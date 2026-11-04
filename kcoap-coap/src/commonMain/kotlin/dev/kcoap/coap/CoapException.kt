@@ -40,5 +40,12 @@ public class CoapException(
 
         /** All Message IDs or tokens for a peer are in use (RFC 7252 §4.4, §5.3.1). */
         IDENTIFIERS_EXHAUSTED,
+
+        /**
+         * The connection to the peer (RFC 8323) could not be opened, or it closed, was released or aborted
+         * before the exchange completed. The message says which; RFC 8323 §3.4 leaves reconnecting to the
+         * application.
+         */
+        CONNECTION_CLOSED,
     }
 }
