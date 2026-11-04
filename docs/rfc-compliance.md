@@ -18,18 +18,20 @@ vectors where they exist and by interop runs against independent implementations
 
 ## CoAP
 
-| Spec | What | Status |
-|---|---|---|
-| RFC 7252 | Messages, reliability, deduplication, options, caching rules, proxying | partial (option registry) |
-| RFC 6690 | Link format, `/.well-known/core` | todo |
-| RFC 7641 | Observe | todo |
-| RFC 7959 | Block-wise | todo |
-| RFC 8132 | FETCH, PATCH, iPATCH | todo |
-| RFC 7967 | No-Response | todo |
-| RFC 9175 | Echo, Request-Tag, token processing (needed by OSCORE Appendix B.1.2) | todo |
-| RFC 8768 | Hop-Limit | todo |
-| RFC 8323 | CoAP over TCP/TLS/WebSockets: framing, CSM, Ping/Pong, Release/Abort, BERT | todo |
-| RFC 9177 | Q-Block | optional |
+| Spec | What | Status | Verified by |
+|---|---|---|---|
+| RFC 7252 §3–4 | Message format, CON/NON/ACK/RST, retransmission, deduplication, Message IDs, NSTART, PROBING_RATE, ping | done | `UdpMessagingTest` (sans-IO, per section), end-to-end on a lossy simulated network, libcoap |
+| RFC 7252 §5 | Tokens, piggybacked / separate / NON responses, matching, critical options (4.02), Accept (4.06), Proxy-Uri (5.05), conditional requests (helper), methods | done | `RequestResponseTest`, libcoap |
+| RFC 7252 §5.6–5.7, §8 | Caching, proxying, multicast | todo | |
+| RFC 6690 | Link format, `/.well-known/core`, query filtering | done | RFC 6690 §5 examples, libcoap discovery both ways |
+| RFC 7641 | Observe: server (sequence numbers, NSTART, superseding, 24 h CON, removal rules) and client (aggregation, §3.4 ordering, deregistration) | done; client re-registration on Max-Age (MAY) todo | `ObserveTest`, libcoap `/time` and `coap-client -s` |
+| RFC 7959 | Block1 / Block2, negotiation, 2.31 / 4.08 / 4.13, Size1 / Size2, with Observe | done (inner; outer for proxies todo) | `BlockwiseTest`, libcoap `-b` both ways |
+| RFC 8132 | FETCH, PATCH, iPATCH, observable FETCH | done (methods; patch formats are the application's) | `RequestResponseTest`, `ObserveTest` |
+| RFC 7967 | No-Response | done (server) | `RequestResponseTest`, `EdgeCaseTest` |
+| RFC 9175 | Echo, Request-Tag, token processing (needed by OSCORE Appendix B.1.2) | partial: client Echo retry, Request-Tag for concurrent Block1 and server keying, DTLS token sequences; server freshness checks and amplification mitigation todo | `MessageSecurityTest`, `BlockwiseTest`, `EdgeCaseTest` |
+| RFC 8768 | Hop-Limit | todo | |
+| RFC 8323 | CoAP over TCP/TLS/WebSockets: framing, CSM, Ping/Pong, Release/Abort, BERT | partial (framing codec) | codec tests |
+| RFC 9177 | Q-Block | optional (Q-Block options get 4.02, so peers fall back to RFC 7959) | |
 
 Hop-Limit and OSCORE: RFC 8768 gives it no OSCORE class, so under the published RFCs it is Class E
 (RFC 8613 §4.1). draft-ietf-core-oscore-capable-proxies updates RFC 8768 to Class U, and libcoap already
@@ -44,7 +46,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | Spec | What | Status |
 |---|---|---|
 | RFC 7252 §9 | Security modes, NoSec + RawPublicKey mandatory | partial (`SecurityMode`, `PeerIdentity`) |
-| RFC 7252 §9.1.1–9.1.2 | Matching by DTLS session and epoch; no retransmission across epochs | partial (`Endpoint.Secure` equality, `SessionEnded`; messaging layer todo) |
+| RFC 7252 §9.1.1–9.1.2 | Matching by DTLS session and epoch; no retransmission across epochs | done in the endpoint (`Endpoint.Secure` equality, `SessionEnded` fails instead of retransmitting); DTLS itself todo |
 | RFC 7252 §9.1.3.1 | PreSharedKey: `TLS_PSK_WITH_AES_128_CCM_8` (RFC 6655) | registry done; protocol todo |
 | RFC 7252 §9.1.3.2 | RawPublicKey (RFC 7250): `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` (RFC 7251), secp256r1, RFC 6920 `sha-256-120` identifiers | registry done; protocol todo |
 | RFC 7252 §9.1.3.3 | Certificate: same suite, authority vs SubjectAltName URI / CN, no wildcards | todo (`CertificateValidator` interface) |

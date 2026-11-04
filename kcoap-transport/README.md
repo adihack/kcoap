@@ -10,5 +10,8 @@ The seam between protocol code and the network, with no dependencies.
 - `DatagramSecurity` and `StreamSecurity`: where DTLS and kcoap's own TLS plug in, with the contract
   an implementation must meet.
 - `CoapScheme`: `coap`, `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws`, `coaps+ws`.
+- `IpLiteral`: the canonical text of IP addresses in `Endpoint.Udp` (dotted IPv4, RFC 5952 IPv6), so
+  endpoints from transports and from URIs compare equal.
 
-Platform adapters (Ktor, Netty, Network.framework, browser WebSocket) are planned as separate modules.
+Adapters live in their own modules: `kcoap-transport-ktor` (UDP on ktor-network) and `kcoap-testkit`
+(an in-memory network for tests). Netty, Network.framework and browser WebSocket adapters are planned.
