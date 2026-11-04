@@ -22,6 +22,8 @@ include(
     ":kcoap-crypto",
     // Default backend on cryptography-kotlin (JDK on JVM/Android, CryptoKit + CommonCrypto on Apple).
     ":kcoap-crypto-default",
+    // Post-quantum backend on Bouncy Castle (JVM/Android only): ML-KEM (FIPS 203) and ML-DSA (FIPS 204).
+    ":kcoap-crypto-bc",
     // Deterministic CBOR (RFC 8949 §4.2) and CBOR sequences (RFC 8742).
     ":kcoap-cbor",
     // COSE structures used by OSCORE and EDHOC (RFC 9052/9053, RFC 9360).
