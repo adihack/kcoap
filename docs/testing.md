@@ -25,7 +25,15 @@ Vectors are extracted from the RFC text by scripts in `tools/`, not typed in by 
 On the JVM, kcoap's own code is compared with Bouncy Castle on random inputs: AES-CCM for every tag
 and nonce length and the long-AAD encoding, AES-GCM and ChaCha20, SHAKE256 and KMAC256.
 
-## 3. Live interop with libcoap and libedhoc
+## 3. Fuzzing hostile input
+
+Every decoder and verifier is fed thousands of mutated RFC messages and random bytes (with
+`kcoap-testkit`'s `ByteMutator`, seeded so failures reproduce): CBOR, the UDP, TCP and WebSocket codecs,
+the OSCORE option and OSCORE verification, and EDHOC message_1 to message_3. Each must fail only with
+its own protocol exception, never with an index or state error, and a tampered protected message must
+never verify. These run on every platform, natively included.
+
+## 4. Live interop with libcoap and libedhoc
 
 Containers built from `interop/` run the reference implementations, and JVM tests talk to them over
 real sockets. The tests skip themselves when Docker or an image is missing. See `interop/README.md`.

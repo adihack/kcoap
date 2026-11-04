@@ -11,6 +11,7 @@ kotlin {
             api(project(":kcoap-crypto"))
         }
         commonTest.dependencies {
+            implementation(project(":kcoap-testkit"))
             // The RFC 9529 traces need real X25519, Ed25519, P-256 and AES; post-quantum uses a test double.
             implementation(project(":kcoap-crypto-default"))
         }

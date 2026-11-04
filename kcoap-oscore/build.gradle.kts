@@ -11,6 +11,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
+            implementation(project(":kcoap-testkit"))
             implementation(project(":kcoap-crypto-default"))
         }
         jvmTest.dependencies {
