@@ -46,8 +46,10 @@ public enum class CoseCurve(public val value: Int, public val keyType: KeyType) 
  * A public COSE_Key (RFC 9052 §7). Private parts are never modelled: private keys live in a
  * [dev.kcoap.crypto.CryptoBackend].
  *
- * Map labels: kty 1, kid 2, alg 3, crv -1, x -2, y -3. The order of [encode] follows the examples in
- * RFC 9529 (kty, kid, crv, x, y), so credentials built from this class match the traces byte for byte.
+ * Map labels: kty 1, kid 2, alg 3, crv -1, x -2, y -3. AKP keys (draft-ietf-cose-dilithium) have no
+ * curve and carry their public key as `pub` under label -1 instead. The order of [encode] follows the
+ * examples in RFC 9529 (kty, kid, crv, x, y), so credentials built from this class match the traces byte
+ * for byte.
  */
 public class CoseKey(
     public val keyType: CoseKeyType,
@@ -86,7 +88,7 @@ public class CoseKey(
         kidBytes?.let { entries += LABEL_KID.toCbor() to it.toCbor() }
         algorithm?.let { entries += LABEL_ALG.toCbor() to it.toCbor() }
         curve?.let { entries += LABEL_CRV.toCbor() to it.value.toCbor() }
-        entries += LABEL_X.toCbor() to xBytes.toCbor()
+        entries += (if (keyType == CoseKeyType.AKP) LABEL_AKP_PUB else LABEL_X).toCbor() to xBytes.toCbor()
         yBytes?.let { entries += LABEL_Y.toCbor() to it.toCbor() }
         return CborMap(entries)
     }
@@ -110,10 +112,18 @@ public class CoseKey(
         public const val LABEL_X: Int = -2
         public const val LABEL_Y: Int = -3
 
+        /** The public key of an AKP key; it shares label -1 with crv of the other key types. */
+        public const val LABEL_AKP_PUB: Int = -1
+
         /** Parses a COSE_Key map. Unknown parameters are ignored, as RFC 9052 §7 allows. */
         public fun fromCbor(map: CborMap): CoseKey {
             val type = map[LABEL_KTY]?.asInt()?.let(CoseKeyType::fromValue)
                 ?: throw CborException("COSE_Key has a missing or unsupported kty")
+            if (type == CoseKeyType.AKP) {
+                val pub = map[LABEL_AKP_PUB]?.asBytes() ?: throw CborException("AKP COSE_Key without pub")
+                val algorithm = (map[LABEL_ALG] as? CborInt)?.value?.toInt() ?: throw CborException("AKP COSE_Key without alg")
+                return CoseKey(type, curve = null, x = pub, kid = map[LABEL_KID]?.asBytes(), algorithm = algorithm)
+            }
             val curve = map[LABEL_CRV]?.let { value ->
                 CoseCurve.fromValue(value.asInt()) ?: throw CborException("Unsupported COSE curve $value")
             }

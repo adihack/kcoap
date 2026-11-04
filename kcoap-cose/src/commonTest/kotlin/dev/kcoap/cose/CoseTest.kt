@@ -52,6 +52,10 @@ class CoseTest {
         val akp = CoseKey(CoseKeyType.AKP, curve = null, x = ByteArray(1312), algorithm = -48)
         assertEquals(akp, CoseKey.fromCbor(akp.toCbor()))
         assertEquals(-48, CoseKey.fromCbor(akp.toCbor()).algorithm)
+        // draft-ietf-cose-dilithium: { 1: 7 (AKP), 3: -48 (ML-DSA-44), -1: pub }
+        assertEquals(listOf(1L, 3L, -1L), akp.toCbor().entries.map { (it.first as dev.kcoap.cbor.CborInt).value })
+        assertFailsWith<CborException> { CoseKey.fromCbor(CborMap(1.toCbor() to 7.toCbor(), 3.toCbor() to (-48).toCbor())) }
+        assertFailsWith<CborException> { CoseKey.fromCbor(CborMap(1.toCbor() to 7.toCbor(), (-1).toCbor() to ByteArray(4).toCbor())) }
         assertNotEquals(okp, akp)
     }
 
