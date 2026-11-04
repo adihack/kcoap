@@ -7,6 +7,32 @@ implementation, already verified against RFC 9529). Everything else fills gaps t
 Protocol logic is common Kotlin code, so all of this runs on the `jvm` target. Platform crypto
 differences are caught separately by running the RFC vectors on every target in CI.
 
+## CoAP against libcoap (running)
+
+The CoAP endpoint is cross-tested with libcoap v4.3.5b over real UDP on the host network, in both
+directions. The tests live in `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/interop/`, are tagged
+`interop`, and skip (JUnit assumption) when `docker info` fails or the image is missing.
+
+```bash
+docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*'
+```
+
+| Test class | Peer | What runs |
+|---|---|---|
+| `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
+| `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05 |
+
+`interop/libcoap/coap.sh` runs any libcoap example program the way the tests do, for manual checks:
+
+```bash
+interop/libcoap/coap.sh coap-server -p 5683 -d 10 -v 7
+interop/libcoap/coap.sh coap-client -v 6 -s 10 coap://127.0.0.1:5683/time
+```
+
+`KCOAP_LIBCOAP_IMAGE` points both at another libcoap build. The JVM test task is never served from the
+Gradle build cache, because whether docker is there is invisible to Gradle.
+
 ## Layer 1: byte-exact differential tests (deterministic)
 
 Interop only proves that a handshake completes. Comparing bytes proves both sides compute the same

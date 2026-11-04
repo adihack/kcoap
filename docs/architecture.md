@@ -1,9 +1,10 @@
 # Architecture
 
-Status: **design**. The transport interfaces (`kcoap-transport`) and the DTLS placeholders
-(`kcoap-dtls`) exist as code; nothing behind them is implemented. This records how kcoap stays one
-protocol core while running in mobile apps, browsers and server applications. The RFC checklist is in
-`rfc-compliance.md`.
+Status: **partly built**. The transport interfaces (`kcoap-transport`), the CoAP endpoint for UDP with
+client and server APIs (`kcoap-coap`, see "The CoAP endpoint as built"), a UDP transport
+(`kcoap-transport-ktor`) and a simulated network for tests (`kcoap-testkit`) exist; DTLS is
+placeholders (`kcoap-dtls`). This records how kcoap stays one protocol core while running in mobile
+apps, browsers and server applications. The RFC checklist is in `rfc-compliance.md`.
 
 ## Layers
 
@@ -35,6 +36,64 @@ OSCORE (outer, for proxies), so the layers compose instead of forming a fixed st
 | Peer identity | OSCORE context / EDHOC credential | PSK identity, raw public key, certificate |
 
 The application sees the identities of both layers and authorizes on either.
+
+## The CoAP endpoint as built
+
+For CoAP over UDP the layers map onto code like this (`kcoap-coap`):
+
+```
+CoapClient / CoapServer       client.*, server.*: suspend calls, Flow for Observe, resource tree + DSL
+Block-wise, Observe           BlockwiseClient / BlockwiseServer, ClientObservation / ObservationRegistry
+Exchanges                     CoapEndpoint + ClientExchange: tokens, matching by (Endpoint, token)
+Message security              ClientMessageSecurity / ServerMessageSecurity, called per message
+Messaging                     UdpMessaging: sans-IO, internal
+Transport                     DatagramTransport: KtorUdpTransport, InMemoryTransport, later DTLS
+```
+
+Block-wise and Observe sit above message security, so OSCORE protects each block and each notification
+on its own (inner Block-wise, RFC 8613 §4.1.3.4.1); outer Block-wise for proxies is not built.
+
+**One endpoint per socket, one lock.** `CoapEndpoint` owns the messaging state machine and the exchange
+registry behind a single `Mutex` that is never held across a suspension: a call takes the lock, runs the
+state machine, takes its effects (datagrams to send, messages to deliver, outcomes of transmissions),
+releases the lock and only then performs them. Request handlers, message security and transports
+therefore run without the lock; each inbound request gets its own coroutine. The receive loop and a
+timer loop run in the scope the endpoint was given.
+
+**Sans-IO where it pays off.** `UdpMessaging` is the part with the subtle timing rules (back-off,
+deduplication lifetimes, NSTART, superseding), so it takes datagrams and time and returns effects, and
+its tests need neither a transport nor a clock. It is `internal` for now: the plan's second API level, a
+public sans-IO engine for Netty or Vert.x event loops, would also need the exchange, block-wise and
+Observe layers in that form, which they are not yet.
+
+**Time and randomness.** Every timer reads `CoapEndpointConfig.timeSource` and waits with coroutine
+delays, so under `runTest` with `testScheduler.timeSource` a 247-second lifetime passes in an instant.
+Retransmission jitter and the first Message ID come from an injected `Random`; tokens from a
+`TokenGenerator` backed by the platform CSPRNG (through `kotlin.uuid`), with per-session sequence
+numbers on DTLS endpoints (RFC 9175 §4.2).
+
+**The DTLS readiness rules, as met:**
+
+1. Matching and deduplication use `Endpoint` equality only: Message ID state, dedup cache, exchanges,
+   observers, block-wise state and Request-Tags are all keyed by `Endpoint`.
+2. `DatagramEvent.SessionEnded` (or `SessionEndedException` from a send) fails the pending Confirmable
+   messages of that endpoint without retransmitting, fails its exchanges and client observations
+   (`CoapException.Reason.SESSION_ENDED`), removes its server observers and block-wise state, and drops
+   its deduplication, Message ID and token state.
+3. Block sizes and the message size limit come from `DatagramTransport.maxDatagramSize`, minus a
+   configurable reserve when message security is on.
+4. `RequestContext` carries the `PeerIdentity` of an `Endpoint.Secure` peer next to the OSCORE
+   `SecurityIdentity`.
+5. One `TimeSource` per endpoint drives every timer.
+6. There is no multicast yet, so nothing is sent to a group through any transport.
+
+**Observability.** A `MessageInterceptor` chain sees every message at the wire, once per message;
+`EndpointEventListener` gets retransmissions, timeouts, resets, duplicates, malformed datagrams,
+rejections, session ends and observer changes. Logging follows `code-style.md` under the tags
+`coap.message`, `coap.exchange`, `coap.server`, `coap.client` and `transport`.
+
+**Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
+virtual time; the JVM tests also run against libcoap over real UDP (`interop/README.md`).
 
 ## Three transport shapes
 
@@ -298,9 +357,11 @@ Not done yet; implementation comes last.
 
 | Module | Scope | State |
 |---|---|---|
-| `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, security interfaces | interfaces |
+| `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, security interfaces | interfaces |
+| `kcoap-coap` | Message model, codecs, the UDP endpoint with client and server, block-wise, Observe | UDP done |
+| `kcoap-testkit` | In-memory datagram network with fault injection, for tests | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders; engine last |
-| `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on all targets except browser UDP/TCP | planned |
+| `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on all targets except browser UDP/TCP | UDP done; TCP, WebSocket, HTTP planned |
 | `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
 | `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
 | `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |

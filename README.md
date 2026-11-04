@@ -24,8 +24,10 @@ since Aug 2025). The only CoAP piece worth reusing is the JuulLabs KoAP codec, w
 | `kcoap-crypto-bc` | Post-quantum backend on Bouncy Castle (JVM/Android): **ML-KEM** (FIPS 203) and **ML-DSA** (FIPS 204) |
 | `kcoap-cbor` | Deterministic CBOR and CBOR sequences (empty) |
 | `kcoap-cose` | COSE_Encrypt0, Sign1, Enc/Sig structures, COSE_Key, CCS/CWT, x5chain/x5t (empty) |
-| `kcoap-coap` | Option registry with OSCORE classes; codec and exchange layer to come |
+| `kcoap-coap` | Messages, codecs, and the CoAP-over-UDP endpoint: messaging, exchanges, `CoapClient`, `CoapServer`, Block-wise, Observe, `/.well-known/core` (cross-tested with libcoap) |
 | `kcoap-transport` | Datagram, byte-stream and message-stream interfaces; endpoints, peer identities, URI schemes |
+| `kcoap-transport-ktor` | UDP transport on ktor-network (JVM, Apple) |
+| `kcoap-testkit` | In-memory datagram network with loss, duplication and reordering, for tests |
 | `kcoap-dtls` | DTLS 1.2 placeholders: cipher suites, config, credentials, engine interface. Engine comes last |
 | `kcoap-oscore` | RFC 8613 (empty) |
 | `kcoap-edhoc` | RFC 9528 Initiator and Responder, methods 0–3, suites 0–6, 24 and PQ suite -24 |

@@ -12,10 +12,10 @@ depends on it. Interop with libcoap and libedhoc runs as soon as a layer can tal
 | 5 | CoAP messages and codec (UDP and RFC 8323 framing), options, URIs | `kcoap-coap` | RFC 7252, 8323, RFC 8613 C | done |
 | 6 | EDHOC: methods 0–3, suites 0–6 and 24, PQ suite (KEM + ML-DSA), EAD, exporter | `kcoap-edhoc` | RFC 9529 traces (both roles, §4 invalid messages), libedhoc | done; libedhoc interop pending |
 | 7 | OSCORE: context, protect/verify, replay window, Observe, B.1.1, B.1.2 (B.2 pending) | `kcoap-oscore` | RFC 8613 C, libcoap live | done |
-| 8 | CoAP endpoint: messaging, exchanges, client and server API, UDP transport | `kcoap-coap`, `kcoap-transport-*` | unit tests, libcoap | planned |
+| 8 | CoAP endpoint: messaging, exchanges, client and server API, UDP transport | `kcoap-coap`, `kcoap-transport-ktor`, `kcoap-testkit` | unit tests on a simulated network, libcoap both ways | done (UDP; DTLS with 12) |
 | 9 | EDHOC over CoAP and RFC 9668 combined request | `kcoap-edhoc-oscore` | RFC 9668 Figure 4, end-to-end tests; libedhoc live pending | done, live interop pending |
 | 10 | Interop harness: libcoap and libedhoc in containers, byte-exact oracles | `interop/` | CI | planned |
-| 11 | TCP and WebSocket transports, browser target (JS/Wasm) | `kcoap-transport-*` | libcoap | planned |
+| 11 | TCP and WebSocket transports, browser target (JS/Wasm) | `kcoap-transport-*` | libcoap | planned (RFC 8323 codec in `kcoap-coap`) |
 | 12 | DTLS 1.2 | `kcoap-dtls` | libcoap with five DTLS backends | last |
 
 Post-quantum: libedhoc implements the KEM-based ephemeral exchange of draft-ietf-lake-pqsuites with

@@ -1,0 +1,653 @@
+package dev.kcoap.coap.stack
+
+import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapException
+import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
+import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.common.hexToBytes
+import dev.kcoap.transport.Endpoint
+import kotlin.random.Random
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+
+class UdpMessagingTest {
+    private val peer = Endpoint.Udp("192.0.2.1", 5683)
+    private val otherPeer = Endpoint.Udp("192.0.2.2", 5683)
+    private val params = TransmissionParameters.Default
+
+    /** Random source whose doubles are fixed, so the initial timeout is exactly predictable. */
+    private class FixedRandom(private val double: Double) : Random() {
+        override fun nextBits(bitCount: Int): Int = 0
+        override fun nextDouble(): Double = double
+    }
+
+    private fun messaging(
+        random: Random = FixedRandom(0.0),
+        separateResponseDelay: Duration? = 1.seconds,
+        parameters: TransmissionParameters = params,
+        interceptors: List<MessageInterceptor> = emptyList(),
+        maxDatagramSize: Int = 1152,
+    ) = UdpMessaging(parameters, maxDatagramSize, separateResponseDelay, random, interceptors)
+
+    private fun request(type: CoapMessageType, messageId: Int, token: String = "a1b2") = CoapMessage.request(CoapCode.GET) {
+        this.type = type
+        this.messageId = messageId
+        this.token = token.hexToBytes()
+        options { uriPath("test") }
+    }
+
+    private fun response(type: CoapMessageType, messageId: Int, token: String = "a1b2", code: CoapCode = CoapCode.CONTENT) =
+        CoapMessage.build {
+            this.type = type
+            this.code = code
+            this.messageId = messageId
+            this.token = token.hexToBytes()
+            payload("ok")
+        }
+
+    private fun UdpMessaging.receive(now: Duration, message: CoapMessage, from: Endpoint = peer) =
+        onDatagram(now, from, UdpMessageCodec.encode(message))
+
+    private fun List<MessagingEffect>.transmitted(): List<CoapMessage> =
+        filterIsInstance<MessagingEffect.Transmit>().map { UdpMessageCodec.decode(it.bytes) }
+
+    private fun List<MessagingEffect>.outcomes(): List<TransmissionOutcome> =
+        filterIsInstance<MessagingEffect.Completed>().map { it.outcome }
+
+    /** Runs the timers at every deadline up to [until] and returns the times something was sent. */
+    private fun UdpMessaging.runTimers(until: Duration, sends: MutableList<Duration> = mutableListOf()): List<Duration> {
+        while (true) {
+            val next = nextDeadline() ?: break
+            if (next > until) break
+            onTimer(next)
+            repeat(takeEffects().transmitted().size) { sends += next }
+        }
+        return sends
+    }
+
+    private fun UdpMessaging.sendConfirmable(now: Duration, to: Endpoint = peer, token: String = "a1b2"): Transmission {
+        val messageId = allocateMessageId(to, now)
+        return send(now, to, request(CoapMessageType.CON, messageId, token), owner = null)
+    }
+
+    @Test
+    fun rfc7252Section4_2RetransmitsWithExponentialBackOffAndGivesUp() {
+        val messaging = messaging(FixedRandom(0.0))
+        messaging.sendConfirmable(Duration.ZERO)
+        assertEquals(1, messaging.takeEffects().transmitted().size)
+
+        val sends = messaging.runTimers(until = 200.seconds)
+        // Initial timeout ACK_TIMEOUT, doubled after each of the MAX_RETRANSMIT = 4 retransmissions.
+        assertEquals(listOf(2.seconds, 6.seconds, 14.seconds, 30.seconds), sends)
+    }
+
+    @Test
+    fun rfc7252Section4_8_2GivingUpTakesAtMostMaxTransmitWait() {
+        val messaging = messaging(FixedRandom(1.0))
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        var timedOutAt: Duration? = null
+        while (timedOutAt == null) {
+            val next = assertNotNullDeadline(messaging)
+            messaging.onTimer(next)
+            if (messaging.takeEffects().outcomes().any { it == TransmissionOutcome.TimedOut }) timedOutAt = next
+        }
+        assertEquals(params.maxTransmitWait, timedOutAt)
+        assertEquals(93.seconds, timedOutAt)
+        assertEquals(4, transmission.retransmissions)
+        assertEquals(Transmission.State.DONE, transmission.state)
+    }
+
+    private fun assertNotNullDeadline(messaging: UdpMessaging): Duration = messaging.nextDeadline() ?: error("No deadline")
+
+    @Test
+    fun initialTimeoutIsRandomWithinTheAckRandomFactor() {
+        val messaging = messaging(Random(7))
+        repeat(20) {
+            val transmission = messaging.sendConfirmable(Duration.ZERO, Endpoint.Udp("192.0.2.9", 1000 + it))
+            assertTrue(transmission.timeout in 2.seconds..3.seconds, "timeout ${transmission.timeout}")
+        }
+    }
+
+    @Test
+    fun anAckEndsRetransmission() {
+        val messaging = messaging()
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, transmission.message.messageId))
+        val outcome = messaging.takeEffects().outcomes().single()
+        assertIs<TransmissionOutcome.Acknowledged>(outcome)
+        assertNull(outcome.piggybackedResponse)
+        assertEquals(emptyList(), messaging.runTimers(until = 100.seconds))
+    }
+
+    @Test
+    fun rfc7252Section5_3_2PiggybackedResponsesMatchMessageIdAndToken() {
+        val messaging = messaging()
+        val transmission = messaging.sendConfirmable(Duration.ZERO, token = "a1b2")
+        val messageId = transmission.message.messageId
+        messaging.takeEffects()
+
+        messaging.receive(1.seconds, response(CoapMessageType.ACK, messageId, token = "ffff"))
+        assertEquals(emptyList(), messaging.takeEffects().outcomes(), "a foreign token is not a piggybacked response")
+
+        messaging.receive(1.seconds, response(CoapMessageType.ACK, messageId, token = "a1b2"))
+        val outcome = assertIs<TransmissionOutcome.Acknowledged>(messaging.takeEffects().outcomes().single())
+        assertEquals("ok", outcome.piggybackedResponse?.payloadAsText())
+    }
+
+    @Test
+    fun anAckForASeparateResponseIgnoresWhatItCarries() {
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        messaging.send(Duration.ZERO, peer, response(CoapMessageType.CON, messageId), owner = null)
+        messaging.takeEffects()
+        messaging.receive(1.seconds, response(CoapMessageType.ACK, messageId, code = CoapCode.BAD_REQUEST))
+        val outcome = assertIs<TransmissionOutcome.Acknowledged>(messaging.takeEffects().outcomes().single())
+        assertNull(outcome.piggybackedResponse)
+    }
+
+    @Test
+    fun rfc7252Section4_2InvalidAcksAndResetsAreSilentlyIgnored() {
+        val messaging = messaging()
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        val messageId = transmission.message.messageId
+        messaging.takeEffects()
+        // An ACK carrying a request, a non-empty RST, an ACK and an RST for unknown Message IDs.
+        messaging.receive(1.seconds, request(CoapMessageType.ACK, messageId))
+        messaging.receive(1.seconds, response(CoapMessageType.RST, messageId))
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, (messageId + 1) and 0xFFFF))
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.RST, (messageId + 1) and 0xFFFF))
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, messageId), from = otherPeer)
+        assertEquals(emptyList(), messaging.takeEffects().filterNot { it is MessagingEffect.Event })
+        assertEquals(Transmission.State.IN_FLIGHT, transmission.state)
+    }
+
+    @Test
+    fun aResetCancelsTheTransmission() {
+        val messaging = messaging()
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.RST, transmission.message.messageId))
+        val effects = messaging.takeEffects()
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.Reset), effects.outcomes())
+        assertTrue(effects.any { (it as? MessagingEffect.Event)?.event is EndpointEvent.ResetReceived })
+        // A second RST matches nothing any more.
+        messaging.receive(2.seconds, CoapMessage.empty(CoapMessageType.RST, transmission.message.messageId))
+        assertEquals(emptyList(), messaging.takeEffects().outcomes())
+    }
+
+    @Test
+    fun aResetRejectingANonConfirmableMessageIsMatched() {
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        messaging.send(Duration.ZERO, peer, response(CoapMessageType.NON, messageId), owner = null)
+        messaging.takeEffects()
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.RST, messageId))
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.Reset), messaging.takeEffects().outcomes())
+    }
+
+    @Test
+    fun aResetForANonConfirmableMessageNoLongerMatchesAfterNonLifetime() {
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val transmission = messaging.send(Duration.ZERO, peer, response(CoapMessageType.NON, messageId), owner = null)
+        messaging.onTimer(params.nonLifetime)
+        messaging.takeEffects()
+        assertEquals(Transmission.State.DONE, transmission.state)
+        messaging.receive(params.nonLifetime + 1.seconds, CoapMessage.empty(CoapMessageType.RST, messageId))
+        assertEquals(emptyList(), messaging.takeEffects().outcomes())
+    }
+
+    @Test
+    fun rfc7252Section4_3CoapPingIsAnsweredWithReset() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.CON, 0x1234))
+        val reset = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessageType.RST, reset.type)
+        assertEquals(0x1234, reset.messageId)
+        // §4.5: a duplicate gets the same Reset.
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 0x1234))
+        assertEquals(listOf(reset), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun rfc7252Section4_5DuplicateConfirmableRequestsGetTheSameAck() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 77))
+        val delivered = messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().single()
+        assertEquals(77, delivered.message.messageId)
+
+        // While the request is processed, a duplicate is ignored.
+        messaging.receive(100.milliseconds, request(CoapMessageType.CON, 77))
+        val duringProcessing = messaging.takeEffects()
+        assertEquals(emptyList(), duringProcessing.transmitted())
+        assertTrue(duringProcessing.any { (it as? MessagingEffect.Event)?.event is EndpointEvent.DuplicateReceived })
+
+        assertNull(messaging.respond(200.milliseconds, peer, 77, CoapMessageType.CON, response(CoapMessageType.CON, 0)))
+        val ack = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessageType.ACK, ack.type)
+        assertEquals(77, ack.messageId)
+        assertEquals("ok", ack.payloadAsText())
+
+        messaging.receive(3.seconds, request(CoapMessageType.CON, 77))
+        assertEquals(listOf(ack), messaging.takeEffects().transmitted())
+        assertTrue(messaging.takeEffects().none { it is MessagingEffect.DeliverRequest }, "processed only once")
+    }
+
+    @Test
+    fun deduplicationIsPerPeer() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 77))
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 77), from = otherPeer)
+        assertEquals(2, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+    }
+
+    @Test
+    fun rfc7252Section4_5DuplicatesAreForgottenAfterExchangeLifetime() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 77))
+        messaging.respond(Duration.ZERO, peer, 77, CoapMessageType.CON, response(CoapMessageType.CON, 0))
+        messaging.takeEffects()
+        messaging.onTimer(params.exchangeLifetime - 1.milliseconds)
+        assertEquals(1, messaging.stateSizes.first)
+        messaging.onTimer(params.exchangeLifetime)
+        assertEquals(0, messaging.stateSizes.first)
+        messaging.receive(params.exchangeLifetime, request(CoapMessageType.CON, 77))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+    }
+
+    @Test
+    fun rfc7252Section5_2_2SlowRequestsGetAnEmptyAckAndASeparateResponse() {
+        val messaging = messaging(separateResponseDelay = 1.seconds)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 5))
+        messaging.takeEffects()
+        assertEquals(1.seconds, messaging.nextDeadline())
+        messaging.onTimer(1.seconds)
+        val emptyAck = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessage.empty(CoapMessageType.ACK, 5), emptyAck)
+
+        // A retransmitted request gets another Empty ACK, never the response (§5.2.2).
+        messaging.receive(2.seconds, request(CoapMessageType.CON, 5))
+        assertEquals(listOf(emptyAck), messaging.takeEffects().transmitted())
+
+        val separate = messaging.respond(3.seconds, peer, 5, CoapMessageType.CON, response(CoapMessageType.ACK, 0))
+        val sent = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessageType.CON, sent.type)
+        assertEquals(separate?.message?.messageId, sent.messageId)
+        assertTrue(sent.messageId != 5)
+        assertEquals("a1b2", sent.tokenHex)
+
+        messaging.receive(4.seconds, request(CoapMessageType.CON, 5))
+        assertEquals(listOf(emptyAck), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun separateResponsesCanBeNonConfirmable() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 5))
+        messaging.acknowledge(peer, 5)
+        messaging.takeEffects()
+        messaging.respond(
+            Duration.ZERO, peer, 5, CoapMessageType.CON, response(CoapMessageType.CON, 0),
+            separateType = CoapMessageType.NON,
+        )
+        assertEquals(CoapMessageType.NON, messaging.takeEffects().transmitted().single().type)
+    }
+
+    @Test
+    fun withoutASeparateResponseDelayRequestsWaitForTheUpperLayer() {
+        val messaging = messaging(separateResponseDelay = null)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 5))
+        messaging.takeEffects()
+        messaging.onTimer(10.seconds)
+        assertEquals(emptyList(), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun rfc7252Section5_2_3NonConfirmableRequestsGetNonConfirmableResponses() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 9))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+        messaging.receive(1.seconds, request(CoapMessageType.NON, 9))
+        assertEquals(emptyList(), messaging.takeEffects().filterNot { it is MessagingEffect.Event }, "duplicate NON ignored")
+        messaging.acknowledge(peer, 9)
+        assertEquals(emptyList(), messaging.takeEffects())
+
+        messaging.respond(1.seconds, peer, 9, CoapMessageType.NON, response(CoapMessageType.CON, 0))
+        val sent = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessageType.NON, sent.type)
+        assertTrue(sent.messageId != 9)
+    }
+
+    @Test
+    fun separateResponsesAreDeliveredForTheUpperLayerToAcceptOrReject() {
+        val messaging = messaging()
+        messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 11))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverResponse>().size)
+        messaging.acknowledge(peer, 11)
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.ACK, 11)), messaging.takeEffects().transmitted())
+
+        messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 12))
+        messaging.takeEffects()
+        messaging.reject(peer, 12, "unknown token")
+        val reset = messaging.takeEffects().transmitted().single()
+        assertEquals(CoapMessage.empty(CoapMessageType.RST, 12), reset)
+        messaging.reject(peer, 12, "again")
+        assertEquals(emptyList(), messaging.takeEffects().transmitted(), "answered only once")
+        messaging.receive(1.seconds, response(CoapMessageType.CON, 12))
+        assertEquals(listOf(reset), messaging.takeEffects().transmitted(), "duplicates get the same RST")
+
+        messaging.receive(Duration.ZERO, response(CoapMessageType.NON, 13))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverResponse>().size)
+        messaging.reject(peer, 13, "unknown token")
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 13)), messaging.takeEffects().transmitted())
+        messaging.reject(otherPeer, 13, "never received")
+        messaging.acknowledge(otherPeer, 13)
+        assertEquals(emptyList(), messaging.takeEffects())
+    }
+
+    @Test
+    fun rfc7252Section4_2ReservedCodesAreRejected() {
+        val messaging = messaging()
+        val signaling = CoapMessage.build {
+            type = CoapMessageType.CON
+            code = CoapCode.PING
+            messageId = 21
+        }
+        messaging.receive(Duration.ZERO, signaling)
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 21)), messaging.takeEffects().transmitted())
+
+        messaging.receive(Duration.ZERO, signaling.toBuilder().apply { type = CoapMessageType.NON; messageId = 22 }.build())
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.NON, 23))
+        val effects = messaging.takeEffects()
+        assertEquals(emptyList(), effects.transmitted())
+        assertEquals(2, effects.count { (it as? MessagingEffect.Event)?.event is EndpointEvent.MessageRejected })
+    }
+
+    @Test
+    fun rfc7252Section4_2FormatErrorsResetConfirmableMessagesOnly() {
+        val messaging = messaging()
+        // CON, MID 0x0102, token length 9 (reserved).
+        messaging.onDatagram(Duration.ZERO, peer, "49010102".hexToBytes())
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 0x0102)), messaging.takeEffects().transmitted())
+        // The same header as NON is dropped silently, and so is an unknown version and a short datagram.
+        messaging.onDatagram(Duration.ZERO, peer, "59010102".hexToBytes())
+        messaging.onDatagram(Duration.ZERO, peer, "80010102".hexToBytes())
+        messaging.onDatagram(Duration.ZERO, peer, "40".hexToBytes())
+        val effects = messaging.takeEffects()
+        assertEquals(emptyList(), effects.transmitted())
+        assertEquals(3, effects.count { (it as? MessagingEffect.Event)?.event is EndpointEvent.MalformedMessage })
+    }
+
+    @Test
+    fun rfc7252Section4_7NstartLimitsOutstandingConfirmableMessagesPerPeer() {
+        val messaging = messaging()
+        val first = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val second = messaging.sendConfirmable(Duration.ZERO, token = "02")
+        val elsewhere = messaging.sendConfirmable(Duration.ZERO, to = otherPeer, token = "03")
+        assertEquals(listOf("01", "03"), messaging.takeEffects().transmitted().map { it.tokenHex })
+        assertEquals(Transmission.State.QUEUED, second.state)
+        assertEquals(Transmission.State.IN_FLIGHT, elsewhere.state)
+
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, first.message.messageId))
+        val effects = messaging.takeEffects()
+        assertEquals(listOf("02"), effects.transmitted().map { it.tokenHex })
+        assertEquals(1.seconds, second.firstSentAt)
+    }
+
+    @Test
+    fun nstartCanBeRaised() {
+        val messaging = messaging(parameters = TransmissionParameters(nstart = 2))
+        messaging.sendConfirmable(Duration.ZERO, token = "01")
+        messaging.sendConfirmable(Duration.ZERO, token = "02")
+        messaging.sendConfirmable(Duration.ZERO, token = "03")
+        assertEquals(listOf("01", "02"), messaging.takeEffects().transmitted().map { it.tokenHex })
+    }
+
+    @Test
+    fun rfc7252Section4_7NonConfirmableRequestsHoldTheirSlotUntilReleased() {
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val non = messaging.send(Duration.ZERO, peer, request(CoapMessageType.NON, messageId, "01"), null, slotHold = 20.seconds)
+        val queued = messaging.sendConfirmable(Duration.ZERO, token = "02")
+        assertEquals(listOf("01"), messaging.takeEffects().transmitted().map { it.tokenHex })
+
+        messaging.onTimer(20.seconds)
+        val effects = messaging.takeEffects()
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.SlotReleased), effects.outcomes())
+        assertEquals(listOf("02"), effects.transmitted().map { it.tokenHex })
+        assertEquals(Transmission.State.IN_FLIGHT, queued.state)
+        assertFalse(non.occupiesSlot)
+    }
+
+    @Test
+    fun settlingFreesTheSlotWithoutAnOutcome() {
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val non = messaging.send(Duration.ZERO, peer, request(CoapMessageType.NON, messageId, "01"), null, slotHold = 20.seconds)
+        val confirmable = messaging.sendConfirmable(Duration.ZERO, token = "02")
+        val queued = messaging.sendConfirmable(Duration.ZERO, token = "03")
+        messaging.takeEffects()
+
+        messaging.settle(1.seconds, queued)
+        assertEquals(Transmission.State.DONE, queued.state)
+        messaging.settle(1.seconds, non)
+        assertEquals(listOf("02"), messaging.takeEffects().transmitted().map { it.tokenHex })
+        messaging.settle(2.seconds, confirmable)
+        assertEquals(Transmission.State.DONE, confirmable.state)
+        assertEquals(emptyList(), messaging.runTimers(until = 100.seconds), "no retransmission after settling")
+        assertEquals(emptyList(), messaging.takeEffects().outcomes())
+        messaging.settle(3.seconds, confirmable)
+    }
+
+    @Test
+    fun rfc7641Section4_5_2ANewerNotificationSupersedesTheOutstandingOne() {
+        val messaging = messaging(FixedRandom(0.0))
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val notification = messaging.send(Duration.ZERO, peer, response(CoapMessageType.CON, messageId), null)
+        messaging.takeEffects()
+
+        assertTrue(messaging.supersede(notification, response(CoapMessageType.CON, 0).toBuilder().payload("newer").build()))
+        messaging.onTimer(2.seconds)
+        val replaced = messaging.takeEffects().transmitted().single()
+        assertEquals("newer", replaced.payloadAsText())
+        assertTrue(replaced.messageId != messageId, "a new Message ID")
+        assertEquals(1, notification.retransmissions, "the counter is retained and incremented")
+        assertEquals(4.seconds, notification.timeout, "the timeout is doubled")
+
+        // A late ACK for the superseded message does not end the newer one.
+        messaging.receive(3.seconds, CoapMessage.empty(CoapMessageType.ACK, messageId))
+        assertEquals(emptyList(), messaging.takeEffects().outcomes())
+        // An RST for the superseded message still rejects the notification.
+        messaging.receive(3.seconds, CoapMessage.empty(CoapMessageType.RST, messageId))
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.Reset), messaging.takeEffects().outcomes())
+        assertFalse(messaging.supersede(notification, response(CoapMessageType.CON, 0)))
+    }
+
+    @Test
+    fun aQueuedNotificationIsReplacedInPlace() {
+        val messaging = messaging()
+        messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val queued = messaging.send(Duration.ZERO, peer, response(CoapMessageType.CON, messageId, token = "02"), null)
+        assertTrue(messaging.supersede(queued, response(CoapMessageType.CON, 0, token = "02").toBuilder().payload("newer").build()))
+        assertEquals("newer", queued.message.payloadAsText())
+        assertEquals(messageId, queued.message.messageId)
+        val nonMessageId = messaging.allocateMessageId(otherPeer, Duration.ZERO)
+        val non = messaging.send(Duration.ZERO, otherPeer, response(CoapMessageType.NON, nonMessageId), null)
+        assertFalse(messaging.supersede(non, response(CoapMessageType.NON, 0)))
+    }
+
+    @Test
+    fun rfc7252Section4_2LateRetransmissionsOutsideMaxTransmitSpanAreSkipped() {
+        val messaging = messaging(FixedRandom(0.0))
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        // The driver was asleep: the first timer fires only after MAX_TRANSMIT_SPAN.
+        messaging.onTimer(params.maxTransmitSpan + 1.seconds)
+        val effects = messaging.takeEffects()
+        assertEquals(emptyList(), effects.transmitted())
+        assertEquals(1, transmission.retransmissions)
+    }
+
+    @Test
+    fun rfc7252Section9_1_1AnEndedSessionFailsEverythingTowardsIt() {
+        val messaging = messaging()
+        val inFlight = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val queued = messaging.sendConfirmable(Duration.ZERO, token = "02")
+        val elsewhere = messaging.sendConfirmable(Duration.ZERO, to = otherPeer, token = "03")
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 99))
+        messaging.takeEffects()
+
+        messaging.onSessionEnded(peer)
+        val effects = messaging.takeEffects()
+        val failures = effects.filterIsInstance<MessagingEffect.Completed>()
+        assertEquals(setOf(inFlight, queued), failures.map { it.transmission }.toSet())
+        failures.forEach {
+            assertEquals(CoapException.Reason.SESSION_ENDED, assertIs<TransmissionOutcome.Failed>(it.outcome).cause.reason)
+        }
+        assertTrue(effects.any { (it as? MessagingEffect.Event)?.event is EndpointEvent.SessionEnded })
+        assertEquals(emptyList(), effects.transmitted())
+        assertEquals(Transmission.State.IN_FLIGHT, elsewhere.state)
+
+        val retransmitted = messaging.runTimers(until = 3.seconds)
+        assertEquals(listOf(2.seconds), retransmitted, "only the other peer's message is retransmitted")
+        // The deduplication state is gone too.
+        messaging.receive(4.seconds, request(CoapMessageType.CON, 99))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+    }
+
+    @Test
+    fun closingFailsEveryTransmission() {
+        val messaging = messaging()
+        messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        messaging.close()
+        val outcome = assertIs<TransmissionOutcome.Failed>(messaging.takeEffects().outcomes().single())
+        assertEquals(CoapException.Reason.CLOSED, outcome.cause.reason)
+    }
+
+    @Test
+    fun rfc7252Section4_4MessageIdsAreNotReusedWithinExchangeLifetime() {
+        val messaging = messaging(Random(3))
+        val first = messaging.allocateMessageId(peer, Duration.ZERO)
+        val seen = mutableSetOf(first)
+        repeat(0xFFFF) { seen += messaging.allocateMessageId(peer, Duration.ZERO) }
+        assertEquals(0x10000, seen.size, "every ID handed out once")
+        val exhausted = assertFailsWith<CoapException> { messaging.allocateMessageId(peer, 1.seconds) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, exhausted.reason)
+        // Another peer has its own space, and after EXCHANGE_LIFETIME the IDs are free again.
+        messaging.allocateMessageId(otherPeer, 1.seconds)
+        assertTrue(messaging.allocateMessageId(peer, params.exchangeLifetime) in seen)
+        messaging.onTimer(params.exchangeLifetime)
+        assertEquals(2, messaging.stateSizes.second, "the new reservation and the other peer's remain")
+    }
+
+    @Test
+    fun messagesLargerThanTheDatagramAreRefused() {
+        val messaging = messaging(maxDatagramSize = 32)
+        val large = response(CoapMessageType.CON, 1).toBuilder().apply { payload = ByteArray(64) }.build()
+        val error = assertFailsWith<CoapException> { messaging.send(Duration.ZERO, peer, large, null) }
+        assertEquals(CoapException.Reason.MESSAGE_TOO_LARGE, error.reason)
+        assertFailsWith<IllegalArgumentException> {
+            messaging.send(Duration.ZERO, peer, CoapMessage.empty(CoapMessageType.ACK, 1), null)
+        }
+    }
+
+    @Test
+    fun interceptorsChangeOrDropMessagesInOrder() {
+        val seen = mutableListOf<String>()
+        val addQuery = object : MessageInterceptor {
+            override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage =
+                message.toBuilder().options { uriQuery("traced") }.build()
+        }
+        val recorder = object : MessageInterceptor {
+            override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage {
+                seen += "send ${message.options.uriQuery}"
+                return message
+            }
+
+            override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage? {
+                seen += "receive ${message.messageId}"
+                return if (message.messageId == 2) null else message
+            }
+        }
+        val messaging = messaging(interceptors = listOf(addQuery, recorder))
+        messaging.sendConfirmable(Duration.ZERO)
+        assertEquals(listOf("traced"), messaging.takeEffects().transmitted().single().options.uriQuery)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 1))
+        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 2))
+        assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+        assertEquals(listOf("send [traced]", "receive 1", "receive 2"), seen)
+    }
+
+    @Test
+    fun aDroppedConfirmableMessageIsNeverSentButStillTimesOut() {
+        val dropAll = object : MessageInterceptor {
+            override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage? = null
+        }
+        val failing = object : MessageInterceptor {
+            override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage = error("boom")
+        }
+        val messaging = messaging(interceptors = listOf(dropAll, failing))
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        assertNull(transmission.bytes)
+        messaging.takeEffects()
+        val outcomes = mutableListOf<TransmissionOutcome>()
+        while (true) {
+            messaging.onTimer(messaging.nextDeadline() ?: break)
+            val effects = messaging.takeEffects()
+            assertEquals(emptyList(), effects.transmitted())
+            outcomes += effects.outcomes()
+            if (outcomes.isNotEmpty()) break
+        }
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.TimedOut), outcomes)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 1))
+        assertEquals(emptyList(), messaging.takeEffects(), "a failing interceptor drops the message")
+    }
+
+    @Test
+    fun theTransmissionIsTheHandleGivenToTheOwner() {
+        val owner = TransmissionOwner { _, _ -> }
+        val messaging = messaging()
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val transmission = messaging.send(Duration.ZERO, peer, request(CoapMessageType.CON, messageId), owner)
+        messaging.takeEffects()
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.ACK, messageId))
+        val completed = messaging.takeEffects().filterIsInstance<MessagingEffect.Completed>().single()
+        assertSame(transmission, completed.transmission)
+        assertSame(owner, completed.transmission.owner)
+        assertContentEquals(UdpMessageCodec.encode(transmission.message), transmission.bytes)
+        assertTrue(transmission.toString().contains("DONE"))
+    }
+
+    @Test
+    fun transmissionParametersDeriveTheRfcTimeValues() {
+        assertEquals(45.seconds, params.maxTransmitSpan)
+        assertEquals(93.seconds, params.maxTransmitWait)
+        assertEquals(2.seconds, params.processingDelay)
+        assertEquals(202.seconds, params.maxRtt)
+        assertEquals(247.seconds, params.exchangeLifetime)
+        assertEquals(145.seconds, params.nonLifetime)
+        assertTrue(params.toString().contains("NSTART=1"))
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(ackRandomFactor = 0.9) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(ackTimeout = Duration.ZERO) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(nstart = 0) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(maxRetransmit = -1) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(probingRate = 0) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(defaultLeisure = (-1).seconds) }
+        assertFailsWith<IllegalArgumentException> { TransmissionParameters(maxLatency = (-1).seconds) }
+    }
+}
