@@ -11,10 +11,10 @@ vectors where they exist and by interop runs against independent implementations
 | RFC 3610 | AES-CCM | done | RFC 3610 §8 vectors 1–24; BouncyCastle differential (all tag/nonce lengths, 6-byte AAD length) |
 | RFC 5869 | HKDF | done | RFC 5869 A.1–A.3 |
 | RFC 8949 §4.2 | Deterministic CBOR | todo | RFC 8949 Appendix A examples |
-| RFC 8742 | CBOR sequences (EDHOC messages) | todo | RFC 9529 traces |
+| RFC 8742 | CBOR sequences (EDHOC messages) | done | RFC 9529 traces |
 | RFC 9052 / 9053 | COSE structures and algorithms | todo | RFC 8613 C, RFC 9529 |
-| RFC 8392 | CWT / CCS credentials | todo | RFC 9529 trace 2 |
-| RFC 9360 | x5chain / x5t | todo | RFC 9529 trace 1 |
+| RFC 8392 | CWT / CCS credentials | partial (CCS done, CWT todo) | RFC 9529 trace 2 |
+| RFC 9360 | x5chain / x5t | done (as EDHOC ID_CRED_x) | RFC 9529 trace 1 |
 
 ## CoAP
 
@@ -75,24 +75,37 @@ implemented last; the interfaces and rules around it are in place now (`architec
 
 §8 compliance requirements:
 
-| Requirement | Status |
-|---|---|
-| Cipher suites 2 **and** 3 (MUST) | registry done; protocol todo |
-| `kid` credential identifiers (MUST) | todo |
-| EDHOC_Exporter (MUST) | todo |
-| EAD processing (MUST) | todo |
-| Error codes 1 and 2 (MUST) | todo |
-| message_4 (MAY, but MUST where no app message flows Responder→Initiator) | todo |
+| Requirement | Status | Verified by |
+|---|---|---|
+| Cipher suites 2 **and** 3 (MUST) | done | RFC 9529 §3 (suite 2), round trips (suite 3) |
+| `kid` credential identifiers (MUST) | done, incl. compact encoding and non-unique kids | RFC 9529 §3, §4.1.6–4.1.7 |
+| EDHOC_Exporter (MUST) | done | RFC 9529 §2.6, §3.8 |
+| EAD processing (MUST) | done: `EadHandler`, critical labels, padding | round trips, negative tests |
+| Error codes 1 and 2 (MUST) | done, plus 0 and 3 | RFC 9529 §3.2, negotiation tests |
+| message_4 (MAY, but MUST where no app message flows Responder→Initiator) | done | RFC 9529 §2.4, §3.6 |
 
-Full scope: methods 0–3, both roles, suites 0–6 and 24, credentials CCS/CWT/X.509 (by reference and by
-value), connection identifier encoding, deduplication (§7), error handling (§6), key update
-(Appendix H). Verified by RFC 9529 traces and the interop matrix.
+| Section | What | Status |
+|---|---|---|
+| §3.2, §5 | Methods 0–3, Initiator and Responder, sans-IO state machines | done |
+| §3.3.2 | Connection identifier encoding, enforced on receipt | done |
+| §3.5 | Credentials: CCS by `kid` / `kccs`, X.509 by `x5t` / `x5chain`; CWT and C509 | partial (no CWT, C509) |
+| §3.6, §10.2 | Suites 0–6 and 24; 25 registered but not implemented (Ed448) | done |
+| §3.8 | EAD, criticality, padding | done |
+| §4 | Key schedule: HKDF (SHA-2), KMAC256 (SHAKE256), transcript hashes | done |
+| §6 | Error messages, cipher suite negotiation (§6.3) | done |
+| §7 | Deduplication | left to the transport (RFC 9528 §3.4) |
+| §9.2, §9.8 | Public key validation, all-zero check, field lengths, deterministic CBOR on receipt | done |
+| App. G | Long PLAINTEXT_2 | done |
+| App. H | EDHOC_KeyUpdate | done (RFC 9529 §2.7, §3.9) |
+
+Verified by RFC 9529 traces 1 and 2 (every printed value, both roles), the invalid messages of RFC 9529
+§4, and round trips over every method and suite. Interop against libedhoc is next.
 
 ## EDHOC with CoAP and OSCORE
 
 | Spec | What | Status |
 |---|---|---|
-| RFC 9528 App. A.1 | EDHOC connection identifiers ↔ OSCORE Sender/Recipient IDs | todo |
+| RFC 9528 App. A.1 | EDHOC connection identifiers ↔ OSCORE Sender/Recipient IDs | partial (Master Secret/Salt from `EdhocSession`; context derivation todo) |
 | RFC 9528 App. A.2 | EDHOC over CoAP (`/.well-known/edhoc`, forward and reverse flows) | todo |
 | RFC 9668 | EDHOC option, combined EDHOC+OSCORE request, application-profile parameters | registry done |
 
@@ -102,3 +115,9 @@ Group OSCORE (draft-ietf-core-oscore-groupcomm), KUDOS key update (draft-ietf-co
 EDHOC-PSK (draft-ietf-lake-edhoc-psk; libedhoc already implements it as method 4), OSCORE-capable
 proxies (draft-ietf-core-oscore-capable-proxies), TLS/DTLS 1.3 IoT profile
 (draft-ietf-uta-tls13-iot-profile).
+
+One exception: the KEM-based key exchange of draft-ietf-lake-pqsuites-02 §3 is implemented, because
+RFC 9528 §9.4 already allows a KEM in method 0 and libedhoc ships it as the private suite -24
+(`CipherSuite.SUITE_PQC_1`: ML-KEM-512, ML-DSA-44, AES-CCM-16-128-128, SHAKE256). The draft's suites
+have no code points yet (TBD1–TBD3); they can be declared as private `CipherSuite`s. Verified so far
+with a size-faithful test double only; interop with libedhoc needs the ML-KEM backend.

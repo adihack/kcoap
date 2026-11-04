@@ -1,0 +1,96 @@
+# kcoap-edhoc
+
+EDHOC (RFC 9528), the lightweight authenticated key exchange for OSCORE, as sans-IO state machines for
+both roles. The state machines take and return message bytes; transport, message correlation and
+deduplication (RFC 9528 §3.4, §7) belong to the caller, and EDHOC over CoAP (Appendix A.2, RFC 9668)
+to `kcoap-edhoc-oscore`.
+
+## Driving a handshake
+
+```kotlin
+val initiator = EdhocInitiator(
+    EdhocInitiatorConfig(
+        method = EdhocMethod.STATIC_DH_STATIC_DH,
+        cipherSuites = listOf(CipherSuite.SUITE_2),            // order of preference
+        credentials = listOf(LocalCredential.staticDiffieHellman(credI, CredentialIdentifier.KeyId(kidI), keyI)),
+        credentialResolver = TrustedCredentials(backend, listOf(credR)),
+    ),
+    backend,
+)
+val responder = EdhocResponder(EdhocResponderConfig(setOf(EdhocMethod.STATIC_DH_STATIC_DH), ...), backend)
+
+responder.processMessage1(initiator.createMessage1())
+initiator.processMessage2(responder.createMessage2())
+responder.processMessage3(initiator.createMessage3())
+initiator.processMessage4(responder.createMessage4())     // only if the application profile uses message_4
+
+val session = initiator.session!!
+val masterSecret = session.oscoreMasterSecret()            // EDHOC_Exporter(0, h'', key length)
+```
+
+Every failure is an `EdhocException` carrying the `EdhocError` of RFC 9528 §6; `errorMessage` is the
+error message to send, or null when none may be sent (the peer sent an error, or nothing was received
+yet). When the Responder answers message_1 with error code 2, `processMessage2` throws
+`EdhocPeerErrorException` and, if the Initiator supports a suite in SUITES_R, returns to
+`EdhocPhase.START` with that suite selected: call `createMessage1()` again (RFC 9528 §6.3.1). Calls out
+of order throw `IllegalStateException`. `EdhocPhase` mirrors the states of RFC 9528 Appendix I.
+
+| Type | Role |
+|---|---|
+| `EdhocInitiator`, `EdhocResponder` | State machines over sealed internal states; one instance per session |
+| `EdhocInitiatorConfig`, `EdhocResponderConfig` | Application profile (RFC 9528 §3.9): method(s), suites, credentials, callbacks |
+| `EdhocSession` | PRK_out, PRK_exporter, `exporter`, `oscoreMasterSecret/Salt`, `keyUpdate` (Appendix H), peer credential, C_I / C_R |
+| `CipherSuite`, `KeyExchangeAlgorithm` | Registry of RFC 9528 §10.2 plus suite -24; the key exchange is Diffie-Hellman or KEM |
+| `AuthenticationCredential`, `X509Certificate` | CRED_x as CCS or DER certificate, with the authentication key |
+| `CredentialIdentifier` | ID_CRED_x: `KeyId`, `X509Thumbprint`, `X509Chain`, `Kccs`, `Other` |
+| `CredentialResolver`, `TrustedCredentials` | Resolves and authorizes a received ID_CRED_x; chains go through `CertificateValidator` |
+| `LocalCredential` | Own CRED_x, ID_CRED_x, private key handle, and whether it signs or does static DH |
+| `EadHandler`, `EadItem` | Produce and consume EAD_1..4; critical labels are enforced, padding is dropped |
+| `ConnectionIdentifierProvider`, `EphemeralKeySource` | Injection points for C_I / C_R and ephemeral keys (trace replay) |
+
+The key exchange is a strategy (`EphemeralKeyExchange`, internal): ECDH on the suite's curve with
+x-only G_X / G_Y (Appendix B), or a KEM where G_X is the encapsulation key, G_Y the ciphertext and
+G_XY the shared secret (draft-ietf-lake-pqsuites §3). Static-DH methods 1–3 are rejected on KEM suites
+both in the configuration and when a Responder receives such a message_1.
+
+## What is implemented
+
+- Methods 0–3, both roles; message_4; EDHOC_Exporter; EDHOC_KeyUpdate (Appendix H).
+- Cipher suites 0–6 and 24 with the default backend; 25 is in the registry and reported as not
+  implemented (its EdDSA needs Ed448, which no backend provides). Suite -24 = libedhoc's
+  `EDHOC_CIPHER_SUITE_PQC_1` (ML-KEM-512, ML-DSA-44, AES-CCM-16-128-128, SHAKE256) with a backend that
+  provides ML-KEM and ML-DSA. Private suites can be declared with the `CipherSuite` constructor.
+- Key schedule of §4: HKDF for SHA-2, KMAC256 with empty customization for SHAKE256, the EDHOC_KDF info
+  encoding, TH_2/TH_3/TH_4, PRK_2e / PRK_3e2m / PRK_4e3m / PRK_out, and the long-PLAINTEXT_2 keystream
+  of Appendix G.
+- Connection identifiers and compact 'kid' encoding (§3.3.2, §3.5.3.2), enforced on receipt.
+- Credentials by `kid`, `x5t` (SHA-256/64, SHA-256, SHA-384, SHAKE256), `x5chain` and `kccs`;
+  non-unique kids are tried in turn (§3.5.3). A minimal DER reader extracts SubjectPublicKeyInfo for
+  Ed25519, X25519, X448, P-256, P-384 and ML-DSA-44/65/87.
+- Error codes 0–3 and cipher suite negotiation (§6). Unknown 'kid' / 'x5t' answers with code 3;
+  untrusted or unsupported identifiers with code 1, as §6.4 requires.
+- Received messages must be deterministically encoded CBOR (§3.1, §9.8); public keys and all
+  cryptographic field lengths are validated (§9.2, §9.8), including the X25519 all-zero check.
+- Intermediate secrets (G_XY, G_RX, G_IY, PRKs, K_3/IV_3, K_4/IV_4) are wiped after use and software
+  ephemeral keys destroyed (§9.8). Logging: DEBUG for protocol steps, TRACE for message bytes through
+  `Logger.payload`; keys, PRKs and plaintexts are never logged.
+
+Not implemented: CWT (`kcwt`) and C509 credentials, `x5u`/`c5u` retrieval, EAD-specific security
+applications, and §7 deduplication (left to the transport). The Responder refuses a C_R equal to C_I,
+because with OSCORE both would become the same Recipient ID (§3.3.3).
+
+## Verified by
+
+| Vectors | What they check |
+|---|---|
+| RFC 9529 §2 (trace 1) | Method 0, suite 0, Ed25519 certificates by `x5t`: every message byte for byte on both sides; H(message_1), G_XY, TH_2, PRK_2e, KEYSTREAM_2, PLAINTEXT_2, MAC_2, Signature_or_MAC_2, TH_3, PRK_3e2m, PRK_4e3m, MAC_3, Signature_or_MAC_3, PLAINTEXT_3, K_3, IV_3, TH_4, K_4, IV_4, PRK_out, PRK_exporter, OSCORE Master Secret/Salt, key update; context_2/3, info encodings, messages to be signed, A_3/A_4 |
+| RFC 9529 §3 (trace 2) | Method 3, suite 2, CCS by `kid`: the rejected first message_1 and the error `02 02`, renegotiation to SUITES_I = [6, 2], then the same values as trace 1 plus SALT_3e2m, G_RX, SALT_4e3m, G_IY |
+| RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve, the low-order X25519 point, a short MAC, non-deterministic CBOR |
+| Round trips | Every method × suites 0–6 and 24; both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
+| Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation |
+
+The trace constants are generated from the RFC text by `tools/gen_edhoc_vectors.py`
+(`tools/regen-vectors.sh`), which checks every value against the byte count the RFC prints.
+
+Still to do: interop against libedhoc, in particular suite -24 with a real ML-KEM-512 / ML-DSA-44
+backend (`kcoap-crypto-bc`).

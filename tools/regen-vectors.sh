@@ -4,8 +4,10 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-for rfc in 3610 5869 8613; do
+for rfc in 3610 5869 8613 9529; do
   curl -sfL "https://www.rfc-editor.org/rfc/rfc${rfc}.txt" -o "$work/rfc${rfc}.txt"
 done
 python3 -I "$here/gen_vectors.py" "$work" \
   "$here/../kcoap-crypto-default/src/commonTest/kotlin/dev/kcoap/crypto/vectors"
+python3 -I "$here/gen_edhoc_vectors.py" "$work/rfc9529.txt" \
+  "$here/../kcoap-edhoc/src/commonTest/kotlin/dev/kcoap/edhoc/vectors/Rfc9529Vectors.kt"
