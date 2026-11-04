@@ -6,3 +6,6 @@ build/
 local.properties
 .DS_Store
 xcuserdata/
+
+# Claude Code session data and agent worktrees
+.claude/
