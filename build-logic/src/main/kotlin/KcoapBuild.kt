@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 /** Which Kotlin targets a kcoap module builds for. */
 enum class KcoapTargets {
-    /** JVM (servers and Android), iOS and macOS. */
+    /** JVM (servers and Android), iOS, macOS and Linux (gateways; also runs the native tests on Linux CI). */
     ALL,
 
     /** JVM only, for modules wrapping JVM libraries such as Bouncy Castle. */
@@ -36,6 +36,7 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
             iosArm64()
             iosSimulatorArm64()
             macosArm64()
+            linuxX64()
         }
 
         sourceSets.getByName("commonTest").dependencies {

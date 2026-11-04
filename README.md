@@ -1,7 +1,7 @@
 # kcoap
 
-CoAP, OSCORE and EDHOC for Kotlin Multiplatform: one implementation for Android, iOS, JVM servers
-and, later, browsers. kcoap aims at complete compliance with the published RFCs, proven by the RFCs'
+CoAP, OSCORE and EDHOC for Kotlin Multiplatform: one implementation for Android, iOS, JVM servers,
+Linux gateways and, later, browsers. kcoap aims at complete compliance with the published RFCs, proven by the RFCs'
 own test vectors and by live interop with libcoap (by RFC authors) and libedhoc. It also supports the
 post-quantum EDHOC suite.
 
@@ -91,6 +91,7 @@ Needs a JDK 17 or newer.
 ```bash
 ./gradlew jvmTest                  # every test on the JVM
 ./gradlew koverHtmlReport          # coverage report in build/reports/kover/html
+./gradlew linuxX64Test             # the common tests as native code (Kotlin/Native, OpenSSL)
 ./gradlew macosArm64Test           # common tests against Apple crypto, on macOS
 ```
 

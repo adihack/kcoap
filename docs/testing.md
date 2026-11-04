@@ -40,6 +40,7 @@ docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
 ```bash
 export JAVA_HOME=/path/to/jdk-17-or-newer
 ./gradlew jvmTest                 # every test on the JVM
+./gradlew linuxX64Test            # the common tests as native code: Kotlin/Native runtime, OpenSSL crypto
 ./gradlew macosArm64Test          # the common tests against Apple crypto (macOS only)
 ./gradlew koverHtmlReport         # coverage report: build/reports/kover/html/index.html
 ./gradlew koverVerify             # fails below the coverage floor
