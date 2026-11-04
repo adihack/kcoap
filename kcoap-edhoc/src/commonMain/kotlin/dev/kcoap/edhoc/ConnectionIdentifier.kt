@@ -25,6 +25,7 @@ public class ConnectionIdentifier(bytes: ByteArray) {
     /** The identifier itself, which is also the OSCORE Recipient ID it maps to. */
     public val bytes: ByteArray get() = content.copyOf()
 
+    /** Length of the identifier in bytes. */
     public val size: Int get() = content.size
 
     /** The representation in EDHOC messages (RFC 9528 §3.3.2). */
@@ -55,6 +56,7 @@ public class ConnectionIdentifier(bytes: ByteArray) {
  * C_I, because with OSCORE both would become the same Recipient ID (RFC 9528 §3.3.3).
  */
 public fun interface ConnectionIdentifierProvider {
+    /** The identifier to send; [peer] is C_I when the Responder chooses C_R, null for the Initiator. */
     public suspend fun choose(backend: CryptoBackend, peer: ConnectionIdentifier?): ConnectionIdentifier
 
     public companion object {

@@ -16,6 +16,7 @@ import dev.kcoap.crypto.CryptoBackend
  * Throw an [EdhocException] to answer with a specific error.
  */
 public fun interface CredentialResolver {
+    /** The trusted credentials [identifier] may refer to, most likely first. */
     public suspend fun resolve(identifier: CredentialIdentifier): List<AuthenticationCredential>
 }
 

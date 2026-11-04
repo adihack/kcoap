@@ -24,13 +24,17 @@ internal class MessageReader(private val bytes: ByteArray, private val what: Str
     val isAtEnd: Boolean get() = reader.isAtEnd
 
     /** The next item as received, after checking it is deterministically encoded. */
-    fun readEncoded(): ByteArray = parse {
-        val encoded = reader.readEncodedItem()
-        if (!Cbor.decode(encoded).encode().contentEquals(encoded)) throw malformed("not deterministically encoded")
-        encoded
-    }
+    fun readEncoded(): ByteArray = readItem().first
 
-    fun readValue(): CborValue = parse { Cbor.decode(readEncoded()) }
+    /** The next item, decoded, after checking it is deterministically encoded. */
+    fun readValue(): CborValue = readItem().second
+
+    private fun readItem(): Pair<ByteArray, CborValue> = parse {
+        val encoded = reader.readEncodedItem()
+        val value = Cbor.decode(encoded)
+        if (!value.encode().contentEquals(encoded)) throw malformed("not deterministically encoded")
+        encoded to value
+    }
 
     /** The next item, which must be an integer in the Int range. */
     fun readInt(): Int {

@@ -14,6 +14,7 @@ import dev.kcoap.crypto.KeyType
  */
 public class X509Certificate private constructor(
     der: ByteArray,
+    /** The type of the subject public key. */
     public val keyType: KeyType,
     publicKey: ByteArray,
     /** The subject's commonName (OID 2.5.4.3), when it is a UTF8, printable or IA5 string. */

@@ -81,17 +81,23 @@ class CipherSuiteTest {
         assertEquals(800, suite.keyExchange.initiatorShareLength)
         assertEquals(768, suite.keyExchange.responderShareLength)
         assertEquals(2420, suite.signature.signatureLength)
-        assertEquals(listOf(16, 16, 13), listOf(suite.edhocAead.keyLength, suite.edhocAead.tagLength, suite.edhocAead.nonceLength))
+        val aead = suite.edhocAead
+        assertEquals(listOf(16, 16, 13), listOf(aead.keyLength, aead.tagLength, aead.nonceLength))
         assertEquals(64, suite.edhocHash.outputLength)
         assertEquals(16, suite.macLength)
         assertEquals(
             listOf(30, -45, 16, -48, 10, -16),
-            listOf(suite.edhocAead.coseId, suite.edhocHash.coseId, suite.macLength, suite.signature.coseId, suite.appAead.coseId, suite.appHash.coseId),
+            listOf(
+                aead.coseId, suite.edhocHash.coseId, suite.macLength, suite.signature.coseId, suite.appAead.coseId,
+                suite.appHash.coseId,
+            ),
         )
         assertEquals(suite, CipherSuite.fromValue(-24))
         assertNull(CipherSuite.fromValue(-23))
         assertEquals("ML_KEM_512", suite.keyExchange.toString())
-        assertTrue(suite.toString().startsWith("CipherSuite(-24: AES_CCM_16_128_128, SHAKE256, 16, ML_KEM_512, ML_DSA_44"))
+        assertTrue(
+            suite.toString().startsWith("CipherSuite(-24: AES_CCM_16_128_128, SHAKE256, 16, ML_KEM_512, ML_DSA_44"),
+        )
     }
 
     @Test
@@ -105,17 +111,19 @@ class CipherSuiteTest {
     /** RFC 9528 §9.3: MAC length and AEAD tag at least 8 bytes, hash output at least 256 bits. */
     @Test
     fun privateSuitesAreValidated() {
-        val dh = KeyExchangeAlgorithm.DiffieHellman(EcdhCurve.P_256)
-        val custom = CipherSuite(-22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, 16, dh, SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256)
+        val p256 = KeyExchangeAlgorithm.DiffieHellman(EcdhCurve.P_256)
+        fun private(macLength: Int) = CipherSuite(
+            -22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, macLength, p256,
+            SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256,
+        )
+        val custom = private(16)
         assertTrue(custom.isImplemented)
         assertTrue(custom.isPrivateUse)
-        assertEquals(custom, CipherSuite(-22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, 16, dh, SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256))
-        assertEquals(custom.hashCode(), CipherSuite(-22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, 16, dh, SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256).hashCode())
-        assertNotEquals(custom, CipherSuite(-22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, 8, dh, SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256))
+        assertEquals(custom, private(16))
+        assertEquals(custom.hashCode(), private(16).hashCode())
+        assertNotEquals(custom, private(8))
         assertNotEquals<Any>(custom, "suite")
-        assertFailsWith<IllegalArgumentException> {
-            CipherSuite(-22, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256, 4, dh, SignatureAlgorithm.ES256, AeadAlgorithm.A128GCM, HashAlgorithm.SHA_256)
-        }
+        assertFailsWith<IllegalArgumentException> { private(4) }
     }
 
     @Test
@@ -130,7 +138,8 @@ class CipherSuiteTest {
             assertFalse(method.isCompatibleWith(CipherSuite.SUITE_PQC_1), method.name)
             assertTrue(method.isCompatibleWith(CipherSuite.SUITE_2), method.name)
         }
-        assertEquals(AuthenticationKind.STATIC_DH, EdhocMethod.STATIC_DH_SIGNATURE.authenticationOf(EdhocRole.INITIATOR))
-        assertEquals(AuthenticationKind.SIGNATURE, EdhocMethod.STATIC_DH_SIGNATURE.authenticationOf(EdhocRole.RESPONDER))
+        val method2 = EdhocMethod.STATIC_DH_SIGNATURE
+        assertEquals(AuthenticationKind.STATIC_DH, method2.authenticationOf(EdhocRole.INITIATOR))
+        assertEquals(AuthenticationKind.SIGNATURE, method2.authenticationOf(EdhocRole.RESPONDER))
     }
 }

@@ -73,6 +73,13 @@ public sealed class KeyExchangeAlgorithm {
  * The parameters follow the order of the registry's "Array" column: EDHOC AEAD, EDHOC hash, EDHOC MAC
  * length, EDHOC key exchange, EDHOC signature, application AEAD, application hash.
  *
+ * @property edhocAead protects message_3 and message_4 (RFC 9528 §5.4.2, §5.5.2).
+ * @property edhocHash computes the transcript hashes and selects HKDF or KMAC (RFC 9528 §4.1).
+ * @property keyExchange the ephemeral key exchange, and with Diffie-Hellman also static-DH authentication.
+ * @property signature signs Signature_or_MAC_2/3 in the signature methods.
+ * @property appAead the AEAD for the application, for example OSCORE (RFC 9528 Appendix A.1).
+ * @property appHash the hash for the application's HKDF, for example OSCORE.
+ *
  * The companion holds the registered suites and libedhoc's private post-quantum suite [SUITE_PQC_1].
  * Other private suites (values -24..-21, RFC 9528 §3.6) can be declared with the public constructor; the
  * constructor enforces the minimum strengths of RFC 9528 §9.3.
@@ -94,6 +101,7 @@ public class CipherSuite private constructor(
      */
     public val isImplemented: Boolean,
 ) {
+    /** A suite from its parameters, for private-use suites; [isImplemented] is true. */
     public constructor(
         value: Int,
         edhocAead: AeadAlgorithm,
@@ -129,27 +137,35 @@ public class CipherSuite private constructor(
         "CipherSuite($value: $edhocAead, $edhocHash, $macLength, $keyExchange, $signature, $appAead, $appHash)"
 
     public companion object {
+        /** AES-CCM-16-64-128, SHA-256, 8, X25519, EdDSA, AES-CCM-16-64-128, SHA-256. */
         public val SUITE_0: CipherSuite = registered(
             0, AES_CCM_16_64_128, SHA_256, 8, EcdhCurve.X25519, SignatureAlgorithm.EDDSA, AES_CCM_16_64_128, SHA_256,
         )
+        /** AES-CCM-16-128-128, SHA-256, 16, X25519, EdDSA, AES-CCM-16-64-128, SHA-256. */
         public val SUITE_1: CipherSuite = registered(
             1, AES_CCM_16_128_128, SHA_256, 16, EcdhCurve.X25519, SignatureAlgorithm.EDDSA, AES_CCM_16_64_128, SHA_256,
         )
+        /** AES-CCM-16-64-128, SHA-256, 8, P-256, ES256, AES-CCM-16-64-128, SHA-256; mandatory (RFC 9528 §8). */
         public val SUITE_2: CipherSuite = registered(
             2, AES_CCM_16_64_128, SHA_256, 8, EcdhCurve.P_256, SignatureAlgorithm.ES256, AES_CCM_16_64_128, SHA_256,
         )
+        /** AES-CCM-16-128-128, SHA-256, 16, P-256, ES256, AES-CCM-16-64-128, SHA-256; mandatory (RFC 9528 §8). */
         public val SUITE_3: CipherSuite = registered(
             3, AES_CCM_16_128_128, SHA_256, 16, EcdhCurve.P_256, SignatureAlgorithm.ES256, AES_CCM_16_64_128, SHA_256,
         )
+        /** ChaCha20/Poly1305, SHA-256, 16, X25519, EdDSA, ChaCha20/Poly1305, SHA-256. */
         public val SUITE_4: CipherSuite = registered(
             4, CHACHA20_POLY1305, SHA_256, 16, EcdhCurve.X25519, SignatureAlgorithm.EDDSA, CHACHA20_POLY1305, SHA_256,
         )
+        /** ChaCha20/Poly1305, SHA-256, 16, P-256, ES256, ChaCha20/Poly1305, SHA-256. */
         public val SUITE_5: CipherSuite = registered(
             5, CHACHA20_POLY1305, SHA_256, 16, EcdhCurve.P_256, SignatureAlgorithm.ES256, CHACHA20_POLY1305, SHA_256,
         )
+        /** A128GCM, SHA-256, 16, X25519, ES256, A128GCM, SHA-256. */
         public val SUITE_6: CipherSuite = registered(
             6, A128GCM, SHA_256, 16, EcdhCurve.X25519, SignatureAlgorithm.ES256, A128GCM, SHA_256,
         )
+        /** A256GCM, SHA-384, 16, P-384, ES384, A256GCM, SHA-384 (CNSA 1.0). */
         public val SUITE_24: CipherSuite = registered(
             24, A256GCM, SHA_384, 16, EcdhCurve.P_384, SignatureAlgorithm.ES384, A256GCM, SHA_384,
         )

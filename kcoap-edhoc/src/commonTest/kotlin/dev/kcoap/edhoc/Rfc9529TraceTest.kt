@@ -30,15 +30,13 @@ class Rfc9529TraceTest {
         assertHex(t.ID_CRED_R, idCredR.encoded)
         assertHex(t.CRED_R_CBOR, credR.encoded)
         assertHex(t.PK_R, credR.publicKey)
-        assertEquals("EDHOC Responder Ed25519", credR.certificate?.subjectCommonName)
+        assertEquals("EDHOC Responder Ed25519", credR.certificate.subjectCommonName)
 
         val initiator = EdhocInitiator(
             EdhocInitiatorConfig(
                 method = EdhocMethod.SIGNATURE_SIGNATURE,
                 cipherSuites = listOf(CipherSuite.SUITE_0),
-                credentials = listOf(
-                    LocalCredential.signature(credI, idCredI, backend.importKeyPair(KeyType.ED25519, t.SK_I.hex(), t.PK_I.hex()).privateKey),
-                ),
+                credentials = listOf(LocalCredential.signature(credI, idCredI, signingKey(t.SK_I, t.PK_I))),
                 credentialResolver = TrustedCredentials(backend, listOf(credR)),
                 connectionIdentifiers = ConnectionIdentifierProvider.fixed(cid(t.C_I)),
                 ephemeralKeys = sequenceOfKeys(fixedKey(KeyType.X25519, t.X, t.G_X)),
@@ -49,9 +47,7 @@ class Rfc9529TraceTest {
             EdhocResponderConfig(
                 methods = setOf(EdhocMethod.SIGNATURE_SIGNATURE),
                 cipherSuites = listOf(CipherSuite.SUITE_0),
-                credentials = listOf(
-                    LocalCredential.signature(credR, idCredR, backend.importKeyPair(KeyType.ED25519, t.SK_R.hex(), t.PK_R.hex()).privateKey),
-                ),
+                credentials = listOf(LocalCredential.signature(credR, idCredR, signingKey(t.SK_R, t.PK_R))),
                 credentialResolver = TrustedCredentials(backend, listOf(credI)),
                 connectionIdentifiers = ConnectionIdentifierProvider.fixed(cid(t.C_R)),
                 ephemeralKeys = sequenceOfKeys(fixedKey(KeyType.X25519, t.Y, t.G_Y)),
@@ -259,6 +255,9 @@ class Rfc9529TraceTest {
             assertHex(t.OSCORE_MASTER_SALT_AFTER_KEYUPDATE, session.oscoreMasterSalt())
         }
     }
+
+    private suspend fun signingKey(privateKey: String, publicKey: String) =
+        backend.importKeyPair(KeyType.ED25519, privateKey.hex(), publicKey.hex()).privateKey
 
     private suspend fun assertSessionKeys(
         initiator: EdhocSession,

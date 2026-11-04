@@ -15,8 +15,11 @@ import dev.kcoap.crypto.CryptoBackend
  * shows key material.
  */
 public class EdhocSession internal constructor(
+    /** This endpoint's role. */
     public val role: EdhocRole,
+    /** The authentication method of the session. */
     public val method: EdhocMethod,
+    /** The selected cipher suite; its application algorithms are what OSCORE uses. */
     public val cipherSuite: CipherSuite,
     /** C_I, chosen by the Initiator. */
     public val initiatorConnectionIdentifier: ConnectionIdentifier,

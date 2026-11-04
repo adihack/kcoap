@@ -15,8 +15,10 @@ public class EadItem(public val label: Int, value: ByteArray? = null) {
     /** ead_value, or null when the item has none. */
     public val value: ByteArray? get() = content?.copyOf()
 
+    /** A negative label: the receiver must understand the item or abort. */
     public val isCritical: Boolean get() = label < 0
 
+    /** Label 0: padding, discarded by the receiver. */
     public val isPadding: Boolean get() = label == 0
 
     internal fun writeTo(writer: CborWriter) {

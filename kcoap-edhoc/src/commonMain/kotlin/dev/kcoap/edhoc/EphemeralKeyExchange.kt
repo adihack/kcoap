@@ -16,6 +16,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * suites) and Y (Responder, Diffie-Hellman suites; a KEM Responder encapsulates instead).
  */
 public fun interface EphemeralKeySource {
+    /** A key pair of [type]. EDHOC destroys software private keys once it no longer needs them. */
     public suspend fun keyPair(backend: CryptoBackend, type: KeyType): KeyPair
 
     public companion object {

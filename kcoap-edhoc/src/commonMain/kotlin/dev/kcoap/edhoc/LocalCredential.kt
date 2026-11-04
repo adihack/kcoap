@@ -9,6 +9,11 @@ import dev.kcoap.crypto.PrivateKey
  *
  * [authentication] fixes what the key is for. RFC 9528 §9.2 discourages using one key both to sign and
  * for static Diffie-Hellman, and a P-256 key could do either, so the purpose is explicit.
+ *
+ * @property credential CRED_x.
+ * @property identifier ID_CRED_x as sent to the peer.
+ * @property privateKey the private authentication key; its type must be the credential's.
+ * @property authentication whether the key signs or does static Diffie-Hellman.
  */
 public class LocalCredential(
     public val credential: AuthenticationCredential,

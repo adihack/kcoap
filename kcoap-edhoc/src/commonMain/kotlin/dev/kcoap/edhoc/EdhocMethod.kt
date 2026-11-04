@@ -18,7 +18,9 @@ public enum class AuthenticationKind {
 public enum class EdhocMethod(
     /** METHOD in message_1. */
     public val value: Int,
+    /** How the Initiator authenticates (Signature_or_MAC_3). */
     public val initiatorAuthentication: AuthenticationKind,
+    /** How the Responder authenticates (Signature_or_MAC_2). */
     public val responderAuthentication: AuthenticationKind,
 ) {
     /** Method 0: both parties sign. */
@@ -48,6 +50,7 @@ public enum class EdhocMethod(
         if (role == EdhocRole.INITIATOR) initiatorAuthentication else responderAuthentication
 
     public companion object {
+        /** The method with METHOD = [value], or null for an unknown method. */
         public fun fromValue(value: Int): EdhocMethod? = entries.firstOrNull { it.value == value }
     }
 }

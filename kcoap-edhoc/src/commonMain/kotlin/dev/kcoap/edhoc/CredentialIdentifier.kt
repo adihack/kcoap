@@ -45,6 +45,7 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
     public class KeyId(kid: ByteArray) : CredentialIdentifier(map(CoseHeader.KID, CborBytes(kid))) {
         private val kidBytes = kid.copyOf()
 
+        /** The key identifier. */
         public val kid: ByteArray get() = kidBytes.copyOf()
 
         override val isByValue: Boolean get() = false
@@ -64,6 +65,7 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
     ) {
         private val hashBytes = hash.copyOf()
 
+        /** The certificate hash. */
         public val hash: ByteArray get() = hashBytes.copyOf()
 
         override val isByValue: Boolean get() = false
@@ -96,6 +98,7 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
 
     /** `{ 14 : CCS }`, a CWT Claims Set by value (RFC 9528 §3.5.3.1), as used for raw public keys. */
     public class Kccs(claimsSet: CwtClaimsSet) : CredentialIdentifier(map(CoseHeader.KCCS, claimsSet.encoded)) {
+        /** The carried claims set, which is CRED_x. */
         public val claimsSet: CwtClaimsSet = claimsSet
 
         override val isByValue: Boolean get() = true
@@ -111,6 +114,7 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
      * 'x5u'). A resolver may still understand it through [header].
      */
     public class Other internal constructor(encoded: ByteArray) : CredentialIdentifier(encoded) {
+        /** An identifier from its header map, encoded with entries in the given order. */
         public constructor(header: CborMap) : this(header.encode())
 
         override val isByValue: Boolean get() = false

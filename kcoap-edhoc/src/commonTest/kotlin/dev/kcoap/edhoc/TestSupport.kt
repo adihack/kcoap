@@ -49,7 +49,9 @@ internal fun fixedKey(type: KeyType, privateHex: String, publicHex: String): sus
 /** Hands out the given connection identifiers in order. */
 internal fun sequenceOfIdentifiers(vararg identifiers: ConnectionIdentifier): ConnectionIdentifierProvider {
     var next = 0
-    return ConnectionIdentifierProvider { _, _ -> identifiers.getOrNull(next++) ?: fail("No more connection identifiers") }
+    return ConnectionIdentifierProvider { _, _ ->
+        identifiers.getOrNull(next++) ?: fail("No more connection identifiers")
+    }
 }
 
 internal fun cid(hex: String): ConnectionIdentifier = ConnectionIdentifier(hex.hex())

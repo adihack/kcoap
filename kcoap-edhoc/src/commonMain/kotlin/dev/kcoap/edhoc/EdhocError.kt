@@ -105,6 +105,7 @@ public class EdhocError(
  * wrong key look the same.
  */
 public open class EdhocException(
+    /** The error to report: what the peer is told, and why this side failed. */
     public val error: EdhocError,
     message: String = error.diagnostic ?: error.toString(),
     cause: Throwable? = null,
