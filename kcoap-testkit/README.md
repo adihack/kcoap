@@ -1,0 +1,39 @@
+# kcoap-testkit
+
+An in-memory datagram network for tests: of kcoap itself, and of applications built on it.
+
+- `InMemoryNetwork`: attaches `InMemoryTransport`s (a `DatagramTransport` each) at UDP-style
+  addresses and delivers datagrams between them in memory.
+- `LinkConditions`: loss, duplication, latency and jitter (and so reordering). Decisions come from
+  the network's seeded `Random`, so a failing run can be replayed.
+- `InMemoryNetwork.filter` drops chosen datagrams deterministically ("lose the first ACK"), and
+  `InMemoryNetwork.tap` sees every datagram with its `DatagramFate`.
+- `InMemoryTransport.inject` hands any `DatagramEvent` to the receiver, for example
+  `SessionEnded` to simulate a DTLS layer.
+
+Delays run on coroutine time: under `runTest`, pass `backgroundScope` to the network and
+`testScheduler.timeSource` to the CoAP endpoint, and retransmissions, lifetimes and latency all run
+on virtual time.
+
+```kotlin
+@Test
+fun survivesALossyNetwork() = runTest {
+    val network = InMemoryNetwork(backgroundScope, Random(42))
+    network.conditions = LinkConditions(lossRate = 0.2, duplicationRate = 0.1, jitter = 50.milliseconds)
+    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    val server = CoapServer(network.attach(), backgroundScope, endpointConfig = config) {
+        resource("hello") { get { CoapResponse.content("Hello") } }
+    }
+    val client = CoapClient(network.attach(), backgroundScope, endpointConfig = config)
+    assertEquals("Hello", client.get("coap://127.0.0.1:50000/hello").payloadAsText())
+}
+```
+
+## Why a separate module
+
+`kcoap-transport` holds the transport interfaces and has no dependencies; the network needs
+kotlinx-coroutines and is only useful in tests, so applications depend on it with
+`testImplementation` and do not ship it. It depends on `kcoap-transport` only, so `kcoap-coap`'s own
+tests can use it without a dependency cycle.
+
+Verified by `InMemoryNetworkTest` and by every end-to-end test of `kcoap-coap`.

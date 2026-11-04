@@ -28,6 +28,8 @@ include(
     ":kcoap-cose",
     // Transport interfaces: datagram, byte stream, message stream; endpoints, peer identities, schemes.
     ":kcoap-transport",
+    // In-memory datagram network with loss, duplication and reordering, for tests of kcoap and its users.
+    ":kcoap-testkit",
     // DTLS 1.2 for coaps (RFC 6347, RFC 7925, RFC 9146). Interfaces and registries only for now.
     ":kcoap-dtls",
     // CoAP message model, codec and exchange layer (RFC 7252, 7641, 7959, 8132, 9175).
