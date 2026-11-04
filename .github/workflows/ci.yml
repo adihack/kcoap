@@ -7,7 +7,7 @@ on:
 
 jobs:
   jvm:
-    name: JVM tests (Linux)
+    name: JVM tests and coverage (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,7 +16,34 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew jvmTest
+      - run: ./gradlew jvmTest koverXmlReport koverVerify
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: jvm-reports
+          path: |
+            **/build/reports/tests/
+            build/reports/kover/
+
+  interop:
+    name: Interop with libcoap and libedhoc (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # The images pin libcoap and libedhoc versions; the interop tests skip themselves without them.
+      - run: docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
+      - run: docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
+      - run: ./gradlew jvmTest --tests '*Interop*'
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: interop-logs
+          path: '**/build/interop-logs/'
 
   apple:
     name: Native tests (macOS + iOS simulator)
