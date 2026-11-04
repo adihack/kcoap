@@ -16,6 +16,8 @@ dependencyResolutionManagement {
 rootProject.name = "kcoap"
 
 include(
+    // Shared basics every module uses: logging, hex, constant-time comparison.
+    ":kcoap-common",
     // Crypto seam: interfaces + pure-Kotlin AES-CCM and HKDF (no platform dependencies).
     ":kcoap-crypto",
     // Default backend on cryptography-kotlin (JDK on JVM/Android, CryptoKit + CommonCrypto on Apple).

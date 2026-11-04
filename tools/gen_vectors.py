@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 src, out = Path(sys.argv[1]), Path(sys.argv[2])
-PKG = "com.example.kcoap.crypto.vectors"
+PKG = "dev.kcoap.crypto.vectors"
 
 
 def strip_pages(text: str) -> str:

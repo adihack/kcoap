@@ -81,5 +81,5 @@ tools/regen-vectors.sh
 ## Before the first publish
 
 - Replace the placeholder coordinates (`kcoap.group` in `gradle.properties`) and the
-  `com.example.kcoap` package.
+  `dev.kcoap` package.
 - Pick a license.
