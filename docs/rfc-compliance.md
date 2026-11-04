@@ -69,7 +69,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | §8.2.1, §8.4.1 | Inner Block-wise (by the stack, above OSCORE) | with the stack | stack tests |
 | App. B.1.1 | Sequence-number persistence | done | unit tests |
 | App. B.1.2 | Echo-based replay-window recovery (server side; client repeats via the stack) | done | unit tests, libcoap `coap-client` answering kcoap's challenge, kcoap answering libcoap's |
-| App. B.2 | Context re-derivation (ID Context) | todo | libcoap |
+| App. B.2 | Context re-derivation (ID Context) | deferred: an optional example protocol; needs the stack to resend on the security layer's request | libcoap (`rfc8613_b_2`) when done |
 | §11 | OSCORE over HTTP | todo | |
 | — | Interop | live, both directions | libcoap v4.3.5b over UDP, raw and through the CoAP stack: B.1.2 challenges both ways, Block1/Block2 and Observe inside OSCORE; `oscore_testcases.sh` todo |
 
