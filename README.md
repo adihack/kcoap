@@ -27,7 +27,7 @@ since Aug 2025). The only CoAP piece worth reusing is the JuulLabs KoAP codec, w
 | `kcoap-transport` | Datagram, byte-stream and message-stream interfaces; endpoints, peer identities, URI schemes |
 | `kcoap-dtls` | DTLS 1.2 placeholders: cipher suites, config, credentials, engine interface. Engine comes last |
 | `kcoap-oscore` | RFC 8613 (empty) |
-| `kcoap-edhoc` | Cipher-suite registry; RFC 9528 state machines to come |
+| `kcoap-edhoc` | RFC 9528 Initiator and Responder, methods 0–3, suites 0–6, 24 and PQ suite -24 |
 | `kcoap-edhoc-oscore` | RFC 9668 combined request, EDHOC→OSCORE mapping (empty) |
 
 DTLS is written in common Kotlin because no platform stack offers the cipher suites RFC 7252 requires.
