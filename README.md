@@ -21,6 +21,7 @@ since Aug 2025). The only CoAP piece worth reusing is the JuulLabs KoAP codec, w
 |---|---|
 | `kcoap-crypto` | `CryptoBackend` seam, algorithm registries, pure-Kotlin **AES-CCM** and **HKDF** |
 | `kcoap-crypto-default` | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit + CommonCrypto on Apple |
+| `kcoap-crypto-bc` | Post-quantum backend on Bouncy Castle (JVM/Android): **ML-KEM** (FIPS 203) and **ML-DSA** (FIPS 204) |
 | `kcoap-cbor` | Deterministic CBOR and CBOR sequences (empty) |
 | `kcoap-cose` | COSE_Encrypt0, Sign1, Enc/Sig structures, COSE_Key, CCS/CWT, x5chain/x5t (empty) |
 | `kcoap-coap` | Option registry with OSCORE classes; codec and exchange layer to come |
@@ -76,6 +77,12 @@ Test vectors in `kcoap-crypto-default/src/commonTest/.../vectors` are generated 
 
 ```bash
 tools/regen-vectors.sh
+```
+
+The ML-KEM and ML-DSA vectors in `kcoap-crypto-bc` are a few NIST ACVP cases, extracted at a pinned commit:
+
+```bash
+tools/regen-pq-vectors.sh
 ```
 
 ## Before the first publish
