@@ -13,5 +13,9 @@ kotlin {
         commonTest.dependencies {
             implementation(project(":kcoap-crypto-default"))
         }
+        jvmTest.dependencies {
+            // The libcoap interop tests run OSCORE through the CoAP client and server over real UDP.
+            implementation(project(":kcoap-transport-ktor"))
+        }
     }
 }

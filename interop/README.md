@@ -85,6 +85,14 @@ and is skipped otherwise:
 
 libcoap's own debug log is written to `kcoap-oscore/build/interop-logs/` when an exchange fails.
 
+`kcoap-oscore/src/jvmTest/.../StackOscoreInteropTest.kt` does the same through kcoap's CoAP client and
+server over real UDP (ktor-network):
+
+- `CoapClient` with `OscoreClient` → `coap-server -E -d 5`: GET `/time` (the stack repeats the request
+  with Echo after the B.1.2 challenge), PUT and GET of a dynamic resource, Observe of `/time`.
+- `coap-client -E` → `CoapServer` with `OscoreServer` (requiring freshness): GET, Block2 download in
+  64-byte blocks, Block1 upload, Observe with `-s 3`; every block and notification is protected on its own.
+
 ```bash
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
 ./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
