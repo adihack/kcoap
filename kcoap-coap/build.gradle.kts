@@ -18,3 +18,10 @@ kotlin {
         }
     }
 }
+
+tasks.withType<Test>().configureEach {
+    // The libcoap interop tests run or skip depending on docker, which Gradle cannot see as an input,
+    // so a result from one environment must never be reused in another.
+    inputs.property("libcoapImage", providers.environmentVariable("KCOAP_LIBCOAP_IMAGE").orElse("kcoap/libcoap:v4.3.5b"))
+    outputs.cacheIf { false }
+}
