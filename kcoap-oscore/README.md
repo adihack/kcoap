@@ -43,8 +43,9 @@ above retransmission and deduplication.
 | §7.2.1 | Sequence numbers below 2^40; the context stops when exhausted |
 | §8 | Request and response protection and verification, error responses with the RFC's diagnostics |
 | App. B.1.1 | Sequence-number persistence through `SequenceNumberStore`, reserving blocks ahead |
+| App. B.1.2 | Freshness challenge with Echo after a reboot (`requireFreshnessProof`), surfaced to the stack as `UnprotectedRequest.challenge` |
 
-Not yet: Appendix B.1.2 (replay-window recovery with Echo after a server reboot), Appendix B.2
+Not yet: Appendix B.2
 (context re-derivation), outer Block-wise for proxies, OSCORE over HTTP (§11).
 
 ## Verified by

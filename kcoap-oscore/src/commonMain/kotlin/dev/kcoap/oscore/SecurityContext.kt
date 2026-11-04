@@ -1,6 +1,7 @@
 package dev.kcoap.oscore
 
 import dev.kcoap.cbor.CborWriter
+import dev.kcoap.common.constantTimeEquals
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.Hkdf
@@ -26,6 +27,9 @@ public class SecurityContext private constructor(
     private var nextSequenceNumber: Long,
     /** Persistence block size K of Appendix B.1.1. */
     private val persistInterval: Long,
+    private val crypto: CryptoBackend,
+    /** False until a request proved its freshness with Echo, when Appendix B.1.2 applies. */
+    private var isFresh: Boolean,
 ) {
     private val senderLock = Mutex()
     private val recipientLock = Mutex()
@@ -51,11 +55,37 @@ public class SecurityContext private constructor(
         number
     }
 
+    /** The Echo value of an outstanding freshness challenge (Appendix B.1.2). */
+    private var pendingEcho: ByteArray? = null
+
     /** Whether [sequence] from the peer was already accepted (or is too old for the window). */
     internal suspend fun isReplay(sequence: Long): Boolean = recipientLock.withLock { replayWindow.isReplay(sequence) }
 
-    /** Records an authenticated [sequence]; false if a concurrent message took it first. */
-    internal suspend fun acceptSequence(sequence: Long): Boolean = recipientLock.withLock { replayWindow.accept(sequence) }
+    /** What to do with an authenticated request. */
+    internal sealed interface Admission {
+        data object Accepted : Admission
+        data object Replay : Admission
+
+        /** Appendix B.1.2: answer with a protected 4.01 carrying [echo], and do not process the request. */
+        class Challenge(val echo: ByteArray) : Admission
+    }
+
+    /**
+     * Admits an authenticated request with Partial IV [sequence] and inner Echo [echo] (RFC 8613 §7.4,
+     * Appendix B.1.2). Checking and updating the replay window is atomic.
+     */
+    internal suspend fun admit(sequence: Long, echo: ByteArray?): Admission = recipientLock.withLock {
+        when {
+            isFresh -> if (replayWindow.accept(sequence)) Admission.Accepted else Admission.Replay
+            echo != null && pendingEcho?.let { constantTimeEquals(it, echo) } == true -> {
+                replayWindow.initializeAt(sequence)
+                isFresh = true
+                pendingEcho = null
+                Admission.Accepted
+            }
+            else -> Admission.Challenge(crypto.randomBytes(ECHO_LENGTH).also { pendingEcho = it })
+        }
+    }
 
     /**
      * The AEAD nonce (RFC 8613 §5.2): the length of [idPiv], the padded ID of the endpoint that chose the
@@ -77,17 +107,25 @@ public class SecurityContext private constructor(
         /** RFC 8613 §7.2.1: Sender Sequence Numbers stay below 2^40, the 5-byte Partial IV range. */
         public const val MAX_SEQUENCE_NUMBER: Long = (1L shl 40) - 1
 
+        /** Length of the Echo values of freshness challenges; RFC 9175 §2.2 allows up to 40 bytes. */
+        private const val ECHO_LENGTH = 8
+
         /**
          * Derives Sender Key, Recipient Key and Common IV with HKDF (RFC 8613 §3.2.1) and restores the
          * Sender Sequence Number from [sequenceStore].
          *
          * @param persistInterval how many sequence numbers to reserve per write to [sequenceStore].
+         * @param requireFreshnessProof set when the context was restored without its replay window, for
+         *   example after a reboot: the first request from the peer is then answered with an Echo
+         *   challenge, and the replay window starts at the Partial IV of the request that returns the
+         *   Echo value (RFC 8613 Appendix B.1.2).
          */
         public suspend fun derive(
             parameters: SecurityContextParameters,
             crypto: CryptoBackend,
             sequenceStore: SequenceNumberStore = InMemorySequenceNumberStore(),
             persistInterval: Long = 64,
+            requireFreshnessProof: Boolean = false,
         ): SecurityContext {
             require(persistInterval > 0) { "persistInterval must be positive" }
             val hkdf = Hkdf(crypto, parameters.hkdfAlgorithm)
@@ -107,6 +145,8 @@ public class SecurityContext private constructor(
                 sequenceStore = sequenceStore,
                 nextSequenceNumber = start,
                 persistInterval = persistInterval,
+                crypto = crypto,
+                isFresh = !requireFreshnessProof,
             )
         }
 

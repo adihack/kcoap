@@ -55,6 +55,14 @@ public interface UnprotectedRequest {
     public val identity: SecurityIdentity
 
     /**
+     * A response the security layer requires instead of processing the request, such as OSCORE's
+     * freshness challenge after a reboot (RFC 8613 Appendix B.1.2: a protected 4.01 with Echo). When it
+     * is set, the stack does not pass the request to a resource; it sends [protectResponse] of this
+     * message, with the type and Message ID it would give any response.
+     */
+    public val challenge: CoapMessage? get() = null
+
+    /**
      * Protects a response to this request. The stack keeps this object for an observation and calls it
      * for every notification.
      */

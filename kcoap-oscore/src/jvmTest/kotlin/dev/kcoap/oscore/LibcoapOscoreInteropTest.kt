@@ -97,6 +97,8 @@ class LibcoapOscoreInteropTest {
         val serverContext = SecurityContext.derive(
             SecurityContextParameters(secret.hexToBytes(), senderId = "12".hexToBytes(), recipientId = "11".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
+            // Like a rebooted server: libcoap's client must answer the Appendix B.1.2 Echo challenge.
+            requireFreshnessProof = true,
         )
         val server = OscoreServer(InMemoryContextRepository().apply { add(serverContext) })
         writeConf("client.conf", sender = "11", recipient = "12")
@@ -109,7 +111,7 @@ class LibcoapOscoreInteropTest {
             assertEquals("hello from kcoap", get.trim())
             val put = runClient("-m", "put", "-e", "ping", "coap://127.0.0.1:${socket.localPort}/echo")
             assertEquals("echo: ping", put.trim())
-            assertEquals(listOf("GET /hello", "PUT /echo"), synchronized(received) { received.toList() })
+            assertEquals(listOf("challenge", "GET /hello", "PUT /echo"), synchronized(received) { received.toList() })
             socket.close()
             responder.join(2000)
         }
@@ -143,6 +145,15 @@ class LibcoapOscoreInteropTest {
                     messageId = request.messageId
                 }
                 val inner = verified.message
+                verified.challenge?.let { challenge ->
+                    synchronized(log) { log += "challenge" }
+                    return@runBlocking verified.protectResponse(
+                        challenge.toBuilder().apply {
+                            type = CoapMessageType.ACK
+                            messageId = request.messageId
+                        }.build(),
+                    )
+                }
                 synchronized(log) { log += "${inner.code.description} ${inner.options.path}" }
                 val text = when (inner.options.path) {
                     "/hello" -> "hello from kcoap"

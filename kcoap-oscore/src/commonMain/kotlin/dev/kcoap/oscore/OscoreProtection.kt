@@ -29,6 +29,9 @@ internal class RequestBinding(
     val isObserveRegistration: Boolean,
 )
 
+/** A verified request, and the Echo challenge to answer it with when freshness is not yet proven. */
+internal class VerifiedRequest(val message: CoapMessage, val binding: RequestBinding, val challengeEcho: ByteArray?)
+
 /**
  * The OSCORE message transformations of RFC 8613 §8, independent of how messages are sent. The client
  * and server SPI implementations ([OscoreClient], [OscoreServer]) wrap these four operations.
@@ -65,7 +68,7 @@ internal object OscoreProtection {
     suspend fun unprotectRequest(
         request: CoapMessage,
         findContext: suspend (kid: ByteArray, kidContext: ByteArray?) -> SecurityContext?,
-    ): Pair<CoapMessage, RequestBinding> {
+    ): VerifiedRequest {
         val optionValue = OscoreOptionValue.decode(request.options.oscore ?: throw OscoreException(OscoreError.DECODE_FAILED, "no OSCORE option"))
         val kid = optionValue.kid ?: throw OscoreException(OscoreError.DECODE_FAILED, "request without kid")
         val piv = optionValue.partialIv ?: throw OscoreException(OscoreError.DECODE_FAILED, "request without Partial IV")
@@ -78,12 +81,14 @@ internal object OscoreProtection {
         val nonce = context.nonce(kid, piv)
         val aad = additionalData(context, requestKid = kid, requestPiv = piv)
         val plaintext = decrypt(context, nonce, request.payload, aad)
-        if (!context.acceptSequence(sequence)) throw OscoreException(OscoreError.REPLAY)
-
-        val inner = parsePlaintext(plaintext)
-        val decrypted = merge(request, inner)
+        val decrypted = merge(request, parsePlaintext(plaintext))
         val binding = RequestBinding(context, kid, piv, nonce, isObserveRegistration = decrypted.options.observe == 0L)
-        return decrypted to binding
+
+        return when (val admission = context.admit(sequence, decrypted.options.echo)) {
+            SecurityContext.Admission.Accepted -> VerifiedRequest(decrypted, binding, challengeEcho = null)
+            SecurityContext.Admission.Replay -> throw OscoreException(OscoreError.REPLAY)
+            is SecurityContext.Admission.Challenge -> VerifiedRequest(decrypted, binding, admission.echo)
+        }
     }
 
     /**

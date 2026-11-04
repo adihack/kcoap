@@ -66,7 +66,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | §4.1.3.5, §8.3.1, §8.4.2 | Observe with OSCORE | done | end-to-end tests |
 | §8.2.1, §8.4.1 | Inner Block-wise (by the stack, above OSCORE) | with the stack | stack tests |
 | App. B.1.1 | Sequence-number persistence | done | unit tests |
-| App. B.1.2 | Echo-based replay-window recovery | todo | |
+| App. B.1.2 | Echo-based replay-window recovery (server side; client repeats via the stack) | done | unit tests, libcoap `coap-client` answering kcoap's challenge, kcoap answering libcoap's |
 | App. B.2 | Context re-derivation (ID Context) | todo | libcoap |
 | §11 | OSCORE over HTTP | todo | |
 | — | Interop | live, both directions | libcoap v4.3.5b over UDP: kcoap client ↔ `coap-server` (incl. its B.1.2 Echo challenge), `coap-client` ↔ kcoap responder; `oscore_testcases.sh` todo |

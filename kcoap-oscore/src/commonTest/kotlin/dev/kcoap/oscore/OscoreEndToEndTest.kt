@@ -232,4 +232,49 @@ class OscoreEndToEndTest {
         val client = OscoreClient(ClientContextResolver { _, _ -> null })
         assertNull(client.protectRequest(request(), peer))
     }
+
+    /** RFC 8613 Appendix B.1.2: after a reboot the server proves the client's freshness with Echo first. */
+    @Test
+    fun rebootedServerChallengesWithEcho() = runTest {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val clientContext = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverContext = SecurityContext.derive(
+            SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)),
+            crypto,
+            requireFreshnessProof = true,
+        )
+        val client = OscoreClient(clientContext, loggers)
+        val server = serverFor(serverContext)
+
+        val first = client.protectRequest(request(), peer)!!
+        val challenged = server.unprotectRequest(first.message, peer)!!
+        val challenge = challenged.challenge!!
+        assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
+        val protectedChallenge = challenged.protectResponse(challenge)
+        assertTrue(protectedChallenge.options.oscore!!.isNotEmpty(), "the challenge carries the server's Partial IV")
+
+        val seenByClient = first.unprotectResponse(protectedChallenge)
+        assertEquals(CoapCode.UNAUTHORIZED, seenByClient.code)
+        val echo = seenByClient.options.echo!!
+        assertEquals(0, seenByClient.payloadSize, "no diagnostic payload")
+
+        val wrongEcho = client.protectRequest(request().toBuilder().options { echo(byteArrayOf(1, 2, 3)) }.build(), peer)!!
+        assertTrue(server.unprotectRequest(wrongEcho.message, peer)!!.challenge != null, "a wrong Echo gets a new challenge")
+        val newEcho = first.let {
+            // The previous challenge was replaced; take the current one from a fresh round.
+            val retry = client.protectRequest(request(), peer)!!
+            retry.unprotectResponse(server.unprotectRequest(retry.message, peer)!!.let { it.protectResponse(it.challenge!!) }).options.echo!!
+        }
+        assertTrue(!newEcho.contentEquals(echo))
+
+        val proof = client.protectRequest(request().toBuilder().options { echo(newEcho) }.build(), peer)!!
+        val accepted = server.unprotectRequest(proof.message, peer)!!
+        assertNull(accepted.challenge, "the Echo proves freshness")
+        assertContentEquals(newEcho, accepted.message.options.echo)
+
+        // The request that proved freshness set the lower limit: the earlier ones are replays now.
+        val replay = assertFailsWith<MessageSecurityException> { server.unprotectRequest(first.message, peer) }
+        assertEquals("Replay detected", replay.diagnostic)
+        assertNull(server.unprotectRequest(client.protectRequest(request(), peer)!!.message, peer)!!.challenge)
+    }
 }

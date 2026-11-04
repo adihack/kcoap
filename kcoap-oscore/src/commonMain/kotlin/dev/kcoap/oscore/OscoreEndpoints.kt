@@ -1,5 +1,6 @@
 package dev.kcoap.oscore
 
+import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.ClientMessageSecurity
@@ -165,19 +166,26 @@ public class OscoreServer(
 
     override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
         if (CoapOptions.OSCORE.number !in request.options) return null
-        val (decrypted, binding) = try {
+        val verified = try {
             OscoreProtection.unprotectRequest(request) { kid, kidContext -> contexts.find(kid, kidContext) }
         } catch (e: OscoreException) {
             log.warn { "Rejected a request from $peer: ${e.message}" }
             throw e.toMessageSecurityException()
         }
-        log.debug { "Verified ${decrypted.code} ${decrypted.options.path} from $peer with ${binding.context}" }
-        return ServerExchange(decrypted, binding)
+        val decrypted = verified.message
+        val challenge = verified.challengeEcho?.let { echo ->
+            log.info { "Challenging $peer to prove freshness for ${verified.binding.context} (RFC 8613 B.1.2)" }
+            // Appendix B.1.2: a protected 4.01 containing only the Echo option and no diagnostic payload.
+            CoapMessage.response(decrypted, CoapCode.UNAUTHORIZED) { options { echo(echo) } }
+        }
+        if (challenge == null) log.debug { "Verified ${decrypted.code} ${decrypted.options.path} from $peer with ${verified.binding.context}" }
+        return ServerExchange(decrypted, verified.binding, challenge)
     }
 
     private class ServerExchange(
         override val message: CoapMessage,
         private val binding: RequestBinding,
+        override val challenge: CoapMessage?,
     ) : UnprotectedRequest {
         private val lock = Mutex()
         private var responses = 0
@@ -186,12 +194,13 @@ public class OscoreServer(
 
         /**
          * The first response reuses the request nonce (RFC 8613 §8.3); later notifications take a new
-         * Partial IV each (§8.3.1).
+         * Partial IV each (§8.3.1), and so does a freshness challenge, whose request may be a replay
+         * (Appendix B.1.2).
          */
         override suspend fun protectResponse(response: CoapMessage): CoapMessage {
             val first = lock.withLock { responses++ == 0 }
             return try {
-                OscoreProtection.protectResponse(binding, response, newPartialIv = !first)
+                OscoreProtection.protectResponse(binding, response, newPartialIv = !first || challenge != null)
             } catch (e: OscoreException) {
                 throw e.toMessageSecurityException()
             }

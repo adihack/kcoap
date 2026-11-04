@@ -25,6 +25,15 @@ internal class ReplayWindow(private val size: Int) {
         return accepted and (1L shl age.toInt()) != 0L
     }
 
+    /**
+     * Makes [sequence] the lower limit: it and every older number count as received (RFC 8613 Appendix
+     * B.1.2, after the client proved freshness with Echo).
+     */
+    fun initializeAt(sequence: Long) {
+        highest = sequence
+        accepted = -1L
+    }
+
     /** Records [sequence]; returns false, changing nothing, if it is a replay. */
     fun accept(sequence: Long): Boolean {
         if (isReplay(sequence)) return false

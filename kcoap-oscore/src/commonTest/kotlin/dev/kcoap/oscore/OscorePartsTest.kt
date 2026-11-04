@@ -150,7 +150,7 @@ class OscorePartsTest {
             val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), aeadAlgorithm = algorithm), crypto)
             val request = dev.kcoap.coap.CoapMessage.request(CoapCode.GET) { options { uriPath("x") } }
             val (protected, _) = OscoreProtection.protectRequest(client, request)
-            val (decrypted, _) = OscoreProtection.unprotectRequest(protected) { _, _ -> server }
+            val decrypted = OscoreProtection.unprotectRequest(protected) { _, _ -> server }.message
             assertEquals(request, decrypted, algorithm.name)
         }
     }

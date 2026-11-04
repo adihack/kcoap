@@ -156,7 +156,9 @@ class Rfc8613VectorsTest {
         )
         for ((withIdContext, protected, unprotected) in cases) {
             val server = context(senderId = "01", recipientId = "", salt = true, withIdContext = withIdContext)
-            val (decrypted, binding) = OscoreProtection.unprotectRequest(UdpMessageCodec.decode(protected.hexToBytes())) { _, _ -> server }
+            val verified = OscoreProtection.unprotectRequest(UdpMessageCodec.decode(protected.hexToBytes())) { _, _ -> server }
+            val decrypted = verified.message
+            val binding = verified.binding
             assertEquals(unprotected, UdpMessageCodec.encode(decrypted).toHex())
             assertEquals("14", binding.requestPiv.toHex())
         }
@@ -173,7 +175,7 @@ class Rfc8613VectorsTest {
         )
         for ((newPartialIv, protected) in expected) {
             val server = context(senderId = "01", recipientId = "", salt = true)
-            val (_, binding) = OscoreProtection.unprotectRequest(UdpMessageCodec.decode(request.hexToBytes())) { _, _ -> server }
+            val binding = OscoreProtection.unprotectRequest(UdpMessageCodec.decode(request.hexToBytes())) { _, _ -> server }.binding
             val message = OscoreProtection.protectResponse(binding, response, newPartialIv)
             assertEquals(protected, UdpMessageCodec.encode(message).toHex(), if (newPartialIv) "C.8" else "C.7")
 
