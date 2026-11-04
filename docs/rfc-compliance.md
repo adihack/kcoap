@@ -105,9 +105,11 @@ Verified by RFC 9529 traces 1 and 2 (every printed value, both roles), the inval
 
 | Spec | What | Status |
 |---|---|---|
-| RFC 9528 App. A.1 | EDHOC connection identifiers ↔ OSCORE Sender/Recipient IDs | partial (Master Secret/Salt from `EdhocSession`; context derivation todo) |
-| RFC 9528 App. A.2 | EDHOC over CoAP (`/.well-known/edhoc`, forward and reverse flows) | todo |
-| RFC 9668 | EDHOC option, combined EDHOC+OSCORE request, application-profile parameters | registry done |
+| RFC 9528 App. A.1 | EDHOC connection identifiers ↔ OSCORE Sender/Recipient IDs, exporter-derived context | done |
+| RFC 9528 App. A.2.1 | EDHOC over CoAP, forward flow (`/.well-known/edhoc`, prefixes, Content-Formats, A.2.3 errors) | done (stack-independent; CoAP resource wiring with the stack) |
+| RFC 9528 App. A.2.2 | Reverse message flow | todo |
+| RFC 9668 §3 | Combined EDHOC + OSCORE request, client and server, error handling | done; Figure 4 byte for byte |
+| RFC 9668 §4 | Connection identifier selection for OSCORE | done (server side) |
 
 ## Drafts (out of scope until published)
 

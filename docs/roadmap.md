@@ -13,7 +13,7 @@ depends on it. Interop with libcoap and libedhoc runs as soon as a layer can tal
 | 6 | EDHOC: methods 0–3, suites 0–6 and 24, PQ suite (KEM + ML-DSA), EAD, exporter | `kcoap-edhoc` | RFC 9529 traces (both roles, §4 invalid messages), libedhoc | done; libedhoc interop pending |
 | 7 | OSCORE: context, protect/verify, replay window, Observe, B.1.1, B.1.2 (B.2 pending) | `kcoap-oscore` | RFC 8613 C, libcoap live | done |
 | 8 | CoAP endpoint: messaging, exchanges, client and server API, UDP transport | `kcoap-coap`, `kcoap-transport-*` | unit tests, libcoap | planned |
-| 9 | EDHOC over CoAP and RFC 9668 combined request | `kcoap-edhoc-oscore` | libcoap + libedhoc application | planned |
+| 9 | EDHOC over CoAP and RFC 9668 combined request | `kcoap-edhoc-oscore` | RFC 9668 Figure 4, end-to-end tests; libedhoc live pending | done, live interop pending |
 | 10 | Interop harness: libcoap and libedhoc in containers, byte-exact oracles | `interop/` | CI | planned |
 | 11 | TCP and WebSocket transports, browser target (JS/Wasm) | `kcoap-transport-*` | libcoap | planned |
 | 12 | DTLS 1.2 | `kcoap-dtls` | libcoap with five DTLS backends | last |
