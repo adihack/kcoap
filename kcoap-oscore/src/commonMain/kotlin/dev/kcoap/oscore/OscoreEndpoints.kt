@@ -1,0 +1,200 @@
+package dev.kcoap.oscore
+
+import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.common.readUnsigned
+import dev.kcoap.common.toHex
+import dev.kcoap.log.LogTags
+import dev.kcoap.log.LoggerFactory
+import dev.kcoap.transport.Endpoint
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+/** Chooses the security context for an outgoing request, or null to send it unprotected. */
+public fun interface ClientContextResolver {
+    public suspend fun contextFor(peer: Endpoint, request: CoapMessage): SecurityContext?
+}
+
+/**
+ * Finds the Recipient Context for an incoming request by its 'kid' and optional 'kid context'
+ * (RFC 8613 §8.2 step 2). Implementations may derive a context on demand, as Appendix B.2 and EDHOC do.
+ */
+public fun interface SecurityContextRepository {
+    public suspend fun find(recipientId: ByteArray, idContext: ByteArray?): SecurityContext?
+}
+
+/** A repository holding contexts in memory, keyed by Recipient ID and ID Context. */
+public class InMemoryContextRepository : SecurityContextRepository {
+    private val lock = Mutex()
+    private val contexts = mutableMapOf<String, SecurityContext>()
+
+    public suspend fun add(context: SecurityContext) {
+        lock.withLock { contexts[key(context.recipientId, context.idContext)] = context }
+    }
+
+    public suspend fun remove(context: SecurityContext) {
+        lock.withLock { contexts.remove(key(context.recipientId, context.idContext)) }
+    }
+
+    /**
+     * Without a 'kid context' in the request, a context is found by Recipient ID alone when exactly one
+     * context has it (RFC 8613 §3.3 recommends unique Recipient IDs).
+     */
+    override suspend fun find(recipientId: ByteArray, idContext: ByteArray?): SecurityContext? = lock.withLock {
+        if (idContext != null) return@withLock contexts[key(recipientId, idContext)]
+        contexts[key(recipientId, null)]
+            ?: contexts.values.singleOrNull { it.recipientId.contentEquals(recipientId) }
+    }
+
+    private fun key(recipientId: ByteArray, idContext: ByteArray?): String = "${recipientId.toHex()}/${idContext?.toHex() ?: "-"}"
+}
+
+/** The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. */
+public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : SecurityIdentity {
+    private val rid = recipientId.copyOf()
+    private val idc = idContext?.copyOf()
+
+    public val recipientId: ByteArray get() = rid.copyOf()
+    public val idContext: ByteArray? get() = idc?.copyOf()
+
+    override val description: String get() = "OSCORE rid=${rid.toHex()}" + (idc?.let { " idc=${it.toHex()}" } ?: "")
+
+    override fun equals(other: Any?): Boolean = other is OscoreIdentity && rid.contentEquals(other.rid) && idc.contentEquals(other.idc)
+
+    override fun hashCode(): Int = rid.contentHashCode()
+
+    override fun toString(): String = description
+}
+
+/**
+ * The OSCORE client side for the CoAP stack: protects requests with the context [contexts] picks and
+ * verifies the responses, including Observe notifications with their replay protection
+ * (RFC 8613 §4.1.3.5.2, §7.4.1).
+ */
+public class OscoreClient(
+    private val contexts: ClientContextResolver,
+    loggers: LoggerFactory = LoggerFactory.Global,
+) : ClientMessageSecurity {
+    private val log = loggers.logger(LogTags.OSCORE).child("client")
+
+    /** Protects every request with [context]. */
+    public constructor(context: SecurityContext, loggers: LoggerFactory = LoggerFactory.Global) :
+        this(ClientContextResolver { _, _ -> context }, loggers)
+
+    override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+        val context = contexts.contextFor(peer, request) ?: return null
+        val (protected, binding) = try {
+            OscoreProtection.protectRequest(context, request)
+        } catch (e: OscoreException) {
+            throw e.toMessageSecurityException()
+        }
+        log.debug { "Protected ${request.code} for $peer with $context, piv=${binding.requestPiv.toHex()}" }
+        return ClientExchange(protected, binding)
+    }
+
+    private inner class ClientExchange(
+        override val message: CoapMessage,
+        private val binding: RequestBinding,
+    ) : ProtectedRequest {
+        private val lock = Mutex()
+        private var usedRequestNonce = false
+        private var notificationNumber: Long = -1
+
+        override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
+            if (response.options.oscore == null) {
+                // OSCORE errors are sent unprotected (RFC 8613 §8.2); pass them on so the application can
+                // react, for example by re-deriving the context. They are not authenticated.
+                if (response.code.isClientError || response.code.isServerError) return response
+                throw MessageSecurityException("Unprotected response to an OSCORE request")
+            }
+            val (decrypted, piv) = try {
+                OscoreProtection.unprotectResponse(binding, response)
+            } catch (e: OscoreException) {
+                log.warn { "Dropped a response: ${e.message}" }
+                throw e.toMessageSecurityException()
+            }
+            return lock.withLock { checkFreshness(decrypted, piv) }
+        }
+
+        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        private fun checkFreshness(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
+            val isNotification = decrypted.options.observe != null
+            if (!isNotification) {
+                if (!binding.isObserveRegistration && usedRequestNonce) {
+                    throw MessageSecurityException("Second response to a non-Observe request")
+                }
+                usedRequestNonce = usedRequestNonce || piv == null
+                return decrypted
+            }
+            if (!binding.isObserveRegistration) throw MessageSecurityException("Notification for a request that did not register")
+            if (piv == null) {
+                if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
+                usedRequestNonce = true
+                return withObserveValue(decrypted, 0)
+            }
+            val sequence = piv.readUnsigned()
+            if (sequence <= notificationNumber) throw MessageSecurityException("Replayed or stale notification")
+            notificationNumber = sequence
+            // §4.1.3.5.2: the client MAY set Observe from the low three bytes of the Partial IV, so the
+            // stack's ordering by Observe value matches OSCORE's ordering by Partial IV. Adding one keeps
+            // the notification without a Partial IV (value 0) the oldest, as the RFC requires.
+            return withObserveValue(decrypted, (sequence + 1) and 0xFFFFFF)
+        }
+
+        private fun withObserveValue(message: CoapMessage, value: Long): CoapMessage =
+            message.toBuilder().options { observe(value) }.build()
+    }
+}
+
+/**
+ * The OSCORE server side for the CoAP stack: verifies requests carrying the OSCORE option against the
+ * contexts in [contexts] and protects the responses. Requests without the option are left to the
+ * stack (null), so a server can host public and protected resources side by side.
+ */
+public class OscoreServer(
+    private val contexts: SecurityContextRepository,
+    loggers: LoggerFactory = LoggerFactory.Global,
+) : ServerMessageSecurity {
+    private val log = loggers.logger(LogTags.OSCORE).child("server")
+
+    override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
+        if (CoapOptions.OSCORE.number !in request.options) return null
+        val (decrypted, binding) = try {
+            OscoreProtection.unprotectRequest(request) { kid, kidContext -> contexts.find(kid, kidContext) }
+        } catch (e: OscoreException) {
+            log.warn { "Rejected a request from $peer: ${e.message}" }
+            throw e.toMessageSecurityException()
+        }
+        log.debug { "Verified ${decrypted.code} ${decrypted.options.path} from $peer with ${binding.context}" }
+        return ServerExchange(decrypted, binding)
+    }
+
+    private class ServerExchange(
+        override val message: CoapMessage,
+        private val binding: RequestBinding,
+    ) : UnprotectedRequest {
+        private val lock = Mutex()
+        private var responses = 0
+
+        override val identity: SecurityIdentity = OscoreIdentity(binding.context.recipientId, binding.context.idContext)
+
+        /**
+         * The first response reuses the request nonce (RFC 8613 §8.3); later notifications take a new
+         * Partial IV each (§8.3.1).
+         */
+        override suspend fun protectResponse(response: CoapMessage): CoapMessage {
+            val first = lock.withLock { responses++ == 0 }
+            return try {
+                OscoreProtection.protectResponse(binding, response, newPartialIv = !first)
+            } catch (e: OscoreException) {
+                throw e.toMessageSecurityException()
+            }
+        }
+    }
+}

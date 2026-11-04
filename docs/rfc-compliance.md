@@ -59,13 +59,17 @@ implemented last; the interfaces and rules around it are in place now (`architec
 
 | Section | What | Status | Verified by |
 |---|---|---|---|
-| §3 | Security context derivation | partial (HKDF on given `info`) | C.1–C.3 |
-| §4 | Option classes E/U, Proxy-Uri decomposition | partial (registry) | C.4–C.7 |
-| §5–§8 | COSE object, AAD, nonce, protect/verify | todo | C.4–C.7 (AEAD part done) |
-| §7.4 | Replay window | todo | interop + unit |
-| §8.3–8.4, §9 | Observe and Block with OSCORE | todo | interop |
-| App. B.1 | Sequence-number persistence, Echo-based replay-window recovery | todo | interop |
+| §3 | Security context derivation | done | C.1–C.3 (keys, IVs, `info`, nonces) |
+| §4 | Option classes E/U, Proxy-Uri decomposition | done | C.4–C.6, unit tests |
+| §5–§8 | COSE object, AAD, nonce, protect/verify, error responses | done | C.4–C.8 byte for byte, both sides |
+| §7.4 | Replay window | done | unit + end-to-end tests |
+| §4.1.3.5, §8.3.1, §8.4.2 | Observe with OSCORE | done | end-to-end tests |
+| §8.2.1, §8.4.1 | Inner Block-wise (by the stack, above OSCORE) | with the stack | stack tests |
+| App. B.1.1 | Sequence-number persistence | done | unit tests |
+| App. B.1.2 | Echo-based replay-window recovery | todo | |
 | App. B.2 | Context re-derivation (ID Context) | todo | libcoap |
+| §11 | OSCORE over HTTP | todo | |
+| — | Interop | todo | libcoap `oscore_testcases.sh` |
 
 ## EDHOC (RFC 9528)
 

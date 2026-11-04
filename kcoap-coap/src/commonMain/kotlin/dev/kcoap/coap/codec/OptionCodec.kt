@@ -7,11 +7,14 @@ import dev.kcoap.common.ByteArrayBuilder
 /**
  * The option and payload part shared by every CoAP framing (RFC 7252 §3.1, RFC 8323 §3.2): delta-encoded
  * options, then an optional 0xFF marker followed by a non-empty payload.
+ *
+ * Public because OSCORE encodes its plaintext and Class I options with the same rules (RFC 8613 §5.3).
  */
-internal object OptionCodec {
+public object OptionCodec {
     private const val PAYLOAD_MARKER = 0xFF
 
-    fun write(options: OptionSet, payload: ByteArray, out: ByteArrayBuilder) {
+    /** Appends [options] in number order, then the payload marker and [payload] when it is not empty. */
+    public fun write(options: OptionSet, payload: ByteArray, out: ByteArrayBuilder) {
         var previous = 0
         for (option in options) {
             val delta = option.number - previous
@@ -31,10 +34,10 @@ internal object OptionCodec {
     }
 
     /** Parsed options and the payload that followed them. */
-    class Parsed(val options: OptionSet, val payload: ByteArray)
+    public class Parsed(public val options: OptionSet, public val payload: ByteArray)
 
     /** Reads options and payload from `bytes[start, end)`; [fail] builds the exception to throw. */
-    fun read(bytes: ByteArray, start: Int, end: Int, fail: (String) -> CoapFormatException): Parsed {
+    public fun read(bytes: ByteArray, start: Int, end: Int, fail: (String) -> CoapFormatException): Parsed {
         val options = OptionSet.Builder()
         var number = 0
         var offset = start
