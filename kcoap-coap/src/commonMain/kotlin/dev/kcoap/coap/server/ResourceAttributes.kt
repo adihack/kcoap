@@ -45,6 +45,7 @@ public class ResourceAttributes(
     override fun toString(): String = toLink("", observable = false).attributes.toString()
 
     public companion object {
+        /** No attributes: the link is just the path. */
         public val NONE: ResourceAttributes = ResourceAttributes()
     }
 }

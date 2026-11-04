@@ -79,18 +79,23 @@ public class CoapClient private constructor(
     public suspend fun request(method: CoapCode, uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapRequest.Builder(method, uri).apply(configure).build())
 
+    /** GET (RFC 7252 §5.8.1) of [uri]; [configure] adds options or makes it Non-confirmable. */
     public suspend fun get(uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapCode.GET, uri, configure)
 
+    /** GET of the CoAP URI [uri]. */
     public suspend fun get(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         get(CoapUri.parse(uri), configure)
 
+    /** DELETE (RFC 7252 §5.8.4) of [uri]. */
     public suspend fun delete(uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapCode.DELETE, uri, configure)
 
+    /** DELETE of the CoAP URI [uri]. */
     public suspend fun delete(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         delete(CoapUri.parse(uri), configure)
 
+    /** POST (RFC 7252 §5.8.2) of [payload] in [contentFormat] to [uri]; large bodies go in Block1 blocks. */
     public suspend fun post(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -98,6 +103,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = withBody(CoapCode.POST, uri, payload, contentFormat, configure)
 
+    /** POST to the CoAP URI [uri]. */
     public suspend fun post(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -105,6 +111,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = post(CoapUri.parse(uri), payload, contentFormat, configure)
 
+    /** PUT (RFC 7252 §5.8.3) of [payload] in [contentFormat] to [uri]; large bodies go in Block1 blocks. */
     public suspend fun put(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -112,6 +119,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = withBody(CoapCode.PUT, uri, payload, contentFormat, configure)
 
+    /** PUT to the CoAP URI [uri]. */
     public suspend fun put(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -127,6 +135,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = withBody(CoapCode.FETCH, uri, payload, contentFormat, configure)
 
+    /** FETCH to the CoAP URI [uri]. */
     public suspend fun fetch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -142,6 +151,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = withBody(CoapCode.PATCH, uri, payload, contentFormat, configure)
 
+    /** PATCH to the CoAP URI [uri]. */
     public suspend fun patch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -157,6 +167,7 @@ public class CoapClient private constructor(
         configure: CoapRequest.Builder.() -> Unit = {},
     ): CoapResponse = withBody(CoapCode.IPATCH, uri, payload, contentFormat, configure)
 
+    /** iPATCH to the CoAP URI [uri]. */
     public suspend fun ipatch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -212,15 +223,18 @@ public class CoapClient private constructor(
         }
     }
 
+    /** Observes [uri] with GET; see [observe]. */
     public fun observe(uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): Flow<CoapResponse> =
         observe(CoapRequest.Builder(CoapCode.GET, uri).apply(configure).build())
 
+    /** Observes the CoAP URI [uri] with GET; see [observe]. */
     public fun observe(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): Flow<CoapResponse> =
         observe(CoapUri.parse(uri), configure)
 
     /** RFC 7252 §4.3 CoAP ping of the server at [uri]: true if it answered with a Reset (or ACK). */
     public suspend fun ping(uri: CoapUri): Boolean = endpoint.ping(config.resolver.resolve(uri))
 
+    /** CoAP ping of the server at the CoAP URI [uri]. */
     public suspend fun ping(uri: String): Boolean = ping(CoapUri.parse(uri))
 
     /**
@@ -242,6 +256,7 @@ public class CoapClient private constructor(
         }
     }
 
+    /** Resource discovery at the server of the CoAP URI [server]; see [discover]. */
     public suspend fun discover(server: String, query: String? = null): List<WebLink> = discover(CoapUri.parse(server), query)
 
     /** Closes the endpoint if the client created it. */

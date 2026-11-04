@@ -11,6 +11,7 @@ public class WebLink(
     /** The first value of [name], or null if absent or a flag. */
     public operator fun get(name: String): String? = attributes.firstOrNull { it.first == name }?.second
 
+    /** Whether the link has the attribute [name], with or without a value. */
     public fun has(name: String): Boolean = attributes.any { it.first == name }
 
     /** The space-separated values of a relation-type attribute such as `rt` or `if` (RFC 6690 §2, §3). */
@@ -29,6 +30,7 @@ public class WebLink(
     /** `sz` (RFC 6690 §3.3), or null when absent or too big for a Long. */
     public val maximumSize: Long? get() = get(LinkFormat.SIZE)?.toLongOrNull()
 
+    /** `title` (RFC 8288), human readable. */
     public val title: String? get() = get(LinkFormat.TITLE)
 
     /** The `obs` hint (RFC 7641 §6): the target is useful to observe. */
@@ -47,11 +49,17 @@ public class WebLink(
  * `/.well-known/core`.
  */
 public object LinkFormat {
+    /** `rt`, RFC 6690 §3.1. */
     public const val RESOURCE_TYPE: String = "rt"
+    /** `if`, RFC 6690 §3.2. */
     public const val INTERFACE: String = "if"
+    /** `ct`, RFC 7252 §7.2.1. */
     public const val CONTENT_TYPE: String = "ct"
+    /** `sz`, RFC 6690 §3.3. */
     public const val SIZE: String = "sz"
+    /** `title`, RFC 8288. */
     public const val TITLE: String = "title"
+    /** `obs`, RFC 7641 §6. */
     public const val OBSERVABLE: String = "obs"
 
     /** RFC 6690 §4.1: the query name that matches the link target. */

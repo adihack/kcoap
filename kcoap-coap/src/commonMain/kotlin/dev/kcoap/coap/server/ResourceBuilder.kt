@@ -59,12 +59,19 @@ public class ResourceBuilder internal constructor(private val resource: DslResou
         resource.dslRecognized = resource.dslRecognized + optionNumbers.toSet()
     }
 
+    /** Handles GET (RFC 7252 §5.8.1); for an observable resource also every notification. */
     public fun get(handler: RequestHandlerFunction): Unit = on(CoapCode.GET, handler)
+    /** Handles POST (RFC 7252 §5.8.2). */
     public fun post(handler: RequestHandlerFunction): Unit = on(CoapCode.POST, handler)
+    /** Handles PUT (RFC 7252 §5.8.3). */
     public fun put(handler: RequestHandlerFunction): Unit = on(CoapCode.PUT, handler)
+    /** Handles DELETE (RFC 7252 §5.8.4). */
     public fun delete(handler: RequestHandlerFunction): Unit = on(CoapCode.DELETE, handler)
+    /** Handles FETCH (RFC 8132 §2). */
     public fun fetch(handler: RequestHandlerFunction): Unit = on(CoapCode.FETCH, handler)
+    /** Handles PATCH (RFC 8132 §3). */
     public fun patch(handler: RequestHandlerFunction): Unit = on(CoapCode.PATCH, handler)
+    /** Handles iPATCH (RFC 8132 §3). */
     public fun ipatch(handler: RequestHandlerFunction): Unit = on(CoapCode.IPATCH, handler)
 
     /** Handles [method], for methods without a shortcut. */

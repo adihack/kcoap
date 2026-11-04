@@ -17,14 +17,18 @@ public class CoapResponse(
         require(code.isResponse) { "$code is not a response code" }
     }
 
+    /** The whole body; a copy. */
     public val payload: ByteArray get() = body.copyOf()
 
     public val payloadSize: Int get() = body.size
 
+    /** Whether the code is 2.xx. */
     public val isSuccess: Boolean get() = code.isSuccess
 
+    /** The Content-Format option, or null. */
     public val contentFormat: Int? get() = options.contentFormat
 
+    /** The body as UTF-8 text. */
     public fun payloadAsText(): String = body.decodeToString()
 
     /** A copy with [block] applied to its options. */
@@ -55,11 +59,14 @@ public class CoapResponse(
         public fun content(text: String, contentFormat: Int = ContentFormat.TEXT_PLAIN): CoapResponse =
             content(text.encodeToByteArray(), contentFormat)
 
+        /** 2.01 Created (RFC 7252 §5.9.1.1), with the Location-Path of the new resource. */
         public fun created(vararg locationPath: String): CoapResponse =
             CoapResponse(CoapCode.CREATED, OptionSet.build { locationPath.forEach { locationPath(it) } })
 
+        /** 2.04 Changed (RFC 7252 §5.9.1.4). */
         public fun changed(): CoapResponse = CoapResponse(CoapCode.CHANGED)
 
+        /** 2.02 Deleted (RFC 7252 §5.9.1.2). */
         public fun deleted(): CoapResponse = CoapResponse(CoapCode.DELETED)
 
         /**

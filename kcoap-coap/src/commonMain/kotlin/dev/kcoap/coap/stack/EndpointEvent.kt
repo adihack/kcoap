@@ -61,9 +61,11 @@ public sealed interface EndpointEvent {
  * must not throw; exceptions are caught and logged.
  */
 public fun interface EndpointEventListener {
+    /** Called for every event. */
     public fun onEvent(event: EndpointEvent)
 
     public companion object {
+        /** Ignores all events. */
         public val None: EndpointEventListener = EndpointEventListener { }
     }
 }

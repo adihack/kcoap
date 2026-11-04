@@ -71,6 +71,7 @@ public class CoapEndpoint(
     internal var requestHandler: RequestHandler? = null
 
     @Volatile
+    /** True once [close] was called. */
     public var isClosed: Boolean = false
         private set
 

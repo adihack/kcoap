@@ -57,6 +57,7 @@ public abstract class CoapResource(public val name: String) {
     /** The parent resource, or null for a root or a detached resource. */
     public val parent: CoapResource? get() = parentRef.load()
 
+    /** The child resources, in the order they were added. */
     public val children: Collection<CoapResource> get() = childMap.load().values
 
     /** "/a/b", or "/" for the root. */
@@ -71,6 +72,7 @@ public abstract class CoapResource(public val name: String) {
             return segments.joinToString("/", prefix = "/")
         }
 
+    /** The child called [name], or null. */
     public fun child(name: String): CoapResource? = childMap.load()[name]
 
     /**

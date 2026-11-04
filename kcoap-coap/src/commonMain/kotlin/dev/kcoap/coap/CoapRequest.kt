@@ -22,10 +22,12 @@ public class CoapRequest(
         require(method.isRequest) { "$method is not a request method" }
     }
 
+    /** The whole body; a copy. */
     public val payload: ByteArray get() = body.copyOf()
 
     public val payloadSize: Int get() = body.size
 
+    /** A builder starting from this request. */
     public fun toBuilder(): Builder = Builder(method, uri).also {
         it.options { addAll(options) }
         it.payload = body
@@ -42,21 +44,29 @@ public class CoapRequest(
     /** Builds a [CoapRequest]. */
     public class Builder(public val method: CoapCode, public val uri: CoapUri) {
         private val options = OptionSet.Builder()
+
+        /** The body; Block1 splits it when it does not fit one message. */
         public var payload: ByteArray = ByteArray(0)
+
+        /** Confirmable (RFC 7252 §4.2) unless set to false. */
         public var isConfirmable: Boolean = true
 
+        /** Adds or changes options in [block]. */
         public fun options(block: OptionSet.Builder.() -> Unit): Builder = apply { options.apply(block) }
 
         /** Sets a UTF-8 text body. */
         public fun payload(text: String): Builder = apply { payload = text.encodeToByteArray() }
 
+        /** Sets Content-Format (RFC 7252 §5.10.3). */
         public fun contentFormat(format: Int): Builder = options { contentFormat(format) }
 
+        /** Sets Accept (RFC 7252 §5.10.4); the server answers 4.06 if it cannot comply. */
         public fun accept(format: Int): Builder = options { accept(format) }
 
         /** Sends the request Non-confirmable (RFC 7252 §4.3). */
         public fun nonConfirmable(): Builder = apply { isConfirmable = false }
 
+        /** The request. */
         public fun build(): CoapRequest = CoapRequest(method, uri, options.build(), payload, isConfirmable)
     }
 }

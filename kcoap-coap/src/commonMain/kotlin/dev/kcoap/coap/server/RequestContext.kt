@@ -26,14 +26,19 @@ public class RequestContext internal constructor(
     public val resource: CoapResource,
     private val inbound: InboundRequest?,
 ) {
+    /** The request method. */
     public val method: CoapCode get() = request.code
 
+    /** The request options (inner options for OSCORE). */
     public val options: OptionSet get() = request.options
 
+    /** The whole request body; a copy. */
     public val payload: ByteArray get() = request.payload
 
+    /** The size of the request body in bytes. */
     public val payloadSize: Int get() = request.payloadSize
 
+    /** The request body as UTF-8 text. */
     public fun payloadAsText(): String = request.payloadAsText()
 
     /** Uri-Query values, decoded. */

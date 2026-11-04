@@ -12,6 +12,7 @@ public class CoapException(
     cause: Throwable? = null,
 ) : Exception(message, cause) {
 
+    /** Why the exchange failed. */
     public enum class Reason {
         /** A Confirmable message was not acknowledged within MAX_TRANSMIT_WAIT (RFC 7252 §4.2). */
         TRANSMISSION_TIMEOUT,
