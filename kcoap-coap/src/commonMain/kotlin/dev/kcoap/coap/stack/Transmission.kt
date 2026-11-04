@@ -3,6 +3,7 @@ package dev.kcoap.coap.stack
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.transport.Endpoint
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 
 /**
@@ -28,6 +29,7 @@ internal class Transmission(
     /** Confirmable messages always count against NSTART (RFC 7252 §4.7). */
     val holdsSlot: Boolean get() = isConfirmable || slotHold != null
 
+    @Volatile
     var state: State = State.CREATED
 
     /** Retransmissions so far; RFC 7252 §4.2's retransmission counter. */
@@ -43,7 +45,15 @@ internal class Transmission(
     var firstSentAt: Duration = Duration.ZERO
 
     /** Whether this transmission still occupies an NSTART slot. */
+    @Volatile
     var occupiesSlot: Boolean = false
+
+    /**
+     * Whether the message still counts as outstanding (RFC 7641 §4.5.1): queued, or a Confirmable one
+     * awaiting its ACK, or a Non-confirmable one holding its slot. Safe to read from any coroutine.
+     */
+    val isOutstanding: Boolean
+        get() = state == State.QUEUED || (state == State.IN_FLIGHT && (isConfirmable || occupiesSlot))
 
     /** A newer message that replaces this one at the next timeout (RFC 7641 §4.5.2). */
     var replacement: CoapMessage? = null

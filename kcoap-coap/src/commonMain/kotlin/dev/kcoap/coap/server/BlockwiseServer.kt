@@ -28,7 +28,7 @@ internal class BlockwiseServer(
     private val uploads = ExpiringCache<OperationKey, Upload>(config.maxConcurrentTransfers, lifetime)
     private val representations = ExpiringCache<OperationKey, CoapResponse>(config.maxConcurrentTransfers, lifetime)
 
-    private class Upload(val contentFormat: Int?) {
+    private class Upload {
         val body = ByteArrayBuilder()
     }
 
@@ -52,16 +52,14 @@ internal class BlockwiseServer(
             options.size1?.let { announced ->
                 if (announced > config.maxBodySize) return@withLock tooLarge(key)
             }
+            // The key holds every option but the Block and NoCacheKey ones (RFC 9175 §3.3), Content-Format
+            // and Request-Tag included, so a block with another Content-Format finds no earlier blocks and
+            // is never assembled with them (RFC 7959 §2.3).
             val upload = if (block.number == 0L) {
-                Upload(options.contentFormat).also { uploads.put(key, it, now) }
+                Upload().also { uploads.put(key, it, now) }
             } else {
                 uploads.get(key, now)
                     ?: return@withLock reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "No earlier blocks of this body")
-            }
-            if (upload.contentFormat != options.contentFormat) {
-                // §2.3: blocks with mismatching Content-Format MUST NOT be assembled.
-                uploads.remove(key)
-                return@withLock reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "Content-Format changed during the transfer")
             }
             val offset = block.offset
             val received = upload.body.size.toLong()

@@ -122,7 +122,8 @@ internal class ServerObservation(
 
     /** The registration response was sent; a separate one is the first outstanding notification. */
     fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
-        outstanding = transmission
+        // On a multi-threaded dispatcher the ACK may already have been processed.
+        outstanding = transmission?.takeIf { it.isOutstanding }
         if (type == CoapMessageType.CON) lastConfirmableAt = now
     }
 
@@ -166,7 +167,8 @@ internal class ServerObservation(
     private suspend fun notifyNow() = mutex.withLock {
         scheduled = false
         if (!isActive) return@withLock
-        val current = outstanding
+        // Recorded transmissions that completed meanwhile (an outcome raced the recording) no longer count.
+        val current = outstanding?.takeIf { it.isOutstanding }
         if (current != null && !current.isConfirmable) {
             changedMeanwhile = true
             return@withLock
@@ -184,6 +186,7 @@ internal class ServerObservation(
         }
         if (type == CoapMessageType.CON) lastConfirmableAt = now
         val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
+        // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
         outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold)
     }
 
