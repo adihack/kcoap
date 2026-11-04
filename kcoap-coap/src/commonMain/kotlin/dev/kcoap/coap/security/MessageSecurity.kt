@@ -55,6 +55,14 @@ public interface UnprotectedRequest {
     public val identity: SecurityIdentity
 
     /**
+     * A response the security layer requires instead of processing the request, such as OSCORE's
+     * freshness challenge after a reboot (RFC 8613 Appendix B.1.2: a protected 4.01 with Echo). When it
+     * is set, the stack does not pass the request to a resource; it sends [protectResponse] of this
+     * message, with the type and Message ID it would give any response.
+     */
+    public val challenge: CoapMessage? get() = null
+
+    /**
      * Protects a response to this request. The stack keeps this object for an observation and calls it
      * for every notification.
      */
@@ -68,12 +76,21 @@ public interface SecurityIdentity {
 }
 
 /**
- * A protected message that failed verification. On the server side, [responseCode] and [diagnostic]
- * form the error response (RFC 8613 §8.2: sent unprotected, with Max-Age 0).
+ * A protected message that failed verification. On the server side it describes the error response,
+ * which is sent unprotected with Max-Age 0 (RFC 8613 §8.2): [responseCode], and as payload either
+ * [errorPayload] with [contentFormat] (an EDHOC error message in RFC 9668 §3.3.1, for example) or the
+ * [diagnostic] text.
  */
 public class MessageSecurityException(
     message: String,
     public val responseCode: CoapCode = CoapCode.BAD_REQUEST,
     public val diagnostic: String? = null,
     cause: Throwable? = null,
-) : Exception(message, cause)
+    errorPayload: ByteArray? = null,
+    public val contentFormat: Int? = null,
+) : Exception(message, cause) {
+    private val payloadBytes = errorPayload?.copyOf()
+
+    /** A structured error body to send instead of [diagnostic], or null. */
+    public val errorPayload: ByteArray? get() = payloadBytes?.copyOf()
+}
