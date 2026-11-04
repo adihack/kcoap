@@ -1,10 +1,39 @@
 # Architecture
 
-Status: **partly built**. The transport interfaces (`kcoap-transport`), the CoAP endpoint for UDP with
-client and server APIs (`kcoap-coap`, see "The CoAP endpoint as built"), a UDP transport
-(`kcoap-transport-ktor`) and a simulated network for tests (`kcoap-testkit`) exist; DTLS is
-placeholders (`kcoap-dtls`). This records how kcoap stays one protocol core while running in mobile
-apps, browsers and server applications. The RFC checklist is in `rfc-compliance.md`.
+Status: **built for UDP**. The CoAP endpoint with client and server APIs, OSCORE, EDHOC (including the
+post-quantum suite), the EDHOC→OSCORE glue, the crypto backends and the UDP transport exist and are
+cross-tested; DTLS, TCP and WebSocket transports and the browser target are designed here and come
+later. This records how kcoap stays one protocol core while running in mobile apps, browsers and
+server applications. The RFC checklist is in `rfc-compliance.md`.
+
+## Module dependencies
+
+```
+kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default ── kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
+              │                └─ kcoap-cose ─┐
+              ├─ kcoap-cbor ──────────────────┤
+              ├─ kcoap-transport ─┬─ kcoap-transport-ktor
+              │                   ├─ kcoap-testkit
+              │                   └─ kcoap-dtls
+              └─ kcoap-coap ── kcoap-oscore ──┬── kcoap-edhoc-oscore
+                       kcoap-edhoc (cbor, cose, crypto) ─┘
+```
+
+Protocol modules depend on SPIs, never on a backend or transport: applications choose
+`kcoap-crypto-default` or `kcoap-crypto-bc`, and `kcoap-transport-ktor` or their own transport.
+
+## Where the patterns are
+
+| Pattern | Used for |
+|---|---|
+| SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `SequenceNumberStore`, `LogSink` |
+| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around OSCORE (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend |
+| Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
+| Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
+| State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
+| Callbacks (`fun interface`) and `Flow` | `EadHandler`, `EdhocSessionListener`, `EndpointEventListener`, Observe as `Flow` |
+| Interceptor chain | `MessageInterceptor` for tracing and metrics |
+| Builder / DSL | `CoapMessage.Builder`, `OptionSet.Builder`, the server's resource DSL, `LogConfig.Builder` |
 
 ## Layers
 
@@ -340,18 +369,15 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 - **EAD handlers** for EDHOC.
 - **Logging and metrics** as hooks, no logging framework dependency.
 
-## Consequences for the existing skeleton
+## Decisions taken for multiplatform
 
-Not done yet; implementation comes last.
-
-1. **`CryptoBackend` becomes `suspend`.** WebCrypto is promise based, so blocking calls do not exist on
-   JS and Wasm.
-2. **The AES block for CCM comes from AES-CTR on WebCrypto**, which has neither ECB nor CCM: encrypting
-   a zero block with the input as the counter yields the encrypted input.
-3. **`CryptoBackend` gains ECDH and ECDSA on P-256** (also needed by EDHOC suite 2). DTLS signatures are
-   DER encoded and COSE signatures are raw `r || s`, so the backend works on one form and a common
-   helper converts.
-4. **`js` and `wasmJs` targets** get added, without DTLS adapters.
+1. **`CryptoBackend` is `suspend`**, because WebCrypto is promise based. Done.
+2. **AES-CCM is common code on the platform AES block**; on WebCrypto the block will come from AES-CTR
+   (encrypting a zero block with the input as the counter yields the encrypted input).
+3. **ECDH, ECDSA, EdDSA, KEMs and signatures are in the SPI**, with opaque private-key handles. COSE
+   uses raw `r || s` ECDSA signatures; DTLS will need DER and converts.
+4. **`js` and `wasmJs` targets** are next, without DTLS adapters; the common code already compiles
+   against the common standard library only.
 
 ## Modules
 
@@ -359,6 +385,9 @@ Not done yet; implementation comes last.
 |---|---|---|
 | `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, security interfaces | interfaces |
 | `kcoap-coap` | Message model, codecs, the UDP endpoint with client and server, block-wise, Observe | UDP done |
+| `kcoap-oscore` | RFC 8613 behind the message-security SPI | done |
+| `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
+| `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
 | `kcoap-testkit` | In-memory datagram network with fault injection, for tests | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders; engine last |
 | `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on all targets except browser UDP/TCP | UDP done; TCP, WebSocket, HTTP planned |
