@@ -79,12 +79,12 @@ implemented last; the interfaces and rules around it are in place now (`architec
 
 | Requirement | Status | Verified by |
 |---|---|---|
-| Cipher suites 2 **and** 3 (MUST) | done | RFC 9529 §3 (suite 2), round trips (suite 3) |
-| `kid` credential identifiers (MUST) | done, incl. compact encoding and non-unique kids | RFC 9529 §3, §4.1.6–4.1.7 |
-| EDHOC_Exporter (MUST) | done | RFC 9529 §2.6, §3.8 |
-| EAD processing (MUST) | done: `EadHandler`, critical labels, padding | round trips, negative tests |
-| Error codes 1 and 2 (MUST) | done, plus 0 and 3 | RFC 9529 §3.2, negotiation tests |
-| message_4 (MAY, but MUST where no app message flows Responder→Initiator) | done | RFC 9529 §2.4, §3.6 |
+| Cipher suites 2 **and** 3 (MUST) | done | RFC 9529 §3 (suite 2), libedhoc interop (suite 2), round trips (suite 3; libedhoc lacks it) |
+| `kid` credential identifiers (MUST) | done, incl. compact encoding and non-unique kids | RFC 9529 §3, §4.1.6–4.1.7, libedhoc interop (integer and byte-string kids) |
+| EDHOC_Exporter (MUST) | done | RFC 9529 §2.6, §3.8, libedhoc interop (exporter, OSCORE secret and salt, before and after key update) |
+| EAD processing (MUST) | done: `EadHandler`, critical labels, padding | round trips, negative tests, libedhoc interop (padding, non-critical items) |
+| Error codes 1 and 2 (MUST) | done, plus 0 and 3 | RFC 9529 §3.2, negotiation tests, libedhoc interop (code 2 negotiation and code 1 in both directions) |
+| message_4 (MAY, but MUST where no app message flows Responder→Initiator) | done | RFC 9529 §2.4, §3.6, libedhoc interop |
 
 | Section | What | Status |
 |---|---|---|
@@ -99,9 +99,14 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | §9.2, §9.8 | Public key validation, all-zero check, field lengths, deterministic CBOR on receipt | done |
 | App. G | Long PLAINTEXT_2 | done |
 | App. H | EDHOC_KeyUpdate | done (RFC 9529 §2.7, §3.9) |
+| — | Interop with libedhoc 0363bd3: suites 0, 2, 4, 24 × methods 0–3 and -24 × method 0, kid/CCS and x5chain, negotiation, tampering (`interop/README.md`) | live, both roles |
 
 Verified by RFC 9529 traces 1 and 2 (every printed value, both roles), the invalid messages of RFC 9529
-§4, and round trips over every method and suite. Interop against libedhoc is next.
+§4, round trips over every method and suite, and live sessions against libedhoc in both roles for every
+suite and method both implement (`LibedhocInteropTest`). Suites 1, 3, 5 and 6 have no independent peer
+yet: libedhoc lacks them. Two libedhoc deviations from RFC 9528 found on the way (its Responder supports
+only its last configured suite and skips the §5.2.3 prior-suite check; without an EAD callback it accepts
+unknown critical EAD items) are pinned by `upstream…` tests and listed in `interop/README.md`.
 
 ## EDHOC with CoAP and OSCORE
 
@@ -123,5 +128,7 @@ proxies (draft-ietf-core-oscore-capable-proxies), TLS/DTLS 1.3 IoT profile
 One exception: the KEM-based key exchange of draft-ietf-lake-pqsuites-02 §3 is implemented, because
 RFC 9528 §9.4 already allows a KEM in method 0 and libedhoc ships it as the private suite -24
 (`CipherSuite.SUITE_PQC_1`: ML-KEM-512, ML-DSA-44, AES-CCM-16-128-128, SHAKE256). The draft's suites
-have no code points yet (TBD1–TBD3); they can be declared as private `CipherSuite`s. Verified so far
-with a size-faithful test double only; interop with libedhoc needs the ML-KEM backend.
+have no code points yet (TBD1–TBD3); they can be declared as private `CipherSuite`s. Verified with real
+ML-KEM and ML-DSA (`kcoap-crypto-bc`) in round trips for suite -24 and a private ML-KEM-1024/ML-DSA-87
+suite, and live against libedhoc (liboqs) for suite -24 in both roles, with CCS (AKP COSE_Key) and
+ML-DSA-44 X.509 credentials.
