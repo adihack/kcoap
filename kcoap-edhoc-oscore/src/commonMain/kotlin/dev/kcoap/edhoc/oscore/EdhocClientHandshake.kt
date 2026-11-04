@@ -2,6 +2,10 @@ package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.CoapRequest
+import dev.kcoap.coap.CoapUri
+import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.EdhocError
@@ -107,8 +111,29 @@ public class EdhocClientHandshake(
         }
     }
 
-    private companion object {
+    public companion object {
         /** One retry per suite the server can name is plenty; more means the peers cannot agree. */
-        const val MAX_NEGOTIATION_ROUNDS = 4
+        private const val MAX_NEGOTIATION_ROUNDS = 4
+
+        /**
+         * A handshake carried by [client] to the server at [server] (scheme, host and port; the path of
+         * [server] is ignored in favour of [path]).
+         */
+        public fun over(
+            client: CoapClient,
+            server: CoapUri,
+            config: EdhocInitiatorConfig,
+            crypto: CryptoBackend,
+            path: String = EdhocOverCoap.WELL_KNOWN_PATH,
+            loggers: LoggerFactory = LoggerFactory.Global,
+        ): EdhocClientHandshake = EdhocClientHandshake(config, crypto, path, loggers) { message ->
+            val request = CoapRequest(
+                method = message.code,
+                uri = CoapUri(server.scheme, server.host, server.port, pathSegments = message.options.uriPath),
+                options = message.options.toBuilder().remove(CoapOptions.URI_PATH.number).build(),
+                payload = message.payload,
+            )
+            client.request(request).toMessage(ByteArray(0))
+        }
     }
 }
