@@ -69,7 +69,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | App. B.1.2 | Echo-based replay-window recovery | todo | |
 | App. B.2 | Context re-derivation (ID Context) | todo | libcoap |
 | §11 | OSCORE over HTTP | todo | |
-| — | Interop | todo | libcoap `oscore_testcases.sh` |
+| — | Interop | live, both directions | libcoap v4.3.5b over UDP: kcoap client ↔ `coap-server` (incl. its B.1.2 Echo challenge), `coap-client` ↔ kcoap responder; `oscore_testcases.sh` todo |
 
 ## EDHOC (RFC 9528)
 

@@ -46,6 +46,26 @@ are compared byte for byte, for both roles.
 
 ## Layer 2: live interop over UDP
 
+### Running now
+
+`kcoap-oscore/src/jvmTest/.../LibcoapOscoreInteropTest.kt` runs with every `./gradlew jvmTest` when
+Docker and the `kcoap/libcoap:v4.3.5b` image (built from `interop/libcoap/Dockerfile`) are present,
+and is skipped otherwise:
+
+- kcoap OSCORE client → libcoap `coap-server -E`: GET `/time`, including libcoap's RFC 8613 B.1.2
+  replay-window challenge (protected 4.01 with Echo, answered by repeating the request with Echo).
+- libcoap `coap-client -E` (with a sequence-number file) → a minimal kcoap OSCORE responder: GET and
+  PUT, and the RFC 8613 §8.2 unprotected error response on replay.
+
+libcoap's own debug log is written to `kcoap-oscore/build/interop-logs/` when an exchange fails.
+
+```bash
+docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
+./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
+```
+
+### Planned
+
 1. **OSCORE interop spec** (core-wg test-spec5) using libcoap's `examples/oscore_testcases.sh`: kcoap
    server against the libcoap client, kcoap client against the libcoap server.
 2. **Our libcoap + libedhoc application** as peer: EDHOC over CoAP (`/.well-known/edhoc`), sequential
