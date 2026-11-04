@@ -14,10 +14,10 @@ thing, message by message, and pinpoints the first field that differs.
 
 ### EDHOC against libedhoc
 
-A small C program (`interop/libedhoc-oracle/`, to be written) links libedhoc and replaces the ephemeral
-key generation in its crypto table with keys read from the test case. libedhoc's own RFC 9529 tests use
-the same technique (`tests/host/rfc9529/test_rfc9529_chapter2.c`). For each case it prints, as hex:
-message_1 to message_4, PRK_out, and the EDHOC_Exporter output for the OSCORE Master Secret and Salt.
+Planned as an option of `edhoc_peer` (the live peer below): replace the ephemeral key generation in
+libedhoc's crypto table with keys read from the test case, as libedhoc's own RFC 9529 tests do
+(`tests/host/rfc9529/test_rfc9529_chapter2.c`), and inject the same keys on the kcoap side through
+`EphemeralKeySource`. Every message then has to match byte for byte, not just the derived secrets.
 
 The Kotlin JVM test generates the cases, runs the program as a subprocess, and compares byte for byte:
 
@@ -63,6 +63,82 @@ libcoap's own debug log is written to `kcoap-oscore/build/interop-logs/` when an
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
 ./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
 ```
+
+### EDHOC against libedhoc
+
+`kcoap-edhoc/src/jvmTest/.../LibedhocInteropTest.kt` runs with every `./gradlew jvmTest` when Docker and
+the `kcoap/libedhoc:0363bd3` image are present, and is skipped otherwise. The image builds libedhoc at the
+pinned commit `0363bd3af02265e919e888b60ccffb4606b68f16` with its vendored mbedTLS, liboqs, XKCP and
+zcbor and its own test suite, and adds `edhoc_peer` (`interop/libedhoc/peer/`), built in libedhoc's build
+tree against its reference cipher suites.
+
+```bash
+docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
+docker run --rm kcoap/libedhoc:0363bd3 ctest --test-dir /build --output-on-failure   # libedhoc's own tests
+./gradlew :kcoap-edhoc:jvmTest --tests '*LibedhocInteropTest*'
+```
+
+`edhoc_peer` runs one EDHOC session per process, as Initiator or Responder, and talks a line protocol on
+stdin and stdout (`docker run -i --rm kcoap/libedhoc:0363bd3 edhoc_peer --role responder --method 3
+--suite 2 --cid 18 --key p256-dh:… --own-kid 32 --own-cred … --peer-kid 2b --peer-cred … --peer-key …`).
+The options and the protocol are documented in the source header; in short:
+
+| Direction | Line | Meaning |
+|---|---|---|
+| in | `msg <hex>` | the next message from kcoap: an EDHOC message or an error message |
+| out | `msg <hex>` | a message for kcoap: message_1..4, or an error message |
+| out | `peer_error <code> [<s>,<s>…]` | an error message arrived (SUITES_R for code 2) |
+| out | `retry <suite>` | the Initiator got error code 2 and sends a new message_1 with this suite selected |
+| out | `failed <ret> <code>` | processing failed (libedhoc return value); the error message follows as `msg` |
+| out | `result <name> <hex>` | after completion: `suite`, `c_i`, `c_r`, `oscore_secret`, `oscore_salt`, `sender_id`, `recipient_id`, `exporter`, `prk_out_check`, `exporter_updated`, `prk_out_check_updated` |
+| out | `done` | the session completed |
+
+The test hands the peer its private key, its credential, and the credential and public key it must accept,
+all generated fresh per session; ephemeral keys are random on both sides. The peer moves libedhoc's log
+(which libedhoc writes to stdout) to stderr; the protocol transcript and that log are written to
+`kcoap-edhoc/build/interop-logs/` when a session fails. A session passes when libedhoc and kcoap agree on
+the selected suite, C_I and C_R, the OSCORE Master Secret and Salt, the Sender and Recipient IDs of RFC 9528
+Appendix A.1, EDHOC_Exporter(32768, "kcoap", 32), EDHOC_Expand(PRK_out, "kcoap-prk-out-check", 32) (PRK_out
+itself stays in libedhoc's non-exportable key slot), and the last two again after EDHOC_KeyUpdate.
+
+What interoperates (every row in both roles: kcoap Initiator with libedhoc Responder, and the reverse):
+
+| Suite | Methods | Credentials | Also covered |
+|---|---|---|---|
+| 0 (Ed25519/X25519, AES-CCM-16-64-128) | 0, 1, 2, 3 | CCS by `kid`; Ed25519 `x5chain` (kcoap Initiator) | EAD padding and non-critical items to libedhoc |
+| 2 (P-256, AES-CCM-16-64-128) | 0, 1, 2, 3 | CCS by `kid` | negotiation with error code 2 both ways; tampered message_2/3 and error code 1 both ways |
+| 4 (X25519/Ed25519, ChaCha20-Poly1305) | 0, 1, 2, 3 | CCS by `kid`; Ed25519 `x5chain` (libedhoc Initiator) | |
+| 24 (P-384, A256GCM, SHA-384) | 0, 1, 2, 3 | CCS by `kid` | negotiation from 24 down to 2 |
+| -24 (ML-KEM-512, ML-DSA-44, SHAKE256) | 0 | CCS with an AKP `COSE_Key`; ML-DSA-44 `x5chain` | Bouncy Castle on kcoap's side, liboqs on libedhoc's |
+
+For each suite and method, message_4 is on in one role and off in the other, and integer and byte-string
+connection identifiers and kids alternate across the matrix. Method 3 on suite -24 ends in error code 1
+in both directions (static-DH methods need DH, draft-ietf-lake-pqsuites §6.3). libedhoc does not
+implement suites 1, 3, 5, 6 or 25, ML-KEM-768/1024 or ML-DSA-65/87.
+
+Deviations found, all on libedhoc's side, each pinned by an `upstream…` test that asserts libedhoc's
+current behaviour (so it fails, and gets flipped, once libedhoc is fixed):
+
+1. **The Responder supports only its last configured suite and skips the prior-suite check.**
+   `edhoc_message_1_process` (`library/core/classic/edhoc_classic_message_1.c`, steps 2 and 3b) compares
+   the selected suite with the last entry of `edhoc_set_cipher_suites` only. Configured with [0, 2], it
+   accepts SUITES_I = [0, 2] (2 selected) although RFC 9528 §5.2.3 step 2 and §6.3.1 require error code 2
+   because suite 0, listed earlier, is supported; and it refuses SUITES_I = 0 although 0 is configured,
+   contrary to its own API documentation ("the Responder checks the selected suite against those it
+   supports"). Single-suite Responders, the common configuration, are unaffected.
+   Test: `upstreamLibedhocResponderSupportsOnlyItsLastSuiteAndSkipsThePriorSuiteCheck`.
+2. **Unknown critical EAD items are accepted when no EAD callback is bound.** Without `edhoc_bind_ead`,
+   message processing skips EAD entirely (`edhoc_classic_message_1.c` step 4 runs only when
+   `ead.process` is set), so a message_1 carrying EAD_1 with label -5 completes. RFC 9528 §3.8: an
+   endpoint receiving a critical EAD item it does not recognize "MUST send an EDHOC error message back"
+   and abort. With a callback bound, `include/edhoc/ead.h` leaves the criticality rule to the callback.
+   Test: `upstreamLibedhocIgnoresUnknownCriticalEadWithoutAnEadInterface`.
+3. Robustness, not an interop failure: methods 1–3 with the KEM suite -24 are not refused up front (the
+   suites' `supports_dh_nike` flag is never read by libedhoc's core). Its Initiator sends such a
+   message_1, and its Responder accepts it and fails only while composing message_2 ("ML-KEM suite does
+   not support static Diffie-Hellman"). Test: `staticDiffieHellmanMethodsOnTheKemSuiteAreRefused`.
+
+No deviation from RFC 9528 or draft-ietf-lake-pqsuites-02 was found on kcoap's side.
 
 ### Planned
 
@@ -111,11 +187,14 @@ Nobody implements suites 5, 6 or 25.
 - **libedhoc lacks suite 3**, which RFC 9528 §8 makes mandatory, and suite 1. Both differ from suites 2
   and 0 only in EDHOC MAC length and EDHOC AEAD tag length (AES-CCM-16-128-128). Adding them to libedhoc
   makes it compliant and removes the need for uoscore here.
+- **libedhoc deviations** from RFC 9528 (Responder suite selection, critical EAD without a callback):
+  see "EDHOC against libedhoc" above.
 - **libcoap has no EDHOC**; our application glue provides `/.well-known/edhoc` and the combined request.
 - **Hop-Limit**: libcoap processes it as Outer (Class U), as draft-ietf-core-oscore-capable-proxies
   specifies; the published RFCs still make it Class E. See `docs/rfc-compliance.md`.
 
-## Layout (planned)
+## Layout
 
-`interop/libedhoc-oracle/` (C harness), `interop/libcoap-oracle/` (scripts and configs), and one
-container image per peer, pinned to a commit.
+One container image per peer, pinned to a release or commit: `interop/libcoap/` (libcoap v4.3.5b) and
+`interop/libedhoc/` (libedhoc 0363bd3, with the `edhoc_peer` line-protocol peer in `peer/`). Planned:
+`interop/libcoap-oracle/` (scripts and configs for the byte-exact OSCORE runs).

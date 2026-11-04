@@ -10,16 +10,16 @@ depends on it. Interop with libcoap and libedhoc runs as soon as a layer can tal
 | 3 | CBOR and COSE | `kcoap-cbor`, `kcoap-cose` | RFC 8949 A, RFC 8613 C.4, RFC 9529 | done |
 | 4 | Post-quantum backend: ML-KEM, ML-DSA | `kcoap-crypto-bc` | FIPS 203/204 vectors (NIST ACVP) | done |
 | 5 | CoAP messages and codec (UDP and RFC 8323 framing), options, URIs | `kcoap-coap` | RFC 7252, 8323, RFC 8613 C | done |
-| 6 | EDHOC: methods 0–3, suites 0–6 and 24, PQ suite (KEM + ML-DSA), EAD, exporter | `kcoap-edhoc` | RFC 9529 traces (both roles, §4 invalid messages), libedhoc | done; libedhoc interop pending |
+| 6 | EDHOC: methods 0–3, suites 0–6 and 24, PQ suite (KEM + ML-DSA), EAD, exporter | `kcoap-edhoc` | RFC 9529 traces (both roles, §4 invalid messages), libedhoc live (both roles, suites 0, 2, 4, 24, -24) | done |
 | 7 | OSCORE: context, protect/verify, replay window, Observe, B.1.1, B.1.2 (B.2 pending) | `kcoap-oscore` | RFC 8613 C, libcoap live | done |
 | 8 | CoAP endpoint: messaging, exchanges, client and server API, UDP transport | `kcoap-coap`, `kcoap-transport-*` | unit tests, libcoap | planned |
 | 9 | EDHOC over CoAP and RFC 9668 combined request | `kcoap-edhoc-oscore` | libcoap + libedhoc application | planned |
-| 10 | Interop harness: libcoap and libedhoc in containers, byte-exact oracles | `interop/` | CI | planned |
+| 10 | Interop harness: libcoap and libedhoc in containers, byte-exact oracles | `interop/` | CI | live harnesses done (libcoap OSCORE, libedhoc EDHOC, in CI); byte-exact oracles planned |
 | 11 | TCP and WebSocket transports, browser target (JS/Wasm) | `kcoap-transport-*` | libcoap | planned |
 | 12 | DTLS 1.2 | `kcoap-dtls` | libcoap with five DTLS backends | last |
 
 Post-quantum: libedhoc implements the KEM-based ephemeral exchange of draft-ietf-lake-pqsuites with
 ML-KEM-512 and ML-DSA-44 as its private suite -24. kcoap models the ephemeral exchange as a strategy
 (Diffie-Hellman or KEM) so the same Initiator and Responder run both; `CipherSuite.SUITE_PQC_1` mirrors
-libedhoc's suite. It is tested with a size-faithful test double today, and cross-tested against
-libedhoc once `kcoap-crypto-bc` provides ML-KEM and ML-DSA.
+libedhoc's suite. It runs on real ML-KEM and ML-DSA from `kcoap-crypto-bc` and interoperates with
+libedhoc's liboqs-based suite -24 in both roles.

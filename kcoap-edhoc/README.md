@@ -87,10 +87,22 @@ because with OSCORE both would become the same Recipient ID (§3.3.3).
 | RFC 9529 §3 (trace 2) | Method 3, suite 2, CCS by `kid`: the rejected first message_1 and the error `02 02`, renegotiation to SUITES_I = [6, 2], then the same values as trace 1 plus SALT_3e2m, G_RX, SALT_4e3m, G_IY |
 | RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve, the low-order X25519 point, a short MAC, non-deterministic CBOR |
 | Round trips | Every method × suites 0–6 and 24; both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
-| Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation |
+| Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation; on the JVM with real ML-KEM and ML-DSA from `kcoap-crypto-bc` (`PostQuantumBouncyCastleTest`), with CCS (AKP COSE_Key) and ML-DSA X.509 credentials |
+| libedhoc (live, JVM) | `LibedhocInteropTest`: sessions with fresh ephemeral keys against libedhoc 0363bd3 in a container, kcoap as Initiator and as Responder, for suites 0, 2, 4, 24 × methods 0–3 and suite -24 (liboqs) × method 0; kid/CCS and x5chain; integer and byte-string identifiers; message_4; negotiation (error code 2) both ways; tampering; EAD. Both sides must agree on OSCORE secret/salt, Sender/Recipient IDs, EDHOC_Exporter and PRK_out, before and after key update |
 
 The trace constants are generated from the RFC text by `tools/gen_edhoc_vectors.py`
 (`tools/regen-vectors.sh`), which checks every value against the byte count the RFC prints.
 
-Still to do: interop against libedhoc, in particular suite -24 with a real ML-KEM-512 / ML-DSA-44
-backend (`kcoap-crypto-bc`).
+The libedhoc tests need Docker and the image built from `interop/libedhoc/Dockerfile`, and skip
+themselves otherwise (see `interop/README.md`):
+
+```bash
+docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
+./gradlew :kcoap-edhoc:jvmTest --tests '*LibedhocInteropTest*'
+```
+
+Tests named `upstream…` record where libedhoc deviates from RFC 9528, asserting its current behaviour:
+its Responder supports only its last configured suite and skips the §5.2.3 check for a supported suite
+earlier in SUITES_I, and without an EAD callback it accepts unknown critical EAD items (§3.8). No
+deviation was found on kcoap's side. Suites 1, 3, 5 and 6 have no independent peer yet (libedhoc lacks
+them), nor does the private ML-KEM-1024 suite.
