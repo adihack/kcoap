@@ -1,0 +1,525 @@
+package dev.kcoap.coap.interop
+
+import dev.kcoap.coap.BlockOption
+import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
+import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.ContentFormat
+import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.client.QBlockClientConfig
+import dev.kcoap.coap.client.QBlockMode
+import dev.kcoap.coap.client.QBlockSupport
+import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.stack.CoapEndpoint
+import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.QBlockClientEvent
+import dev.kcoap.transport.DatagramEvent
+import dev.kcoap.transport.DatagramTransport
+import dev.kcoap.transport.Endpoint
+import dev.kcoap.transport.ktor.KtorTcpConnector
+import dev.kcoap.transport.ktor.KtorUdpTransport
+import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
+import java.util.Collections
+import kotlin.random.Random
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+
+/**
+ * The kcoap client with Q-Block (RFC 9177) against libcoap's `coap-server -L 7` (cases K1–K5, K7–K10 and K12
+ * of docs/plan-qblock-and-platforms.md §1.5), over real UDP, TCP and WebSockets. Every case starts a server
+ * of its own, since libcoap's `-l` loss list counts every datagram the server sends, and compares body
+ * bytes. Loss on the kcoap side comes from [LossyTransport]. Skipped when docker or the image is missing.
+ *
+ * libcoap's `/example_data` holds 1500 bytes until it is PUT: groups of a letter and `123456789`.
+ */
+@Tag("interop")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class KcoapClientAgainstLibcoapQBlockTest {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /** A message the client sent or received, when, and whether [LossyTransport] dropped it. */
+    class Wire(val outgoing: Boolean, val message: CoapMessage, val at: Duration, val dropped: Boolean = false) {
+        override fun toString(): String = "${if (outgoing) "out" else "in"} $at ${if (dropped) "X " else ""}$message"
+    }
+
+    private val wire: MutableList<Wire> = Collections.synchronizedList(mutableListOf())
+    private val events: MutableList<EndpointEvent> = Collections.synchronizedList(mutableListOf())
+    private var start = System.nanoTime()
+    private fun elapsed(): Duration = (System.nanoTime() - start).nanoseconds
+
+    private val recorder = object : MessageInterceptor {
+        override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = message.also { wire += Wire(true, it, elapsed()) }
+        override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage = message.also { wire += Wire(false, it, elapsed()) }
+    }
+
+    /**
+     * Records every datagram on the wire, retransmissions and ACKs included, and is the kcoap-side loss:
+     * drops the datagrams [dropOut] and [dropIn] pick by their message, so a test can lose exactly the blocks
+     * the case names.
+     */
+    private inner class LossyTransport(
+        private val inner: DatagramTransport,
+        private val dropOut: (CoapMessage) -> Boolean,
+        private val dropIn: (CoapMessage) -> Boolean,
+    ) : DatagramTransport {
+        override val maxDatagramSize: Int get() = inner.maxDatagramSize
+
+        override suspend fun send(to: Endpoint, datagram: ByteArray) {
+            val message = runCatching { UdpMessageCodec.decode(datagram) }.getOrNull()
+            val drop = message != null && dropOut(message)
+            message?.let { wire += Wire(true, it, elapsed(), dropped = drop) }
+            if (!drop) inner.send(to, datagram)
+        }
+
+        override suspend fun receive(): DatagramEvent {
+            while (true) {
+                val event = inner.receive()
+                val message = (event as? DatagramEvent.Received)?.let { runCatching { UdpMessageCodec.decode(it.datagram) }.getOrNull() }
+                val drop = message != null && dropIn(message)
+                message?.let { wire += Wire(false, it, elapsed(), dropped = drop) }
+                if (!drop) return event
+            }
+        }
+
+        override suspend fun close() = inner.close()
+    }
+
+    @BeforeAll
+    fun requireLibcoap() {
+        assumeTrue(Libcoap.isAvailable, "docker or ${Libcoap.IMAGE} not available")
+    }
+
+    @AfterAll
+    fun stop() {
+        scope.cancel()
+    }
+
+    // ---------------------------------------------------------------- harness
+
+    /** Starts `coap-server` with [arguments], waits until it listens, runs [block], and removes it. */
+    private fun withServer(vararg arguments: String, webSockets: Boolean = false, block: (Libcoap.Server) -> Unit) {
+        val server = Libcoap.startServer(*arguments, webSockets = webSockets)
+        try {
+            val deadline = System.nanoTime() + 20.seconds.inWholeNanoseconds
+            while (System.nanoTime() < deadline && "created UDP" !in server.logs()) Thread.sleep(100)
+            check("created UDP" in server.logs()) { "coap-server did not start: ${server.logs()}" }
+            block(server)
+        } catch (e: Throwable) {
+            System.err.println("libcoap log:\n${server.logs().takeLast(20_000)}")
+            System.err.println("kcoap wire:\n${wire.joinToString("\n")}")
+            throw e
+        } finally {
+            server.close()
+        }
+    }
+
+    private fun withClient(
+        qBlock: QBlockClientConfig = QBlockClientConfig(QBlockMode.PROBE),
+        blockSize: Int? = 64,
+        dropOut: (CoapMessage) -> Boolean = { false },
+        dropIn: (CoapMessage) -> Boolean = { false },
+        block: suspend (CoapClient) -> Unit,
+    ) = runBlocking {
+        wire.clear()
+        events.clear()
+        start = System.nanoTime()
+        val transport = LossyTransport(KtorUdpTransport.bind("127.0.0.1"), dropOut, dropIn)
+        val endpoint = CoapEndpoint(
+            transport, scope,
+            CoapEndpointConfig(eventListener = { events += it }),
+        )
+        val client = CoapClient(endpoint, CoapClientConfig(blockSize = blockSize, qBlock = qBlock))
+        try {
+            withTimeout(90.seconds) { block(client) }
+            assertEquals(0, endpoint.exchangeCount(), "no exchange is left")
+        } finally {
+            endpoint.close()
+        }
+    }
+
+    private fun withReliableClient(block: suspend (CoapClient) -> Unit) = runBlocking {
+        wire.clear()
+        start = System.nanoTime()
+        val qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true)
+        val client = CoapClient(
+            listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope,
+            CoapClientConfig(blockSize = 64, qBlock = qBlock),
+            CoapEndpointConfig(interceptors = listOf(recorder)),
+        )
+        try {
+            withTimeout(60.seconds) { block(client) }
+        } finally {
+            client.close()
+        }
+    }
+
+    private fun sent(): List<Wire> = synchronized(wire) { wire.filter { it.outgoing && !it.dropped } }
+
+    private fun received(): List<Wire> = synchronized(wire) { wire.filter { !it.outgoing && !it.dropped } }
+
+    private fun requests(path: String): List<Wire> = sent().filter { it.message.isRequest && it.message.options.path == path }
+
+    /** Blocks of 64 bytes, which leaves out the answer to the probe, block 0 of 16 bytes. */
+    private fun blocks(): List<Wire> = received().filter { it.message.options.qBlock2?.size == 64 && it.message.code == CoapCode.CONTENT }
+
+    private val CoapMessage.qBlock2: List<String> get() = options.qBlock2List.map { "${it.number}/${if (it.more) "M" else "_"}/${it.size}" }
+
+    private val CoapMessage.qBlock1: String? get() = options.qBlock1?.let { "${it.number}/${if (it.more) "M" else "_"}/${it.size}" }
+
+    private fun body(size: Int, seed: Int): ByteArray {
+        val random = Random(seed)
+        return ByteArray(size) { ('a' + random.nextInt(26)).code.toByte() }
+    }
+
+    /** libcoap's initial `/example_data`: 150 groups of a letter from a to z and `123456789`. */
+    private val exampleData: ByteArray = buildString { repeat(150) { append('a' + it % 26).append("123456789") } }.encodeToByteArray()
+
+    /** RFC 9177 §4.1: no message carries both a Block and a Q-Block option. */
+    private fun assertNoMessageMixesBlockAndQBlock() {
+        val block = setOf(CoapOptions.BLOCK1.number, CoapOptions.BLOCK2.number)
+        val qBlock = setOf(CoapOptions.Q_BLOCK1.number, CoapOptions.Q_BLOCK2.number)
+        val mixed = synchronized(wire) { wire.toList() }.filter { line ->
+            line.message.options.any { it.number in block } && line.message.options.any { it.number in qBlock }
+        }
+        assertEquals(emptyList(), mixed)
+    }
+
+    // ---------------------------------------------------------------- K1
+
+    @Test
+    fun k1ANonGetFindsSupportWithTheProbeAndGetsTheBodyInSetsWithContinues() = withServer("-L", "7", "-v", "7") { server ->
+        withClient { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertEquals(CoapCode.CONTENT, response.code)
+            assertContentEquals(exampleData, response.payload)
+            assertEquals(ContentFormat.TEXT_PLAIN, response.contentFormat)
+            val probe = sent().first().message
+            assertEquals("/.well-known/core", probe.options.path)
+            assertEquals(CoapMessageType.CON, probe.type)
+            assertEquals(listOf("0/_/16"), probe.qBlock2)
+            assertTrue(received().first().message.options.qBlock2 != null, "libcoap answers the probe with Q-Block2")
+            assertEquals(QBlockSupport.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+
+            val gets = requests("/example_data").map { it.message }
+            assertEquals(listOf("0/M/64", "10/M/64", "20/M/64"), gets.map { it.qBlock2.single() }, "exactly two Continues")
+            assertTrue(gets.all { it.type == CoapMessageType.NON })
+            assertTrue(gets.drop(1).all { it.options.observe == null && it.options.etags.isEmpty() })
+            assertTrue(gets.all { it.options.requestTags.map(ByteArray::toList) == gets[0].options.requestTags.map(ByteArray::toList) })
+            val blocks = blocks().map { it.message }
+            assertEquals((0L..23L).toList(), blocks.map { it.options.qBlock2!!.number })
+            assertTrue(blocks.all { it.options.etags.single().contentEquals(blocks[0].options.etags.single()) })
+            assertTrue(blocks.all { it.options.size2 == 1500L && it.options.contentFormat == ContentFormat.TEXT_PLAIN })
+            assertTrue(blocks.all { it.tokenHex == gets[0].tokenHex }, "libcoap continues on the original token")
+            val took = blocks().last().at - requests("/example_data").first().at
+            assertTrue(took < 1.5.seconds, "the body took $took")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K2
+
+    @Test
+    fun k2LostBlocksAreAskedForAtOnceWhenALaterSetArrives() = withServer("-L", "7", "-v", "7", "-l", "4,9") { server ->
+        withClient { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertContentEquals(exampleData, response.payload)
+            val asked = requests("/example_data").filter { it.message.options.qBlock2List.size > 1 }
+            assertEquals(listOf(listOf("2/_/64", "7/_/64")), asked.map { it.message.qBlock2 })
+            val block10 = blocks().first { it.message.options.qBlock2!!.number == 10L }
+            assertTrue(asked.single().at - block10.at < 500.milliseconds, "asked when block 10 arrived")
+            assertTrue(events.filterIsInstance<QBlockClientEvent.Recovery>().any { it.sent && it.blocks == listOf(2L, 7L) })
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    @Test
+    fun k2ALostBlock0IsAskedForWithTheWholeBodyNeverAlone() = withServer("-L", "7", "-v", "7", "-l", "2") { server ->
+        withClient { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertContentEquals(exampleData, response.payload)
+            val options = requests("/example_data").flatMap { it.message.qBlock2 }
+            assertEquals(2, options.count { it == "0/M/64" }, "the request and the request for block 0: $options")
+            assertTrue("0/_/64" !in options, "libcoap runs the handler again for NUM 0")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    @Test
+    fun k2WithTheMBitAMissingTailOfASetIsAskedForWithOneOption() = withServer("-L", "7", "-v", "7", "-l", "5-25") { server ->
+        withClient(QBlockClientConfig(QBlockMode.PROBE, missingBlockMBit = true)) { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertContentEquals(exampleData, response.payload)
+            val asked = requests("/example_data").first { it.message.qBlock2 == listOf("3/M/64") }
+            // libcoap's -l counts every datagram it sends, so some of these are lost on purpose too.
+            val answer = blocks().filter { it.message.tokenHex == asked.message.tokenHex }.map { it.message.options.qBlock2!!.number }
+            assertTrue(answer.isNotEmpty() && answer.all { it in 3L..9L }, "the server answers 3/M with blocks 3 to 9: $answer")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K3
+
+    @Test
+    fun k3ANonPutGetsA231PerSetAndTheNextSetFollowsAtOnce() = withServer("-L", "7", "-v", "7") { server ->
+        withClient { client ->
+            val upload = body(3000, 3)
+
+            val response = client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+
+            assertTrue(response.code == CoapCode.CHANGED || response.code == CoapCode.CREATED, "PUT answered ${response.code}")
+            val puts = requests("/example_data")
+            assertEquals((0..46).map { "$it/${if (it < 46) "M" else "_"}/64" }, puts.map { it.message.qBlock1 })
+            assertEquals(1, puts.map { it.message.options.requestTags.single().toList() }.toSet().size)
+            assertTrue(puts.all { it.message.options.size1 == 3000L })
+            val continues = received().filter { it.message.code == CoapCode.CONTINUE }
+            assertEquals(listOf(9L, 19L, 29L, 39L), continues.map { it.message.options.qBlock1!!.number })
+            for (continued in continues) {
+                val next = puts.first { it.message.options.qBlock1!!.number == continued.message.options.qBlock1!!.number + 1 }
+                assertTrue(next.at - continued.at < 200.milliseconds, "the next set at once after a 2.31")
+            }
+            val final = received().last { it.message.code.isSuccess && it.message.code != CoapCode.CONTINUE }.message
+            assertEquals(null, final.options.qBlock1, "libcoap's final response carries no Q-Block1")
+            val took = received().last().at - puts.first().at
+            assertTrue(took < 1.5.seconds, "the upload took $took")
+
+            assertContentEquals(upload, client.get("${server.uri}/example_data") { nonConfirmable() }.payload)
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K4
+
+    @Test
+    fun k4BlocksLostOnTheWayAreAskedForWithA408AfterTheLastBlock() = withServer("-L", "7", "-v", "7") { server ->
+        val lost = mutableSetOf<Long>()
+        withClient(dropOut = { message ->
+            val num = message.options.qBlock1?.number
+            num != null && num in setOf(2L, 7L) && lost.add(num)
+        }) { client ->
+            val upload = body(3000, 4)
+
+            val response = client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+
+            assertTrue(response.code == CoapCode.CHANGED || response.code == CoapCode.CREATED, "PUT answered ${response.code}")
+            assertTrue(received().none { it.message.code == CoapCode.CONTINUE }, "no 2.31 while set 0 has gaps")
+            val puts = requests("/example_data")
+            val setStarts = listOf(10L, 20L, 30L, 40L).map { num -> puts.first { it.message.options.qBlock1!!.number == num }.at }
+            val firstSet = puts.first().at
+            (listOf(firstSet) + setStarts).zipWithNext().forEach { (a, b) ->
+                assertTrue(b - a in 1.9.seconds..3.5.seconds, "sets NON_TIMEOUT_RANDOM apart: ${b - a}")
+            }
+            val missing = received().single { it.message.code == CoapCode.REQUEST_ENTITY_INCOMPLETE }
+            assertEquals(ContentFormat.MISSING_BLOCKS_CBOR_SEQ, missing.message.options.contentFormat)
+            assertContentEquals(byteArrayOf(0x02, 0x07), missing.message.payload)
+            assertEquals(puts.last { it.message.options.qBlock1!!.number == 46L }.message.tokenHex, missing.message.tokenHex)
+            val lastBlock = puts.first { it.message.options.qBlock1!!.number == 46L }.at
+            assertTrue(missing.at - lastBlock in 3.seconds..6.seconds, "4.08 ${missing.at - lastBlock} after the last block")
+            val resent = puts.filter { it.at > missing.at }.map { it.message.options.qBlock1!!.number }
+            assertEquals(listOf(2L, 7L), resent)
+            assertContentEquals(upload, client.get("${server.uri}/example_data") { nonConfirmable() }.payload)
+        }
+    }
+
+    @Test
+    fun upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4() = withServer("-L", "7", "-v", "7") { server ->
+        val lost = mutableSetOf<Long>()
+        withClient(dropOut = { message ->
+            val num = message.options.qBlock1?.number
+            num != null && num in setOf(1L, 3L, 5L) && lost.add(num)
+        }) { client ->
+            val response = client.put("${server.uri}/example_data", body(3000, 5), ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+
+            assertEquals(CoapCode.REQUEST_ENTITY_INCOMPLETE, response.code, "libcoap's 3-range limit")
+            assertEquals(null, response.contentFormat, "no list: the body is given up")
+            assertTrue("missing" in response.payloadAsText().lowercase(), response.payloadAsText())
+        }
+    }
+
+    // ---------------------------------------------------------------- K5
+
+    @Test
+    fun k5AServerWithoutQBlockAnswersTheProbe402AndRfc7959CarriesTheBodies() = withServer("-v", "7") { server ->
+        withClient { client ->
+            val upload = body(3000, 6)
+
+            val got = client.get("${server.uri}/example_data") { nonConfirmable() }
+            val put = client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+            val again = client.get("${server.uri}/example_data")
+
+            assertContentEquals(exampleData, got.payload)
+            assertTrue(put.isSuccess, "PUT answered ${put.code}")
+            assertContentEquals(upload, again.payload)
+            val probeAnswer = received().first().message
+            assertEquals(CoapMessageType.ACK, probeAnswer.type)
+            assertEquals(CoapCode.BAD_OPTION, probeAnswer.code)
+            assertEquals(listOf("0/_/16"), probeAnswer.qBlock2, "upstream: libcoap repeats the option it rejects in its 4.02")
+            assertEquals(QBlockSupport.Capability.UNSUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+            val qBlock = setOf(CoapOptions.Q_BLOCK1.number, CoapOptions.Q_BLOCK2.number)
+            val withQBlock = synchronized(wire) { wire.toList() }.filter { line -> line.message.options.any { it.number in qBlock } }
+            assertEquals(listOf(probeAnswer.tokenHex), withQBlock.map { it.message.tokenHex }.distinct(), "only the probe and its 4.02")
+            assertTrue(requests("/example_data").any { it.message.options.block1 != null })
+            assertTrue(received().any { it.message.options.block2 != null })
+        }
+    }
+
+    // ---------------------------------------------------------------- K7
+
+    @Test
+    fun k7ConfirmableBodiesGoInLockStepWithoutContinuesOr231() = withServer("-L", "7", "-v", "7") { server ->
+        withClient { client ->
+            val got = client.get("${server.uri}/example_data")
+            assertContentEquals(exampleData, got.payload)
+            val gets = requests("/example_data")
+            assertEquals(1, gets.size, "no Continue for Confirmable blocks")
+            val conBlocks = blocks().filter { it.message.type == CoapMessageType.CON }
+            assertTrue(conBlocks.isNotEmpty(), "separate Confirmable blocks: ${blocks().map { it.message.type }}")
+            val acks = sent().filter { it.message.type == CoapMessageType.ACK }.map { it.message.messageId }
+            assertTrue(conBlocks.all { it.message.messageId in acks }, "each Confirmable block acknowledged")
+
+            wire.clear()
+            val upload = body(3000, 7)
+            val put = client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN)
+            assertTrue(put.isSuccess, "PUT answered ${put.code}")
+            val puts = requests("/example_data")
+            assertTrue(puts.all { it.message.type == CoapMessageType.CON })
+            assertEquals(47, puts.map { it.message.options.qBlock1!!.number }.toSet().size)
+            assertTrue(received().none { it.message.code == CoapCode.CONTINUE }, "no 2.31 for Confirmable blocks")
+            assertContentEquals(upload, client.get("${server.uri}/example_data").payload)
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K8
+
+    @Test
+    fun upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8() = withServer("-L", "7", "-v", "7") { server ->
+        var lost = 0
+        withClient(dropIn = { message -> message.options.qBlock2?.number == 2L && message.options.size2 != null && lost++ < 2 }) { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertContentEquals(exampleData, response.payload)
+            val asked = requests("/example_data").filter { 2L in it.message.options.qBlock2List.map(BlockOption::number) }
+            assertEquals(2, asked.size, "block 2 asked for twice: ${requests("/example_data").map { it.message.qBlock2 }}")
+            val unTagged = received().filter { it.message.options.qBlock2 != null && it.message.options.etags.isEmpty() }
+            assertTrue(unTagged.isNotEmpty(), "libcoap answers without ETag once its cache expired")
+            assertTrue(unTagged.all { it.message.options.size2 == null })
+            val restart = requests("/example_data").last { it.message.qBlock2 == listOf("0/M/64") }
+            assertTrue(restart.at > unTagged.first().at, "the GET starts again")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K9
+
+    @Test
+    fun k9aANonFetchUploadsItsBodyAndGetsTheResponseBodyInQBlock2() = withServer("-L", "7", "-v", "7") { server ->
+        withClient { client ->
+            val query = body(700, 9)
+
+            val response = client.fetch("${server.uri}/example_data", query, ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+
+            val fetches = requests("/example_data").filter { it.message.options.qBlock1 != null }
+            assertEquals(11, fetches.size)
+            assertEquals(listOf(9L), received().filter { it.message.code == CoapCode.CONTINUE }.map { it.message.options.qBlock1!!.number })
+            // libcoap's /example_data answers a FETCH like a GET, in blocks of its own 1024 bytes.
+            assertEquals(CoapCode.CONTENT, response.code)
+            assertContentEquals(exampleData, response.payload)
+            val body = received().filter { it.message.options.qBlock2 != null && it.message.tokenHex != sent().first().message.tokenHex }
+            assertEquals(listOf(fetches.last().message.tokenHex), body.map { it.message.tokenHex }.distinct(), "the body on the last Q-Block1 token")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    /**
+     * K9 (b). libcoap 4.3.5 sends only block 0 of a 2.01 or 2.04 body, here the echo of the PUT (`-e`); the
+     * client asks for the rest when NON_RECEIVE_TIMEOUT has passed, with a PUT that carries only Q-Block2 and
+     * the upload's Request-Tag (RFC 9177 §4.7), and libcoap answers it.
+     */
+    @Test
+    fun upstreamLibcoapSendsOnlyBlock0OfAnEchoedPutBodyAndTheRestIsFetchedK9() = withServer("-L", "7", "-v", "7", "-e") { server ->
+        withClient { client ->
+            val upload = body(3000, 10)
+
+            val response = client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() }
+
+            assertContentEquals(upload, response.payload)
+            val puts = requests("/example_data")
+            val tag = puts.first().message.options.requestTags.single()
+            val followUp = puts.single { it.message.options.qBlock1 == null }
+            assertEquals(0, followUp.message.payloadSize)
+            assertContentEquals(tag, followUp.message.options.requestTags.single())
+            assertEquals(listOf("1/_/1024", "2/_/1024"), followUp.message.qBlock2)
+            val beforeAsked = received().filter { it.message.options.qBlock2 != null && it.at < followUp.at }
+            assertEquals(listOf(0L), beforeAsked.drop(1).map { it.message.options.qBlock2!!.number }, "upstream: block 0 alone")
+            assertTrue(followUp.at - beforeAsked.last().at >= 3.seconds, "asked for after NON_RECEIVE_TIMEOUT")
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    // ---------------------------------------------------------------- K10
+
+    @Test
+    fun k10OnReliableTransportsBlocksGoBackToBackWithout231OrContinue() =
+        withServer("-L", "7", "-X", "1152", "-v", "7", webSockets = true) { server ->
+            for (base in listOf(server.tcpUri, server.webSocketUri)) {
+                withReliableClient { client ->
+                    val upload = body(3000, 11)
+
+                    val put = client.put("$base/example_data", upload, ContentFormat.TEXT_PLAIN)
+                    val got = client.get("$base/example_data")
+
+                    assertTrue(put.isSuccess, "$base: PUT answered ${put.code}")
+                    assertContentEquals(upload, got.payload, base)
+                    val puts = requests("/example_data").filter { it.message.options.qBlock1 != null }
+                    assertEquals(47, puts.size, base)
+                    assertTrue(received().none { it.message.code == CoapCode.CONTINUE }, "$base: no 2.31")
+                    val gets = requests("/example_data").filter { it.message.code == CoapCode.GET }
+                    assertEquals(listOf(listOf("0/M/64")), gets.map { it.message.qBlock2 }, "$base: no Continue")
+                    assertEquals(47, blocks().size, base)
+                    assertNoMessageMixesBlockAndQBlock()
+                }
+            }
+        }
+
+    // ---------------------------------------------------------------- K12
+
+    @Test
+    fun k12ALostProbeAnswerIsRecoveredByRetransmittingTheProbe() = withServer("-L", "7", "-v", "7", "-l", "1") { server ->
+        withClient { client ->
+            val response = client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            assertContentEquals(exampleData, response.payload)
+            val probes = requests("/.well-known/core").map { it.message }
+            assertEquals(2, probes.size, "the probe and its retransmission")
+            assertEquals(1, probes.map { it.messageId }.toSet().size)
+            assertEquals(QBlockSupport.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+            assertTrue(requests("/example_data").all { it.message.options.qBlock2 != null })
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+}
