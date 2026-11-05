@@ -7,6 +7,7 @@ import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ResponseVerification
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -156,6 +157,27 @@ class OscoreEndToEndTest {
         val error = CoapMessage.response(plain.message, CoapCode.UNAUTHORIZED) { payload("Security context not found") }
         val unverified = assertIs<ResponseVerification.Unverified>(other.unprotectResponse(error), "OSCORE errors are unprotected")
         assertSame(error, unverified.message, "handed on as they came, for the application")
+    }
+
+    @Test
+    fun adr0008AVerifiedRequestCarriesItsContextsIdentity() = runTest {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val named = object : SecurityIdentity {
+            override val description: String get() = "lamp 42"
+        }
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverContext = SecurityContext.derive(
+            SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)),
+            crypto,
+            EphemeralSequenceNumberStore(),
+            identity = named,
+        )
+        assertEquals(OscoreIdentity(byteArrayOf(0x0b), null), clientContext.identity, "by default the Recipient ID")
+        assertSame(named, serverContext.identity)
+
+        val verified = serverFor(serverContext).unprotectRequest(OscoreClient(clientContext).protectRequest(request(), peer)!!.message, peer)!!
+
+        assertSame(named, verified.identity, "the identity of the context, not one built from the Recipient ID")
     }
 
     @Test

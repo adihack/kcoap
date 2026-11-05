@@ -70,7 +70,11 @@ public class InMemoryContextRepository : SecurityContextRepository {
     private fun key(recipientId: ByteArray, idContext: ByteArray?): String = "${recipientId.toHex()}/${idContext?.toHex() ?: "-"}"
 }
 
-/** The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. */
+/**
+ * The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. The default
+ * [SecurityContext.identity]; a context EDHOC established carries kcoap-edhoc-oscore's `EdhocIdentity`, which
+ * holds this one and the peer's credential.
+ */
 public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : SecurityIdentity {
     private val rid = recipientId.copyOf()
     private val idc = idContext?.copyOf()
@@ -308,9 +312,10 @@ public class OscoreClient(
 
 /**
  * The OSCORE server side for the CoAP stack: verifies requests carrying the OSCORE option against the
- * contexts in [contexts] and protects the responses. Requests without the option are left to the stack
- * (null). On a server with message security its default access policy refuses them, so only the resources
- * the application makes [dev.kcoap.coap.server.AccessPolicy.Public] serve them (ADR 0008).
+ * contexts in [contexts] and protects the responses. Each verified request carries its context's
+ * [SecurityContext.identity]. Requests without the option are left to the stack (null). On a server with
+ * message security its default access policy refuses them, so only the resources the application makes
+ * [dev.kcoap.coap.server.AccessPolicy.Public] serve them (ADR 0008).
  */
 public class OscoreServer(
     private val contexts: SecurityContextRepository,
@@ -344,7 +349,7 @@ public class OscoreServer(
         private val lock = Mutex()
         private var responses = 0
 
-        override val identity: SecurityIdentity = OscoreIdentity(binding.context.recipientId, binding.context.idContext)
+        override val identity: SecurityIdentity = binding.context.identity
 
         /**
          * The first response reuses the request nonce (RFC 8613 §8.3); every later one takes a new Partial IV

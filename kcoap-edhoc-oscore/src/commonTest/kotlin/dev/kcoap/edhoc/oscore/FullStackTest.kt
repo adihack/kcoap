@@ -7,13 +7,13 @@ import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.oscore.InMemoryContextRepository
-import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.testkit.InMemoryNetwork
 import dev.kcoap.testkit.LinkConditions
@@ -28,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -58,13 +59,15 @@ class FullStackTest {
             }),
         )
         val bigBody = ByteArray(3000) { (it % 251).toByte() }
+        val lightsSeenBy = mutableListOf<SecurityIdentity?>()
         var uploaded = ByteArray(0)
         val server = CoapServer(serverTransport, backgroundScope, CoapServerConfig(security = CombinedRequestServer(edhoc, OscoreServer(contexts))), endpointConfig) {
             resource(".well-known") { add(EdhocResource(edhoc)) }
+            // The default policy of a server with message security (ADR 0008): only OSCORE reaches it.
             resource("lights") {
                 get {
-                    // Only OSCORE-authenticated clients may read.
-                    if (securityIdentity !is OscoreIdentity) CoapResponse.error(CoapCode.UNAUTHORIZED) else CoapResponse.content("on")
+                    lightsSeenBy += securityIdentity
+                    CoapResponse.content("on")
                 }
             }
             resource("firmware") {
@@ -87,7 +90,13 @@ class FullStackTest {
         val base = "coap://${address.host}:${address.port}"
         val serverUri = CoapUri.parse(base)
 
+        // Without a protection installed, the request goes unprotected and is refused, as a plain client's is.
         assertEquals(CoapCode.UNAUTHORIZED, client.get("$base/lights").code, "no OSCORE yet")
+        val plain = CoapClient(network.attach(), backgroundScope, endpointConfig = endpointConfig)
+        assertEquals(CoapCode.UNAUTHORIZED, plain.get("$base/lights").code)
+        assertEquals(emptyList(), lightsSeenBy, "the handler never ran for it")
+        // /.well-known/core shows a plain client only the EDHOC resource, which is Public.
+        assertEquals(listOf("/.well-known/edhoc"), plain.discover(base).map { it.target })
         val store = RecordingStore()
         val handshake =
             EdhocClientHandshake.over(client, serverUri, peers.initiatorConfig(), crypto, sequenceStore = store)
@@ -98,6 +107,11 @@ class FullStackTest {
 
         val lights = client.get("$base/lights")
         assertEquals("on", lights.payloadAsText())
+        // The handler sees who EDHOC authenticated, not only the C_R it allocated.
+        val identity = assertIs<EdhocIdentity>(lightsSeenBy.single())
+        assertEquals(peers.client.credential, identity.peerCredential)
+        assertContentEquals(session.edhoc.peerConnectionIdentifier.bytes, identity.oscore.recipientId)
+        assertTrue(client.discover(base).any { it.target == "/lights" && it.has("osc") }, "an OSCORE client sees it, marked osc")
         assertTrue(wire.any { it.options.edhoc }, "message_3 went with the first OSCORE request")
         assertFalse(protection.isMessage3Pending())
         assertEquals(session.oscore.recipientId.toList(), session.edhoc.ownConnectionIdentifier.bytes.toList())

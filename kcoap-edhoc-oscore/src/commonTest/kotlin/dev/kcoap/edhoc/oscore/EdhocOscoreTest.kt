@@ -20,6 +20,7 @@ import dev.kcoap.edhoc.EdhocPeerErrorException
 import dev.kcoap.edhoc.EdhocRole
 import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.oscore.OscoreClient
+import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.test.runTest
@@ -68,6 +69,29 @@ class EdhocOscoreTest {
         assertEquals(listOf("temp"), verified.message.options.uriPath)
         val response = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("21") })
         assertEquals("21", protected.verified(response).payloadAsText())
+
+        // ADR 0008: the verified request carries who EDHOC authenticated, with the context's Recipient ID (C_R).
+        val identity = assertIs<EdhocIdentity>(verified.identity)
+        assertEquals(peers.client.credential, identity.peerCredential)
+        assertEquals(peers.client.identifier, identity.peerCredentialIdentifier)
+        assertContentEquals(clientContext.senderId, identity.oscore.recipientId)
+        assertEquals(peers.server.credential, assertIs<EdhocIdentity>(clientContext.identity).peerCredential, "the client's names the server")
+    }
+
+    @Test
+    fun edhocIdentitiesAreEqualByOscoreIdentityAndCredential() = runTest {
+        val peers = Peers.create(crypto)
+        val rid = OscoreIdentity(byteArrayOf(0x05), null)
+        val one = EdhocIdentity(rid, peers.client.credential, peers.client.identifier)
+
+        assertEquals(one, EdhocIdentity(OscoreIdentity(byteArrayOf(0x05), null), peers.client.credential, peers.server.identifier), "however identified")
+        assertEquals(one.hashCode(), EdhocIdentity(rid, peers.client.credential, peers.client.identifier).hashCode())
+        assertFalse(one == EdhocIdentity(rid, peers.server.credential, peers.server.identifier), "another credential")
+        assertFalse(one == EdhocIdentity(OscoreIdentity(byteArrayOf(0x06), null), peers.client.credential, peers.client.identifier))
+        assertFalse(one.equals(rid), "not an OSCORE identity alone")
+        assertTrue(one.description.startsWith("EDHOC AuthenticationCredential(CCS"), one.description)
+        assertTrue(one.description.endsWith("OSCORE rid=05"), one.description)
+        assertEquals(one.description, one.toString())
     }
 
     @Test
