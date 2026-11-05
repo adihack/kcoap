@@ -12,9 +12,10 @@ internal class OscoreContexts(val client: SecurityContext, val server: SecurityC
  * Derives both ends of an OSCORE association from a pre-shared Master Secret and Master Salt
  * (RFC 8613 §3.2), with the values of RFC 8613 Appendix C.1: a test vector, never a key for real use.
  * The sequence numbers live in [dataDirectory] (RFC 8613 Appendix B.1.1), so a restarted app continues
- * where it stopped.
+ * where it stopped. Called once per process, by [OscoreAssociation]: deriving again while the first
+ * contexts live would hand out their numbers a second time.
  */
-internal suspend fun oscoreContexts(crypto: CryptoBackend, dataDirectory: File): OscoreContexts {
+internal suspend fun deriveOscoreContexts(crypto: CryptoBackend, dataDirectory: File): OscoreContexts {
     val store = FileSequenceNumberStore(dataDirectory.toPath())
     val clientId = ByteArray(0)
     val serverId = byteArrayOf(0x01)

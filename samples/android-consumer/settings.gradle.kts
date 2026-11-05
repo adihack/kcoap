@@ -22,12 +22,13 @@ dependencyResolutionManagement {
     }
     versionCatalogs {
         // kcoap's own catalog, for the Kotlin version kcoap is built with and its Android minSdk, plus the
-        // Android Gradle plugin, which only this sample uses.
+        // Android Gradle plugin and kotlin.test on JUnit 4 for the unit tests, which only this sample uses.
         create("libs") {
             from(files("../../gradle/libs.versions.toml"))
             version("agp", "9.4.1")
             plugin("android-application", "com.android.application").versionRef("agp")
             plugin("kotlin-android", "org.jetbrains.kotlin.android").versionRef("kotlin")
+            library("kotlin-test-junit", "org.jetbrains.kotlin", "kotlin-test-junit").versionRef("kotlin")
         }
     }
 }

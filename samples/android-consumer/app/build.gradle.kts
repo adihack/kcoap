@@ -75,4 +75,7 @@ dependencies {
     implementation("dev.kcoap:kcoap-crypto:$kcoapVersion")
     implementation("dev.kcoap:kcoap-crypto-default:$kcoapVersion")
     "postQuantumImplementation"("dev.kcoap:kcoap-crypto-bc:$kcoapVersion")
+
+    // The unit tests run the tour's plain Kotlin on the JVM, without a device.
+    testImplementation(libs.kotlin.test.junit)
 }

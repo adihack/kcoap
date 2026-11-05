@@ -28,9 +28,9 @@ class MainActivity : Activity() {
         }
         setContentView(ScrollView(this).apply { addView(output) })
 
-        // Sequence numbers must not come back from a backup (RFC 8613 Appendix B.1.1), and Auto Backup
-        // skips this directory.
-        val tour = KcoapTour(cryptoBackend(), CRYPTO_SETUP, noBackupFilesDir)
+        // The crypto backend and the OSCORE contexts are the process's, shared by every MainActivity.
+        val app = application as SampleApplication
+        val tour = KcoapTour(app.crypto, CRYPTO_SETUP, app.oscore)
         scope.launch {
             val report = try {
                 tour.run(scope)

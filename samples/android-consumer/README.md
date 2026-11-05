@@ -16,13 +16,15 @@ of its own, outside kcoap's, because it needs the Android SDK; CI builds it in t
 | Dexing | D8 at minSdk 26 |
 | Shrinking | R8 on both release variants, with no rule of the app's own (`app/proguard-rules.pro` is empty): whatever kcoap needs ships in its jars |
 | Lint | AGP's lint on the default variant |
+| Unit tests | `OscoreAssociationTest` on the JVM in both flavors (`test`, the debug build type in AGP 9): one OSCORE derivation per process, and tours running at once sharing it |
 
 The app's code (`app/src/main/kotlin`) is a tour of the public API in plain Kotlin: the crypto capability
 report (`CryptoBackend.supports`, `CipherSuite.isSupportedBy`), OSCORE contexts with a durable
 `SequenceNumberStore` under `noBackupFilesDir`, an EDHOC Initiator configuration narrowed with
 `supportedBy`, and a CoAP GET and an OSCORE-protected GET over `KtorUdpTransport` to a `CoapServer` in
 the same app on the loopback interface. `MainActivity` runs it and shows the result, which also goes to
-logcat under the tag `kcoap`.
+logcat under the tag `kcoap`. The crypto backend and the OSCORE contexts belong to the process
+(`SampleApplication`), not to the Activity.
 
 Two flavors cover the two ways an app sets up kcoap's cryptography:
 
@@ -39,7 +41,7 @@ Running the app on emulators across API levels is PL-2.
 
 ```bash
 ./gradlew publishToMavenLocal                                  # in the repository root: kcoap into ~/.m2
-./gradlew -p samples/android-consumer assembleRelease lint     # needs the Android SDK (ANDROID_HOME)
+./gradlew -p samples/android-consumer assembleRelease lint test   # needs the Android SDK (ANDROID_HOME)
 ```
 
 The sample takes the kcoap version from `-Pkcoap.version` or, without it, from the repository's

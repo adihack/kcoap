@@ -137,9 +137,10 @@ jobs:
       # kcoap from this commit into ~/.m2, where samples/android-consumer, a build of its own, finds it. The
       # unit job's checkAndroidApi already checks the jvm jars against API level 26 without the SDK; this
       # checks what only the Android toolchain sees: resolution for Android, compilation, D8, R8 on both
-      # release variants with no rules of the app's own, and lint.
+      # release variants with no rules of the app's own, and lint. The sample's unit tests run its tour on
+      # the JVM in both flavors (AGP 9 tests the debug build type).
       - run: ./gradlew --console=plain publishToMavenLocal
-      - run: ./gradlew --console=plain -p samples/android-consumer assembleRelease lint
+      - run: ./gradlew --console=plain -p samples/android-consumer assembleRelease lint test
       - uses: actions/upload-artifact@v7
         if: always()
         with:
