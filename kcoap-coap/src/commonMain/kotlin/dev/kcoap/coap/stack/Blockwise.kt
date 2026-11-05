@@ -213,16 +213,39 @@ internal class ExpiringCache<K, V>(private val capacity: Int, private val lifeti
 
     fun remove(key: K): V? = entries.remove(key)?.value
 
-    fun removeAll(predicate: (K) -> Boolean) {
-        entries.keys.removeAll(predicate)
+    /** Removes the entries whose key matches [predicate] and returns their values, so the caller can release them. */
+    fun removeAll(predicate: (K) -> Boolean): List<V> {
+        val removed = ArrayList<V>()
+        val iterator = entries.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (predicate(entry.key)) {
+                removed += entry.value.value
+                iterator.remove()
+            }
+        }
+        return removed
     }
 
     val size: Int get() = entries.size
 
-    /** Drops the expired entries, which are the first ones. */
-    private fun prune(now: Duration) {
+    /** Every entry, expired or not, from the one used longest ago to the latest; nothing changes. */
+    val entryList: List<Pair<K, V>> get() = entries.map { (key, entry) -> key to entry.value }
+
+    /** When the first entry expires, the earliest of all, or null when the cache is empty. */
+    val earliestExpiry: Duration? get() = entries.values.firstOrNull()?.expiresAt
+
+    /** Drops the expired entries, which are the first ones, and returns their values. */
+    fun prune(now: Duration): List<V> {
+        val removed = ArrayList<V>()
         val iterator = entries.values.iterator()
-        while (iterator.hasNext() && iterator.next().expiresAt <= now) iterator.remove()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.expiresAt > now) break
+            removed += entry.value
+            iterator.remove()
+        }
+        return removed
     }
 
     /** The keys from the first entry to the last, for tests. */

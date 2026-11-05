@@ -44,6 +44,23 @@ class ExpiringCacheTest {
     }
 
     @Test
+    fun pruningAndRemovingReturnWhatWentSoItCanBeReleased() {
+        val cache = ExpiringCache<String, Int>(capacity = 8, lifetime = 10.seconds)
+        assertNull(cache.earliestExpiry)
+        cache.put("a", 1, 0.seconds)
+        cache.put("b", 2, 1.seconds)
+        cache.put("c", 3, 2.seconds)
+        assertEquals(10.seconds, cache.earliestExpiry)
+
+        assertEquals(listOf(1, 2), cache.prune(11.seconds))
+        assertEquals(listOf("c" to 3), cache.entryList)
+        assertEquals(12.seconds, cache.earliestExpiry)
+        cache.put("d", 4, 3.seconds)
+        assertEquals(listOf(4), cache.removeAll { it == "d" })
+        assertEquals(emptyList(), cache.prune(11.seconds), "c lives until 12 s")
+    }
+
+    @Test
     fun aStaleEntryIsNeverReturned() {
         val cache = ExpiringCache<String, Int>(capacity = 2, lifetime = 10.seconds)
         cache.put("a", 1, 0.seconds)
