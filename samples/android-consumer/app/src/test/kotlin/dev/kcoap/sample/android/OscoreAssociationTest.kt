@@ -55,7 +55,11 @@ class OscoreAssociationTest {
                 async(Dispatchers.Default) { KcoapTour(crypto, CRYPTO_SETUP, association).run(scope) }
             }.awaitAll()
 
-            (reports + first).forEach { assertContains(it, "Hello under OSCORE") }
+            (reports + first).forEach {
+                assertContains(it, "Hello under OSCORE")
+                // The plain GET reaches the public resource of a server that has OSCORE (ADR 0008).
+                assertContains(it, "2.05 Content Hello\n")
+            }
             // The two protected requests took their Partial IVs from the one client context.
             assertEquals(next + 2, client.peekSequenceNumber())
         } finally {

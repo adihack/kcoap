@@ -22,7 +22,9 @@ The app's code (`app/src/main/kotlin`) is a tour of the public API in plain Kotl
 report (`CryptoBackend.supports`, `CipherSuite.isSupportedBy`), OSCORE contexts with a durable
 `SequenceNumberStore` under `noBackupFilesDir`, an EDHOC Initiator configuration narrowed with
 `supportedBy`, and a CoAP GET and an OSCORE-protected GET over `KtorUdpTransport` to a `CoapServer` in
-the same app on the loopback interface. `MainActivity` runs it and shows the result, which also goes to
+the same app on the loopback interface, on a resource that is `AccessPolicy.Public`: a server with OSCORE
+refuses every request it did not verify unless the resource's policy permits it
+([ADR 0008](../../docs/adr/0008-fail-closed-message-security.md)). `MainActivity` runs it and shows the result, which also goes to
 logcat under the tag `kcoap`. The crypto backend and the OSCORE contexts belong to the process
 (`SampleApplication`), not to the Activity.
 

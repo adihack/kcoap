@@ -3,6 +3,7 @@ package dev.kcoap.sample.android
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.oscore.InMemoryContextRepository
@@ -16,12 +17,17 @@ import kotlin.time.Duration.Companion.seconds
  * A CoAP GET (RFC 7252) and an OSCORE-protected GET (RFC 8613) over UDP on the loopback interface, from a
  * [CoapClient] to a [CoapServer] in the same app, each on its own [KtorUdpTransport]. The server answers
  * both on one resource and says whether OSCORE protected the request.
+ *
+ * A server with OSCORE refuses every request it did not verify, unless a resource's [AccessPolicy] says
+ * otherwise (docs/adr/0008-fail-closed-message-security.md): `hello` is [AccessPolicy.Public], so it answers
+ * the plain GET too; without it the plain GET would get 4.01 Unauthorized.
  */
 internal suspend fun loopbackGets(scope: CoroutineScope, contexts: OscoreContexts): String {
     val repository = InMemoryContextRepository().apply { add(contexts.server) }
     val serverTransport = KtorUdpTransport.bind("127.0.0.1", 0)
     val server = CoapServer(serverTransport, scope, CoapServerConfig(security = OscoreServer(repository))) {
         resource("hello") {
+            access = AccessPolicy.Public
             get { CoapResponse.content(if (securityIdentity == null) "Hello" else "Hello under OSCORE") }
         }
     }
