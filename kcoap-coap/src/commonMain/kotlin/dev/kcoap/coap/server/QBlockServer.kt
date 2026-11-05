@@ -863,7 +863,8 @@ internal class QBlockServer(
      * ([ServedBody.isSettled]): then its lease goes back, and a change meanwhile sends the next body.
      */
     private fun follow(body: ServedBody, observation: ServerObservation) {
-        body.onDone = { launch("settle a notification of ${observation.resource.path}") { settled(body, observation) } }
+        // In the endpoint's scope, so that a lease is given back also when the server stops on a shared endpoint.
+        body.onDone = { endpoint.launchGuarded("settle a notification of ${observation.resource.path}") { settled(body, observation) } }
         observation.body = body
     }
 
