@@ -63,7 +63,7 @@ internal class AddressVerification(
      * request is always allowed.
      */
     fun exceedsLimit(requestSize: Int, responseSize: Long, isBurst: Boolean): Boolean =
-        appliesTo(isBurst) && responseSize.toLong() > config.amplificationFactor.toLong() * requestSize
+        appliesTo(isBurst) && responseSize > config.amplificationFactor.toLong() * requestSize
 
     /**
      * Whether the address of [peer] is verified: still within its lifetime, or by now, because [echo], the
