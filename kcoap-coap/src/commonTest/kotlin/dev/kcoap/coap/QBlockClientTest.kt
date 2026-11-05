@@ -10,6 +10,7 @@ import dev.kcoap.coap.stack.MissingBlocks
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.common.toHex
+import dev.kcoap.testkit.DatagramFate
 import dev.kcoap.testkit.InMemoryDatagram
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
@@ -379,6 +380,42 @@ class QBlockClientTest {
         val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
 
         assertContentEquals(newer, response.payload)
+        assertEquals(2, setup.server.servedBodies)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc9177Section4_4ALostRequestForTheWholeBodyIsRepeatedAfterNonReceiveTimeout() = runTest {
+        // libcoap K8: once its cache expired, it answers a request for missing blocks without ETag and Size2.
+        val setup = setup()
+        setup.server.resources["/big"] = body(1500)
+        setup.server.script = { from, request ->
+            val asked = request.options.qBlock2List.map { it.number } == listOf(2L)
+            if (asked) {
+                send(from, nonResponse(request, CoapCode.CONTENT, body(1500).copyOfRange(128, 192)) { qBlock2(BlockOption(2, true, 2)) })
+            }
+            asked
+        }
+        var blockLost = false
+        var wholeBody = 0
+        setup.fixture.network.filter = { datagram ->
+            val message = datagram.message()
+            val isBlock2 = datagram.from == setup.server.address && message?.options?.qBlock2?.number == 2L
+            val asksForWholeBody = datagram.from == setup.clientAddress && message?.isRequest == true && message.qBlock2 == listOf("0/1/64")
+            when {
+                isBlock2 && !blockLost -> false.also { blockLost = true }
+                asksForWholeBody -> wholeBody++ != 1
+                else -> true
+            }
+        }
+
+        val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+
+        assertContentEquals(body(1500), response.payload)
+        val restarts = setup.fixture.traffic.filter { it.from == setup.clientAddress && it.message?.qBlock2 == listOf("0/1/64") }
+        assertEquals(3, restarts.size, "the GET, the lost request for the whole body, and its repeat")
+        assertEquals(DatagramFate.FILTERED, restarts[1].fate)
+        assertEquals(4.seconds, restarts[2].at - restarts[1].at)
         assertEquals(2, setup.server.servedBodies)
         setup.assertNothingLeft()
     }
