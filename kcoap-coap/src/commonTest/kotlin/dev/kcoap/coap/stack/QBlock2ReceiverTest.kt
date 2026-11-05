@@ -75,6 +75,52 @@ class QBlock2ReceiverTest {
         assertTrue(receiver.isAssembling)
     }
 
+    /** RFC 7959 §2.2: only the last block may differ from the block size, and only by being smaller. */
+    @Test
+    fun rfc7959Section2_2ALastBlockLargerThanItsSizeIsDropped() {
+        val receiver = receiver()
+        receiver.onBlock(Duration.ZERO, download(0, 100, size = 16))
+        val tooLong = download(2, 100, size = 16).toBuilder().apply { payload = ByteArray(68) }
+            .options { qBlock2(block(2, false, 16)) }.build()
+        assertEquals(listOf("Block 2 carries more than 16 bytes"), receiver.onBlock(Duration.ZERO, tooLong).drops())
+        val dropped = (0L..6L).filter { receiver.onBlock(Duration.ZERO, download(it, 100, size = 16)).drops().isNotEmpty() }
+        assertEquals(listOf(0L), dropped, "only block 0 had arrived: block 2 did not mark or fill 3 to 6")
+    }
+
+    @Test
+    fun rfc9177Section4_4EveryBlockNeedsExactlyOneETag() {
+        fun withoutETag(num: Long, size: Int = size2) =
+            download(num, size).toBuilder().options { remove(CoapOptions.ETAG.number) }.build()
+        val receiver = receiver()
+        assertEquals(listOf("No ETag"), receiver.onBlock(Duration.ZERO, withoutETag(0)).drops())
+        assertFalse(receiver.isAssembling, "no body starts without ETag")
+        val small = 64 + 3
+        val noETags = receiver()
+        val drops = listOf(0L, 1L).flatMap { noETags.onBlock(Duration.ZERO, withoutETag(it, small)).drops() }
+        assertEquals(listOf("No ETag", "No ETag"), drops)
+        assertNull(noETags.nextDeadline(), "two blocks without ETag never make a body")
+        receiver.feed(0, 1, 2)
+        val withSize2 = receiver.onBlock(Duration.ZERO, withoutETag(3)).drops()
+        assertEquals(listOf("No ETag"), withSize2, "with Size2 it is not libcoap's rerun")
+        assertTrue(receiver.isAssembling)
+        val observation = receiver()
+        assertIs<QBlockAction.Deliver<Nothing>>(observation.feed(0, 1, size = small).last())
+        val notification = observation.onBlock(Duration.ZERO, withoutETag(0, small)).drops()
+        assertEquals(listOf("No ETag"), notification, "a notification without ETag")
+    }
+
+    @Test
+    fun rfc9177Section4_4ABodyOfMoreThan2To20BlocksFails() {
+        val receiver = receiver(maxBodySize = 64 shl 20)
+        val huge = download(0, 32, size = 16).toBuilder().options { size2(20L shl 20) }.build()
+        val failure = assertIs<QBlockAction.Fail>(receiver.onBlock(Duration.ZERO, huge).single())
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
+        assertEquals("Response body of 20971520 bytes needs more than 2^20 blocks of 16", failure.diagnostic)
+        val largest = receiver(maxBodySize = 64 shl 20)
+        val fits = download(0, 32, size = 16).toBuilder().options { size2(16L shl 20) }.build()
+        assertEquals(emptyList(), largest.onBlock(Duration.ZERO, fits), "exactly 2^20 blocks")
+    }
+
     @Test
     fun rfc9177Section4_4ABodyAboveTheLimitFails() {
         val receiver = receiver(maxBodySize = 1000)
@@ -123,6 +169,10 @@ class QBlock2ReceiverTest {
         }.build()
         assertEquals(listOf("0/1/64"), receiver.onBlock(Duration.ZERO, rerun).requested(), "the whole body is asked for again")
         assertNull(receiver.nextDeadline(), "nothing is assembled meanwhile")
+        val unsafe = receiver(restartable = false)
+        unsafe.feed(0, 1, 2)
+        val failure = assertIs<QBlockAction.Fail>(unsafe.onBlock(Duration.ZERO, rerun).single())
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
     }
 
     @Test
@@ -157,6 +207,8 @@ class QBlock2ReceiverTest {
         val lastOne = receiver(mBit = true)
         lastOne.feed(*(0L..8L).toList().toLongArray())
         assertEquals(listOf("9/0/64"), lastOne.onTimer(4.seconds).requested())
+        val unsafe = receiver(restartable = false, mBit = true)
+        assertEquals(listOf("0/0/64, 1/1/64"), unsafe.feed(12).requested(), "0/M=1 would ask for the entire body")
     }
 
     @Test
@@ -195,11 +247,47 @@ class QBlock2ReceiverTest {
     }
 
     @Test
-    fun rfc9177AppendixAConfirmableBodiesRecoverAfterMaxTransmitWait() {
+    fun rfc9177Section4_4ConfirmableBodiesRecoverAfterMaxTransmitSpan() {
         val receiver = receiver(mode = BodyMode.CON)
         assertEquals(emptyList(), receiver.feed(0, 2), "no request at once and no Continue")
-        assertEquals(timing.parameters.maxTransmitWait, receiver.nextDeadline())
-        assertEquals(listOf((listOf(1L) + (3L..9L)).joinToString { "$it/0/64" }), receiver.onTimer(timing.parameters.maxTransmitWait).requested())
+        assertEquals(45.seconds, receiver.nextDeadline(), "MAX_TRANSMIT_SPAN")
+        assertEquals(listOf((listOf(1L) + (3L..9L)).joinToString { "$it/0/64" }), receiver.onTimer(45.seconds).requested())
+    }
+
+    /** Feeds one block every 10 s, running every timer that falls due in between. */
+    private fun QBlock2Receiver.trickle(blocks: Int, size: Int): List<QBlockAction<Nothing>> {
+        val actions = mutableListOf<QBlockAction<Nothing>>()
+        for (num in 0 until blocks) {
+            val at = (num * 10).seconds
+            while (true) {
+                val due = nextDeadline()?.takeIf { it <= at } ?: break
+                actions += onTimer(due)
+            }
+            actions += onBlock(at, download(num.toLong(), size))
+        }
+        return actions
+    }
+
+    @Test
+    fun rfc9177Section4_4APartialBodyLivesWhileItsBlocksKeepComing() {
+        val size = 30 * 64 + 9
+        for (mode in listOf(BodyMode.NON, BodyMode.RELIABLE)) {
+            val actions = receiver(mode = mode).trickle(31, size)
+            assertTrue(actions.none { it is QBlockAction.Discard }, "$mode: 300 s, but never 124 s without a block")
+            val delivered = assertIs<QBlockAction.Deliver<Nothing>>(actions.last(), "$mode")
+            assertContentEquals(bytes(size), delivered.message.payload)
+        }
+    }
+
+    @Test
+    fun rfc9177Section4_4AStalledPartialBodyExpiresLifetimeAfterItsLatestBlock() {
+        val receiver = receiver(mode = BodyMode.RELIABLE)
+        receiver.feed(0)
+        receiver.feed(1, at = 50.seconds)
+        assertEquals(174.seconds, receiver.nextDeadline())
+        assertEquals(emptyList(), receiver.onTimer(173.seconds))
+        val discard = assertIs<QBlockAction.Discard>(receiver.onTimer(174.seconds).single())
+        assertEquals("The partial body expired", discard.reason)
     }
 
     @Test
