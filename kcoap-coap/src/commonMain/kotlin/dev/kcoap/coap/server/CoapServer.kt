@@ -387,7 +387,9 @@ public class CoapServer private constructor(
             return
         }
         val message = response.toMessage(request.token)
-        if (!reply.isChallenge && checksAddress(inbound, unprotected) && mustVerifyAddress(inbound, request, message, isBurst = false)) {
+        if (!reply.isChallenge && checksAddress(inbound, unprotected) && addressVerification.appliesTo(isBurst = false) &&
+            mustVerifyAddress(inbound, request, UdpMessageCodec.encode(message).size, isBurst = false)
+        ) {
             val kept = if (AddressVerification.isRepeatSensitive(request.code)) AddressVerification.Withheld(request, response) else null
             // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
             reply.observation?.let { observations.remove(it, "address not verified") }
@@ -429,14 +431,12 @@ public class CoapServer private constructor(
             inbound.peerIdentity == PeerIdentity.None
 
     /**
-     * Whether [response] to [request], [isBurst] when it stands for all the blocks of a Q-Block2 burst, is
-     * larger than [CoapServerConfig.amplificationFactor] allows towards an address that is not verified yet
-     * (RFC 9175 §2.4 item 3). The sizes are those of the messages on the wire.
+     * Whether [responseSize] bytes in answer to [request], with [isBurst] all the blocks of a Q-Block2 burst
+     * together, are more than [CoapServerConfig.amplificationFactor] allows towards an address that is not
+     * verified yet (RFC 9175 §2.4 item 3). Sizes are those of the messages on the wire.
      */
-    private suspend fun mustVerifyAddress(inbound: InboundRequest, request: CoapMessage, response: CoapMessage, isBurst: Boolean): Boolean {
-        if (!addressVerification.appliesTo(isBurst)) return false
+    private suspend fun mustVerifyAddress(inbound: InboundRequest, request: CoapMessage, responseSize: Int, isBurst: Boolean): Boolean {
         val requestSize = UdpMessageCodec.encode(inbound.message).size
-        val responseSize = UdpMessageCodec.encode(response).size
         if (!addressVerification.exceedsLimit(requestSize, responseSize, isBurst)) return false
         return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
     }
