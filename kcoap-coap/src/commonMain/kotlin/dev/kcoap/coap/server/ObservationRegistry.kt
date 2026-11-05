@@ -62,7 +62,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
 
     /**
      * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST), unless the
-     * registry is closed or full; a replacement does not count against the bounds again.
+     * registry is closed or full; a replacement does not count against the bounds again. The replaced one
+     * ends: nothing of its Q-Block2 body goes out any more on the token the new one now uses.
      */
     suspend fun register(observation: ServerObservation): Registration {
         val config = server.config
@@ -81,7 +82,10 @@ internal class ObservationRegistry(private val server: CoapServer) {
             index(observation)
             previous
         }
-        previous?.deactivate()
+        previous?.let {
+            it.deactivate()
+            server.qBlock.stop(it)
+        }
         server.endpoint.report(EndpointEvent.ObserverAdded(observation.peer, observation.resource.path))
         return Registration.ADDED
     }
@@ -104,8 +108,9 @@ internal class ObservationRegistry(private val server: CoapServer) {
             registered
         }
         observation.deactivate()
-        // RFC 9177 §4.5: the rest of a Q-Block2 notification body would only be answered with Resets.
-        observation.body?.let { server.qBlock.stop(it) }
+        // RFC 9177 §4.5: the rest of a Q-Block2 notification body would only be answered with Resets. After
+        // deactivate, so that a body the server installs meanwhile is either stopped here or never installed.
+        server.qBlock.stop(observation)
         if (removed) server.endpoint.report(EndpointEvent.ObserverRemoved(observation.peer, observation.resource.path, reason))
     }
 
@@ -169,8 +174,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * registration's [connection].
  *
  * An observation registered with Q-Block ([qBlockSize]) gets its notifications as Q-Block2 bodies
- * (RFC 9177 §4.5, [QBlockServer.notify]): its latest [body] is the one outstanding notification until it is
- * settled ([ServedBody.isSettled]), every block out, and a Non-confirmable body for at least
+ * (RFC 9177 §4.5, [QBlockServer.notify]): its [latest] body is the one outstanding notification until it is
+ * settled ([OutstandingBody.isSettled]), every block out, and a Non-confirmable body for at least
  * [CoapServerConfig.nonConfirmableNotificationInterval]. Changes meanwhile fold into the next body, and a body
  * is never replaced by a newer one while it goes out, so a resource that changes faster than its bodies go out
  * still has whole bodies reach the client.
@@ -224,11 +229,11 @@ internal class ServerObservation(
     private var nonConfirmableInRow = 0
 
     /**
-     * The Q-Block2 body of the latest notification, or of the registration response, of an observation with
-     * [qBlockSize]; written under [QBlockServer]'s lock.
+     * What the observation keeps of the Q-Block2 body of its latest notification, or of the registration
+     * response, if it has [qBlockSize]; written under [QBlockServer]'s lock.
      */
     @Volatile
-    var body: ServedBody? = null
+    var latest: OutstandingBody? = null
 
     /** Whether message or channel security authenticated the client when it registered. */
     private val isAuthenticated: Boolean get() = identity != null || peerIdentity != PeerIdentity.None
@@ -296,8 +301,8 @@ internal class ServerObservation(
      * The Q-Block2 [body] of this observation is settled: a change meanwhile sends the next notification
      * (RFC 9177 §4.5). Taken under [mutex], so a change that found the body outstanding is not missed.
      */
-    suspend fun onBodySettled(body: ServedBody) {
-        val changed = mutex.withLock { this.body === body && changedMeanwhile }
+    suspend fun onBodySettled(body: OutstandingBody) {
+        val changed = mutex.withLock { latest === body && changedMeanwhile }
         if (changed) schedule()
     }
 
@@ -310,7 +315,7 @@ internal class ServerObservation(
             return@withLock
         }
         val now = server.endpoint.now()
-        val body = body
+        val body = latest
         if (body != null && !body.isSettled(now, server.config.nonConfirmableNotificationInterval)) {
             // RFC 9177 §4.5: a body is never cut short by a newer one; onBodySettled sends the latest state.
             changedMeanwhile = true
@@ -327,7 +332,7 @@ internal class ServerObservation(
         val notification = server.notification(this, type)
         if (notification == null) {
             // A Q-Block2 body went out (or the observation ended meanwhile).
-            if (this.body !== body) count(type, now)
+            if (latest !== body) count(type, now)
             return@withLock
         }
         if (current != null && server.endpoint.replaceOutstanding(current, notification)) return@withLock

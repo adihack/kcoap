@@ -11,6 +11,7 @@ import dev.kcoap.coap.OptionSet
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
+import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.EndpointEvent
@@ -779,7 +780,8 @@ internal class QBlockServer(
      * bytes fits next to its options. Its later sets go out NON_TIMEOUT_RANDOM apart or on Continues, and
      * requests for its missing blocks find it under the registration's operation, where it replaces the
      * observation's older body and ends whatever that still had to send (§4.4). A Non-confirmable body first
-     * takes the lease of one NSTART slot towards the client, which may wait (RFC 7641 §4.5.1, RFC 9177 §7.2).
+     * takes the lease of one NSTART slot towards the client, which may wait (RFC 7641 §4.5.1, RFC 9177 §7.2);
+     * an observer removed or replaced meanwhile gets nothing (RFC 7641 §3.6).
      */
     suspend fun notify(
         observation: ServerObservation,
@@ -796,15 +798,17 @@ internal class QBlockServer(
         val lease = if (mode == BodyMode.NON) endpoint.leaseBody(observation.peer, response.payloadSize, nonTimeoutRandom) else null
         val target = NotificationBody(observation, type, lease)
         val evicted = ArrayList<Pair<Endpoint, Limit>>()
-        val (body, actions) = try {
+        val started = try {
             lock.withLock {
+                // Checked under the lock that stop() takes after the observation was deactivated.
+                if (!observation.isActive) return@withLock null
                 val now = endpoint.now()
                 // No request to piggyback block 0 on: every block goes in a message of its own.
                 val sender = QBlock2Sender<QBlockTarget>(
                     response.payloadSize, size, mode, timing, nonTimeoutRandom, firstBlockPiggybacked = false,
                 )
                 val body = ServedBody(observation.operationKey, response, nextETag(), sender, now, observation, target)
-                observation.body?.let { older -> if (!older.isDropped) end(older, now) }
+                bodiesOf(observation).forEach { older -> end(older, now) }
                 follow(body, observation)
                 // A body of one block is not kept: asking for it again runs the handler, as cheaply.
                 if (sender.count > 1) store(body, now, evicted)
@@ -814,6 +818,12 @@ internal class QBlockServer(
             lease?.let { endpoint.releaseBody(it) }
             throw e
         }
+        if (started == null) {
+            lease?.let { endpoint.releaseBody(it) }
+            log.debug { "No notification body for $observation: the observer is gone" }
+            return null
+        }
+        val (body, actions) = started
         evicted.forEach { (peer, limit) -> endpoint.report(EndpointEvent.LimitReached(peer, limit)) }
         log.debug {
             "Notification of ${response.payloadSize} bytes to ${observation.peer} in ${body.sender.count} Q-Block2 blocks of $size, $type"
@@ -835,21 +845,37 @@ internal class QBlockServer(
         } catch (e: Exception) {
             // The security layer, its sequence-number store or the messaging layer failed: the observer goes.
             log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
-            stop(body)
+            lock.withLock { stop(body, endpoint.now()) }
             server.observations.remove(observation, "notification failed: ${e.message}")
         }
     }
 
     /**
-     * Stops [body], the latest of an observation whose observer was removed (RFC 7641 §3.6): nothing more of it
-     * goes out, and its lease is given back.
+     * Stops the bodies of [observation], whose observer was removed or replaced (RFC 7641 §3.6): nothing more of
+     * them goes out, and their leases are given back. The bodies are those the server still holds, cached or
+     * still sending; one of a single block is out already.
      */
-    suspend fun stop(body: ServedBody) {
+    suspend fun stop(observation: ServerObservation) {
+        if (observation.qBlockSize == null) return
         lock.withLock {
-            if (!body.isDropped) end(body, endpoint.now())
-            body.markDone()
+            val now = endpoint.now()
+            bodiesOf(observation).forEach { stop(it, now) }
         }
     }
+
+    /** Under [lock]: [body] sends nothing more, and is done. */
+    private fun stop(body: ServedBody, now: Duration) {
+        if (!body.isDropped) end(body, now)
+        body.markDone()
+    }
+
+    /** Under [lock]: the bodies of [observation] the server holds, cached or still sending. */
+    private fun bodiesOf(observation: ServerObservation): List<ServedBody> =
+        (served.entryList.map { it.second } + sending).filter { it.observation === observation && !it.isDropped }
+
+    /** Under [lock]: the body of [observation] cached for its client's follow-ups, if one is. */
+    private fun cachedOf(observation: ServerObservation, now: Duration): ServedBody? =
+        served.peek(observation.operationKey, now)?.takeIf { it.observation === observation }
 
     /** Under [lock]: [body] sends nothing more by itself, but stays cached for what its client asks. */
     private fun end(body: ServedBody, now: Duration) {
@@ -859,21 +885,32 @@ internal class QBlockServer(
     }
 
     /**
-     * Under [lock]: [body] is now the outstanding notification of [observation], which learns when it is settled
-     * ([ServedBody.isSettled]): then its lease goes back, and a change meanwhile sends the next body.
+     * Under [lock]: [body] is now the outstanding notification of [observation], which keeps an [OutstandingBody]
+     * of it and learns when it is settled ([OutstandingBody.isSettled]): then its lease goes back, and a change
+     * meanwhile sends the next body. Nothing the observation keeps refers to the body, which goes once it leaves
+     * the cache.
      */
     private fun follow(body: ServedBody, observation: ServerObservation) {
-        // In the endpoint's scope, so that a lease is given back also when the server stops on a shared endpoint.
-        body.onDone = { endpoint.launchGuarded("settle a notification of ${observation.resource.path}") { settled(body, observation) } }
-        observation.body = body
+        val outstanding = OutstandingBody(body.sender.mode, body.startedAt)
+        val lease = body.notification?.lease
+        body.onDone = {
+            outstanding.markDone()
+            // In the endpoint's scope, so that a lease is given back also when the server stops on a shared endpoint.
+            endpoint.launchGuarded("settle a notification of ${observation.resource.path}") {
+                settled(outstanding, lease, observation)
+            }
+        }
+        observation.latest = outstanding
     }
 
-    private suspend fun settled(body: ServedBody, observation: ServerObservation) {
+    private suspend fun settled(body: OutstandingBody, lease: BodyLease?, observation: ServerObservation) {
         try {
             // A Non-confirmable body keeps its slot as long as a single Non-confirmable notification would.
-            if (body.sender.mode == BodyMode.NON) delay(body.startedAt + config.nonConfirmableNotificationInterval - endpoint.now())
+            if (body.mode == BodyMode.NON) {
+                delay(body.startedAt + config.nonConfirmableNotificationInterval - endpoint.now())
+            }
         } finally {
-            withContext(NonCancellable) { body.notification?.lease?.let { endpoint.releaseBody(it) } }
+            withContext(NonCancellable) { lease?.let { endpoint.releaseBody(it) } }
         }
         observation.onBodySettled(body)
     }

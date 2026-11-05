@@ -645,6 +645,83 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7641Section3_6AnObserverRemovedWhileItsBodyWaitsForItsSlotGetsNoBody() = runTest {
+        val first = Counter("first")
+        val second = Counter("second")
+        val f = fixture {
+            add(first)
+            add(second)
+        }
+        f.peer.send(register(f.peer, path = "first"))
+        val registration = f.peer.send(register(f.peer, path = "second"))
+        f.peer.drain(5.seconds)
+
+        val start = f.stack.now
+        first.change()
+        delay(100.milliseconds)
+        // Its handler ran; its body waits for the NSTART slot that the first body holds for 3 s.
+        second.change()
+        delay(1.seconds)
+        f.peer.send(
+            CoapMessage.request(CoapCode.GET) {
+                type = CoapMessageType.NON
+                token = registration.token
+                options {
+                    uriPath("second")
+                    observe(1)
+                }
+            },
+        )
+        f.peer.drain(10.seconds)
+
+        assertEquals(0, second.observerCount)
+        val notifications = f.serverSent().filter { it.at >= start }.mapNotNull { it.message }
+            .filter { it.hasToken(registration.token) && it.options.observe != null }
+        assertEquals(emptyList(), notifications, "RFC 7641 §3.6: nothing of a body for the observer that is gone")
+        delay(5.seconds)
+        assertEquals(0, f.server.endpoint.leaseCount(), "the slot it waited for goes back")
+    }
+
+    @Test
+    fun rfc7641Section4_1AReRegistrationOnTheSameTokenEndsTheBodyOfTheObserverItReplaces() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        val set0 = f.peer.drain()
+        assertEquals((0L..9L).toList(), set0.numbers(), "the first of five sets")
+        val replaced = set0.first().options.etags.single()
+
+        // As libcoap does: the same token again.
+        f.peer.send(register(f.peer).toBuilder().apply { token = registration.token }.build())
+        val after = f.peer.drain(10.seconds)
+
+        assertTrue(after.isNotEmpty() && after.all { it.options.observe != null }, "the new registration's body")
+        assertTrue(after.none { it.options.etags.single().contentEquals(replaced) }, "no later set of the old body")
+        assertEquals(1, counter.observerCount)
+    }
+
+    @Test
+    fun rfc7959Section7_1AnObservationKeepsNoBodyOnceItLeftTheCache() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        f.peer.drain(5.seconds)
+
+        delay(TransmissionParameters.Default.nonPartialTimeout + 1.seconds)
+        val state = f.server.qBlock.state()
+        assertTrue(state.isEmpty, "nothing of either body is held for the observation: $state")
+        assertEquals(1, counter.observerCount, "which goes on")
+        counter.change()
+        val next = f.peer.drain(5.seconds)
+        assertEquals(47, next.size)
+        assertTrue(next.all { it.hasToken(registration.token) && it.options.observe == 2L })
+    }
+
+    @Test
     fun rfc9177Section4_4AResponseWithoutRoomForA16ByteBlockGets413() = runTest {
         val f = fixture {
             resource("crowded") {

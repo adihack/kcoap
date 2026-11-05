@@ -4,7 +4,6 @@ import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
-import dev.kcoap.coap.stack.BodyMode
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.QBlock2Sender
 import dev.kcoap.transport.Endpoint
@@ -48,7 +47,7 @@ internal class ServedBody(
     /**
      * Whether the body is no longer the outstanding notification of its [observation]: every block went out
      * (and was acknowledged, if Confirmable), it stopped, or it was dropped. Set once, under [QBlockServer]'s
-     * lock; read by the observation under its own.
+     * lock; the observation learns of it through [onDone] ([OutstandingBody]).
      */
     @Volatile
     var isDone: Boolean = false
@@ -63,13 +62,6 @@ internal class ServedBody(
         isDone = true
         onDone?.invoke()
     }
-
-    /**
-     * Whether the body is [isDone] and, if Non-confirmable, at least [interval] old, as a single
-     * Non-confirmable notification keeps its NSTART slot for [CoapServerConfig.nonConfirmableNotificationInterval].
-     */
-    fun isSettled(now: Duration, interval: Duration): Boolean =
-        isDone && (sender.mode != BodyMode.NON || now >= startedAt + interval)
 
     /** The Observe value for a block to [target]: the body's, when the target carries Observe (§4.5). */
     fun observeFor(target: QBlockTarget): Long? = observe?.takeIf { target.carriesObserve }
