@@ -32,7 +32,42 @@ Before tagging 0.1.0:
 - the freeze list above has merged and CI is green on `main`;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - a license and the Maven namespace are chosen (below);
-- `./gradlew publishToMavenLocal` works and a sample consumer builds against it.
+- `./gradlew publishToMavenLocal` works and a sample consumer builds against it;
+- the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
+  release matches the CHANGELOG entry.
+
+## What is published
+
+Every module whose build applies a tier plugin (`kcoap.kmp-library`, `kcoap.kmp-jvm-native-library`,
+`kcoap.kmp-jvm-library`), except the modules that apply `kcoap.unpublished` first. Today that is
+kcoap-dtls, whose SPIs have no engine yet; it joins the published set, with its ABI dumps, when the
+engine lands (roadmap E1). An unpublished module is still built and tested, but has no Maven
+publication, no API reference page and no ABI dumps.
+
+## ABI dumps
+
+Every published module commits dumps of its public API in `<module>/api`: `<module>.api` for the JVM
+class files and `<module>.klib.api` for the klibs of every other target (Apple, Linux, js, wasmJs). They
+come from the Kotlin Gradle plugin's ABI validation, configured once in `build-logic` (`KcoapBuild.kt`):
+
+```bash
+./gradlew checkKotlinAbi    # fails when the public API differs from the dumps (part of check and scripts/test unit)
+./gradlew updateKotlinAbi   # rewrites the dumps; commit the diff together with the API change
+```
+
+Declarations marked `@InternalKcoapApi` are left out. Every API change therefore shows up as a dump diff
+in review, and a work package lists the changes its diff must match.
+
+**Apple targets.** Linux builds the Apple klibs too (Kotlin's klib cross-compilation), so the dumps
+written on Linux include `iosArm64`, `iosSimulatorArm64` and `macosArm64`, and the macOS CI job checks
+them again with the native toolchain. Should a host ever be unable to build an Apple target (for example
+after an Apple source set gains cinterop), `updateKotlinAbi` keeps that target's entries from the
+committed dump instead of dropping them (`keepLocallyUnsupportedTargets`), and they must be refreshed on
+macOS:
+
+```bash
+./gradlew updateKotlinAbi   # on a Mac with Xcode; commit the changed */api/*.klib.api files
+```
 
 ## Secrets
 
@@ -61,9 +96,12 @@ workflow's own token cannot turn it on.
 ## Trying a release locally
 
 ```bash
-./gradlew publishToMavenLocal -Pkcoap.version=0.1.0-local   # into ~/.m2, unsigned
+./gradlew publishToMavenLocal -Pkcoap.version=0.1.0-local   # into ~/.m2/repository/dev/kcoap, unsigned
 ./gradlew dokkaGenerate                                     # API reference in build/dokka/html
 ```
+
+The artifacts land under `kcoap.group` (`dev/kcoap/<module>/<version>`), one per published module and
+target; kcoap-dtls is not among them.
 
 Consumers of GitHub Packages need a GitHub token with `read:packages`:
 
