@@ -24,7 +24,8 @@ import kotlinx.coroutines.withContext
  *
  * In [QBlockMode.PROBE] the first request to a server waits for one Confirmable `GET` of
  * [QBlockClientConfig.probePath] with Q-Block2 0/0/16 (block 0 of 16 bytes, nothing more), which §4.1 requires
- * to be Confirmable and which is the probe libcoap sends. Concurrent requests to the same server share it.
+ * to be Confirmable and which is the probe libcoap sends. Concurrent requests of this client to the same
+ * server share it; one that looks a server up just as another client's probe ends may probe once more.
  * - A 2.xx answer carrying Q-Block1 or Q-Block2, and no Block option next to it, means
  *   [Capability.SUPPORTED].
  * - Any other answer means [Capability.UNSUPPORTED]: 4.02 (Bad Option, §4.1), even one that repeats the
@@ -77,11 +78,6 @@ internal class QBlockSupport(
         if (!isOwner) return probe.await()
         var result: Capability? = null
         try {
-            // A probe that ended between the look-up and the lock left its answer.
-            capabilities.get(peer, isProtected, endpoint.now())?.let {
-                result = it
-                return it
-            }
             val (capability, reason) = probe(peer)
             result = capability
             record(key, capability, reason)
