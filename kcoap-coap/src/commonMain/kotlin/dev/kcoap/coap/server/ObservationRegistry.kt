@@ -190,6 +190,12 @@ internal class ServerObservation(
 
     private var lastConfirmableAt: Duration = registeredAt
 
+    /** Non-confirmable notifications since the last Confirmable one; under [mutex]. */
+    private var nonConfirmableInRow = 0
+
+    /** Whether message or channel security authenticated the client when it registered. */
+    private val isAuthenticated: Boolean get() = identity != null || peerIdentity != PeerIdentity.None
+
     /** The registration response was sent; a separate one is the first outstanding notification. */
     suspend fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
         val changed = mutex.withLock {
@@ -267,18 +273,31 @@ internal class ServerObservation(
         val notification = server.notification(this) ?: return@withLock
         if (current != null && server.endpoint.replaceOutstanding(current, notification)) return@withLock
         val now = server.endpoint.now()
+        // RFC 7641 §7: without client authentication, Non-confirmable notifications MUST be interspersed with
+        // Confirmable ones, whose ACKs confirm that the client still wants them; a spoofed one does not.
         val type = if (resource.notificationType == CoapMessageType.NON &&
-            now - lastConfirmableAt < server.config.confirmableNotificationInterval
+            now - lastConfirmableAt < server.config.confirmableNotificationInterval &&
+            (isAuthenticated || nonConfirmableInRow < UNAUTHENTICATED_NON_CONFIRMABLE_RUN)
         ) {
             CoapMessageType.NON
         } else {
             CoapMessageType.CON
         }
-        if (type == CoapMessageType.CON) lastConfirmableAt = now
+        if (type == CoapMessageType.CON) {
+            lastConfirmableAt = now
+            nonConfirmableInRow = 0
+        } else {
+            nonConfirmableInRow++
+        }
         val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
         // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
         outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"
+
+    private companion object {
+        /** At most this many Non-confirmable notifications in a row to an unauthenticated client (RFC 7641 §7). */
+        const val UNAUTHENTICATED_NON_CONFIRMABLE_RUN = 8
+    }
 }
