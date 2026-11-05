@@ -11,14 +11,17 @@ import kotlin.time.Duration
  * Owned and mutated only by [UdpMessaging]; the upper layer holds it as a handle.
  */
 internal class Transmission(
-    val peer: Endpoint,
+    override val peer: Endpoint,
     message: CoapMessage,
     /** The encoded message, or null when an interceptor dropped it: then nothing is ever sent. */
     bytes: ByteArray?,
     val owner: TransmissionOwner?,
-    /** For Non-confirmable messages: how long the message occupies an NSTART slot, or null for none. */
+    /**
+     * For Non-confirmable messages: how long the message occupies an NSTART slot, or null for none, as for
+     * a message of a body whose [BodyLease] holds the slot.
+     */
     val slotHold: Duration?,
-) {
+) : SlotHolder {
     var message: CoapMessage = message
         private set
     var bytes: ByteArray? = bytes

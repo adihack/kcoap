@@ -12,6 +12,7 @@ import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The CoAP over UDP messaging layer of RFC 7252 §4 as a sans-IO state machine: datagrams and time go in,
@@ -25,7 +26,8 @@ import kotlin.time.Duration
  * - Resets for Empty Confirmable messages (CoAP ping), reserved code classes and format errors
  *   (§4.2, §4.3), and silently ignored invalid ACKs and RSTs,
  * - NSTART outstanding interactions per peer (§4.7, RFC 7641 §4.5.1), with Non-confirmable messages
- *   holding a slot for as long as the caller asks (PROBING_RATE for requests),
+ *   holding a slot for as long as the caller asks (PROBING_RATE for requests), and Non-confirmable
+ *   Q-Block bodies holding one slot for the whole body through a [BodyLease] (RFC 9177 §7.2),
  * - superseding an outstanding notification with a newer one at its next timeout (RFC 7641 §4.5.2),
  * - failing, never retransmitting, everything towards an ended DTLS session (§9.1.1).
  *
@@ -35,8 +37,8 @@ import kotlin.time.Duration
  *   ACK; null leaves that to the upper layer.
  * @param maxDeduplicationEntries the most received messages remembered; new ones beyond it are dropped
  *   without state or answer (RFC 7252 §11.3).
- * @param maxPerPeer the most slot-holding messages outstanding or queued towards one peer; [send] refuses
- *   more.
+ * @param maxPerPeer the most slot-holding messages and body leases outstanding or queued towards one peer;
+ *   [send] and [lease] refuse more.
  */
 internal class UdpMessaging(
     private val parameters: TransmissionParameters,
@@ -49,6 +51,7 @@ internal class UdpMessaging(
     private val maxPerPeer: Int = Int.MAX_VALUE,
 ) {
     private val log: Logger = loggerFactory.logger(LogTags.COAP_MESSAGE)
+    private val timing = QBlockTiming(parameters)
     private val effects = ArrayList<MessagingEffect>()
     private val messageIds = MessageIdAllocator(random.nextInt(0x10000))
     private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime, maxDeduplicationEntries)
@@ -59,6 +62,9 @@ internal class UdpMessaging(
 
     /** Transmissions with a running timer: Confirmable ones awaiting an ACK, Non-confirmable ones holding a slot. */
     private val timed = LinkedHashSet<Transmission>()
+
+    /** Body leases holding a slot, each until its deadline at the latest. */
+    private val leases = LinkedHashSet<BodyLease>()
     private val windows = HashMap<Endpoint, PeerWindow>()
 
     /** The deadline [nextDeadline] last returned, which the timer loop waits for; null while it waits for none. */
@@ -67,9 +73,10 @@ internal class UdpMessaging(
     /** Whether a call since [takeWakeup] added a deadline earlier than [armedDeadline]. */
     private var wakeupNeeded = false
 
+    /** A peer's NSTART slots: how many are taken, and who waits for one, first come first served. */
     private class PeerWindow {
         var outstanding = 0
-        val queue = ArrayDeque<Transmission>()
+        val queue = ArrayDeque<SlotHolder>()
     }
 
     /** Returns and clears the effects produced since the last call. */
@@ -188,6 +195,69 @@ internal class UdpMessaging(
             }
             else -> false
         }
+    }
+
+    /**
+     * Takes one NSTART slot towards [peer] for a whole Non-confirmable Q-Block body of [bodyBytes] bytes
+     * (RFC 9177 §7.2), waiting in the peer's queue like a transmission while its slots are taken. Once
+     * granted it holds the slot until [releaseLease], or for min([bodyBytes] ÷ PROBING_RATE,
+     * NON_PROBING_WAIT) at most (RFC 7252 §4.7, RFC 9177 §7.2). NON_PROBING_WAIT takes the body's
+     * [nonTimeoutRandom], drawn here when it is null. [MessagingEffect.LeaseGranted] says when it is granted.
+     *
+     * @throws CoapException with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] if [peer] has the most
+     *   slot-holding messages and leases outstanding or queued that the endpoint allows.
+     */
+    fun lease(now: Duration, peer: Endpoint, bodyBytes: Int, nonTimeoutRandom: Duration? = null): BodyLease {
+        require(bodyBytes >= 0) { "A body cannot have a negative size: $bodyBytes" }
+        val existing = windows[peer]
+        if (existing != null && existing.outstanding + existing.queue.size >= maxPerPeer) {
+            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
+            throw CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        }
+        val drawn = nonTimeoutRandom ?: timing.drawNonTimeoutRandom(random)
+        val atProbingRate = (bodyBytes.toDouble() / parameters.probingRate).seconds
+        val lease = BodyLease(peer, minOf(atProbingRate, timing.nonProbingWait(drawn)), drawn)
+        val window = existing ?: PeerWindow().also { windows[peer] = it }
+        if (window.outstanding >= parameters.nstart) {
+            lease.state = BodyLease.State.QUEUED
+            window.queue.addLast(lease)
+            log.with("peer" to peer).debug { "Body lease queued behind NSTART=${parameters.nstart}" }
+            return lease
+        }
+        window.outstanding++
+        grant(now, lease)
+        return lease
+    }
+
+    /**
+     * The body of [lease] ended: a queued lease leaves the queue, a held one frees its slot at once, and one
+     * that expired is only marked released. Idempotent.
+     */
+    fun releaseLease(now: Duration, lease: BodyLease) {
+        when (lease.state) {
+            BodyLease.State.QUEUED -> {
+                windows[lease.peer]?.queue?.remove(lease)
+                lease.state = BodyLease.State.RELEASED
+            }
+            BodyLease.State.HELD -> {
+                lease.state = BodyLease.State.RELEASED
+                if (lease.isPaced) {
+                    leases.remove(lease)
+                    releaseSlot(now, lease)
+                }
+            }
+            BodyLease.State.CREATED, BodyLease.State.EXPIRED -> lease.state = BodyLease.State.RELEASED
+            BodyLease.State.RELEASED, BodyLease.State.FAILED -> Unit
+        }
+    }
+
+    private fun grant(now: Duration, lease: BodyLease) {
+        lease.state = BodyLease.State.HELD
+        lease.deadline = now + lease.hold
+        leases += lease
+        schedule(lease.deadline)
+        log.with("peer" to lease.peer).debug { "Body lease granted for ${lease.hold} at most" }
+        effects += MessagingEffect.LeaseGranted(lease)
     }
 
     // ---------------------------------------------------------------- answering received messages
@@ -379,6 +449,7 @@ internal class UdpMessaging(
             if (candidate != null && (next == null || candidate < next!!)) next = candidate
         }
         timed.forEach { consider(it.deadline) }
+        leases.forEach { consider(it.deadline) }
         // Pending entries are in arrival order, and so in deadline order: the first is the earliest.
         consider(received.pending.firstOrNull()?.ackDeadline)
         consider(received.nextExpiry())
@@ -398,6 +469,13 @@ internal class UdpMessaging(
                 if (transmission.occupiesSlot) releaseSlot(now, transmission)
                 effects += MessagingEffect.Completed(transmission, TransmissionOutcome.SlotReleased)
             }
+        }
+        for (lease in leases.filter { it.deadline <= now }) {
+            // RFC 9177 §7.2: the body has taken its time at PROBING_RATE, or NON_PROBING_WAIT; the next may go.
+            leases.remove(lease)
+            lease.state = BodyLease.State.EXPIRED
+            log.with("peer" to lease.peer).debug { "Body lease expired after ${lease.hold}" }
+            releaseSlot(now, lease)
         }
         while (true) {
             // In deadline order, so the scan stops at the first entry not due yet.
@@ -470,7 +548,7 @@ internal class UdpMessaging(
      */
     fun onSessionEnded(peer: Endpoint) {
         val cause = CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED)
-        failAll(cause) { it.peer == peer }
+        failAll(cause) { it == peer }
         received.forget(peer)
         messageIds.forget(peer)
         effects += MessagingEffect.Event(EndpointEvent.SessionEnded(peer))
@@ -484,23 +562,30 @@ internal class UdpMessaging(
         finish(now, transmission, TransmissionOutcome.Failed(cause))
     }
 
-    /** Fails every transmission with [cause]; the endpoint is closing. */
+    /** Fails every transmission and body lease with [cause]; the endpoint is closing. */
     fun close(cause: CoapException = CoapException("Endpoint closed", CoapException.Reason.CLOSED)) {
         failAll(cause) { true }
     }
 
-    private fun failAll(cause: CoapException, predicate: (Transmission) -> Boolean) {
-        val affected = (outbound.values + windows.values.flatMap { it.queue })
-            .filter { it.state != Transmission.State.DONE && predicate(it) }
+    /** Fails every transmission and body lease towards the peers that [peers] selects. */
+    private fun failAll(cause: CoapException, peers: (Endpoint) -> Boolean) {
+        val queued = windows.filterKeys(peers).values.flatMap { it.queue }
+        val affected = (outbound.values + queued.filterIsInstance<Transmission>())
+            .filter { it.state != Transmission.State.DONE && peers(it.peer) }
             .distinct()
-        windows.entries.removeAll { (peer, window) ->
-            window.queue.removeAll(predicate)
-            affected.any { it.peer == peer } && window.queue.isEmpty()
-        }
+        val endedLeases = queued.filterIsInstance<BodyLease>() + leases.filter { peers(it.peer) }
+        // Every slot holder of these peers fails below, so their windows have nothing left to count.
+        windows.keys.removeAll(peers)
         for (transmission in affected) {
             transmission.occupiesSlot = false
             retire(transmission)
             effects += MessagingEffect.Completed(transmission, TransmissionOutcome.Failed(cause))
+        }
+        for (lease in endedLeases) {
+            leases.remove(lease)
+            lease.state = BodyLease.State.FAILED
+            lease.failure = cause
+            effects += MessagingEffect.LeaseFailed(lease, cause)
         }
     }
 
@@ -508,6 +593,10 @@ internal class UdpMessaging(
 
     /** Diagnostics for tests: deduplication entries, reserved Message IDs, and timed transmissions. */
     internal val stateSizes: Triple<Int, Int, Int> get() = Triple(received.size, messageIds.reservedCount, timed.size)
+
+    /** Diagnostics for tests: body leases that hold a slot or wait for one. */
+    internal val leaseCount: Int
+        get() = leases.size + windows.values.sumOf { window -> window.queue.count { it is BodyLease } }
 
     private fun start(now: Duration, transmission: Transmission) {
         val peer = transmission.peer
@@ -554,16 +643,20 @@ internal class UdpMessaging(
         }
     }
 
-    private fun releaseSlot(now: Duration, transmission: Transmission) {
-        transmission.occupiesSlot = false
-        val window = windows[transmission.peer] ?: return
+    /** [holder] gives its slot back; the transmissions and leases waiting for one get it in turn. */
+    private fun releaseSlot(now: Duration, holder: SlotHolder) {
+        if (holder is Transmission) holder.occupiesSlot = false
+        val window = windows[holder.peer] ?: return
         window.outstanding--
         while (window.outstanding < parameters.nstart) {
             val next = window.queue.removeFirstOrNull() ?: break
             window.outstanding++
-            start(now, next)
+            when (next) {
+                is Transmission -> start(now, next)
+                is BodyLease -> grant(now, next)
+            }
         }
-        if (window.outstanding == 0 && window.queue.isEmpty()) windows.remove(transmission.peer)
+        if (window.outstanding == 0 && window.queue.isEmpty()) windows.remove(holder.peer)
     }
 
     private fun sendEmptyAck(entry: InboundEntry) {

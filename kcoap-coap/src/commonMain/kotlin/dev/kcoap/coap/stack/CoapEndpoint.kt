@@ -697,6 +697,8 @@ public class CoapEndpoint private constructor(
                     }
                 }
                 is MessagingEffect.Event -> emit(effect.event)
+                is MessagingEffect.LeaseGranted -> effect.lease.granted.complete(Unit)
+                is MessagingEffect.LeaseFailed -> effect.lease.granted.completeExceptionally(closedError(effect.cause))
             }
         }
     }

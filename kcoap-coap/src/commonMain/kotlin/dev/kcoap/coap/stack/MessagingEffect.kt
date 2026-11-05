@@ -28,6 +28,12 @@ internal sealed interface MessagingEffect {
     /** A transmission ended or released its NSTART slot. */
     class Completed(val transmission: Transmission, val outcome: TransmissionOutcome) : MessagingEffect
 
+    /** A [BodyLease] got its NSTART slot; its body may start. */
+    class LeaseGranted(val lease: BodyLease) : MessagingEffect
+
+    /** A [BodyLease] failed with [cause]: the endpoint closed or the peer's DTLS session ended. */
+    class LeaseFailed(val lease: BodyLease, val cause: CoapException) : MessagingEffect
+
     /** Something worth reporting to [EndpointEventListener]. */
     class Event(val event: EndpointEvent) : MessagingEffect
 }

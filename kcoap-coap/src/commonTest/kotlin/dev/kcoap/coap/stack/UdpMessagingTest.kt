@@ -747,6 +747,195 @@ class UdpMessagingTest {
         assertTrue(messaging.runTimers(until = 1.seconds).isEmpty(), "the refused one is not retransmitted")
     }
 
+    private fun List<MessagingEffect>.granted(): List<BodyLease> =
+        filterIsInstance<MessagingEffect.LeaseGranted>().map { it.lease }
+
+    @Test
+    fun rfc9177Section7_2ABodyLeaseHoldsOneSlotAndASecondLeaseWaits() {
+        val messaging = messaging()
+        val first = messaging.lease(Duration.ZERO, peer, 100)
+        assertEquals(listOf(first), messaging.takeEffects().granted())
+        assertEquals(BodyLease.State.HELD, first.state)
+
+        val second = messaging.lease(Duration.ZERO, peer, 100)
+        val request = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val elsewhere = messaging.lease(Duration.ZERO, otherPeer, 100)
+        val effects = messaging.takeEffects()
+        assertEquals(listOf(elsewhere), effects.granted(), "another peer has slots of its own")
+        assertEquals(emptyList(), effects.transmitted(), "NSTART 1: the request waits behind the leases")
+        assertEquals(BodyLease.State.QUEUED, second.state)
+        assertEquals(Transmission.State.QUEUED, request.state)
+        assertEquals(3, messaging.leaseCount)
+
+        messaging.releaseLease(5.seconds, first)
+        val afterRelease = messaging.takeEffects()
+        assertEquals(BodyLease.State.RELEASED, first.state)
+        assertEquals(listOf(second), afterRelease.granted(), "first come, first served")
+        assertEquals(105.seconds, second.deadline)
+        assertEquals(Transmission.State.QUEUED, request.state)
+
+        messaging.releaseLease(6.seconds, second)
+        assertEquals(listOf("01"), messaging.takeEffects().transmitted().map { it.tokenHex })
+        assertEquals(1, messaging.leaseCount)
+    }
+
+    @Test
+    fun rfc9177Section7_2ALeaseReleasesItselfAfterTheBodyTimeAtProbingRate() {
+        val messaging = messaging()
+        val lease = messaging.lease(Duration.ZERO, peer, 100)
+        messaging.sendConfirmable(Duration.ZERO, token = "01")
+        messaging.takeEffects()
+        assertEquals(100.seconds, lease.hold, "100 bytes at PROBING_RATE 1 byte/s")
+        assertEquals(100.seconds, messaging.nextDeadline())
+
+        val sends = messaging.runTimers(until = 100.seconds)
+        assertEquals(listOf(100.seconds), sends, "the queued request goes when the lease expires")
+        assertEquals(BodyLease.State.EXPIRED, lease.state)
+        assertEquals(0, messaging.leaseCount)
+
+        messaging.releaseLease(101.seconds, lease)
+        assertEquals(BodyLease.State.RELEASED, lease.state, "an expired lease is only marked released")
+        assertEquals(emptyList(), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun rfc9177Section7_2ALeaseIsCappedAtNonProbingWait() {
+        // NON_PROBING_WAIT = NON_TIMEOUT × (2^4 − 1) × 1.5 + 2 × MAX_LATENCY + NON_TIMEOUT_RANDOM = 245 s + [2, 3] s.
+        val shortest = messaging(FixedRandom(0.0)).lease(Duration.ZERO, peer, 3000)
+        assertEquals(2.seconds, shortest.nonTimeoutRandom)
+        assertEquals(247.seconds, shortest.hold)
+        val longest = messaging(FixedRandom(1.0)).lease(Duration.ZERO, peer, 3000)
+        assertEquals(3.seconds, longest.nonTimeoutRandom)
+        assertEquals(248.seconds, longest.hold)
+        val given = messaging(FixedRandom(1.0)).lease(Duration.ZERO, peer, 3000, nonTimeoutRandom = 2500.milliseconds)
+        assertEquals(2500.milliseconds, given.nonTimeoutRandom, "the body's own draw is kept")
+        assertEquals(247500.milliseconds, given.hold)
+        val faster = messaging(parameters = TransmissionParameters(probingRate = 100)).lease(Duration.ZERO, peer, 3000)
+        assertEquals(30.seconds, faster.hold, "below the cap the body's bytes at PROBING_RATE decide")
+    }
+
+    @Test
+    fun aQueuedLeaseThatIsReleasedLeavesTheQueue() {
+        val messaging = messaging()
+        val held = messaging.lease(Duration.ZERO, peer, 100)
+        val queued = messaging.lease(Duration.ZERO, peer, 100)
+        val request = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        messaging.takeEffects()
+
+        messaging.releaseLease(1.seconds, queued)
+        assertEquals(BodyLease.State.RELEASED, queued.state)
+        messaging.releaseLease(2.seconds, held)
+        val effects = messaging.takeEffects()
+        assertEquals(emptyList(), effects.granted())
+        assertEquals(listOf("01"), effects.transmitted().map { it.tokenHex })
+        assertEquals(Transmission.State.IN_FLIGHT, request.state)
+
+        messaging.releaseLease(3.seconds, held)
+        messaging.releaseLease(3.seconds, queued)
+        assertEquals(emptyList(), messaging.takeEffects(), "releasing is idempotent")
+        val created = BodyLease(peer, 1.seconds, 2.seconds)
+        messaging.releaseLease(3.seconds, created)
+        assertEquals(BodyLease.State.RELEASED, created.state)
+    }
+
+    @Test
+    fun aLeaseWaitsBehindAQueuedTransmissionAndViceVersa() {
+        val messaging = messaging()
+        val first = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val lease = messaging.lease(Duration.ZERO, peer, 100)
+        val last = messaging.sendConfirmable(Duration.ZERO, token = "02")
+        messaging.takeEffects()
+        assertEquals(BodyLease.State.QUEUED, lease.state)
+
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, first.message.messageId))
+        val effects = messaging.takeEffects()
+        assertEquals(listOf(lease), effects.granted())
+        assertEquals(emptyList(), effects.transmitted().filter { it.isRequest })
+        assertEquals(Transmission.State.QUEUED, last.state)
+        assertEquals(101.seconds, lease.deadline)
+    }
+
+    @Test
+    fun rfc7252Section9_1_1AnEndedSessionFailsItsLeases() {
+        val messaging = messaging()
+        val held = messaging.lease(Duration.ZERO, peer, 100)
+        val queued = messaging.lease(Duration.ZERO, peer, 100)
+        val request = messaging.sendConfirmable(Duration.ZERO, token = "01")
+        val elsewhere = messaging.lease(Duration.ZERO, otherPeer, 100)
+        messaging.takeEffects()
+
+        messaging.onSessionEnded(peer)
+        val effects = messaging.takeEffects()
+        val failed = effects.filterIsInstance<MessagingEffect.LeaseFailed>()
+        assertEquals(setOf(held, queued), failed.map { it.lease }.toSet())
+        assertTrue(failed.all { it.cause.reason == CoapException.Reason.SESSION_ENDED })
+        assertEquals(BodyLease.State.FAILED, held.state)
+        assertEquals(CoapException.Reason.SESSION_ENDED, queued.failure?.reason)
+        assertIs<TransmissionOutcome.Failed>(effects.outcomes().single())
+        assertEquals(Transmission.State.DONE, request.state)
+        assertEquals(BodyLease.State.HELD, elsewhere.state)
+
+        val fresh = messaging.lease(1.seconds, peer, 100)
+        assertEquals(listOf(fresh), messaging.takeEffects().granted(), "the peer's window went with its session")
+        messaging.releaseLease(2.seconds, held)
+        assertEquals(BodyLease.State.FAILED, held.state, "a failed lease stays failed")
+    }
+
+    @Test
+    fun closingFailsEveryLease() {
+        val messaging = messaging()
+        val held = messaging.lease(Duration.ZERO, peer, 100)
+        val queued = messaging.lease(Duration.ZERO, peer, 100)
+        messaging.takeEffects()
+
+        messaging.close()
+        val failed = messaging.takeEffects().filterIsInstance<MessagingEffect.LeaseFailed>()
+        assertEquals(listOf(queued, held), failed.map { it.lease })
+        assertTrue(failed.all { it.cause.reason == CoapException.Reason.CLOSED })
+        assertEquals(0, messaging.leaseCount)
+        assertNull(messaging.nextDeadline(), "no lease timer is left")
+    }
+
+    @Test
+    fun rfc7252Section11_3LeasesCountTowardsTheLimitPerPeer() {
+        val messaging = messaging(maxPerPeer = 2)
+        messaging.lease(Duration.ZERO, peer, 100)
+        messaging.lease(Duration.ZERO, peer, 100)
+        messaging.takeEffects()
+
+        val error = assertFailsWith<CoapException> { messaging.lease(Duration.ZERO, peer, 100) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, error.reason)
+        assertFailsWith<CoapException> { messaging.sendConfirmable(Duration.ZERO, token = "01") }
+        val events = messaging.takeEffects().filterIsInstance<MessagingEffect.Event>().map { it.event }
+        assertEquals(2, events.count { it is EndpointEvent.LimitReached })
+        assertFailsWith<IllegalArgumentException> { messaging.lease(Duration.ZERO, otherPeer, -1) }
+    }
+
+    @Test
+    fun aLeaseIsUsableOnlyWhileGrantedOrExpired() {
+        val lease = BodyLease(peer, 1.seconds, 2.seconds)
+        assertFailsWith<IllegalStateException> { lease.checkUsable() }
+        lease.state = BodyLease.State.HELD
+        lease.checkUsable()
+        lease.state = BodyLease.State.EXPIRED
+        lease.checkUsable()
+        lease.state = BodyLease.State.RELEASED
+        assertFailsWith<IllegalStateException> { lease.checkUsable() }
+        lease.state = BodyLease.State.FAILED
+        lease.failure = CoapException("gone", CoapException.Reason.SESSION_ENDED)
+        assertEquals(CoapException.Reason.SESSION_ENDED, assertFailsWith<CoapException> { lease.checkUsable() }.reason)
+        assertTrue(lease.toString().contains("FAILED"))
+
+        val unpaced = BodyLease.unpaced(peer, Duration.ZERO)
+        assertFalse(unpaced.isPaced)
+        assertEquals(BodyLease.State.HELD, unpaced.state)
+        assertTrue(unpaced.granted.isCompleted)
+        val messaging = messaging()
+        messaging.releaseLease(Duration.ZERO, unpaced)
+        assertEquals(BodyLease.State.RELEASED, unpaced.state)
+        assertEquals(emptyList(), messaging.takeEffects(), "an unpaced lease holds no slot to give back")
+    }
+
     @Test
     fun transmissionParametersDeriveTheRfcTimeValues() {
         assertEquals(45.seconds, params.maxTransmitSpan)
