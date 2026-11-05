@@ -29,7 +29,8 @@ Protocol modules depend on SPIs, never on a backend or transport: applications c
 
 | Pattern | Used for |
 |---|---|
-| SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `SequenceNumberStore`, `LogSink` |
+| SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `LogSink` |
+| SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run |
 | Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around OSCORE (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend |
 | Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
 | Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
