@@ -272,11 +272,16 @@ server over real UDP (ktor-network):
 `coap+tcp` and `coap+ws`:
 
 - `CoapClient` with `OscoreClient`, `KtorTcpConnector` and `KtorWebSocketConnector` →
-  `coap-server -p <port> -w <ws port> -E -d 5 -X 1152`: GET `/time` after the B.1.2 challenge, PUT and GET of
-  a dynamic resource, Observe of `/time`, on each transport.
-- `coap-client -E` (with `-X 1152` over WebSockets) → `CoapServer` with `OscoreServer` (requiring freshness)
-  on `KtorTcpListener` and `KtorWebSocketListener`: GET, Block2 download and Block1 upload in 64-byte inner
-  blocks, Observe with `-s 3`.
+  `coap-server -p <port> -w <ws port> -E -d 5 -X 1152`, a fresh server per transport: GET `/time`, PUT and
+  GET of a dynamic resource, Observe of `/time`, on each transport. The test asserts the B.1.2 challenge each
+  time: libcoap answers the first GET with a protected 4.01 carrying Echo, and kcoap repeats it with that Echo.
+- `coap-client -E` (with `-X 1152` over WebSockets) → `CoapServer` with `OscoreServer` on `KtorTcpListener`,
+  then on `KtorWebSocketListener`, each a server whose context requires freshness as after a restart: GET,
+  Block2 download and Block1 upload in 64-byte inner blocks, Observe with `-s 3`. The test asserts that the
+  server challenged libcoap's first GET with a protected 4.01 carrying Echo, and that libcoap repeated it with
+  that Echo before it got "hello over OSCORE".
+- The challenge and its Echo travel encrypted, so the tests record them inside OSCORE
+  (`RecordingClientSecurity`, `RecordingServerSecurity`), not with a message interceptor on the wire.
 
 ```bash
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
