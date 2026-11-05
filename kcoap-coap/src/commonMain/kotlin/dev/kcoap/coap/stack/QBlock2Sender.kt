@@ -165,12 +165,16 @@ internal class QBlock2Sender<R>(
     }
 
     private fun onMissing(now: Duration, blocks: List<BlockOption>, ref: R): List<QBlockAction<R>> {
-        val requested = sortedSetOf<Long>()
+        // §4.4: each block once, however the options overlap, in ascending order.
+        val requested = HashSet<Long>()
         for (option in blocks) {
-            if (option.more) requested.addAll(sets.numbers(sets.of(option.number), count).filter { it >= option.number })
-            else requested += option.number
+            if (option.more) {
+                requested.addAll(sets.numbers(sets.of(option.number), count).filter { it >= option.number })
+            } else {
+                requested += option.number
+            }
         }
-        val inBody = requested.filter { it < count }
+        val inBody = requested.filter { it < count }.sorted()
         if (inBody.isEmpty()) return listOf(QBlockAction.Reject(ref, CoapCode.BAD_REQUEST, "No block of the body asked for"))
         val actions = ArrayList<QBlockAction<R>>()
         pending.clear()
