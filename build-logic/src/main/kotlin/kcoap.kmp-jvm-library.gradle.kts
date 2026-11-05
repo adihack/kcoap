@@ -4,6 +4,7 @@
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("org.jetbrains.kotlinx.kover")
+    id("kcoap.publishing")
 }
 
 configureKcoapLibrary(KcoapTargets.JVM)

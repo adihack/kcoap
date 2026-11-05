@@ -49,7 +49,22 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
         options.release.set(17)
     }
 
+    // -Pkcoap.tests=unit runs everything except the interop tests, -Pkcoap.tests=interop only those;
+    // without the property every test runs, and interop tests skip themselves when Docker is missing.
+    val selection = providers.gradleProperty("kcoap.tests").orElse("all").get()
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        filter {
+            isFailOnNoMatchingTests = false
+            when (selection) {
+                "unit" -> INTEROP_TEST_PATTERNS.forEach { excludeTestsMatching(it) }
+                "interop" -> INTEROP_TEST_PATTERNS.forEach { includeTestsMatching(it) }
+                "all" -> Unit
+                else -> error("kcoap.tests must be unit, interop or all, not '$selection'")
+            }
+        }
     }
 }
+
+/** Interop tests are named *Interop* or live in an `interop` package. */
+private val INTEROP_TEST_PATTERNS = listOf("*Interop*", "*.interop.*")
