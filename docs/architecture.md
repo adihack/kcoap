@@ -30,8 +30,8 @@ Protocol modules depend on SPIs, never on a backend or transport: applications c
 | Pattern | Used for |
 |---|---|
 | SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `LogSink` |
-| SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run |
-| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around OSCORE (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend |
+| SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run. `MutableSecurityContextRepository` for an EDHOC server: `EdhocServer` adds a context per handshake, so production servers supply one with a bound; `InMemoryContextRepository` has none |
+| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend |
 | Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
 | Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
 | State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
@@ -519,7 +519,10 @@ The RFCs have three things that behave like streams. They are abstracted at diff
 | Large bodies | RFC 7959, RFC 9177 | API | streamed body (kotlinx-io `Source` / `Sink`) |
 
 EDHOC has no streams: it is message based and transport agnostic. Over CoAP its messages are
-correlated by a prefixed connection identifier (RFC 9528 Appendix A.2).
+correlated by a prefixed connection identifier (RFC 9528 Appendix A.2), and kcoap-edhoc-oscore carries them
+in the application model like any other request: `EdhocServer.handle(payload, peer)` returns a
+`CoapResponse`, and `EdhocClientHandshake` sends through a `suspend (CoapRequest) -> CoapResponse` port that
+`CoapClient.request` fits, so nothing of the messaging layer (type, Message ID, token) reaches EDHOC.
 
 RFC 8323 specifics the reliable messaging layer handles: no Type or Message ID, each side sends a CSM
 (7.01) first, Ping/Pong (7.02/7.03), Release (7.04), Abort (7.05), Max-Message-Size defaulting to 1152,
@@ -609,8 +612,9 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 
 - **Clock and timers**, injectable, so tests run on virtual time.
 - **Randomness and ephemeral keys**, injectable, for RFC 9529 and DTLS trace replay.
-- **Storage**: OSCORE contexts, persisted sequence numbers (RFC 8613 Appendix B.1.1), replay windows,
-  EDHOC state between messages, DTLS session tickets.
+- **Storage**: OSCORE contexts (`SecurityContextRepository`, and `MutableSecurityContextRepository` where
+  EDHOC adds them), persisted sequence numbers (RFC 8613 Appendix B.1.1), replay windows, EDHOC state
+  between messages, DTLS session tickets.
 - **Credentials**: resolvers for EDHOC credentials, PSKs and raw public keys; one `CertificateValidator`
   shared by EDHOC (`x5chain`) and DTLS/TLS. No validator ships yet: a common-code validator for the
   RFC 7925 profile and thin platform adapters (JVM `CertPathValidator`, Apple `SecTrust`) are on the

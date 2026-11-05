@@ -5,7 +5,7 @@ EDHOC as the key establishment for OSCORE, over CoAP:
 | Spec | What | Where |
 |---|---|---|
 | RFC 9528 App. A.1 | OSCORE context from an EDHOC session: exporter-derived Master Secret and Salt, application AEAD and HKDF, Sender/Recipient IDs from C_R/C_I (Table 14) | `EdhocSession.oscoreParameters()`, `oscoreContext()` |
-| RFC 9528 App. A.2 | EDHOC over CoAP, forward flow: POST to `/.well-known/edhoc`, `true`/C_R prefixes, Content-Formats 64/65, error responses (A.2.3) | `EdhocOverCoap`, `EdhocServer.handle()`, `EdhocClientHandshake.run()` |
+| RFC 9528 App. A.2 | EDHOC over CoAP, forward flow: POST to `/.well-known/edhoc`, `true`/C_R prefixes, Content-Formats 64/65, error responses (A.2.3), in kcoap-coap's application model (`CoapRequest`, `CoapResponse`) | `EdhocOverCoap`, `EdhocServer.handle()`, `EdhocResource`, `EdhocClientHandshake.run()` |
 | RFC 9668 §3 | EDHOC + OSCORE combined request: message_3 on the first OSCORE request, the EDHOC option, server processing order and errors | `CombinedRequestSecurity`, `CombinedRequestServer`, `EdhocClientHandshake.runCombined()` |
 | RFC 9668 §4 | Connection identifiers usable as OSCORE IDs: C_R unique among sessions and Recipient IDs, never C_I, also under concurrent handshakes | `EdhocServer` |
 | RFC 9528 §9.7 | Pending server sessions bound to the peer that sent message_1, bounded in total and per peer, the oldest evicted past a grace period, expired after MAX_TRANSMIT_WAIT, secrets wiped | `EdhocServer`, `EdhocServerEvent` |
@@ -13,11 +13,11 @@ EDHOC as the key establishment for OSCORE, over CoAP:
 ## Server
 
 ```kotlin
-val contexts = InMemoryContextRepository()                     // shared by EDHOC and OSCORE
+val contexts = InMemoryContextRepository()                     // shared by EDHOC and OSCORE; bound it in production
 val edhoc = EdhocServer(responderConfig, crypto, contexts, eventListener = { metrics.count(it) })
 val security = CombinedRequestServer(edhoc, OscoreServer(contexts))
 CoapServer(transport, scope, CoapServerConfig(security = security)) {
-    resource(".well-known") { add(EdhocResource(edhoc)) }  // calls edhoc.handle(request, peer)
+    resource(".well-known") { add(EdhocResource(edhoc)) }  // calls edhoc.handle(payload, peer)
     resource("lights") {
         // Only OSCORE reaches it (the default with message security); the policy narrows it to operators.
         access = AccessPolicy { (it.securityIdentity as? EdhocIdentity)?.peerCredential in operators }
@@ -25,6 +25,18 @@ CoapServer(transport, scope, CoapServerConfig(security = security)) {
     }
 }
 ```
+
+`EdhocServer` puts the context of every completed session into any `MutableSecurityContextRepository`
+(kcoap-oscore), usually the one its `OscoreServer` finds contexts in. Those contexts accumulate, one per
+handshake, and nothing removes them: `InMemoryContextRepository` has no bound, so a production server
+supplies a repository with one (evicting the context found least recently, say). An evicted client gets
+OSCORE's unprotected 4.01 "Security context not found" and runs EDHOC again. `CombinedRequestServer`
+decorates any `ServerMessageSecurity` that verifies against those contexts, such as `OscoreServer` or a
+decorator of it.
+
+`EdhocServer.handle` answers everything a peer sends with a response, never an exception: a malformed
+payload (`EdhocOverCoap.parseRequest` throws `EdhocException`) and every failed EDHOC step become the
+EDHOC error response of RFC 9528 Appendix A.2.3.
 
 `EdhocResource` is `AccessPolicy.Public` of its own, so clients run EDHOC before they have OSCORE; every
 other resource of a server with message security refuses requests without it (ADR 0008). A request
@@ -38,7 +50,7 @@ make it keep (RFC 9528 §9.7):
 - **C_R** is reserved in the same locked step that checks it is free, before message_2 is composed, and
   stays reserved until the session's OSCORE context is in the repository: concurrent handshakes of one
   server never share one, nor collide with a context it is adding (RFC 9668 §4.1.2). The context is added
-  only if its Recipient ID is still free (`InMemoryContextRepository.addIfAbsent`), so when another writer
+  only if its Recipient ID is still free (`MutableSecurityContextRepository.addIfAbsent`), so when another writer
   of the repository took it meanwhile (a second `EdhocServer` for another application profile, RFC 9668
   §5, or the application), the handshake fails with "Connection identifier in use" and that writer's
   context stays.
@@ -79,17 +91,27 @@ share its store with contexts outside its repository.
 ## Client
 
 ```kotlin
-val handshake = EdhocClientHandshake(initiatorConfig, crypto) { request -> client.send(request) }
-val (session, security) = handshake.runCombined()  // two round trips in total (RFC 9668)
-// Give `security` to the CoAP client: its first request carries message_3.
+val security = PeerSecurity()
+val client = CoapClient(transport, scope, CoapClientConfig(security = security))
+val server = CoapUri.parse("coap://192.0.2.1")
+// Two round trips in total (RFC 9668): message_1 and message_2 here, message_3 with the first request.
+val (session, protection) = EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()
+security.install(client, server, protection)
+client.get("coap://192.0.2.1/lights")
 ```
 
-`EdhocClientHandshake` takes a plain "send this request, return the response" function, so it is
-independent of the CoAP endpoint and easy to test.
+`EdhocClientHandshake` takes a `suspend (CoapRequest) -> CoapResponse` function, the shape of
+`CoapClient.request`, which `over` passes; any other carrier, or a test double such as
+`{ edhocServer.handle(it.payload, peer) }`, fits as well. `runCombined()` returns a `CombinedHandshake`,
+which destructures into the session and the protection. A handshake fails with an `EdhocException`:
+`EdhocPeerErrorException` when the server sent an EDHOC error, `EdhocTransferException` (with the
+`response`) when it answered with something that is not EDHOC.
 
-`PeerSecurity` holds one protection per server. A request to a server without one fails with
-`MessageSecurityException` instead of going out in plaintext, except for `unprotectedPaths` (the EDHOC
-resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP on purpose. Discovery before the
+`PeerSecurity` holds one protection per server, keyed by the transport endpoint the client's requests go
+to; `install(client, uri, protection)` finds that endpoint with the client's own resolver. A request to a
+server without a protection fails with `MessageSecurityException` instead of going out in plaintext, except
+for `unprotectedPaths` (the EDHOC resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP
+on purpose. Discovery before the
 handshake (`client.discover(server)` for `rt=core.edhoc`) asks `/.well-known/core`, so it takes a plain client or
 `PeerSecurity(unprotectedPaths = setOf("/.well-known/edhoc", "/.well-known/core"))`, and an EDHOC resource at
 another path needs that path in `unprotectedPaths`. A client with `QBlockMode.PROBE` and `withMessageSecurity`
@@ -99,8 +121,15 @@ runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the fir
 
 - RFC 9668 Figure 4, byte for byte.
 - Complete handshakes over the CoAP framing, sequential and combined, with and without message_4,
-  cipher suite negotiation across the transfer, and every error path of RFC 9668 §3.3.1 and RFC 9528
-  Appendix A.2.3.
+  cipher suite negotiation across the transfer and its limit, and every error path of RFC 9668 §3.3.1 and
+  RFC 9528 Appendix A.2.3: each malformed request payload as an `EdhocException` with a generic diagnostic on
+  the wire, responses that are not EDHOC as `EdhocTransferException` (`EdhocOscoreTest`).
+- The glue on its SPIs: `EdhocServer` on any `MutableSecurityContextRepository` (it checks C_R with `find`
+  and adds with `addIfAbsent`), `CombinedRequestServer` around any `ServerMessageSecurity` (and a 4.00 when
+  that layer does not take the rebuilt request), a handshake to a resource at another path, the crypto
+  backend asked once per configuration by both sides, not per session; through the stack,
+  `PeerSecurity.install(client, uri, protection)` resolving the endpoint the client's requests go to
+  (`FullStackTest`).
 - OSCORE contexts derived on both sides interoperate. The OSCORE values themselves come from the
   EDHOC exporter, checked against RFC 9529 in `kcoap-edhoc`.
 - Pending sessions (`EdhocServerSessionsTest`): C_R collisions with a session composing message_2 and

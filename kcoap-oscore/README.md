@@ -30,6 +30,12 @@ Both plug into the CoAP stack through `dev.kcoap.coap.security` (`ClientMessageS
 `ServerMessageSecurity`), at the place RFC 8613 Figure 1 puts OSCORE: below Block-wise and Observe,
 above retransmission and deduplication.
 
+`OscoreServer` finds contexts through the `SecurityContextRepository` SPI (`find` by Recipient ID and ID
+Context). `MutableSecurityContextRepository` adds `add`, `addIfAbsent` and `remove`, for contexts that come
+and go while the server runs: kcoap-edhoc-oscore's `EdhocServer` adds one per completed handshake.
+`InMemoryContextRepository` implements it without a bound; a server that runs EDHOC for many clients supplies
+one with a bound, since an evicted client only runs EDHOC again.
+
 Both fail closed ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)):
 
 - `OscoreClient` fails a request its `ClientContextResolver` finds no context for with
@@ -186,6 +192,9 @@ Not yet: Appendix B.2
     backend that cannot build the AEAD gets its keys wiped.
 - `EphemeralSequenceNumberStore` shared by parallel contexts on `Dispatchers.Default`: every number once,
   and none used before it was stored.
+- `InMemoryContextRepository` as a `MutableSecurityContextRepository`: replacing `add`, `addIfAbsent` that never
+  replaces, `remove` by Recipient ID and ID Context, and a request without 'kid context' finding the only
+  context of its Recipient ID (`InMemoryContextRepositoryTest`).
 - Interop with libcoap v4.3.5b in both directions, raw and through the CoAP stack, including B.1.2
   challenges both ways, and Q-Block under OSCORE: Inner Block1 and Block2 with the defaults; libcoap's single
   protected response per request, which breaks Q-Block2 bodies once `withMessageSecurity` is on, is pinned
