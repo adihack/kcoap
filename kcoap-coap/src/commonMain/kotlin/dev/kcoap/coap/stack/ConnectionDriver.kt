@@ -110,12 +110,21 @@ internal class ConnectionDriver(
      * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it. A
      * connection this side opens starts with one exchange counted for its opener, so it is not released
      * as idle before [handOver].
+     *
+     * Not suspending, so that the owner registers and starts a driver in one step under its own lock, and
+     * a close in between can never find it registered but not started. Until this returns nothing else can
+     * reach the driver, so its lock is free; starting only queues the CSM, which [absorb] does.
      */
-    suspend fun start() {
-        withMessaging { now ->
-            start(now)
-            if (isInitiator) exchangeOpened()
+    fun start() {
+        check(lock.tryLock()) { "$this is in use before it started" }
+        try {
+            messaging.start(owner.now())
+            if (isInitiator) messaging.exchangeOpened()
+            absorb(messaging.takeEffects())
+        } finally {
+            lock.unlock()
         }
+        wakeups.trySend(Unit)
         writer = scope.launch(CoroutineName("coap-connection-writer")) { writeLoop() }
         scope.launch(CoroutineName("coap-connection-reader")) { readLoop() }
         scope.launch(CoroutineName("coap-connection-timers")) { timerLoop() }

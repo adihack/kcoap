@@ -45,6 +45,24 @@ adds its entry and migration note below.
   - `ContentFormat.MISSING_BLOCKS_CBOR_SEQ` (272, RFC 9177 §5).
   - `OptionSet.qBlock1`, `qBlock2` and `qBlock2List`, and `OptionSet.Builder.qBlock1()`, `qBlock2()` and
     `addQBlock2()`.
+- Amplification mitigation by address verification (RFC 9175 §2.4 item 3, §2.6; SRV-1). A response larger
+  than `CoapServerConfig.amplificationFactor` (3) times its request, to a client that neither OSCORE nor
+  DTLS authenticated on a datagram transport, waits until the client's address is verified: the server
+  sends a 4.01 Unauthorized with an 8-byte Echo value instead, piggybacked or Non-confirmable, never as a
+  separate Confirmable response, and a request that returns the value verifies the address for
+  `verifiedAddressLifetime` (1 hour). `CoapServerConfig.amplification` chooses what is checked:
+  `AmplificationPolicy.Q_BLOCK_BURSTS` (the default; the server sends no Q-Block bursts yet, so nothing
+  changes for now), `ALL_RESPONSES` (also every Observe registration; a separate response to an address
+  not yet verified goes Non-confirmable, so it is never retransmitted there; and each POST or PATCH keeps
+  its own response for the repeat of that request, so it does not run twice, up to `maxConcurrentTransfers`
+  of them) or `OFF`. `maxVerifiedAddresses` (10 000) bounds the verified addresses and, separately, the
+  outstanding challenges. New `EndpointEvent.LimitReached.Limit` values: `AMPLIFICATION_FACTOR` (a
+  response was held back), `VERIFIED_ADDRESSES`, `ADDRESS_CHALLENGES` and `HELD_BACK_RESPONSES` (an entry
+  was evicted for room; for the last, that POST or PATCH runs again when it is repeated); an exhaustive
+  `when` over `Limit` needs the four new branches. The
+  configuration properties are new trailing constructor parameters with defaults, so source stays
+  compatible; compiled callers of the constructor recompile. libcoap's `coap-client` repeats its request
+  with the Echo value and completes, and its Q-Block probe of `/.well-known/core` is never challenged.
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
@@ -171,6 +189,11 @@ Build governance (WP-C1):
 
 ### Fixed
 
+- A connection that an endpoint accepted or opened while it closed could stay open, and the accept loop
+  could fail with `IllegalStateException: Already started`: a new connection was registered in the
+  connection pool before it started, so a `close()` in between shut it down unstarted. It is now
+  registered and started in one step (coap-core-20; the known flake of
+  `ConcurrencyStressTest.closeRacingConnectionSetupFailsTheWaitingRequestsAndClosesEveryConnection`).
 - The client answers a separate response only after verifying it and checking its critical options (RFC
   7252 §5.4.1), however long verification takes; the Empty ACK timer for slow requests no longer
   acknowledges a response first. A Confirmable separate response, or a notification, with a critical

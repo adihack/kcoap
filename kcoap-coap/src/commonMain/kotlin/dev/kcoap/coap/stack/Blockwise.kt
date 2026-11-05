@@ -171,6 +171,10 @@ internal data class OperationKey(
 /**
  * A bounded map whose entries expire [lifetime] after their last use, evicting the least recently used
  * entry when full. Not thread safe.
+ *
+ * [put] and [get] give an entry the expiry `now + lifetime` and move it to the end; [peek] changes
+ * neither. With one lifetime for all entries and `now` never going back, the entries are therefore in
+ * order of expiry, so the expired ones are always the first and pruning them costs only their number.
  */
 internal class ExpiringCache<K, V>(private val capacity: Int, private val lifetime: Duration) {
     private class Entry<V>(val value: V, var expiresAt: Duration)
@@ -189,11 +193,22 @@ internal class ExpiringCache<K, V>(private val capacity: Int, private val lifeti
         return entry.value
     }
 
-    fun put(key: K, value: V, now: Duration) {
+    /** Like [get], but leaves the entry's expiry and its place in the eviction order as they are. */
+    fun peek(key: K, now: Duration): V? {
+        val entry = entries[key] ?: return null
+        if (entry.expiresAt > now) return entry.value
+        entries.remove(key)
+        return null
+    }
+
+    /** Stores [value]; returns the key evicted to make room for it, or null when there was room. */
+    fun put(key: K, value: V, now: Duration): K? {
         entries.remove(key)
         prune(now)
-        while (entries.size >= capacity) entries.remove(entries.keys.first())
+        var evicted: K? = null
+        if (entries.size >= capacity) evicted = entries.keys.first().also { entries.remove(it) }
         entries[key] = Entry(value, now + lifetime)
+        return evicted
     }
 
     fun remove(key: K): V? = entries.remove(key)?.value
@@ -204,7 +219,12 @@ internal class ExpiringCache<K, V>(private val capacity: Int, private val lifeti
 
     val size: Int get() = entries.size
 
+    /** Drops the expired entries, which are the first ones. */
     private fun prune(now: Duration) {
-        entries.entries.removeAll { it.value.expiresAt <= now }
+        val iterator = entries.values.iterator()
+        while (iterator.hasNext() && iterator.next().expiresAt <= now) iterator.remove()
     }
+
+    /** The keys from the first entry to the last, for tests. */
+    val keys: List<K> get() = entries.keys.toList()
 }

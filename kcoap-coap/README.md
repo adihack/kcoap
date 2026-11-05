@@ -62,7 +62,13 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   for notifications (§2.6); block sizes from the transport's `maxDatagramSize`. RFC 9175 Request-Tags for
   concurrent Block1 operations, and server state keyed by them.
 - **RFC 9175 Echo**: a 4.01 with Echo is answered once with the Echo value; the security layer can
-  answer with a challenge instead of the resource (RFC 8613 Appendix B.1.2).
+  answer with a challenge instead of the resource (RFC 8613 Appendix B.1.2). Against amplification the
+  server verifies a client's address before a response larger than three times its request (§2.4 item
+  3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a 4.01
+  with an Echo value instead, piggybacked or Non-confirmable, and returning the value verifies the
+  address for an hour. `CoapServerConfig.amplification` checks Q-Block2 bursts by default (none are sent
+  yet), every response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
+  Non-confirmable, and keeps each POST's or PATCH's response for its repeat), or nothing.
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
@@ -103,8 +109,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-and amplification mitigation by address validation (RFC 9175 §2.4; the bounds above cap but do not
-prevent it), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177).
+(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177).
 
 ## Verified by
 
@@ -123,7 +128,7 @@ prevent it), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177).
   `interop/README.md`).
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class
   (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
-  `TimeSourceContractTest`), on virtual time; `ConcurrencyStressTest` on real threads through
+  `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; `ConcurrencyStressTest` on real threads through
   `kcoap-testkit`'s `Stress`, on the JVM and Kotlin/Native: close racing requests and collectors, the
   observer registry, the connection pool, requests racing an idle Release.
 - Line coverage 98% (`./gradlew :kcoap-coap:koverXmlReport`).

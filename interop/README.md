@@ -22,6 +22,7 @@ docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
 |---|---|---|
 | `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
 | `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05; the Q-Block fallback with `-L 7 -v 7` (below) |
+| `LibcoapClientAgainstKcoapAddressVerificationTest` | `coap-client -B 10 -v 7 -o ...` (also `-N`, and `-L 7`) | a kcoap server with `AmplificationPolicy.ALL_RESPONSES` (RFC 9175 §2.4 item 3): a piggybacked 4.01 with Echo, then the whole 3000-byte body in Block2 after libcoap's repeat; a NON 4.01 for `-N`; libcoap's Q-Block probe of `/.well-known/core` answered 4.02 at once, never challenged |
 
 ### Q-Block (RFC 9177)
 
