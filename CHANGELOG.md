@@ -44,6 +44,10 @@ adds its entry and migration note below.
   `ReliableTransportConfig.maxPendingConnections` (128) and `maxConnections` (1 024) (WP-S1).
 - `kcoap-testkit`: `Stress.run` and `Stress.race`, bounded concurrency stress tests on the real
   `Dispatchers.Default` for common tests (WP-S1).
+- `kcoap-testkit`: `InMemoryLink` runs one test over datagrams and over connections (`Datagrams`,
+  `Connections`, each with a server and client `Side`, the server's `uri` and `cut`), and `InMemorySessions`
+  stands in for a DTLS layer whose sessions can end (WP-B1). kcoap's own conformance suites run on them:
+  `ExchangeConformanceTest` (kcoap-coap) and `OscoreOverLinksTest` (kcoap-oscore), on every target.
 - Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
   Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
   (QB-0). The Q-Block state machines (QB-1, ADR 0006) drive the server (QB-3, below), not yet the client.
@@ -238,6 +242,31 @@ adds its entry and migration note below.
   only when present (PL-1).
 
 ### Changed (breaking)
+
+One endpoint over an internal per-peer link (WP-B1, [ADR 0005](docs/adr/0005-peer-link-seam.md)). Block-wise,
+Observe, Q-Block, Echo/Request-Tag, the access policy and message security now run on the same exchange layer
+over datagrams and connections; what a link can do (Resets, message types, ordering) decides the few places
+where RFC 7252 and RFC 8323 differ:
+
+- **`CoapEndpoint.transport` and `CoapEndpoint.maxDatagramSize` are gone, and so is the placeholder transport
+  of an endpoint without a datagram transport.** The endpoint keeps the transports it was given to itself;
+  block sizes already followed the peer's limits. *Migration:* keep a reference to the `DatagramTransport` you
+  pass in, for example to read `KtorUdpTransport.localEndpoint`; read `DatagramTransport.maxDatagramSize` on
+  it if you need the datagram size.
+- **A peer the endpoint has no transport for fails with `CoapException(Reason.TRANSPORT_UNAVAILABLE)`**, a new
+  reason, instead of `IllegalArgumentException`: a `coap` request or ping on an endpoint without a datagram
+  transport, or a request or ping to an RFC 8323 scheme that no connector serves (a peer whose connection a
+  listener accepted is still reached on that connection). The message names the scheme. *Migration:* catch
+  `CoapException` and check `reason`, or configure the transport. A `ping` of such a peer now throws
+  `CoapException(TRANSPORT_UNAVAILABLE)` where it threw `IllegalArgumentException`; other connection failures
+  still make it return false.
+- **`EndpointResolver.IpLiterals` is renamed `EndpointResolver.Default`**, which it is, and still takes IP
+  literals for every scheme and passes host names to the connectors of RFC 8323 schemes. *Migration:* rename
+  the reference; the default `CoapClientConfig` needs nothing.
+- `CoapException.Reason` wording no longer assumes datagrams: `SESSION_ENDED` is a secure session that ended,
+  `MESSAGE_TOO_LARGE` names the datagram size or the peer's Max-Message-Size, and `TRANSMISSION_TIMEOUT` and
+  `RESET` say they come from datagram transports only. `ObservableResource.notificationType` and
+  `CoapRequest.isConfirmable` are documented as hints that reliable transports ignore. No behaviour changes.
 
 The EDHOC-OSCORE glue on SPIs and the application model (WP-A3):
 

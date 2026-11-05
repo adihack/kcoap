@@ -3,20 +3,15 @@ package dev.kcoap.coap.stack
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
-import dev.kcoap.coap.CoapMessageType
-import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.Connector
-import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
-import dev.kcoap.transport.SessionEndedException
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -27,7 +22,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -44,13 +38,16 @@ import kotlinx.coroutines.withTimeoutOrNull
  * transports (RFC 8323) on connections: opened on demand through [Connector]s for `coap+tcp`,
  * `coaps+tcp`, `coap+ws` and `coaps+ws` peers, reused per peer and released when idle, and accepted from
  * [ConnectionListener]s. Every connection has a messaging layer of its own, so tokens are scoped to it,
- * and its responses, notifications and failures stay with it (RFC 8323 §3.3, §7.4).
+ * and its responses, notifications and failures stay with it (RFC 8323 §3.3, §7.4). One exchange layer
+ * serves all of them through an internal link per peer, chosen by the kind of the peer's [Endpoint], so
+ * Block-wise, Observe, Q-Block and message security behave the same on every transport.
  *
  * The endpoint runs its coroutines in [scope] and inherits its dispatcher. It starts receiving and
  * accepting once a [dev.kcoap.coap.server.CoapServer] is attached or the first request or ping goes out,
  * so a server's resources are in place before the first request arrives, whichever of a server and a
- * [dev.kcoap.coap.client.CoapClient] sharing the endpoint is created first. On Android or iOS pass a scope such as `lifecycleScope + Dispatchers.Default` to keep the
- * receive loop, timers and handlers off the main thread.
+ * [dev.kcoap.coap.client.CoapClient] sharing the endpoint is created first. On Android or iOS pass a scope
+ * such as `lifecycleScope + Dispatchers.Default` to keep the receive loop, timers and handlers off the main
+ * thread.
  *
  * **Lifecycle.** An endpoint ends exactly once, in one terminal transition, whichever way it ends: [close],
  * cancelling [scope], or a datagram transport whose receive fails. Then open exchanges fail, observations
@@ -75,7 +72,7 @@ public class CoapEndpoint private constructor(
     scope: CoroutineScope,
     public val config: CoapEndpointConfig,
 ) {
-    /** An endpoint on [transport], for `coap` peers. */
+    /** An endpoint on [transport], for `coap` peers; it has no connections. */
     public constructor(
         transport: DatagramTransport,
         scope: CoroutineScope,
@@ -85,7 +82,9 @@ public class CoapEndpoint private constructor(
     /**
      * An endpoint on any combination of transports: [transport] for `coap` peers, [connectors] to open
      * connections to peers of the RFC 8323 schemes they serve, [listeners] to accept connections.
-     * [close] closes all of them.
+     * [close] closes all of them. A request to a peer the endpoint has no transport for fails with
+     * [CoapException.Reason.TRANSPORT_UNAVAILABLE]: a `coap` peer without [transport], or a peer of a scheme
+     * no connector serves, unless that peer already has a connection open, as one a listener accepted.
      */
     public constructor(
         scope: CoroutineScope,
@@ -95,26 +94,10 @@ public class CoapEndpoint private constructor(
         listeners: List<ConnectionListener> = emptyList(),
     ) : this(transport, connectors, listeners, scope, config)
 
-    /**
-     * The datagram transport. An endpoint created without one has a placeholder that refuses to send, and
-     * requests to datagram peers fail at once.
-     */
-    public val transport: DatagramTransport = datagramTransport ?: NoDatagramTransport
-
-    private val hasDatagramTransport = datagramTransport != null
     private val log = config.loggerFactory.logger(LogTags.COAP_EXCHANGE)
-    /** Guards the messaging state machine and the exchanges; never held across a suspension. Internal for tests. */
+
+    /** Guards the exchanges and the closed state; never held across a suspension. Internal for tests. */
     internal val lock = Mutex()
-    private val messaging = UdpMessaging(
-        config.parameters,
-        transport.maxDatagramSize,
-        config.separateResponseDelay,
-        config.random,
-        config.interceptors,
-        config.loggerFactory,
-        config.maxDeduplicationEntries,
-        config.maxExchangesPerPeer,
-    )
     private val exchanges = HashMap<ExchangeKey, ClientExchange>()
 
     /** How many of [exchanges] each peer has, for [CoapEndpointConfig.maxExchangesPerPeer]; under [lock]. */
@@ -122,10 +105,9 @@ public class CoapEndpoint private constructor(
 
     /** One permit per running request handler, [CoapEndpointConfig.maxConcurrentRequests] in all. */
     private val handlerPermits = Semaphore(config.maxConcurrentRequests)
-    private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val clockStart = config.timeSource.markNow()
 
-    /** Warns when the time source and the dispatcher's clock disagree; shared with the connections. */
+    /** Warns when the time source and the dispatcher's clock disagree; shared with the links. */
     internal val clockCheck = ClockCheck(log)
 
     /** This endpoint's own token generator unless the configuration names one (RFC 9175 §4.2 state is per endpoint). */
@@ -145,7 +127,14 @@ public class CoapEndpoint private constructor(
             }),
     )
 
-    private val reliable = ReliableConnections(this, connectors, listeners, this.scope, config)
+    /** RFC 7252 messaging with every datagram peer, when the endpoint has a datagram transport. */
+    private val datagram: DatagramLink? = datagramTransport?.let { DatagramLink(it, this, config) }
+
+    /** The datagram transport, if the endpoint has one; for tests, which read its address. */
+    internal val transport: DatagramTransport? get() = datagram?.transport
+
+    /** RFC 8323 connections: a [ConnectionLink] per peer, opened through [connectors] or accepted from [listeners]. */
+    private val connections = ReliableConnections(this, connectors, listeners, this.scope, config)
 
     @Volatile
     internal var requestHandler: RequestHandler? = null
@@ -188,14 +177,8 @@ public class CoapEndpoint private constructor(
             var failure: CoapException? = null
             try {
                 attached.await()
-                reliable.start()
-                if (hasDatagramTransport) {
-                    val timers = launch(CoroutineName("coap-timers")) { timerLoop() }
-                    failure = receiveLoop()
-                    timers.cancel()
-                } else {
-                    awaitCancellation()
-                }
+                connections.start()
+                failure = datagram?.run() ?: awaitCancellation()
             } finally {
                 shutdown(failure ?: CoapException("Endpoint closed: its scope was cancelled", CoapException.Reason.CLOSED))
             }
@@ -210,40 +193,58 @@ public class CoapEndpoint private constructor(
         attached.complete(Unit)
     }
 
-    /** The largest message the datagram transport carries; block sizes towards datagram peers follow it. */
-    public val maxDatagramSize: Int get() = transport.maxDatagramSize
-
     /** The parameters messaging runs with. */
     public val parameters: TransmissionParameters get() = config.parameters
 
     /** Time on [CoapEndpointConfig.timeSource] since the endpoint started; every timer uses it. */
     internal fun now(): Duration = clockStart.elapsedNow()
 
-    /** Whether [peer] is reached over a reliable transport (RFC 8323) rather than datagrams. */
-    internal fun isReliable(peer: Endpoint): Boolean = ReliableConnections.schemeOrNull(peer) != null
+    // ---------------------------------------------------------------- links
+
+    /**
+     * Whether [peer] is reached on a connection (RFC 8323 §8 schemes) rather than over datagrams: the one place
+     * the endpoint tells the two apart, by the kind of the [Endpoint] (no scheme registry, ADR 0004).
+     */
+    private fun isOnConnection(peer: Endpoint): Boolean = when (peer) {
+        is Endpoint.Tcp, is Endpoint.WebSocket -> true
+        is Endpoint.Udp, is Endpoint.Secure, is Endpoint.Opaque -> false
+    }
+
+    /** What the link to [peer] can do, known without opening it. */
+    internal fun capabilities(peer: Endpoint): LinkCapabilities =
+        if (isOnConnection(peer)) LinkCapabilities.CONNECTION else LinkCapabilities.DATAGRAM
+
+    /**
+     * The link to [peer]: the datagram link, or the connection to [peer], which this opens if needed.
+     *
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], or as [ReliableConnections.linkFor] throws.
+     */
+    internal suspend fun linkFor(peer: Endpoint): PeerLink =
+        if (isOnConnection(peer)) connections.linkFor(peer) else datagramLinkTo(peer)
+
+    /**
+     * The datagram link to [peer]; for a request that came in a datagram, and for tests.
+     *
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   datagram transport.
+     */
+    internal fun datagramLinkTo(peer: Endpoint): PeerLink {
+        val link = datagram ?: throw CoapException(
+            "${schemeOf(peer)} needs a DatagramTransport; this endpoint has none for $peer",
+            CoapException.Reason.TRANSPORT_UNAVAILABLE,
+        )
+        return link.to(peer)
+    }
+
+    /** The scheme a datagram [peer] is reached by, for messages: `coaps` over DTLS, else `coap`. */
+    private fun schemeOf(peer: Endpoint): String = if (peer is Endpoint.Secure) "coaps" else "coap"
 
     /**
      * What one message to [peer] may be: the datagram size, or the peer's Max-Message-Size on its
      * connection (RFC 8323 §5.3.1), which this opens if needed.
      */
-    internal suspend fun limits(peer: Endpoint): MessageLimits =
-        if (isReliable(peer)) limits(reliable.connectionFor(peer)) else datagramLimits
-
-    /** The limits of messages on [connection], or of datagrams when it is null. */
-    internal fun limits(connection: ConnectionDriver?): MessageLimits {
-        if (connection == null) return datagramLimits
-        val settings = connection.settings
-        return MessageLimits(
-            maxMessageSize = settings.maxMessageSize.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-            codec = connection.codec,
-            // RFC 8323 §6: BERT only when both CSMs indicated it.
-            allowsBert = settings.supportsBert && config.reliable.announcesBert,
-            isReliable = true,
-        )
-    }
-
-    private val datagramLimits: MessageLimits
-        get() = MessageLimits(transport.maxDatagramSize, UdpMessageCodec, allowsBert = false, isReliable = false)
+    internal suspend fun limits(peer: Endpoint): MessageLimits = linkFor(peer).limits
 
     // ---------------------------------------------------------------- client side
 
@@ -251,13 +252,16 @@ public class CoapEndpoint private constructor(
      * Sends [request] (code, options and payload; header fields are set here) to [peer] and returns the
      * exchange that collects its responses as [mode] says. The token comes from
      * [CoapEndpointConfig.tokenGenerator] unless [token] is given, which re-registers or cancels an
-     * observation (RFC 7641 §3.3.1, §3.6) and replaces the exchange that had it. The token and Message ID
-     * are assigned before [security] protects the request, and kept afterwards. A response with a critical
-     * option outside [recognizedOptions] is rejected (RFC 7252 §5.4.1). Over a reliable transport,
-     * [confirmable] and [pacing] do not apply.
+     * observation (RFC 7641 §3.3.1, §3.6) and replaces the exchange that had it. The token, and on a datagram
+     * link the message type and Message ID, are assigned before [security] protects the request, and kept
+     * afterwards. A response with a critical option outside [recognizedOptions] is rejected
+     * (RFC 7252 §5.4.1). On a link without message types, [confirmable] and [pacing] do not apply.
      *
      * @param pacing [Pacing.PerMessage], or [Pacing.Body] for a Non-confirmable message of a Q-Block body
      *   whose granted [BodyLease] towards [peer] holds the slot (RFC 9177 §7.2).
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], with [CoapException.Reason.CONNECTION_CLOSED] when its connection cannot be
+     *   opened, or like [closeCause] once the endpoint is closed.
      * @throws IllegalArgumentException for a Confirmable request with [Pacing.Body], which would deadlock
      *   at NSTART 1 (RFC 9177 §7.1), or a lease towards another peer.
      * @throws IllegalStateException for a lease not yet granted or already released.
@@ -273,43 +277,35 @@ public class CoapEndpoint private constructor(
         recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS,
     ): ClientExchange {
         attach()
-        if (isReliable(peer)) return openReliableExchange(peer, request, security, mode, token, recognizedOptions)
-        requireDatagramTransport(peer)
-        if (pacing is Pacing.Body) {
-            require(!confirmable) { "A Confirmable body takes a slot per message (RFC 9177 §7.1), not a body lease" }
-            require(pacing.lease.peer == peer) { "The body lease is towards ${pacing.lease.peer}, not $peer" }
+        // On a connection the exchange is counted before it is registered, so its idle Release (RFC 8323 §5.5)
+        // cannot start in between.
+        val link = if (isOnConnection(peer)) connections.reservedLinkFor(peer) else datagramLinkTo(peer)
+        val exchange = try {
+            link.checkPacing(confirmable, pacing)
+            lock.withLock {
+                // Checked under the lock that the terminal transition takes, so no exchange is added after they
+                // were all failed: it fails at once instead of waiting for a response that never comes.
+                ensureOpen()
+                register(link, token, mode, recognizedOptions)
+            } ?: throw tooManyExchanges(peer)
+        } catch (e: Throwable) {
+            withContext(NonCancellable) { link.exchangeClosed(null) }
+            throw e
         }
-        val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
-        val (exchange, messageId) = lock.withLock {
-            // Checked under the lock that the terminal transition takes, so no exchange is added after they
-            // were all failed: it fails at once instead of waiting for a response that never comes.
-            ensureOpen()
-            register(peer, token, mode, recognizedOptions)?.let { it to messaging.allocateMessageId(peer, now()) }
-        } ?: throw tooManyExchanges(peer)
-        val plain = request.toBuilder().apply {
-            this.type = type
-            this.messageId = messageId
-            this.token = exchange.token
-        }.build()
         try {
+            val plain = link.address(request, exchange.token, confirmable)
             val protected = security?.protectRequest(plain, peer)
             exchange.protectedRequest = protected
             val wire = protected?.message?.toBuilder()?.apply {
-                this.type = type
-                this.messageId = messageId
-                this.token = exchange.token
+                type = plain.type
+                messageId = plain.messageId
+                this.token = plain.token
             }?.build() ?: plain
             exchange.request = wire
-            // A message of a body takes no slot of its own: the body's lease holds one for all of them.
-            val slotHold = if (confirmable || pacing is Pacing.Body) null else nonConfirmableSlotHold(wire)
-            // Recorded under the lock, before the datagram goes out: a cancellation while sending can then
-            // still settle the transmission, which would otherwise retransmit for nobody and hold NSTART.
-            withMessaging { now ->
-                ensureOpen()
-                (pacing as? Pacing.Body)?.lease?.checkUsable()
-                exchange.transmission = send(now, peer, wire, exchange, slotHold)
+            link.sendRequest(wire, pacing, exchange) { exchange.delivery = it }
+            log.with("peer" to peer, "token" to exchange.key.token).debug {
+                "Request ${plain.code} ${plain.options.path}" + if (link.capabilities.hasMessageTypes) " as ${plain.type}" else ""
             }
-            log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path} as $type" }
         } catch (e: Throwable) {
             withContext(NonCancellable) { exchange.cancel() }
             throw e
@@ -318,59 +314,21 @@ public class CoapEndpoint private constructor(
     }
 
     /**
-     * RFC 8323 §3.3: the request goes on the connection to [peer], opened if needed, without Type or
-     * Message ID; the token is unique among the exchanges with [peer], so on its connection.
-     */
-    private suspend fun openReliableExchange(
-        peer: Endpoint,
-        request: CoapMessage,
-        security: ClientMessageSecurity?,
-        mode: ResponseMode,
-        token: ByteArray?,
-        recognizedOptions: Set<Int>,
-    ): ClientExchange {
-        lock.withLock { ensureOpen() }
-        // Counted on the connection before the request is, so its idle Release cannot start in between.
-        val connection = reliable.reservedConnectionFor(peer)
-        val exchange = try {
-            lock.withLock {
-                ensureOpen()
-                register(peer, token, mode, recognizedOptions)?.also { it.connection = connection }
-            } ?: throw tooManyExchanges(peer)
-        } catch (e: Throwable) {
-            withContext(NonCancellable) { connection.exchangeClosed(null) }
-            throw e
-        }
-        val plain = request.toBuilder().apply { this.token = exchange.token }.build()
-        try {
-            val protected = security?.protectRequest(plain, peer)
-            exchange.protectedRequest = protected
-            val wire = protected?.message?.toBuilder()?.apply { this.token = exchange.token }?.build() ?: plain
-            exchange.request = wire
-            connection.send(wire)
-            log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path}" }
-        } catch (e: Throwable) {
-            withContext(NonCancellable) { exchange.cancel() }
-            throw e
-        }
-        return exchange
-    }
-
-    /**
-     * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
-     * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.
+     * Called under [lock]: a new exchange on [link] with [token] or a fresh one, replacing an exchange that had
+     * it; null when the peer has [CoapEndpointConfig.maxExchangesPerPeer] already.
      */
     private fun register(
-        peer: Endpoint,
+        link: PeerLink,
         token: ByteArray?,
         mode: ResponseMode,
         recognizedOptions: Set<Int>,
     ): ClientExchange? {
+        val peer = link.peer
         val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
         if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
         val logger = log.with("peer" to peer, "token" to chosen.toHex())
-        val exchange = ClientExchange(this, peer, chosen, mode, recognizedOptions, logger)
+        val exchange = ClientExchange(this, link, chosen, mode, recognizedOptions, logger)
         val previous = exchanges.put(exchange.key, exchange)
         if (previous == null) {
             exchangesPerPeer[peer] = (exchangesPerPeer[peer] ?: 0) + 1
@@ -396,18 +354,6 @@ public class CoapEndpoint private constructor(
         )
     }
 
-    private fun requireDatagramTransport(peer: Endpoint) {
-        require(hasDatagramTransport) { "$peer needs a DatagramTransport; this endpoint has none" }
-    }
-
-    /**
-     * RFC 7252 §4.7: a Non-confirmable request occupies its NSTART slot until its response arrives, or
-     * for as long as sending it took at PROBING_RATE, so an endpoint that never answers is probed no
-     * faster than that.
-     */
-    private fun nonConfirmableSlotHold(message: CoapMessage): Duration =
-        (UdpMessageCodec.encode(message).size.toDouble() / config.parameters.probingRate).seconds
-
     private fun allocateToken(peer: Endpoint): ByteArray {
         repeat(TOKEN_ATTEMPTS) {
             val token = tokens.next(peer)
@@ -422,6 +368,9 @@ public class CoapEndpoint private constructor(
      * peer answers with a Reset: true if it answered, false if it never did within MAX_TRANSMIT_WAIT. To a
      * reliable peer (RFC 8323 §5.4) a Ping on its connection, opened if needed: true if the Pong came
      * within [ReliableTransportConfig.pingTimeout], false if not or if the connection failed.
+     *
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], or like [closeCause] once the endpoint is closed.
      */
     public suspend fun ping(peer: Endpoint): Boolean = ping(peer, custody = false)
 
@@ -431,37 +380,16 @@ public class CoapEndpoint private constructor(
      */
     public suspend fun ping(peer: Endpoint, custody: Boolean): Boolean {
         attach()
-        if (isReliable(peer)) {
-            lock.withLock { ensureOpen() }
-            return try {
-                reliable.connectionFor(peer).ping(custody, config.reliable.pingTimeout)
-            } catch (e: CoapException) {
-                log.debug { "Ping of $peer failed: ${e.message}" }
-                false
-            }
+        lock.withLock { ensureOpen() }
+        val link = try {
+            linkFor(peer)
+        } catch (e: CoapException) {
+            if (e.reason == CoapException.Reason.TRANSPORT_UNAVAILABLE) throw e
+            // A connection that cannot be opened is a peer that does not answer.
+            log.debug { "Ping of $peer failed: ${e.message}" }
+            return false
         }
-        requireDatagramTransport(peer)
-        val answer = CompletableDeferred<Boolean>()
-        val owner = TransmissionOwner { _, outcome ->
-            when (outcome) {
-                // A peer that acknowledges instead of resetting is alive as well.
-                TransmissionOutcome.Reset, is TransmissionOutcome.Acknowledged -> answer.complete(true)
-                TransmissionOutcome.TimedOut -> answer.complete(false)
-                is TransmissionOutcome.Failed -> answer.completeExceptionally(outcome.cause)
-                TransmissionOutcome.SlotReleased -> Unit
-            }
-        }
-        var transmission: Transmission? = null
-        try {
-            withMessaging { now ->
-                ensureOpen()
-                transmission = send(now, peer, CoapMessage.empty(CoapMessageType.CON, allocateMessageId(peer, now)), owner)
-            }
-            return answer.await()
-        } catch (e: Throwable) {
-            transmission?.let { settle(it) }
-            throw e
-        }
+        return link.ping(custody)
     }
 
     /** Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation. */
@@ -476,8 +404,8 @@ public class CoapEndpoint private constructor(
     }
 
     /**
-     * The exchange ends: its token is free again, and its connection no longer counts it as busy. Cleanup,
-     * so it runs to the end in a cancelled coroutine too.
+     * The exchange ends: its token is free again, and its link no longer counts it. Cleanup, so it runs to the
+     * end in a cancelled coroutine too.
      */
     internal suspend fun forget(exchange: ClientExchange): Unit = withContext(NonCancellable) {
         var first = false
@@ -486,12 +414,7 @@ public class CoapEndpoint private constructor(
             exchange.isForgotten = true
             (exchanges[exchange.key] === exchange).also { if (it) unregister(exchange) }
         }
-        if (first) exchange.connection?.exchangeClosed(exchange.key.token.takeIf { registered })
-    }
-
-    /** Stops working on [transmission]; cleanup, so it runs to the end in a cancelled coroutine too. */
-    internal suspend fun settle(transmission: Transmission): Unit = withContext(NonCancellable) {
-        withMessaging { now -> settle(now, transmission) }
+        if (first) exchange.link.exchangeClosed(exchange.key.token.takeIf { registered })
     }
 
     /**
@@ -503,8 +426,9 @@ public class CoapEndpoint private constructor(
      * [BodyLease.nonTimeoutRandom]. A body that ends because the peer never answered may leave the lease to
      * expire instead of releasing it, so the next body to that peer waits as PROBING_RATE asks.
      *
-     * Towards a reliable peer the lease is granted at once and paces nothing (RFC 8323 has no NSTART). A
-     * caller cancelled while waiting leaves the queue.
+     * The datagram link owns the leases. Towards a peer on a connection the lease is granted at once and paces
+     * nothing (RFC 8323 has no NSTART), without opening the connection. A caller cancelled while waiting leaves
+     * the queue.
      *
      * @throws CoapException like [closeCause] once the endpoint is closed, with
      *   [CoapException.Reason.SESSION_ENDED] when the peer's DTLS session ends while it waits, or with
@@ -513,23 +437,12 @@ public class CoapEndpoint private constructor(
     internal suspend fun leaseBody(peer: Endpoint, bodyBytes: Int, nonTimeoutRandom: Duration? = null): BodyLease {
         require(bodyBytes >= 0) { "A body cannot have a negative size: $bodyBytes" }
         attach()
-        if (isReliable(peer)) {
+        if (isOnConnection(peer)) {
+            // Without opening the connection, which the body's first message does.
             lock.withLock { ensureOpen() }
-            return BodyLease.unpaced(peer, nonTimeoutRandom ?: Duration.ZERO)
+            return ConnectionLink.lease(peer, nonTimeoutRandom)
         }
-        requireDatagramTransport(peer)
-        val lease = withMessaging { now ->
-            ensureOpen()
-            lease(now, peer, bodyBytes, nonTimeoutRandom)
-        }
-        try {
-            lease.granted.await()
-        } catch (e: Throwable) {
-            // A caller cancelled while waiting, or just after the grant, must not keep the peer's slot.
-            releaseBody(lease)
-            throw e
-        }
-        return lease
+        return datagramLinkTo(peer).leaseBody(bodyBytes, nonTimeoutRandom)
     }
 
     /**
@@ -537,11 +450,11 @@ public class CoapEndpoint private constructor(
      * use the lease. Idempotent; cleanup, so it runs to the end in a cancelled coroutine too.
      */
     internal suspend fun releaseBody(lease: BodyLease): Unit = withContext(NonCancellable) {
-        withMessaging { now -> releaseLease(now, lease) }
+        if (lease.isPaced) datagram?.release(lease) else ConnectionLink.release(lease)
     }
 
     /** Body leases that hold a slot or wait for one, for tests. */
-    internal suspend fun leaseCount(): Int = lock.withLock { messaging.leaseCount }
+    internal suspend fun leaseCount(): Int = datagram?.leaseCount() ?: 0
 
     /** Exchanges in the registry, for tests. */
     internal suspend fun exchangeCount(): Int = lock.withLock { exchanges.size }
@@ -576,87 +489,6 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    // ---------------------------------------------------------------- server side
-
-    /**
-     * Answers [request]: on its connection when it came over one (RFC 8323 §3.3), else piggybacked or
-     * separately; returns the transmission of a separate datagram response.
-     */
-    internal suspend fun respond(
-        request: InboundRequest,
-        response: CoapMessage,
-        owner: TransmissionOwner?,
-        separateType: CoapMessageType,
-    ): Transmission? {
-        val connection = request.connection
-        if (connection != null) {
-            connection.respond(request.sequence, response)
-            return null
-        }
-        return withMessaging { now ->
-            respond(now, request.peer, request.message.messageId, request.message.type, response, owner, separateType)
-        }
-    }
-
-    /** Sends an Empty ACK; reliable transports have none, the response itself acknowledges (RFC 8323 §3.1). */
-    internal suspend fun acknowledge(request: InboundRequest) {
-        if (request.connection != null) return
-        withMessaging { acknowledge(request.peer, request.message.messageId) }
-    }
-
-    /** The request is done without a response (RFC 7967): an Empty ACK, or on a connection a note for Custody. */
-    internal suspend fun finishWithoutResponse(request: InboundRequest) {
-        val connection = request.connection ?: return acknowledge(request)
-        connection.answered(request.sequence)
-    }
-
-    internal suspend fun reject(request: InboundRequest, reason: String) {
-        val connection = request.connection
-        if (connection != null) {
-            // RFC 8323 has no Reset; the request is only dropped.
-            log.debug { "Dropped a request from ${request.peer}: $reason" }
-            connection.answered(request.sequence)
-            return
-        }
-        withMessaging { reject(request.peer, request.message.messageId, reason) }
-    }
-
-    /**
-     * Sends a notification or other server-initiated response in a message of its own. To a reliable peer
-     * it goes on [connection], or the peer's connection, as it is: there are no message types
-     * (RFC 8323 §7.2), so the returned transmission is already done, and a closed connection is reported to
-     * [owner] as a failure.
-     */
-    internal suspend fun sendSeparately(
-        peer: Endpoint,
-        message: CoapMessage,
-        type: CoapMessageType,
-        owner: TransmissionOwner,
-        slotHold: Duration? = null,
-        connection: ConnectionDriver? = null,
-    ): Transmission {
-        if (isReliable(peer)) {
-            val transmission = Transmission(peer, message, null, owner, null).apply { state = Transmission.State.DONE }
-            lock.withLock { ensureOpen() }
-            try {
-                val target = connection ?: reliable.existing(peer)
-                    ?: throw CoapException("No connection to $peer", CoapException.Reason.CONNECTION_CLOSED)
-                target.send(message)
-            } catch (e: CoapException) {
-                owner.onOutcome(transmission, TransmissionOutcome.Failed(e))
-            }
-            return transmission
-        }
-        return withMessaging { now ->
-            ensureOpen()
-            send(now, peer, message.withHeader(type, allocateMessageId(peer, now)), owner, slotHold)
-        }
-    }
-
-    /** Replaces an outstanding notification with a newer one; see [UdpMessaging.supersede]. */
-    internal suspend fun replaceOutstanding(transmission: Transmission, message: CoapMessage): Boolean =
-        withMessaging { supersede(transmission, message) }
-
     // ---------------------------------------------------------------- lifecycle
 
     /**
@@ -684,30 +516,26 @@ public class CoapEndpoint private constructor(
 
     /**
      * The terminal transition; only the first call does anything. Under the lock the state becomes closed,
-     * so nothing new is registered or sent after it, and the messaging layer fails its transmissions; then,
-     * outside the lock, exchanges fail, the server drops its observers, connections are released, the
-     * transport is closed and the coroutines are cancelled. Runs to the end even in a cancelled coroutine.
+     * so no exchange is registered after it; then the datagram link fails its transmissions, which it checks
+     * the closed state for before it sends anything new, exchanges fail, the server drops its observers,
+     * connections are released, the transport is closed and the coroutines are cancelled. Runs to the end
+     * even in a cancelled coroutine.
      */
     private suspend fun shutdown(cause: CoapException): Unit = withContext(NonCancellable) {
-        var effects: List<MessagingEffect> = emptyList()
         val open = lock.withLock {
             if (closeCause != null) return@withContext
             closeCause = cause
-            messaging.close(cause)
-            effects = messaging.takeEffects()
             exchangesPerPeer.clear()
             exchanges.values.toList().also { exchanges.clear() }
         }
-        execute(effects)
+        // The datagram link takes its lock here after closeCause is set, so once it failed what it had, nothing
+        // new goes out.
+        datagram?.close(cause)
         open.forEach { it.fail(cause) }
         // Each step runs even when one before it failed, so the endpoint always ends.
         closingStep("stop the server") { requestHandler?.onEndpointClosed() }
-        closingStep("close the connections") { reliable.close() }
-        try {
-            transport.close()
-        } catch (e: Exception) {
-            log.debug { "Closing the transport failed: ${e.message}" }
-        }
+        closingStep("close the connections") { connections.close() }
+        datagram?.closeTransport()
         // Not joined: this may run on one of the endpoint's own coroutines, such as a handler.
         job.cancel()
         closed.complete(cause)
@@ -724,8 +552,11 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    /** Called under [lock]: throws an exception like [closeCause] once the endpoint is closed. */
-    private fun ensureOpen() {
+    /**
+     * Throws an exception like [closeCause] once the endpoint is closed: called under [lock], or under a link's
+     * lock before it sends anything new, which [shutdown] takes after it set [closeCause].
+     */
+    internal fun ensureOpen() {
         closeCause?.let { throw closedError(it) }
     }
 
@@ -733,94 +564,29 @@ public class CoapEndpoint private constructor(
     internal fun closedError(): CoapException =
         closedError(closeCause ?: CoapException("Endpoint closed", CoapException.Reason.CLOSED))
 
-    private fun closedError(cause: CoapException): CoapException =
+    /** A new exception like [cause], for one more caller that fails with it. */
+    internal fun closedError(cause: CoapException): CoapException =
         CoapException(cause.message ?: "Endpoint closed", cause.reason, cause.cause)
 
-    // ---------------------------------------------------------------- driving the state machine
+    // ---------------------------------------------------------------- what the links deliver
 
     /**
-     * Runs [block] on the state machine under the lock, then executes its effects outside the lock. The
-     * effects run to the end even when the calling coroutine is cancelled meanwhile: the state machine has
-     * committed to them, and they may belong to other exchanges, such as a queued request that a released
-     * NSTART slot started. A cancelled caller sees its cancellation at its next suspension.
+     * A request on [link], new (not a duplicate); [sequence] is its number on a connection. A side without a
+     * server rejects it (RFC 7252 §4.2), or on a link without Resets answers it with 5.01 Not Implemented,
+     * since RFC 8323 §3.3 has every request on a connection answered with an error at least.
      */
-    private suspend fun <T> withMessaging(signal: Boolean = true, block: UdpMessaging.(now: Duration) -> T): T {
-        var effects: List<MessagingEffect> = emptyList()
-        var wakeup = false
-        val result = try {
-            lock.withLock {
-                try {
-                    messaging.block(now())
-                } finally {
-                    effects = messaging.takeEffects()
-                    wakeup = messaging.takeWakeup()
-                }
-            }
-        } finally {
-            if (effects.isNotEmpty()) withContext(NonCancellable) { execute(effects) }
-            // Only a deadline earlier than the one the timer loop waits for wakes it (CLR-4).
-            if (signal && wakeup) wakeups.trySend(Unit)
-        }
-        return result
-    }
-
-    private suspend fun execute(effects: List<MessagingEffect>) {
-        for (effect in effects) {
-            when (effect) {
-                is MessagingEffect.Transmit -> transmit(effect)
-                is MessagingEffect.DeliverRequest -> onRequest(effect.from, effect.message)
-                is MessagingEffect.DeliverResponse -> onSeparateResponse(effect.from, effect.message)
-                is MessagingEffect.Completed -> effect.transmission.owner?.let { owner ->
-                    try {
-                        owner.onOutcome(effect.transmission, effect.outcome)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        log.error(e) { "Transmission owner failed on ${effect.outcome}" }
-                    }
-                }
-                is MessagingEffect.Event -> emit(effect.event)
-                is MessagingEffect.LeaseGranted -> effect.lease.granted.complete(Unit)
-                is MessagingEffect.LeaseFailed -> effect.lease.granted.completeExceptionally(closedError(effect.cause))
-            }
-        }
-    }
-
-    /**
-     * Sends one datagram. A [SessionEndedException] ends the peer's DTLS session. An
-     * [IllegalArgumentException] means the transport cannot carry this datagram to this peer at all, such
-     * as an endpoint type it does not serve: a local error that no retransmission fixes, so the message
-     * fails at once with [CoapException.Reason.TRANSPORT_FAILED] instead of looking like a silent peer
-     * after MAX_TRANSMIT_WAIT. Any other failure is transient, and retransmission covers it, as it covers a
-     * datagram the network lost.
-     */
-    private suspend fun transmit(effect: MessagingEffect.Transmit) {
-        val to = effect.to
-        try {
-            transport.send(to, effect.bytes)
-        } catch (e: SessionEndedException) {
-            onSessionEnded(e.endpoint)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IllegalArgumentException) {
-            log.error(e) { "The transport refused to send ${effect.bytes.size} bytes to $to" }
-            val transmission = effect.transmission ?: return
-            val cause = CoapException("The transport cannot send to $to: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
-            withMessaging { now -> abandon(now, transmission, cause) }
-        } catch (e: Exception) {
-            // UDP gives no delivery guarantee anyway; retransmission covers a failed send.
-            log.warn(e) { "Sending ${effect.bytes.size} bytes to $to failed" }
-        }
-    }
-
-    private suspend fun onRequest(from: Endpoint, message: CoapMessage) {
+    internal suspend fun onRequest(link: PeerLink, message: CoapMessage, sequence: Long = -1) {
+        val request = InboundRequest(link, message, sequence)
         val handler = requestHandler
         if (handler == null) {
-            // RFC 7252 §4.2: a recipient that lacks the context to process a message rejects it.
-            withMessaging { reject(from, message.messageId, "no server on this endpoint") }
+            if (link.capabilities.hasReset) {
+                request.reject("no server on this endpoint")
+            } else {
+                request.respond(CoapMessage.response(message, CoapCode.NOT_IMPLEMENTED))
+            }
             return
         }
-        launchHandler(handler, InboundRequest(this, from, message))
+        launchHandler(handler, request)
     }
 
     /**
@@ -854,14 +620,14 @@ public class CoapEndpoint private constructor(
      * RFC 8323 §3.3: every request on a connection is answered. One whose handler ended without answering,
      * cancelled with its server or never started, gets 5.03 Service Unavailable, so the peer does not wait
      * for its own timeout and Pongs with Custody (§5.4.1) and a Release drain (§5.5) do not wait for it.
-     * Over datagrams nothing is owed: the messaging layer acknowledges a Confirmable request on its own.
+     * On a link with message types nothing is owed: the messaging layer acknowledges a Confirmable request on
+     * its own.
      */
     private suspend fun answerAbandoned(request: InboundRequest) {
-        val connection = request.connection ?: return
-        if (request.isAnswered) return
+        if (request.link.capabilities.hasMessageTypes || request.isAnswered) return
         log.debug { "Answering an abandoned request from ${request.peer} with 5.03" }
         try {
-            connection.respond(request.sequence, CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE))
+            request.respond(CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -888,14 +654,20 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    private suspend fun onSeparateResponse(from: Endpoint, message: CoapMessage) {
-        val exchange = lock.withLock { exchanges[ExchangeKey(from, message.tokenHex)] }
+    /**
+     * A response on [link] that did not come piggybacked, new (not a duplicate), matched by token among the
+     * exchanges with its peer, and on a connection among that connection's (RFC 8323 §3.3).
+     */
+    internal suspend fun onResponse(link: PeerLink, message: CoapMessage) {
+        val exchange = lock.withLock { exchanges[ExchangeKey(link.peer, message.tokenHex)] }?.takeIf { it.link == link }
         if (exchange == null) {
             // RFC 7252 §5.3.2 and RFC 7641 §3.5: an unexpected response is rejected, which also cancels an
-            // observation the client forgot (RFC 7641 §3.6).
-            withMessaging { reject(from, message.messageId, "no exchange for token ${message.tokenHex}") }
+            // observation the client forgot (RFC 7641 §3.6); a connection has no Reset and drops it.
+            link.rejectResponse(message, "no exchange for token ${message.tokenHex}")
             return
         }
+        // RFC 8323 §3.1: on a connection there is nothing to answer at the messaging layer.
+        if (!link.capabilities.hasMessageTypes) return exchange.onResponse(message)
         // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
         // options, which only the verified response shows; so it is answered after both, and before it is
         // handed on. No timer answers it meanwhile (UdpMessaging), so every way out of here answers it.
@@ -904,80 +676,37 @@ public class CoapEndpoint private constructor(
         } catch (e: Throwable) {
             // An unexpected failure of the message security: the response is dropped, as one that failed
             // verification, but acknowledged, so the peer does not retransmit it until it gives up.
-            withMessaging { acknowledge(from, message.messageId) }
+            link.acceptResponse(message)
             throw e
         }
         when (inspection) {
             is ClientExchange.Inspection.Accepted -> {
-                withMessaging { acknowledge(from, message.messageId) }
+                link.acceptResponse(message)
                 exchange.accept(inspection.response)
             }
             is ClientExchange.Inspection.Rejected -> {
-                val reason = inspection.cause.message ?: "unrecognized critical option"
-                withMessaging { reject(from, message.messageId, reason) }
+                link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
                 exchange.refuse(inspection.cause)
             }
             is ClientExchange.Inspection.Unverified -> {
-                withMessaging { acknowledge(from, message.messageId) }
+                link.acceptResponse(message)
                 exchange.acceptUnverified(inspection.response, inspection.reason)
             }
-            ClientExchange.Inspection.Dropped -> withMessaging { acknowledge(from, message.messageId) }
+            ClientExchange.Inspection.Dropped -> link.acceptResponse(message)
         }
-    }
-
-    private suspend fun onSessionEnded(peer: Endpoint) {
-        log.info { "Session to $peer ended" }
-        withMessaging { onSessionEnded(peer) }
-        val bound = lock.withLock {
-            tokens.forget(peer)
-            exchanges.values.filter { it.peer == peer }
-        }
-        val cause = CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED)
-        forgetPeer(peer)
-        bound.forEach { it.fail(cause) }
-        requestHandler?.onSessionEnded(peer)
-    }
-
-    // ---------------------------------------------------------------- reliable transports
-
-    /**
-     * A request on a connection. RFC 8323 §3.3: a side without a CoAP server MUST answer every request with
-     * an error; 5.01 Not Implemented is the simplest.
-     */
-    internal suspend fun onReliableRequest(connection: ConnectionDriver, message: CoapMessage, sequence: Long) {
-        val request = InboundRequest(this, connection.peer, message, connection, sequence)
-        val handler = requestHandler
-        if (handler == null) {
-            request.respond(CoapMessage.response(message, CoapCode.NOT_IMPLEMENTED))
-            return
-        }
-        launchHandler(handler, request)
     }
 
     /**
-     * A response on a connection, matched by token among that connection's exchanges. RFC 8323 §7.2 lets a
-     * client abort on a notification with an unknown token; here it is only dropped.
+     * Everything bound to [link] ends with [cause]: the DTLS session to its peer ended (RFC 7252 §9.1.1), or
+     * its connection closed (RFC 8323 §3.4, §7.4). Its exchanges fail, what the clients learned about the peer
+     * and its token state go, and the server drops its observers and transfers.
      */
-    internal suspend fun onReliableResponse(connection: ConnectionDriver, message: CoapMessage) {
-        val exchange = lock.withLock { exchanges[ExchangeKey(connection.peer, message.tokenHex)] }
-            ?.takeIf { it.connection === connection }
-        if (exchange == null) {
-            log.debug { "Dropped a response from ${connection.peer} that matches no exchange" }
-            emit(EndpointEvent.MessageRejected(connection.peer, 0, "no exchange for token ${message.tokenHex}"))
-            return
-        }
-        exchange.onResponse(message)
-    }
-
-    /** RFC 8323 §3.4, §7.4: the connection's exchanges fail, and its observers and transfers are dropped. */
-    internal suspend fun onConnectionClosed(connection: ConnectionDriver, reason: String) {
-        val peer = connection.peer
-        log.debug { "Connection to $peer closed: $reason" }
+    internal suspend fun onLinkEnded(link: PeerLink, cause: CoapException) {
+        val peer = link.peer
         val bound = lock.withLock {
             tokens.forget(peer)
-            exchanges.values.filter { it.connection === connection }
+            exchanges.values.filter { it.link == link }
         }
-        val cause = CoapException("The connection to $peer closed: $reason", CoapException.Reason.CONNECTION_CLOSED)
         forgetPeer(peer)
         bound.forEach { it.fail(cause) }
         requestHandler?.onSessionEnded(peer)
@@ -991,75 +720,16 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    /** Emits an [EndpointEvent] from the server side or a connection. */
+    /** Emits an [EndpointEvent] from the server side or a link. */
     internal fun report(event: EndpointEvent) {
         emit(event)
     }
 
-    /**
-     * Receives until the endpoint closes. Returns null when it closed, or the failure when the transport's
-     * receive failed: a transport that cannot receive is gone for good (a socket the system closed, a
-     * network that went away), so the endpoint closes with [CoapException.Reason.TRANSPORT_FAILED] instead
-     * of looking alive while every request runs into a timeout.
-     */
-    private suspend fun receiveLoop(): CoapException? {
-        while (true) {
-            val event = try {
-                transport.receive()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (isClosed) return null
-                log.error(e) { "The datagram transport failed; the endpoint closes" }
-                return CoapException("The datagram transport failed: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
-            }
-            try {
-                when (event) {
-                    is DatagramEvent.Received -> withMessaging { now -> onDatagram(now, event.from, event.datagram) }
-                    is DatagramEvent.SessionEnded -> onSessionEnded(event.endpoint)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log.error(e) { "Failed to process a datagram" }
-            }
-        }
-    }
-
-    /**
-     * Fires the messaging layer's timers. It waits with the dispatcher's delays for deadlines read on the
-     * time source, so the two must be one clock ([clockCheck] warns when they are not). A wakeup means a
-     * call added a deadline earlier than the one it waits for ([UdpMessaging.takeWakeup]): the next deadline
-     * is recomputed, and the timers run only once one is due.
-     */
-    private suspend fun timerLoop() {
-        while (true) {
-            val next = lock.withLock { messaging.nextDeadline() }
-            val wait = next?.minus(now())
-            if (wait == null) {
-                wakeups.receive()
-                continue
-            }
-            if (wait.isPositive()) {
-                val before = now()
-                if (withTimeoutOrNull(wait) { wakeups.receive() } != null) continue
-                clockCheck.afterTimeout(wait, now() - before)
-            }
-            try {
-                withMessaging(signal = false) { now -> onTimer(now) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log.error(e) { "Timer processing failed" }
-            }
-        }
-    }
-
-    override fun toString(): String = "CoapEndpoint($transport)"
+    override fun toString(): String = "CoapEndpoint(${datagram?.transport ?: "no datagram transport"})"
 
     private fun describeTransports(connectors: List<Connector>, listeners: List<ConnectionListener>): String =
         listOfNotNull(
-            transport.takeIf { hasDatagramTransport }?.toString(),
+            datagram?.transport?.toString(),
             connectors.takeIf { it.isNotEmpty() }?.joinToString(prefix = "connectors for ") { connector ->
                 connector.schemes.joinToString("/") { it.scheme }
             },
@@ -1072,19 +742,4 @@ public class CoapEndpoint private constructor(
         /** Seconds after which a client refused for overload may try again. */
         const val OVERLOAD_MAX_AGE = 2L
     }
-}
-
-/** The datagram transport of an endpoint that has none: nothing ever arrives, and sending is refused. */
-private object NoDatagramTransport : DatagramTransport {
-    override val maxDatagramSize: Int = 1152
-
-    override suspend fun send(to: Endpoint, datagram: ByteArray) {
-        throw IllegalStateException("This endpoint has no DatagramTransport")
-    }
-
-    override suspend fun receive(): DatagramEvent = awaitCancellation()
-
-    override suspend fun close() {}
-
-    override fun toString(): String = "no datagram transport"
 }

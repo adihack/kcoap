@@ -8,7 +8,7 @@ import kotlin.time.Duration
 
 /**
  * An outbound Confirmable or Non-confirmable message and its retransmission state (RFC 7252 §4.2).
- * Owned and mutated only by [UdpMessaging]; the upper layer holds it as a handle.
+ * Owned and mutated only by [UdpMessaging]; the layers above a [DatagramLink] hold it as a [Delivery].
  */
 internal class Transmission(
     override val peer: Endpoint,
@@ -21,13 +21,13 @@ internal class Transmission(
      * a message of a body whose [BodyLease] holds the slot.
      */
     val slotHold: Duration?,
-) : SlotHolder {
+) : SlotHolder, Delivery {
     var message: CoapMessage = message
         private set
     var bytes: ByteArray? = bytes
         private set
 
-    val isConfirmable: Boolean get() = message.type == CoapMessageType.CON
+    override val isConfirmable: Boolean get() = message.type == CoapMessageType.CON
 
     /** Confirmable messages always count against NSTART (RFC 7252 §4.7). */
     val holdsSlot: Boolean get() = isConfirmable || slotHold != null
@@ -55,11 +55,15 @@ internal class Transmission(
      * Whether the message still counts as outstanding (RFC 7641 §4.5.1): queued, or a Confirmable one
      * awaiting its ACK, or a Non-confirmable one holding its slot. Safe to read from any coroutine.
      */
-    val isOutstanding: Boolean
+    override val isOutstanding: Boolean
         get() = state == State.QUEUED || (state == State.IN_FLIGHT && (isConfirmable || occupiesSlot))
 
     /** A newer message that replaces this one at the next timeout (RFC 7641 §4.5.2). */
     var replacement: CoapMessage? = null
+
+    override val isDone: Boolean get() = state == State.DONE
+
+    override val isSuperseded: Boolean get() = replacement != null
 
     /** Every Message ID this transmission was sent with; more than one after a replacement. */
     val messageIds: MutableList<Int> = mutableListOf(message.messageId)

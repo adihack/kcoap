@@ -27,7 +27,8 @@ import kotlinx.coroutines.withTimeout
 /**
  * The connections of a [CoapEndpoint] for CoAP over reliable transports (RFC 8323): opened on demand
  * through [connectors] when a request needs one, reused for every exchange with the same peer, released
- * when idle, and accepted from [listeners].
+ * when idle, and accepted from [listeners]. Each one is a [ConnectionLink] to its peer, on a
+ * [ConnectionDriver].
  *
  * RFC 8323 §3 leaves connection management to the implementation; this one keeps at most one
  * connection per peer [Endpoint]. A connection that is being released takes no new requests, and a new
@@ -60,24 +61,24 @@ internal class ReliableConnections(
     }
 
     /**
-     * The usable connection to [peer], opened if there is none: the transport connection, its
+     * The link of the usable connection to [peer], opened if there is none: the transport connection, its
      * handshakes and the CSM exchange, within [ReliableTransportConfig.connectTimeout]. Concurrent
      * callers share one attempt.
      *
-     * @throws IllegalArgumentException when no connector serves the peer's scheme.
-     * @throws CoapException with [CoapException.Reason.CONNECTION_CLOSED] when the connection cannot be
-     *   opened, or the peer asked not to reconnect yet (Hold-Off, §5.5); like [CoapEndpoint.closeCause]
-     *   once the endpoint is closed.
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when [peer] has no connection
+     *   and no connector serves its scheme; with [CoapException.Reason.CONNECTION_CLOSED] when the connection
+     *   cannot be opened, or the peer asked not to reconnect yet (Hold-Off, §5.5); like
+     *   [CoapEndpoint.closeCause] once the endpoint is closed.
      */
-    suspend fun connectionFor(peer: Endpoint): ConnectionDriver = find(peer, reserve = false)
+    suspend fun linkFor(peer: Endpoint): ConnectionLink = find(peer, reserve = false).link
 
     /**
-     * Like [connectionFor], with an exchange already counted on the connection for the caller, so its idle
+     * Like [linkFor], with an exchange already counted on the connection for the caller, so its idle
      * Release (§5.5) cannot start before the caller's request goes out; the caller counts it out again with
-     * [ConnectionDriver.exchangeClosed]. A connection that started releasing meanwhile is skipped, and the
-     * next one opens once it is gone.
+     * [PeerLink.exchangeClosed]. A connection that started releasing meanwhile is skipped, and the next one
+     * opens once it is gone.
      */
-    suspend fun reservedConnectionFor(peer: Endpoint): ConnectionDriver = find(peer, reserve = true)
+    suspend fun reservedLinkFor(peer: Endpoint): ConnectionLink = find(peer, reserve = true).link
 
     private suspend fun find(peer: Endpoint, reserve: Boolean): ConnectionDriver {
         val scheme = schemeOf(peer)
@@ -94,8 +95,10 @@ internal class ReliableConnections(
                     // An accepted connection serves requests to its peer too (RFC 8323 §3.3); a connector is
                     // needed only to open one.
                     existing == null -> {
-                        val connector = connectors.firstOrNull { scheme in it.schemes }
-                            ?: throw IllegalArgumentException("${scheme.scheme} needs a Connector; this endpoint has none for it")
+                        val connector = connectors.firstOrNull { scheme in it.schemes } ?: throw CoapException(
+                            "${scheme.scheme} needs a Connector; this endpoint has none for it",
+                            CoapException.Reason.TRANSPORT_UNAVAILABLE,
+                        )
                         Step.Join(startConnecting(peer, connector).also { if (reserve) it.reservations++ })
                     }
                     existing.isUsable -> Step.Use(existing)
@@ -162,9 +165,6 @@ internal class ReliableConnections(
         var isReserved = false
     }
 
-    /** The connection to [peer] if there is one, for notifications to observers. */
-    suspend fun existing(peer: Endpoint): ConnectionDriver? = lock.withLock { drivers[peer] }
-
     /** Called under [lock]. */
     private fun startConnecting(peer: Endpoint, connector: Connector): Attempt {
         holdOffUntil[peer]?.let { until ->
@@ -212,30 +212,27 @@ internal class ReliableConnections(
         return attempt
     }
 
-    private suspend fun open(peer: Endpoint, connector: Connector): ConnectionDriver {
-        var driver: ConnectionDriver? = null
-        try {
-            return withTimeout(config.reliable.connectTimeout) {
-                val connection = connector.connect(peer)
-                check(connection.remote == peer) { "The connector opened a connection to ${connection.remote}, not $peer" }
-                val opened = withContext(NonCancellable) {
-                    val created = ConnectionDriver(connection, isInitiator = true, this@ReliableConnections, scope, config)
-                    if (registerAndStart(created) { null } != null) {
-                        connection.close()
-                        throw endpoint.closedError()
-                    }
-                    log.debug { "Connected to $peer" }
-                    created
-                }
-                driver = opened
-                // RFC 8323 §3.3 allows requests before the peer's CSM; waiting for it sizes them right from the start.
-                opened.established.await()
-                opened
+    private suspend fun open(peer: Endpoint, connector: Connector): ConnectionDriver = withTimeout(config.reliable.connectTimeout) {
+        val connection = connector.connect(peer)
+        check(connection.remote == peer) { "The connector opened a connection to ${connection.remote}, not $peer" }
+        val opened = withContext(NonCancellable) {
+            val created = ConnectionDriver(connection, isInitiator = true, this@ReliableConnections, scope, config)
+            if (registerAndStart(created) { null } != null) {
+                connection.close()
+                throw endpoint.closedError()
             }
+            log.debug { "Connected to $peer" }
+            created
+        }
+        try {
+            // RFC 8323 §3.3 allows requests before the peer's CSM; waiting for it sizes them right from the start.
+            opened.established.await()
         } catch (e: Throwable) {
-            driver?.let { withContext(NonCancellable) { it.abort("Connection setup failed: ${e.message}") } }
+            // No CSM in time, or the connection closed first: a started connection is aborted, never left open.
+            withContext(NonCancellable) { opened.abort("Connection setup failed: ${e.message}") }
             throw e
         }
+        opened
     }
 
     private suspend fun acceptLoop(listener: ConnectionListener) {
@@ -347,12 +344,16 @@ internal class ReliableConnections(
 
     override val clockCheck: ClockCheck get() = endpoint.clockCheck
 
+    override fun ensureOpen() {
+        endpoint.ensureOpen()
+    }
+
     override suspend fun onRequest(driver: ConnectionDriver, message: CoapMessage, sequence: Long) {
-        endpoint.onReliableRequest(driver, message, sequence)
+        endpoint.onRequest(driver.link, message, sequence)
     }
 
     override suspend fun onResponse(driver: ConnectionDriver, message: CoapMessage) {
-        endpoint.onReliableResponse(driver, message)
+        endpoint.onResponse(driver.link, message)
     }
 
     override suspend fun onReleased(driver: ConnectionDriver, holdOff: Duration?) {
@@ -362,8 +363,11 @@ internal class ReliableConnections(
 
     override suspend fun onClosed(driver: ConnectionDriver, reason: String) {
         try {
-            // Exchanges and observations end before the slot frees, so a new connection never sees their state.
-            endpoint.onConnectionClosed(driver, reason)
+            // RFC 8323 §3.4, §7.4: the connection's exchanges fail, and its observers and transfers are dropped,
+            // before the slot frees, so a new connection never sees their state.
+            log.debug { "Connection to ${driver.peer} closed: $reason" }
+            val cause = CoapException("The connection to ${driver.peer} closed: $reason", CoapException.Reason.CONNECTION_CLOSED)
+            endpoint.onLinkEnded(driver.link, cause)
         } finally {
             // However that ended: a slot that stayed taken would keep the peer unreachable for good.
             withContext(NonCancellable) { lock.withLock { if (drivers[driver.peer] === driver) drivers.remove(driver.peer) } }
@@ -375,17 +379,15 @@ internal class ReliableConnections(
         endpoint.report(event)
     }
 
-    companion object {
-        private val SHUTDOWN_FLUSH_TIMEOUT = 1.seconds
+    private companion object {
+        val SHUTDOWN_FLUSH_TIMEOUT = 1.seconds
 
-        /** The reliable scheme of [peer], or null for datagram peers. */
-        fun schemeOrNull(peer: Endpoint): CoapScheme? = when (peer) {
+        /** The RFC 8323 scheme of [peer]; the endpoint sends only peers on connections here. */
+        fun schemeOf(peer: Endpoint): CoapScheme = when (peer) {
             is Endpoint.Tcp -> peer.scheme
             is Endpoint.WebSocket -> peer.scheme
-            else -> null
+            is Endpoint.Udp, is Endpoint.Secure, is Endpoint.Opaque ->
+                throw IllegalArgumentException("$peer is not reached over a reliable transport")
         }
-
-        fun schemeOf(peer: Endpoint): CoapScheme =
-            schemeOrNull(peer) ?: throw IllegalArgumentException("$peer is not reached over a reliable transport")
     }
 }

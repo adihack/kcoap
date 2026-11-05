@@ -36,7 +36,10 @@ internal interface ConnectionOwner {
     /** Checks that the clock advances with the dispatcher's. */
     val clockCheck: ClockCheck
 
-    /** A request arrived on [driver]; answer it with [ConnectionDriver.respond]. */
+    /** Throws an exception like [CoapEndpoint.closeCause] once the endpoint is closed. */
+    fun ensureOpen()
+
+    /** A request arrived on [driver]; it is answered through [ConnectionDriver.link]. */
     suspend fun onRequest(driver: ConnectionDriver, message: CoapMessage, sequence: Long)
 
     /** A response or notification arrived on [driver]. */
@@ -68,6 +71,9 @@ internal class ConnectionDriver(
     config: CoapEndpointConfig,
 ) {
     val peer: Endpoint = connection.remote
+
+    /** How the exchange layer sends and answers on this connection. */
+    val link: ConnectionLink = ConnectionLink(this, owner, config)
     private val reliableConfig = config.reliable
     private val log = config.loggerFactory.logger(LogTags.COAP_EXCHANGE).with("peer" to peer)
     private val lock = Mutex()

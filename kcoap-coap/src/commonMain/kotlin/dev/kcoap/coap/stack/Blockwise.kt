@@ -5,45 +5,8 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.OptionSet
-import dev.kcoap.coap.codec.MessageCodec
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
-
-/**
- * What one message to a peer may be: at most [maxMessageSize] bytes in [codec]'s framing. That is the
- * transport's datagram size for UDP (architecture rule 3), the peer's Max-Message-Size on a connection
- * (RFC 8323 §5.3.1).
- */
-internal class MessageLimits(
-    val maxMessageSize: Int,
-    private val codec: MessageCodec,
-    /** RFC 8323 §6: both CSMs indicated BERT, so one message may carry several 1024-byte blocks. */
-    val allowsBert: Boolean,
-    /** On a reliable transport SZX 7 means BERT; on datagrams it is reserved (RFC 7959 §2.2). */
-    val isReliable: Boolean,
-) {
-    /** The encoded size of [message]. */
-    fun size(message: CoapMessage): Int = codec.encode(message).size
-
-    /** Whether [message] fits with [reserve] bytes to spare for message security. */
-    fun fits(message: CoapMessage, reserve: Int): Boolean = size(message) + reserve <= maxMessageSize
-
-    /**
-     * Payload bytes that fit next to [header] (its payload is ignored) and [reserve]: the header, token,
-     * options and payload marker come off, and on a stream the 4 bytes the length field can grow by.
-     */
-    fun payloadRoom(header: CoapMessage, reserve: Int): Int {
-        val bare = size(header.toBuilder().apply { payload = ByteArray(0) }.build())
-        return maxMessageSize - reserve - bare - 1 - (if (isReliable) LENGTH_GROWTH else 0)
-    }
-
-    override fun toString(): String = "MessageLimits(maxMessageSize=$maxMessageSize, bert=$allowsBert)"
-
-    private companion object {
-        /** RFC 8323 §3.2: the extended length takes at most 4 bytes. */
-        const val LENGTH_GROWTH = 4
-    }
-}
 
 /**
  * How a body is cut into blocks: [chunk] payload bytes per message, numbered in units of [unit] bytes.

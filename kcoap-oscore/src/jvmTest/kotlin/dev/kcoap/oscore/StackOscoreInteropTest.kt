@@ -294,13 +294,16 @@ class StackOscoreInteropTest {
         )
         val repository = InMemoryContextRepository().apply { add(context) }
         val qBlock = QBlockServerConfig(isEnabled = true, withMessageSecurity = withMessageSecurity)
-        return CoapServer(KtorUdpTransport.bind("127.0.0.1"), scope, CoapServerConfig(security = OscoreServer(repository), qBlock = qBlock)) {
+        val transport = KtorUdpTransport.bind("127.0.0.1")
+        return CoapServer(transport, scope, CoapServerConfig(security = OscoreServer(repository), qBlock = qBlock)) {
             resource("big") { get { CoapResponse.content(big) } }
-        }
+        }.also { ports[it] = transport.localEndpoint.port }
     }
 
-    private fun uriOf(server: CoapServer, path: String): String =
-        "coap://127.0.0.1:${(server.endpoint.transport as KtorUdpTransport).localEndpoint.port}$path"
+    /** The UDP port of each server [qBlockServer] started. */
+    private val ports = HashMap<CoapServer, Int>()
+
+    private fun uriOf(server: CoapServer, path: String): String = "coap://127.0.0.1:${ports.getValue(server)}$path"
 
     /**
      * L11 of docs/plan-qblock-and-platforms.md: libcoap's `coap-client -L 7 -E` probes kcoap with a protected

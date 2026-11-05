@@ -89,7 +89,9 @@ suspend fun useServer(scope: CoroutineScope) {
 - `observe` returns a cold `Flow`: it registers when collected and deregisters (GET with Observe 1)
   when the collector stops. Collectors of the same resource share one registration.
 - `CoapClientConfig` sets the request timeout, a block size for early negotiation, a size limit for
-  downloads and the `EndpointResolver` (IP literals and `localhost` by default).
+  downloads and the `EndpointResolver`: `EndpointResolver.Default` takes IP literals for every scheme and
+  `localhost`, and leaves host names of `coap+tcp` and `coap+ws` to the connector; a `coap://` host name
+  needs a resolver of your own.
 
 ## Client and server on one port
 
@@ -123,7 +125,8 @@ every message at the wire, after OSCORE protection; `toString()` of a message ne
 
 CoAP over reliable transports (RFC 8323) uses the same client and server: the URI scheme picks the
 transport. A server takes listeners, a client takes connectors; both can also share a `CoapEndpoint`
-with a UDP transport.
+with a UDP transport: `CoapEndpoint(scope, config, transport = udp, connectors = ..., listeners = ...)`.
+Block-wise, Observe, Q-Block, Echo, access policies and OSCORE run the same code on every transport.
 
 ```kotlin
 suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
@@ -160,6 +163,8 @@ suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: I
   favour of arrival order (§7.1), and cancelling always deregisters (§7.4).
 - `ping` sends a CoAP Ping and waits for the Pong (§5.4); `endpoint.ping(peer, custody = true)` asks for
   Custody (§5.4.1).
+- A request or ping to a scheme the endpoint has no transport for, such as `coap://` on a client made from
+  connectors only, fails at once with `CoapException.Reason.TRANSPORT_UNAVAILABLE`, naming the scheme.
 - `coaps+ws` works with `wss://` on the engine's TLS. `coaps+tcp` needs a TLS connector, which is not
   built yet.
 

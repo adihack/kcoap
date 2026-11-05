@@ -4,13 +4,14 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.UnprotectedRequest
-import dev.kcoap.coap.stack.ConnectionDriver
+import dev.kcoap.coap.stack.Delivery
+import dev.kcoap.coap.stack.DeliveryOutcome
+import dev.kcoap.coap.stack.DeliveryOwner
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.ExchangeKey
+import dev.kcoap.coap.stack.NotificationPolicy
 import dev.kcoap.coap.stack.OperationKey
-import dev.kcoap.coap.stack.Transmission
-import dev.kcoap.coap.stack.TransmissionOutcome
-import dev.kcoap.coap.stack.TransmissionOwner
+import dev.kcoap.coap.stack.PeerLink
 import dev.kcoap.common.toHex
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
@@ -182,15 +183,19 @@ internal class ObservationRegistry(private val server: CoapServer) {
 /**
  * One entry in a resource's list of observers and its notification state.
  *
- * At most one notification is outstanding per observation (RFC 7641 §4.5.1, enforced per client by the
- * messaging layer's NSTART). A change while one is outstanding is not queued: a Confirmable notification
- * is superseded at its next timeout (§4.5.2), otherwise the latest state is sent once the outstanding one
- * completes, so intermediate states are skipped and the client eventually sees the latest (§4.5).
+ * Every notification goes on the [link] the registration came on: over datagrams to the client's endpoint, on
+ * a connection on that connection (RFC 8323 §7.2), so a closed connection ends the observation with it
+ * (§7.4). The latest state is kept here on every link: at most one notification is outstanding per
+ * observation (RFC 7641 §4.5.1, enforced per client by the messaging layer's NSTART), and a change while one
+ * is outstanding is not queued. A Confirmable notification is superseded at its next timeout (§4.5.2),
+ * otherwise the latest state is sent once the outstanding one completes, so intermediate states are skipped
+ * and the client eventually sees the latest (§4.5). Whether a notification goes Confirmable or
+ * Non-confirmable is the link's [NotificationPolicy]: a connection has no message types and writes each one
+ * as it is.
  *
  * No notification goes out before the registration response: on reliable transports the client ignores
  * Observe values and takes notifications in the order they arrive (RFC 8323 §7.1), so the order of
- * sending is the order of freshness. There, notifications have no message type (§7.2) and go on the
- * registration's [connection].
+ * sending is the order of freshness.
  *
  * An observation registered with Q-Block ([qBlockSize]) gets its notifications as Q-Block2 bodies
  * (RFC 9177 §4.5, [QBlockServer.notify]): its [latest] body is the one outstanding notification until it is
@@ -203,7 +208,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
 internal class ServerObservation(
     private val server: CoapServer,
     val resource: ObservableResource,
-    val peer: Endpoint,
+    /** The link the registration came on, where every notification goes. */
+    val link: PeerLink,
     val token: ByteArray,
     /** The registration request, inner if protected; every notification is generated from it. */
     val request: CoapMessage,
@@ -214,16 +220,18 @@ internal class ServerObservation(
     val blockSize: Int?,
     val operationKey: OperationKey,
     registeredAt: Duration,
-    /** The connection the registration came on (RFC 8323); null for datagrams. */
-    val connection: ConnectionDriver? = null,
-    /** What channel security authenticated when the client registered. */
-    val peerIdentity: PeerIdentity = PeerIdentity.None,
     /**
      * For a registration that carried Q-Block1 or Q-Block2 (RFC 9177 §4.5): the most bytes a block of its
      * notification bodies takes; null for a registration without Q-Block.
      */
     val qBlockSize: Int? = null,
-) : TransmissionOwner {
+) : DeliveryOwner {
+    /** The client's endpoint. */
+    val peer: Endpoint get() = link.peer
+
+    /** What channel security authenticated about the client: the DTLS session, or TLS on the connection. */
+    val peerIdentity: PeerIdentity get() = link.peerIdentity
+
     /** The client endpoint and token (RFC 7641 §4.1); only requests of [identity] replace or cancel it. */
     val key: ExchangeKey = ExchangeKey(peer, token.toHex())
     private val mutex = Mutex()
@@ -233,7 +241,7 @@ internal class ServerObservation(
         private set
 
     @Volatile
-    private var outstanding: Transmission? = null
+    private var outstanding: Delivery? = null
 
     @Volatile
     private var scheduled = false
@@ -244,11 +252,6 @@ internal class ServerObservation(
     @Volatile
     private var registrationSent = false
 
-    private var lastConfirmableAt: Duration = registeredAt
-
-    /** Non-confirmable notifications since the last Confirmable one; under [mutex]. */
-    private var nonConfirmableInRow = 0
-
     /**
      * What the observation keeps of the Q-Block2 body of its latest notification, or of the registration
      * response, if it has [qBlockSize]; written under [QBlockServer]'s lock.
@@ -256,33 +259,43 @@ internal class ServerObservation(
     @Volatile
     var latest: OutstandingBody? = null
 
-    /** Whether message or channel security authenticated the client when it registered. */
-    private val isAuthenticated: Boolean get() = identity != null || peerIdentity != PeerIdentity.None
+    /**
+     * Whether each notification goes Confirmable (RFC 7641 §4.5, §7): interspersed Confirmable ones on a datagram
+     * link, more of them to a client that neither message nor channel security authenticated; under [mutex].
+     */
+    private val policy: NotificationPolicy = link.notificationPolicy(
+        registeredAt,
+        isAuthenticated = identity != null || link.peerIdentity != PeerIdentity.None,
+        confirmableInterval = server.config.confirmableNotificationInterval,
+    )
 
-    /** The registration response was sent; a separate one is the first outstanding notification. */
-    suspend fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
+    /**
+     * The registration response was sent, Confirmable when [confirmable]; a separate one, its [delivery], is the
+     * first outstanding notification.
+     */
+    suspend fun onRegistrationSent(delivery: Delivery?, confirmable: Boolean, now: Duration) {
         val changed = mutex.withLock {
             // On a multi-threaded dispatcher the ACK may already have been processed.
-            outstanding = transmission?.takeIf { it.isOutstanding }
-            if (type == CoapMessageType.CON) lastConfirmableAt = now
+            outstanding = delivery?.takeIf { it.isOutstanding }
+            if (confirmable) policy.sent(confirmable = true, now)
             registrationSent = true
             changedMeanwhile
         }
         if (changed) schedule()
     }
 
-    override suspend fun onOutcome(transmission: Transmission, outcome: TransmissionOutcome) {
+    override suspend fun onOutcome(delivery: Delivery, outcome: DeliveryOutcome) {
         when (outcome) {
-            is TransmissionOutcome.Acknowledged, TransmissionOutcome.SlotReleased -> {
-                if (outstanding !== transmission) return
+            is DeliveryOutcome.Delivered, DeliveryOutcome.Released -> {
+                if (outstanding !== delivery) return
                 outstanding = null
                 // A replacement that never went out, or a change while a NON held the slot: send the latest.
-                if (transmission.replacement != null || changedMeanwhile) schedule()
+                if (delivery.isSuperseded || changedMeanwhile) schedule()
             }
             // §4.5: a Reset or a timed-out Confirmable notification removes the observer.
-            TransmissionOutcome.Reset -> server.observations.remove(this, "reset by client")
-            TransmissionOutcome.TimedOut -> server.observations.remove(this, "notification not acknowledged")
-            is TransmissionOutcome.Failed -> server.observations.remove(this, outcome.cause.message ?: "failed")
+            DeliveryOutcome.Rejected -> server.observations.remove(this, "reset by client")
+            DeliveryOutcome.TimedOut -> server.observations.remove(this, "notification not acknowledged")
+            is DeliveryOutcome.Failed -> server.observations.remove(this, outcome.cause.message ?: "failed")
         }
     }
 
@@ -349,50 +362,24 @@ internal class ServerObservation(
             return@withLock
         }
         changedMeanwhile = false
-        // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK.
-        val type = if (qBlockSize != null && server.mustConfirmBodies(this)) CoapMessageType.CON else nextType(now)
+        // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK. Only a
+        // resource that asks for NON may get Non-confirmable notifications; any other type it names asks for CON.
+        val confirmable = (qBlockSize != null && server.mustConfirmBodies(this)) ||
+            policy.nextIsConfirmable(requested = resource.notificationType != CoapMessageType.NON, now)
+        val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         val notification = server.notification(this, type)
         if (notification == null) {
             // A Q-Block2 body went out (or the observation ended meanwhile).
-            if (latest !== body) count(type, now)
+            if (latest !== body) policy.sent(confirmable, now)
             return@withLock
         }
-        if (current != null && server.endpoint.replaceOutstanding(current, notification)) return@withLock
-        count(type, now)
-        val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
+        if (current != null && link.supersede(current, notification)) return@withLock
+        policy.sent(confirmable, now)
+        // RFC 7641 §4.5.1: a Non-confirmable notification holds the client's NSTART slot this long.
+        val slotHold = if (confirmable) null else server.config.nonConfirmableNotificationInterval
         // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
-        outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
-    }
-
-    /**
-     * Under [mutex]: the type of the next notification. RFC 7641 §7: without client authentication,
-     * Non-confirmable notifications MUST be interspersed with Confirmable ones, whose ACKs confirm that the
-     * client still wants them; a spoofed one does not.
-     */
-    private fun nextType(now: Duration): CoapMessageType =
-        if (resource.notificationType == CoapMessageType.NON &&
-            now - lastConfirmableAt < server.config.confirmableNotificationInterval &&
-            (isAuthenticated || nonConfirmableInRow < UNAUTHENTICATED_NON_CONFIRMABLE_RUN)
-        ) {
-            CoapMessageType.NON
-        } else {
-            CoapMessageType.CON
-        }
-
-    /** Under [mutex]: a notification of [type] went out. */
-    private fun count(type: CoapMessageType, now: Duration) {
-        if (type == CoapMessageType.CON) {
-            lastConfirmableAt = now
-            nonConfirmableInRow = 0
-        } else {
-            nonConfirmableInRow++
-        }
+        outstanding = link.notify(notification, confirmable, this, slotHold)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"
-
-    private companion object {
-        /** At most this many Non-confirmable notifications in a row to an unauthenticated client (RFC 7641 §7). */
-        const val UNAUTHENTICATED_NON_CONFIRMABLE_RUN = 8
-    }
 }

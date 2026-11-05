@@ -2,8 +2,9 @@ package dev.kcoap.coap
 
 /**
  * A CoAP exchange that could not complete because of the peer, the network or the endpoint itself: no
- * acknowledgement, a Reset, a DTLS session that ended, a response that violates the protocol or could not be
- * verified, or an endpoint that is closed or whose transport failed. [reason] says which.
+ * acknowledgement or a Reset over datagrams, a secure session or connection that ended, a response that
+ * violates the protocol or could not be verified, or an endpoint that is closed, has no transport for the peer,
+ * or whose transport failed. [reason] says which; the reasons of one transport shape say so.
  *
  * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses. The exception is a
  * protected request answered only by an error that message security could not verify, which ends with
@@ -21,16 +22,22 @@ public class CoapException(
 
     /** Why the exchange failed. */
     public enum class Reason {
-        /** A Confirmable message was not acknowledged within MAX_TRANSMIT_WAIT (RFC 7252 §4.2). */
+        /**
+         * A Confirmable message was not acknowledged within MAX_TRANSMIT_WAIT (RFC 7252 §4.2). Datagrams only: a
+         * connection has no acknowledgements (RFC 8323 §3.1), and its loss is [CONNECTION_CLOSED].
+         */
         TRANSMISSION_TIMEOUT,
 
         /** No response arrived in time after the request was sent or acknowledged. */
         RESPONSE_TIMEOUT,
 
-        /** The peer rejected the message with a Reset (RFC 7252 §4.2, §4.3). */
+        /** The peer rejected the message with a Reset (RFC 7252 §4.2, §4.3). Datagrams only: RFC 8323 has no Reset. */
         RESET,
 
-        /** The DTLS session to the peer ended; RFC 7252 §9.1.1 forbids retransmitting across epochs. */
+        /**
+         * The secure session to the peer ended: its DTLS session over datagrams, which RFC 7252 §9.1.1 forbids
+         * retransmitting across. A connection that ends is [CONNECTION_CLOSED].
+         */
         SESSION_ENDED,
 
         /**
@@ -46,13 +53,24 @@ public class CoapException(
          */
         TRANSPORT_FAILED,
 
+        /**
+         * The endpoint has no transport for the peer, so nothing was sent: a `coap` or `coaps` peer of an endpoint
+         * without a datagram transport, or a peer of an RFC 8323 scheme that no connector serves and that has no
+         * connection open. The message names the scheme. A configuration mistake rather than a failure of the
+         * peer: the endpoint needs that transport.
+         */
+        TRANSPORT_UNAVAILABLE,
+
         /** A response violated the protocol, for example an unrecognized critical option (RFC 7252 §5.4.1). */
         BAD_RESPONSE,
 
         /** A block-wise transfer could not be completed (RFC 7959), for example blocks of changing ETags. */
         BLOCKWISE_FAILED,
 
-        /** A message did not fit into the transport's datagram size. */
+        /**
+         * A message is larger than the transport or the peer allows: the datagram size, or the peer's
+         * Max-Message-Size on a connection (RFC 8323 §5.3.1).
+         */
         MESSAGE_TOO_LARGE,
 
         /** All Message IDs or tokens for a peer are in use (RFC 7252 §4.4, §5.3.1). */

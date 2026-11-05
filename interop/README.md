@@ -131,12 +131,15 @@ Deviations of libcoap 4.3.5b's client, each pinned by the `upstreamLibcoap…` t
   wants neither, and a Q-Block1 block with M set must fill its block (RFC 7959 §2.3), so kcoap answers
   4.00; libcoap then gives the body up after its first set.
 - **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9): with
-  blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, sends Resets
-  to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later sets, gets
-  every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test also checks
-  kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered on its own
-  token from the cached body, and the Continues' sets on the original token, so it holds only while the fault
-  is libcoap's.
+  blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, usually sends
+  Resets to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later
+  sets, gets every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test
+  also checks kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered
+  on its own token from the cached body, and the Continues' sets on the original token, so it holds only while
+  the fault is libcoap's. It does not assert the Resets: whether libcoap sends any depends on how its request
+  for block 3 interleaves with kcoap's set. One interop run under load saw none; alone, the test saw Resets in
+  20 of 20 runs both before and after the PeerLink refactoring (WP-B1, ee9d3d7 and its head), so the timing is
+  libcoap's and not a change in kcoap.
 
 ```bash
 interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello
@@ -267,9 +270,26 @@ server over real UDP (ktor-network):
   kcoap against kcoap takes these bodies (`OscoreQBlockEndToEndTest`), also the notification bodies of a
   protected observation, which no libcoap run can cover for the same reason.
 
+`kcoap-oscore/src/jvmTest/.../ReliableOscoreInteropTest.kt` runs the same exchanges on connections (RFC
+8323), since OSCORE sits above the link the endpoint picks for the scheme (ADR 0005), both ways over
+`coap+tcp` and `coap+ws`:
+
+- `CoapClient` with `OscoreClient`, `KtorTcpConnector` and `KtorWebSocketConnector` →
+  `coap-server -p <port> -w <ws port> -E -d 5 -X 1152`, a fresh server per transport: GET `/time`, PUT and
+  GET of a dynamic resource, Observe of `/time`, on each transport. The test asserts the B.1.2 challenge each
+  time: libcoap answers the first GET with a protected 4.01 carrying Echo, and kcoap repeats it with that Echo.
+- `coap-client -E` (with `-X 1152` over WebSockets) → `CoapServer` with `OscoreServer` on `KtorTcpListener`,
+  then on `KtorWebSocketListener`, each a server whose context requires freshness as after a restart: GET,
+  Block2 download and Block1 upload in 64-byte inner blocks, Observe with `-s 3`. The test asserts that the
+  server challenged libcoap's first GET with a protected 4.01 carrying Echo, and that libcoap repeated it with
+  that Echo before it got "hello over OSCORE".
+- The challenge and its Echo travel encrypted, so the tests record them inside OSCORE
+  (`RecordingClientSecurity`, `RecordingServerSecurity`), not with a message interceptor on the wire.
+
 ```bash
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
 ./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
+./gradlew :kcoap-oscore:jvmTest --tests '*ReliableOscoreInteropTest*'
 ```
 
 ### EDHOC against libedhoc

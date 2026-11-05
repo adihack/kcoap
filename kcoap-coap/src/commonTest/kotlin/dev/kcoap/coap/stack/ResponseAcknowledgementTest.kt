@@ -232,7 +232,7 @@ class ResponseAcknowledgementTest {
         peer.send(forged)
         delay(1.seconds)
         assertTrue(exchange.isOpen, "the forged response neither answers nor ends the request")
-        assertEquals(true, exchange.transmission?.occupiesSlot, "nor frees its NSTART slot")
+        assertEquals(true, (exchange.delivery as? Transmission)?.occupiesSlot, "nor frees its NSTART slot")
         peer.send(genuine)
 
         assertEquals("genuine", endpoint.awaitResponse(exchange, 10.seconds).payloadAsText())

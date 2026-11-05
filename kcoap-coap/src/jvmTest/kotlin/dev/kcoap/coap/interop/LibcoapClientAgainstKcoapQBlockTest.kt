@@ -598,11 +598,13 @@ class LibcoapClientAgainstKcoapQBlockTest {
     /**
      * Pinned, found by L9: when the gaps of a body span two sets, libcoap 4.3.5's client loses the body although
      * every block reaches it. kcoap loses the first copies of blocks 3, 11 and 14; libcoap asks for block 3 alone
-     * when block 10 arrives, sends Resets to blocks of set 1 on the original token, asks for the rest of set 1 with
-     * 11/M and for the later sets, gets every block 0 to 46, and then exits 0 having written one block of 64 bytes
-     * instead of the 3000-byte body. kcoap's side is checked too ([servedBodyViolations]): one body with one ETag
+     * when block 10 arrives, usually sends Resets to blocks of set 1 on the original token, asks for the rest of
+     * set 1 with 11/M and for the later sets, gets every block 0 to 46, and then exits 0 having written one block
+     * of 64 bytes instead of the 3000-byte body. kcoap's side is checked too ([servedBodyViolations]): one body with one ETag
      * and Size2 on every block, each request answered on its token from it, the Continues on the original one,
-     * as RFC 9177 §4.4 asks; so the pin holds only while the fault is libcoap's.
+     * as RFC 9177 §4.4 asks; so the pin holds only while the fault is libcoap's. The Resets are not asserted:
+     * whether libcoap sends them depends on how its request for block 3 interleaves with kcoap's set, and one
+     * run under load saw none (interop/README.md).
      */
     @Test
     fun upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3() {
@@ -617,7 +619,6 @@ class LibcoapClientAgainstKcoapQBlockTest {
         assertEquals((0L..46L).toSet(), blocksArrived(result), "every block reached libcoap: $result")
         val missing = receivedMessages().first { it.options.path == "/big" && it.options.qBlock2?.number == 3L }
         assertEquals(listOf(BlockOption(3, false, 2)), missing.options.qBlock2List)
-        assertTrue(result.wire.any { it.isSent && it.type == "RST" }, "libcoap resets blocks of the body it still assembles: $result")
         assertEquals(0, result.exitCode, "$result")
         val written = File(directory, "out.bin").readBytes()
         assertTrue(isOneBlock(written), "the deviation: one block of the body written for the body (${written.size} bytes)")

@@ -21,7 +21,8 @@ import kotlin.time.Duration
  *   Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and lets the server
  *   choose the response block size. Set, it also turns BERT off.
  * @property maxResponseBodySize the largest body assembled from Block2 transfers.
- * @property resolver turns the host of a URI into a transport [Endpoint].
+ * @property resolver turns the host of a URI into a transport [Endpoint]; [EndpointResolver.Default] takes IP
+ *   literals for every scheme and passes host names to the connectors of RFC 8323 schemes.
  * @property observeCancellation what a cancelled observation does (RFC 7641 §3.6). Over reliable
  *   transports the client always deregisters (RFC 8323 §7.4).
  * @property echoRetry whether a 4.01 with Echo is answered by repeating the request once with that Echo
@@ -36,7 +37,7 @@ public class CoapClientConfig(
     public val requestTimeout: Duration? = null,
     public val blockSize: Int? = null,
     public val maxResponseBodySize: Int = 1 shl 20,
-    public val resolver: EndpointResolver = EndpointResolver.IpLiterals,
+    public val resolver: EndpointResolver = EndpointResolver.Default,
     public val observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
     public val echoRetry: Boolean = true,
     public val securityReserve: Int = 64,
@@ -65,22 +66,28 @@ public enum class ObserveCancellation {
     FORGET,
 }
 
-/** Finds the transport endpoint for a URI's host and port. */
+/**
+ * Finds the transport endpoint for a URI's host and port. The kind of [Endpoint] it returns picks the
+ * endpoint's transport: an [Endpoint.Udp] or [Endpoint.Secure] its datagram transport, an [Endpoint.Tcp] or
+ * [Endpoint.WebSocket] a connection.
+ */
 public fun interface EndpointResolver {
     /** @throws IllegalArgumentException when the host cannot be resolved. */
     public suspend fun resolve(uri: CoapUri): Endpoint
 
     public companion object {
         /**
-         * For datagram schemes, IP literals in their canonical form ([IpLiteral], so that responses match
-         * by endpoint equality) and `localhost` as 127.0.0.1; other names need a resolver that knows DNS.
+         * IP literals for every scheme, in their canonical form ([IpLiteral], so that responses match by
+         * endpoint equality), and `localhost` as 127.0.0.1 for datagram schemes.
          *
          * For the reliable schemes of RFC 8323 §8, responses arrive on the connection that carried the
          * request, so host names stay names, which the connector resolves and TLS checks the certificate
          * against: `coap+tcp` and `coaps+tcp` become an [Endpoint.Tcp], `coap+ws` and `coaps+ws` the
-         * [Endpoint.WebSocket] at `/.well-known/coap` of the URI's authority.
+         * [Endpoint.WebSocket] at `/.well-known/coap` of the URI's authority. Datagram host names other than
+         * `localhost` need a resolver the application supplies, one that knows DNS, since a response over
+         * datagrams matches its request by the address it comes from.
          */
-        public val IpLiterals: EndpointResolver = EndpointResolver { uri ->
+        public val Default: EndpointResolver = EndpointResolver { uri ->
             val usesTls = uri.scheme.security == ChannelSecurityKind.TLS
             when (uri.scheme.kind) {
                 TransportKind.DATAGRAM -> {

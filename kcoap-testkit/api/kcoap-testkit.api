@@ -73,6 +73,52 @@ public final class dev/kcoap/testkit/InMemoryDatagram {
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract class dev/kcoap/testkit/InMemoryLink {
+	public abstract fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public abstract fun getUri ()Ljava/lang/String;
+	public abstract fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Connections : dev/kcoap/testkit/InMemoryLink {
+	public static final field Companion Ldev/kcoap/testkit/InMemoryLink$Connections$Companion;
+	public static final field DEFAULT_PORT I
+	public fun <init> (Ldev/kcoap/testkit/InMemoryConnections;Ldev/kcoap/transport/CoapScheme;ILdev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryConnections;Ldev/kcoap/transport/CoapScheme;ILdev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getConnections ()Ldev/kcoap/testkit/InMemoryConnections;
+	public final fun getPort ()I
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun getUri ()Ljava/lang/String;
+	public final fun listen (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Connections$Companion {
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Datagrams : dev/kcoap/testkit/InMemoryLink {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryNetwork;ILdev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryNetwork;ILdev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getNetwork ()Ldev/kcoap/testkit/InMemoryNetwork;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun getUri ()Ljava/lang/String;
+	public fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Side {
+	public final fun getConnectors ()Ljava/util/List;
+	public final fun getListeners ()Ljava/util/List;
+	public final fun getTransport ()Ldev/kcoap/transport/DatagramTransport;
+	public final fun peer (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class dev/kcoap/testkit/InMemoryMessageStream : dev/kcoap/testkit/InMemoryConnection, dev/kcoap/transport/MessageConnection {
 	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
@@ -103,6 +149,20 @@ public final class dev/kcoap/testkit/InMemoryNetwork {
 }
 
 public final class dev/kcoap/testkit/InMemoryNetwork$Companion {
+}
+
+public final class dev/kcoap/testkit/InMemorySessions : dev/kcoap/transport/DatagramTransport {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun endAll (Ldev/kcoap/transport/SessionEndReason;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun endAll$default (Ldev/kcoap/testkit/InMemorySessions;Ldev/kcoap/transport/SessionEndReason;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun sessionTo (Ldev/kcoap/transport/Endpoint$Udp;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/kcoap/testkit/InMemoryTransport : dev/kcoap/transport/DatagramTransport {

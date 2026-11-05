@@ -421,7 +421,7 @@ class AmplificationTest {
         val server = fixture.server { resource("large") { get { CoapResponse.content(large) } } }
         val peer = fixture.transport()
         val request = request("large", 1, 1)
-        val inbound = InboundRequest(server.endpoint, peer.localEndpoint, request)
+        val inbound = InboundRequest(server.endpoint.datagramLinkTo(peer.localEndpoint), request)
         val burst = List(10) { CoapResponse.content(large).toMessage(request.token) }
         val probeAnswer = listOf(CoapResponse(CoapCode.CONTENT, payload = ByteArray(16)).toMessage(request.token))
         val authenticated = assertNotNull(ToySecurity.unprotectRequest(ToySecurity.protectRequest(request, peer.localEndpoint).message, peer.localEndpoint))
@@ -432,7 +432,7 @@ class AmplificationTest {
         assertFalse(server.mustVerifyAddress(inbound, request, null, probeAnswer, isBurst = true), "within the factor")
         assertFalse(server.mustVerifyAddress(inbound, request, null, burst, isBurst = false), "single responses are not checked by default")
         val session = Endpoint.Secure(SessionId(3), 0, peer.localEndpoint, PeerIdentity.PreSharedKey(byteArrayOf(1)))
-        assertFalse(server.mustVerifyAddress(InboundRequest(server.endpoint, session, request), request, null, burst, isBurst = true), "DTLS")
+        assertFalse(server.mustVerifyAddress(InboundRequest(server.endpoint.datagramLinkTo(session), request), request, null, burst, isBurst = true), "DTLS")
     }
 
     @Test

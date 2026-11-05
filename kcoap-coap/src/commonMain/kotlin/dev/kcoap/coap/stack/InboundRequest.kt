@@ -9,20 +9,21 @@ import kotlin.coroutines.CoroutineContext
 
 /**
  * A request as the messaging layer delivered it, deduplicated but not yet verified by message security,
- * and the ways to answer it at the messaging layer.
+ * and the ways to answer it at the messaging layer, on the [link] it came on.
  */
 internal class InboundRequest(
-    private val endpoint: CoapEndpoint,
-    val peer: Endpoint,
+    /** The link the request came on, where its response must go (on a connection, that connection: RFC 8323 §3.3). */
+    val link: PeerLink,
     /** The request as received, possibly OSCORE protected. */
     val message: CoapMessage,
-    /** The connection it came on (RFC 8323), where its response must go; null for a datagram. */
-    val connection: ConnectionDriver? = null,
-    /** Its number on [connection], for Custody and Release. */
+    /** Its number on a connection, for Custody and Release (RFC 8323 §5.4.1, §5.5); -1 for a datagram. */
     val sequence: Long = -1,
 ) {
-    /** Over a reliable transport every request is answered, as if Confirmable (RFC 8323 §3.3). */
-    val isConfirmable: Boolean get() = connection != null || message.type == CoapMessageType.CON
+    /** The client's endpoint. */
+    val peer: Endpoint get() = link.peer
+
+    /** Over a link without message types every request is answered, as if Confirmable (RFC 8323 §3.3). */
+    val isConfirmable: Boolean get() = !link.capabilities.hasMessageTypes || message.type == CoapMessageType.CON
 
     /**
      * Whether [respond], [finishWithoutResponse] or [reject] completed. A request on a connection that is
@@ -33,38 +34,33 @@ internal class InboundRequest(
         private set
 
     /** What channel security authenticated: TLS on the connection, or the DTLS session of the endpoint. */
-    val peerIdentity: PeerIdentity
-        get() = connection?.peerIdentity ?: (peer as? Endpoint.Secure)?.identity ?: PeerIdentity.None
+    val peerIdentity: PeerIdentity get() = link.peerIdentity
 
     /**
-     * Sends [response] with the request's token: on the request's connection, or piggybacked if still
-     * possible, else separately as [separateType] (Confirmable requests only). Returns the separate
-     * datagram response's transmission.
+     * Sends [response] with the request's token: piggybacked if still possible, else in a message of its own,
+     * Confirmable for a Confirmable request when [confirmable]; on a connection, on that connection. Returns
+     * the delivery of a separate datagram response, whose outcome goes to [owner].
      */
-    suspend fun respond(
-        response: CoapMessage,
-        owner: TransmissionOwner? = null,
-        separateType: CoapMessageType = CoapMessageType.CON,
-    ): Transmission? {
+    suspend fun respond(response: CoapMessage, owner: DeliveryOwner? = null, confirmable: Boolean = true): Delivery? {
         // RFC 7252 §5.3.1: the token is echoed unchanged; OSCORE does not protect it, so the stack keeps it.
         val withToken = if (response.hasToken(message.token)) response else response.toBuilder().apply { token = message.token }.build()
-        return endpoint.respond(this, withToken, owner, separateType).also { isAnswered = true }
+        return link.respond(this, withToken, owner, confirmable).also { isAnswered = true }
     }
 
     /** Sends an Empty ACK now, promising a separate response (RFC 7252 §5.2.2); nothing on a connection. */
     suspend fun acknowledge() {
-        endpoint.acknowledge(this)
+        link.acknowledge(this)
     }
 
     /** The request is deliberately not answered (RFC 7967): an Empty ACK for a Confirmable datagram. */
     suspend fun finishWithoutResponse() {
-        endpoint.finishWithoutResponse(this)
+        link.finishWithoutResponse(this)
         isAnswered = true
     }
 
     /** Rejects the request with a Reset, or silently for a Non-confirmable request or on a connection. */
     suspend fun reject(reason: String) {
-        endpoint.reject(this, reason)
+        link.reject(this, reason)
         isAnswered = true
     }
 

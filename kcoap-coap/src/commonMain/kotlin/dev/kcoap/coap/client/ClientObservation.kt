@@ -80,7 +80,11 @@ internal class ClientObservation(
     @Volatile
     private var established = false
     private val order = NotificationOrder()
-    private val isReliable = client.endpoint.isReliable(peer)
+    /**
+     * What the link to [peer] does: on an ordered one the Observe value is ignored (RFC 8323 §7.1), and without
+     * a Reset the client must deregister, as a forgotten token ends nothing on the server (RFC 8323 §7.4).
+     */
+    private val capabilities = client.endpoint.capabilities(peer)
 
     /** The token of an established observation with Q-Block (RFC 9177 §4.5); null otherwise. */
     @Volatile
@@ -99,7 +103,7 @@ internal class ClientObservation(
         // The security layer orders what it protects (RFC 8613 §4.1.3.5.2); a client with security whose resolver
         // left this registration unprotected orders it here, like the RFC 7959 path does.
         override fun isFresh(value: Long, isProtected: Boolean): Boolean =
-            isReliable || isProtected || order.accept(value, client.endpoint.now())
+            capabilities.isOrdered || isProtected || order.accept(value, client.endpoint.now())
 
         override fun onEstablished(token: ByteArray, forgets: Boolean) {
             qBlockToken = token
@@ -160,7 +164,7 @@ internal class ClientObservation(
             return Event.Final(client.blockwise.complete(peer, registration, first, confirmable))
         }
         established = true
-        if (!isReliable) order.accept(first.options.observe!!, client.endpoint.now())
+        if (!capabilities.isOrdered) order.accept(first.options.observe!!, client.endpoint.now())
         whole(first)?.let { mutableEvents.emit(Event.Notification(it)) }
         while (true) {
             // A notification with an unrecognized critical option ends the exchange with BAD_RESPONSE: the
@@ -176,7 +180,7 @@ internal class ClientObservation(
                 current.cancel()
                 return Event.Final(client.blockwise.complete(peer, registration, notification, confirmable))
             }
-            if (current.protectedRequest == null && !isReliable && !order.accept(value, client.endpoint.now())) {
+            if (current.protectedRequest == null && !capabilities.isOrdered && !order.accept(value, client.endpoint.now())) {
                 log.debug { "Dropped a stale notification $value (RFC 7641 §3.4)" }
                 continue
             }
@@ -239,7 +243,7 @@ internal class ClientObservation(
      * finds no observer is an ordinary GET, so it deregisters after those too.
      */
     private fun afterRejection(cause: Throwable) {
-        if (!isReliable || cause !is CoapException || cause.reason !in DEREGISTERING_FAILURES) return
+        if (capabilities.hasReset || cause !is CoapException || cause.reason !in DEREGISTERING_FAILURES) return
         val rejected = qBlockToken ?: exchange?.token ?: return
         log.debug { "Deregistering after a rejected response (RFC 8323 §7.4)" }
         client.endpoint.launchGuarded("deregister a rejected observation") {
@@ -262,7 +266,7 @@ internal class ClientObservation(
                 withContext(NonCancellable) {
                     // Its transfer forgets every token as it ends; the deregistration then takes the token over.
                     job?.join()
-                    val forget = (client.config.observeCancellation == ObserveCancellation.FORGET || forgetsToken) && !isReliable
+                    val forget = (client.config.observeCancellation == ObserveCancellation.FORGET || forgetsToken) && capabilities.hasReset
                     if (!forget && !qBlockEnded) deregister(qBlockToken)
                 }
             }
@@ -271,7 +275,7 @@ internal class ClientObservation(
         val current = exchange ?: return
         client.endpoint.launchGuarded("deregister an observation") {
             withContext(NonCancellable) {
-                val forget = client.config.observeCancellation == ObserveCancellation.FORGET && !isReliable
+                val forget = client.config.observeCancellation == ObserveCancellation.FORGET && capabilities.hasReset
                 if (!established || forget || !current.isOpen) {
                     current.cancel()
                     return@withContext

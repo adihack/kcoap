@@ -141,6 +141,22 @@ final class dev.kcoap.testkit/InMemoryNetwork { // dev.kcoap.testkit/InMemoryNet
     }
 }
 
+final class dev.kcoap.testkit/InMemorySessions : dev.kcoap.transport/DatagramTransport { // dev.kcoap.testkit/InMemorySessions|null[0]
+    constructor <init>(dev.kcoap.testkit/InMemoryTransport, dev.kcoap.transport/PeerIdentity = ...) // dev.kcoap.testkit/InMemorySessions.<init>|<init>(dev.kcoap.testkit.InMemoryTransport;dev.kcoap.transport.PeerIdentity){}[0]
+
+    final val localEndpoint // dev.kcoap.testkit/InMemorySessions.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.testkit/InMemorySessions.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val maxDatagramSize // dev.kcoap.testkit/InMemorySessions.maxDatagramSize|{}maxDatagramSize[0]
+        final fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.testkit/InMemorySessions.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemorySessions.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/InMemorySessions.close|close(){}[0]
+    final suspend fun endAll(dev.kcoap.transport/SessionEndReason = ...) // dev.kcoap.testkit/InMemorySessions.endAll|endAll(dev.kcoap.transport.SessionEndReason){}[0]
+    final suspend fun receive(): dev.kcoap.transport/DatagramEvent // dev.kcoap.testkit/InMemorySessions.receive|receive(){}[0]
+    final suspend fun send(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.testkit/InMemorySessions.send|send(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+    final suspend fun sessionTo(dev.kcoap.transport/Endpoint.Udp): dev.kcoap.transport/Endpoint.Secure // dev.kcoap.testkit/InMemorySessions.sessionTo|sessionTo(dev.kcoap.transport.Endpoint.Udp){}[0]
+}
+
 final class dev.kcoap.testkit/InMemoryTransport : dev.kcoap.transport/DatagramTransport { // dev.kcoap.testkit/InMemoryTransport|null[0]
     final val localEndpoint // dev.kcoap.testkit/InMemoryTransport.localEndpoint|{}localEndpoint[0]
         final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.testkit/InMemoryTransport.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
@@ -212,6 +228,68 @@ final class dev.kcoap.testkit/StressScope : kotlinx.coroutines/CoroutineScope { 
         final fun <get-coroutineContext>(): kotlin.coroutines/CoroutineContext // dev.kcoap.testkit/StressScope.coroutineContext.<get-coroutineContext>|<get-coroutineContext>(){}[0]
     final val iteration // dev.kcoap.testkit/StressScope.iteration|{}iteration[0]
         final fun <get-iteration>(): kotlin/Int // dev.kcoap.testkit/StressScope.iteration.<get-iteration>|<get-iteration>(){}[0]
+}
+
+sealed class dev.kcoap.testkit/InMemoryLink { // dev.kcoap.testkit/InMemoryLink|null[0]
+    abstract val scheme // dev.kcoap.testkit/InMemoryLink.scheme|{}scheme[0]
+        abstract fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.testkit/InMemoryLink.scheme.<get-scheme>|<get-scheme>(){}[0]
+    abstract val uri // dev.kcoap.testkit/InMemoryLink.uri|{}uri[0]
+        abstract fun <get-uri>(): kotlin/String // dev.kcoap.testkit/InMemoryLink.uri.<get-uri>|<get-uri>(){}[0]
+
+    abstract suspend fun client(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.client|client(){}[0]
+    abstract suspend fun cut() // dev.kcoap.testkit/InMemoryLink.cut|cut(){}[0]
+    abstract suspend fun server(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.server|server(){}[0]
+
+    final class Connections : dev.kcoap.testkit/InMemoryLink { // dev.kcoap.testkit/InMemoryLink.Connections|null[0]
+        constructor <init>(dev.kcoap.testkit/InMemoryConnections, dev.kcoap.transport/CoapScheme = ..., kotlin/Int = ..., dev.kcoap.transport/PeerIdentity = ...) // dev.kcoap.testkit/InMemoryLink.Connections.<init>|<init>(dev.kcoap.testkit.InMemoryConnections;dev.kcoap.transport.CoapScheme;kotlin.Int;dev.kcoap.transport.PeerIdentity){}[0]
+
+        final val connections // dev.kcoap.testkit/InMemoryLink.Connections.connections|{}connections[0]
+            final fun <get-connections>(): dev.kcoap.testkit/InMemoryConnections // dev.kcoap.testkit/InMemoryLink.Connections.connections.<get-connections>|<get-connections>(){}[0]
+        final val port // dev.kcoap.testkit/InMemoryLink.Connections.port|{}port[0]
+            final fun <get-port>(): kotlin/Int // dev.kcoap.testkit/InMemoryLink.Connections.port.<get-port>|<get-port>(){}[0]
+        final val scheme // dev.kcoap.testkit/InMemoryLink.Connections.scheme|{}scheme[0]
+            final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.testkit/InMemoryLink.Connections.scheme.<get-scheme>|<get-scheme>(){}[0]
+        final val uri // dev.kcoap.testkit/InMemoryLink.Connections.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // dev.kcoap.testkit/InMemoryLink.Connections.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryLink.Connections.toString|toString(){}[0]
+        final suspend fun client(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.Connections.client|client(){}[0]
+        final suspend fun cut() // dev.kcoap.testkit/InMemoryLink.Connections.cut|cut(){}[0]
+        final suspend fun listen(): dev.kcoap.testkit/InMemoryConnectionListener // dev.kcoap.testkit/InMemoryLink.Connections.listen|listen(){}[0]
+        final suspend fun server(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.Connections.server|server(){}[0]
+
+        final object Companion { // dev.kcoap.testkit/InMemoryLink.Connections.Companion|null[0]
+            final const val DEFAULT_PORT // dev.kcoap.testkit/InMemoryLink.Connections.Companion.DEFAULT_PORT|{}DEFAULT_PORT[0]
+                final fun <get-DEFAULT_PORT>(): kotlin/Int // dev.kcoap.testkit/InMemoryLink.Connections.Companion.DEFAULT_PORT.<get-DEFAULT_PORT>|<get-DEFAULT_PORT>(){}[0]
+        }
+    }
+
+    final class Datagrams : dev.kcoap.testkit/InMemoryLink { // dev.kcoap.testkit/InMemoryLink.Datagrams|null[0]
+        constructor <init>(dev.kcoap.testkit/InMemoryNetwork, kotlin/Int = ..., dev.kcoap.transport/PeerIdentity = ...) // dev.kcoap.testkit/InMemoryLink.Datagrams.<init>|<init>(dev.kcoap.testkit.InMemoryNetwork;kotlin.Int;dev.kcoap.transport.PeerIdentity){}[0]
+
+        final val network // dev.kcoap.testkit/InMemoryLink.Datagrams.network|{}network[0]
+            final fun <get-network>(): dev.kcoap.testkit/InMemoryNetwork // dev.kcoap.testkit/InMemoryLink.Datagrams.network.<get-network>|<get-network>(){}[0]
+        final val scheme // dev.kcoap.testkit/InMemoryLink.Datagrams.scheme|{}scheme[0]
+            final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.testkit/InMemoryLink.Datagrams.scheme.<get-scheme>|<get-scheme>(){}[0]
+        final val uri // dev.kcoap.testkit/InMemoryLink.Datagrams.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // dev.kcoap.testkit/InMemoryLink.Datagrams.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryLink.Datagrams.toString|toString(){}[0]
+        final suspend fun client(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.Datagrams.client|client(){}[0]
+        final suspend fun cut() // dev.kcoap.testkit/InMemoryLink.Datagrams.cut|cut(){}[0]
+        final suspend fun server(): dev.kcoap.testkit/InMemoryLink.Side // dev.kcoap.testkit/InMemoryLink.Datagrams.server|server(){}[0]
+    }
+
+    final class Side { // dev.kcoap.testkit/InMemoryLink.Side|null[0]
+        final val connectors // dev.kcoap.testkit/InMemoryLink.Side.connectors|{}connectors[0]
+            final fun <get-connectors>(): kotlin.collections/List<dev.kcoap.transport/Connector> // dev.kcoap.testkit/InMemoryLink.Side.connectors.<get-connectors>|<get-connectors>(){}[0]
+        final val listeners // dev.kcoap.testkit/InMemoryLink.Side.listeners|{}listeners[0]
+            final fun <get-listeners>(): kotlin.collections/List<dev.kcoap.transport/ConnectionListener> // dev.kcoap.testkit/InMemoryLink.Side.listeners.<get-listeners>|<get-listeners>(){}[0]
+        final val transport // dev.kcoap.testkit/InMemoryLink.Side.transport|{}transport[0]
+            final fun <get-transport>(): dev.kcoap.transport/DatagramTransport? // dev.kcoap.testkit/InMemoryLink.Side.transport.<get-transport>|<get-transport>(){}[0]
+
+        final suspend fun peer(dev.kcoap.transport/Endpoint): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryLink.Side.peer|peer(dev.kcoap.transport.Endpoint){}[0]
+    }
 }
 
 final object dev.kcoap.testkit/ByteMutator { // dev.kcoap.testkit/ByteMutator|null[0]

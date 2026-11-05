@@ -355,7 +355,7 @@ class EdgeCaseTest {
 
     @Test
     fun theDefaultResolverAcceptsOnlyIpLiteralsAndLocalhostForDatagrams() = runTest {
-        val resolver = EndpointResolver.IpLiterals
+        val resolver = EndpointResolver.Default
         assertEquals(Endpoint.Udp("::1", 5683), resolver.resolve(CoapUri.parse("coap://[0:0:0:0:0:0:0:1]")))
         assertEquals(Endpoint.Udp("127.0.0.1", 1234), resolver.resolve(CoapUri.parse("coap://localhost:1234")))
         assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://example.com")) }
@@ -364,7 +364,7 @@ class EdgeCaseTest {
     /** RFC 8323 §8: responses come on the connection, so names stay names for the connector to resolve. */
     @Test
     fun theDefaultResolverMapsReliableSchemesToConnectionEndpoints() = runTest {
-        val resolver = EndpointResolver.IpLiterals
+        val resolver = EndpointResolver.Default
         assertEquals(Endpoint.Tcp("127.0.0.1", 5683), resolver.resolve(CoapUri.parse("coap+tcp://127.0.0.1")))
         assertEquals(Endpoint.Tcp("::1", 5684, usesTls = true), resolver.resolve(CoapUri.parse("coaps+tcp://[0::1]")))
         assertEquals(Endpoint.Tcp("example.com", 5683), resolver.resolve(CoapUri.parse("coap+tcp://example.com")))

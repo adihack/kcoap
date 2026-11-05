@@ -2,7 +2,7 @@ package dev.kcoap.coap.server
 
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.QBlockAction
-import dev.kcoap.coap.stack.TransmissionOwner
+import dev.kcoap.coap.stack.DeliveryOwner
 
 /** What answers one request in a [CoapServer]'s pipeline. */
 internal sealed interface Reply {
@@ -15,7 +15,7 @@ internal sealed interface Reply {
         val response: CoapResponse,
         val observation: ServerObservation? = null,
         val isChallenge: Boolean = false,
-        val owner: TransmissionOwner? = null,
+        val owner: DeliveryOwner? = null,
     ) : Reply
 
     /**

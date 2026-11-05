@@ -92,7 +92,8 @@ closed in both roles ([ADR 0008](adr/0008-fail-closed-message-security.md)):
 
 ## The CoAP endpoint as built
 
-For CoAP over UDP the layers map onto code like this (`kcoap-coap`):
+One `CoapEndpoint` runs one exchange layer over every transport it was given, through an internal link per
+peer ([ADR 0005](adr/0005-peer-link-seam.md)). The layers map onto code like this (`kcoap-coap`):
 
 ```
 CoapClient / CoapServer       client.*, server.*: suspend calls, Flow for Observe, resource tree + DSL
@@ -101,23 +102,57 @@ Q-Block (RFC 9177), opt-in    QBlockClient / QBlockServer driving the sans-IO co
                               QBlock1Receiver, QBlock2Sender, QBlock2Receiver (stack.*)
 Exchanges                     CoapEndpoint + ClientExchange: tokens, matching by (Endpoint, token)
 Message security              ClientMessageSecurity / ServerMessageSecurity, called per message
-Messaging                     UdpMessaging: sans-IO, internal
-Transport                     DatagramTransport: KtorUdpTransport, InMemoryTransport, later DTLS
+──────── PeerLink (internal)  send, respond, acknowledge, reject, ping, notify; limits, capabilities;
+                              how a delivery ended (Delivered, Released, Rejected, TimedOut, Failed)
+DatagramLink                  ConnectionLink (one per connection, on a ConnectionDriver)
+  UdpMessaging: sans-IO         ReliableMessaging: sans-IO (RFC 8323)
+  one lock, receive and timer   ReliableConnections: connect, accept, reuse, release
+DatagramTransport             Connector / ConnectionListener (TCP, WebSocket), InMemoryConnections
+  KtorUdpTransport, InMemoryTransport, later DTLS
 ```
 
 Block-wise and Observe sit above message security, so OSCORE protects each block and each notification
 on its own (inner Block-wise, RFC 8613 §4.1.3.4.1); outer Block-wise for proxies is not built.
 
-**One endpoint per socket, one lock.** `CoapEndpoint` owns the messaging state machine and the exchange
-registry behind a single `Mutex` that is never held across a suspension: a call takes the lock, runs the
-state machine, takes its effects (datagrams to send, messages to deliver, outcomes of transmissions),
-releases the lock and only then performs them, under `NonCancellable`, because the state machine has
-committed to them and they may belong to other exchanges. Request handlers, message security and
-transports therefore run without the lock; each inbound request gets its own coroutine, up to
-`maxConcurrentRequests`. The receive loop and a timer loop run in the scope the endpoint was given, on
-its dispatcher (on Android or iOS a scope such as `lifecycleScope + Dispatchers.Default`), and start once
-a server attaches or the first request or ping goes out, so a server's resources are in place before the
-first request, whichever of a server and a client sharing the endpoint is created first. Client-side
+**One exchange layer, a link per peer.** The endpoint picks the link once, by the kind of the peer's
+`Endpoint`, in one exhaustive `when`: `Udp`, `Secure` and `Opaque` peers go to the datagram link, `Tcp` and
+`WebSocket` peers to their connection, opened through the `Connector` that serves the scheme or accepted from
+a listener. There is no scheme registry ([ADR 0004](adr/0004-no-scheme-registry.md)): `Connector.schemes`
+is the lookup, and a peer the endpoint has no transport for fails at once with
+`CoapException(TRANSPORT_UNAVAILABLE)`, naming the scheme. Above the link, the exchange, Block-wise,
+Observe, Q-Block, Echo/Request-Tag, access and message-security code sees only what the link reports:
+
+- `limits`: the largest message, the datagram size or the peer's Max-Message-Size (RFC 8323 §5.3.1), and
+  whether BERT is allowed (§6); every block size follows them.
+- `capabilities`: `hasReset` (a Reset ends a forgotten observation; without one the client deregisters,
+  RFC 8323 §7.4), `hasMessageTypes` (CON/NON, ACKs, NSTART, Q-Block sets and timers; without them every
+  request is answered and a Q-Block body goes back to back, RFC 9177 Appendix B), `isOrdered` (Observe values
+  are not needed to order notifications, RFC 8323 §7.1) and `verifiesAddress` (a connection's handshake
+  already showed the client receives at its address, so no Echo address check, RFC 9175 §2.4).
+- `DeliveryOutcome` for what it sent on its own: `Delivered` (with a piggybacked response), `Released` (a
+  NON's NSTART hold ended), `Rejected` (a Reset), `TimedOut`, `Failed`. A connection writes a message and is
+  done; a closed one fails it.
+
+The datagram link owns what only RFC 7252 has: message types and Message IDs, ACKs and Resets,
+retransmission, deduplication, NSTART and the `BodyLease` of a Non-confirmable Q-Block body, and the
+notification policy of RFC 7641 §4.5 and §7 (interspersed Confirmable notifications, the Non-confirmable
+slot hold). On a connection a lease is granted at once and holds nothing, and a notification has no type.
+`ObservableResource.notificationType` and `CoapRequest.isConfirmable` are hints that only datagram links
+follow.
+
+**One lock per component.** The endpoint keeps the exchange registry and its closed state behind one
+`Mutex`; the datagram link keeps the messaging state machine behind its own, as each connection's
+`ConnectionDriver` does. None is held across a suspension: a call takes the lock, runs the state machine,
+takes its effects (datagrams to send, messages to deliver, outcomes of transmissions), releases the lock
+and only then performs them, under `NonCancellable`, because the state machine has committed to them and
+they may belong to other exchanges. A link checks the endpoint's closed state under its own lock before it
+sends anything new, and the terminal transition closes the link after it set that state, so nothing new
+goes out once the endpoint closed. Request handlers, message security and transports run without any lock;
+each inbound request gets its own coroutine, up to `maxConcurrentRequests`. The datagram link's receive
+loop and timer loop run in the scope the endpoint was given, on its dispatcher (on Android or iOS a scope
+such as `lifecycleScope + Dispatchers.Default`), and start once a server attaches or the first request or
+ping goes out, so a server's resources are in place before the first request, whichever of a server and a
+client sharing the endpoint is created first. Client-side
 response verification (OSCORE) runs on the receive loop, before the response is queued, so a forged
 notification cannot push out a genuine one; message-security backends should be fast or offload their
 own work. A separate response is acknowledged or reset only after that verification and the check of
@@ -254,8 +289,9 @@ endpoint unless the configuration names one.
    messages of that endpoint without retransmitting, fails its exchanges and client observations
    (`CoapException.Reason.SESSION_ENDED`), removes its server observers and block-wise state, and drops
    its deduplication, Message ID and token state.
-3. Block sizes and the message size limit come from `DatagramTransport.maxDatagramSize`, minus a
-   configurable reserve when message security is on.
+3. Block sizes and the message size limit come from the link's limits, the transport's
+   `DatagramTransport.maxDatagramSize` on a datagram link, minus a configurable reserve when message
+   security is on.
 4. `RequestContext` carries the `PeerIdentity` of an `Endpoint.Secure` peer next to the OSCORE
    `SecurityIdentity`.
 5. One `TimeSource` per endpoint drives every timer, and it advances with the clock of the dispatcher the
@@ -270,18 +306,23 @@ rejections, session ends and observer changes. Logging follows `code-style.md` u
 
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also
-run against libcoap over real UDP (`interop/README.md`).
+run against libcoap over real UDP (`interop/README.md`). `ExchangeConformanceTest` runs one suite over a
+datagram link and a connection link (kcoap-testkit's `InMemoryLink`, with `InMemorySessions` standing in
+for DTLS so a datagram link can be lost), and `OscoreOverLinksTest` does the same for OSCORE.
 
 ### Over reliable transports (RFC 8323)
 
 The same `CoapEndpoint` runs connections next to (or instead of) its datagram transport, all in common
-code, sans-IO where the protocol rules are:
+code, sans-IO where the protocol rules are. Each connection is a `ConnectionLink`, so everything above the
+link is the code that runs over datagrams:
 
 ```
 CoapClient / CoapServer       unchanged; the URI scheme picks the transport
-Block-wise, Observe           sizes from the peer's Max-Message-Size, BERT; Observe values ignored (§7.1)
-Exchanges                     CoapEndpoint: matching by (Endpoint, token) and by connection
+Block-wise, Observe           sizes from the link's limits (Max-Message-Size, BERT); Observe values ignored
+                              on an ordered link (§7.1)
+Exchanges                     CoapEndpoint: matching by (Endpoint, token) and by link
 Message security              unchanged; signaling stays unprotected below it
+ConnectionLink                per connection: the PeerLink of RFC 8323, no types, no Reset, Custody
 ReliableConnections           per endpoint: connect on demand through Connectors, one per peer, idle
                               release, Hold-Off; accept from ConnectionListeners
 ConnectionDriver              per connection: reader, ordered writer, timers, one lock, back-pressure
@@ -296,8 +337,9 @@ Transport                     Connection SPI: ByteStreamConnection (TCP) | Messa
   takes requests, so an idle Release never starts between the two. A connection opened on demand is
   counted busy for its opener until it is handed over, in one step, to every request that waited for it,
   so even an event loop that resumes them late never finds it released. Every
-  exchange and every server observation remembers its connection, so responses and notifications go
-  back on it and a closed connection fails exactly what was on it (§3.4, §7.4).
+  exchange, inbound request and server observation holds the link it came on, so responses and
+  notifications go back on that connection and a closed connection fails exactly what was on it
+  (§3.4, §7.4).
 - **CSM first.** Each side sends its CSM at once, without waiting for the peer's (§3.3). The peer's CSM
   must be its first message (Empty excepted, §3.4), within `csmTimeout`, or the connection is aborted.
   A client sends its first request after the peer's CSM, so block sizes follow the peer's
@@ -372,8 +414,13 @@ the connection and `Endpoint.Tcp` / `Endpoint.WebSocket` only describe the peer.
 TLS (`coaps+tcp` and `coap+tcp` are distinct origins, RFC 8323 §8); for a connection this side opens, a
 host name stays a name, which the connector resolves and TLS checks the certificate against.
 
-Everything above the messaging layer sees exchanges, never sockets. A URI scheme registry maps `coap`,
-`coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws` and `coaps+ws` to a transport factory.
+Everything above the messaging layer sees exchanges and links, never sockets. There is no URI scheme
+registry ([ADR 0004](adr/0004-no-scheme-registry.md)): the client's `EndpointResolver` turns a URI into an
+`Endpoint` (`EndpointResolver.Default` takes IP literals for every scheme, `localhost` for datagrams, and
+leaves host names of RFC 8323 schemes to the connector), `CoapScheme` maps each scheme to a `TransportKind`
+and a channel security, and the endpoint picks the link by the kind of `Endpoint`: its datagram transport for
+`coap` (and `coaps` once DTLS exists), the `Connector` whose `schemes` include `coap+tcp`, `coaps+tcp`,
+`coap+ws` or `coaps+ws`. A scheme nothing serves fails with `CoapException(TRANSPORT_UNAVAILABLE)`.
 
 ## DTLS
 

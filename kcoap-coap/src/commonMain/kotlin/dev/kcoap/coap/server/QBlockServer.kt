@@ -13,6 +13,8 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
+import dev.kcoap.coap.stack.DeliveryOutcome
+import dev.kcoap.coap.stack.DeliveryOwner
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
@@ -26,8 +28,6 @@ import dev.kcoap.coap.stack.QBlock2Sender
 import dev.kcoap.coap.stack.QBlockAction
 import dev.kcoap.coap.stack.QBlockCheck
 import dev.kcoap.coap.stack.QBlockTiming
-import dev.kcoap.coap.stack.TransmissionOutcome
-import dev.kcoap.coap.stack.TransmissionOwner
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.Endpoint
 import kotlin.math.ceil
@@ -158,7 +158,7 @@ internal class QBlockServer(
     /** Whether Q-Block may run for [inbound]: it is on, and allowed with the request's security and transport. */
     fun accepts(inbound: InboundRequest, unprotected: UnprotectedRequest?): Boolean =
         qBlock.isEnabled && (unprotected == null || qBlock.withMessageSecurity) &&
-            (inbound.connection == null || qBlock.onReliableTransports)
+            (inbound.link.capabilities.hasMessageTypes || qBlock.onReliableTransports)
 
     /**
      * The reply to [ref], a request that carries Q-Block1 or Q-Block2 and that [accepts], for [resource]; null
@@ -237,7 +237,7 @@ internal class QBlockServer(
                 else -> null
             }
             if (limit != null) return Upload.Refused(limit)
-            val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.connection != null)
+            val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.link.capabilities)
             isFirst = true
             PartialBody(key, QBlock1Receiver(ref.request, mode, timing, now)).also { partials[key] = it }
         }
@@ -352,8 +352,8 @@ internal class QBlockServer(
     )
 
     /** §4.3: a Reset to a 4.08 shows the client abandoned the body, which is then discarded. */
-    private fun resetOwner(body: PartialBody) = TransmissionOwner { _, outcome ->
-        if (outcome == TransmissionOutcome.Reset) {
+    private fun resetOwner(body: PartialBody) = DeliveryOwner { _, outcome ->
+        if (outcome == DeliveryOutcome.Rejected) {
             launch("discard a Q-Block1 body after a Reset") {
                 val actions = lock.withLock {
                     if (body.isDropped) return@withLock emptyList()
@@ -526,7 +526,7 @@ internal class QBlockServer(
             observation?.let { server.observations.remove(it, "registration response 4.13") }
             return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The response options leave no room for a block"))
         }
-        val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.connection != null)
+        val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.link.capabilities)
         val now = endpoint.now()
         val evicted = ArrayList<Pair<Endpoint, Limit>>()
         val reply = lock.withLock {
@@ -699,24 +699,24 @@ internal class QBlockServer(
      * no Observe and is no notification: a Reset to it shows only that its client forgot that request's token,
      * so only what is still queued for that request goes, and the observer and the rest of the body stay.
      */
-    private fun blockOwner(body: ServedBody, num: Long, target: QBlockTarget) = TransmissionOwner { _, outcome ->
+    private fun blockOwner(body: ServedBody, num: Long, target: QBlockTarget) = DeliveryOwner { _, outcome ->
         val isObserved = body.observation != null
         val event: ((QBlock2Sender<QBlockTarget>, Duration) -> List<QBlockAction<QBlockTarget>>)? = when (outcome) {
-            is TransmissionOutcome.Acknowledged -> { sender, now -> sender.onAcknowledged(now, num) }
-            TransmissionOutcome.TimedOut -> { sender, now -> sender.onTimeout(now, num) }
-            TransmissionOutcome.Reset, is TransmissionOutcome.Failed -> { sender, now ->
+            is DeliveryOutcome.Delivered -> { sender, now -> sender.onAcknowledged(now, num) }
+            DeliveryOutcome.TimedOut -> { sender, now -> sender.onTimeout(now, num) }
+            DeliveryOutcome.Rejected, is DeliveryOutcome.Failed -> { sender, now ->
                 log.debug { "Block $num of $body to $target ended with $outcome" }
                 if (isObserved) sender.onReset(now, target) else sender.onReset(now)
             }
-            TransmissionOutcome.SlotReleased -> null
+            DeliveryOutcome.Released -> null
         }
         val removal = if (!isObserved || !target.carriesObserve) {
             null
         } else {
             when (outcome) {
-                TransmissionOutcome.Reset -> "reset by client"
-                TransmissionOutcome.TimedOut -> "notification not acknowledged"
-                is TransmissionOutcome.Failed -> outcome.cause.message ?: "failed"
+                DeliveryOutcome.Rejected -> "reset by client"
+                DeliveryOutcome.TimedOut -> "notification not acknowledged"
+                is DeliveryOutcome.Failed -> outcome.cause.message ?: "failed"
                 else -> null
             }
         }
@@ -796,7 +796,7 @@ internal class QBlockServer(
             val target = action.ref
             val size = UdpMessageCodec.encode(body.block(action.num, action.more, target.token, body.observeFor(target))).size.toLong()
             val inbound = (target as? QBlockRequest)?.inbound ?: return@sumOf size
-            val isConfirmable = inbound.connection == null && inbound.message.type == CoapMessageType.CON
+            val isConfirmable = inbound.link.capabilities.hasMessageTypes && inbound.message.type == CoapMessageType.CON
             if (isConfirmable && (inbound.isAnswered || !piggybacked.add(inbound))) size * copies else size
         }
     }
@@ -828,7 +828,7 @@ internal class QBlockServer(
         val requested = checkNotNull(observation.qBlockSize) { "$observation was not registered with Q-Block" }
         val size = blockSize(response, limits, requested)
             ?: return CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The notification options leave no room for a block")
-        val mode = BodyMode.of(type, observation.connection != null)
+        val mode = BodyMode.of(type, observation.link.capabilities)
         val nonTimeoutRandom = lock.withLock { timing.drawNonTimeoutRandom(random) }
         val lease = if (mode == BodyMode.NON) endpoint.leaseBody(observation.peer, response.payloadSize, nonTimeoutRandom) else null
         val target = NotificationBody(observation, type, lease)
@@ -875,7 +875,7 @@ internal class QBlockServer(
             val message = body.block(num, more, observation.token, body.observeFor(target))
             val outgoing = observation.unprotected?.protectResponse(message) ?: message
             val owner = blockOwner(body, num, target)
-            endpoint.sendSeparately(observation.peer, outgoing, target.type, owner, connection = observation.connection)
+            observation.link.notify(outgoing, target.type == CoapMessageType.CON, owner, slotHold = null)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1061,7 +1061,7 @@ internal class QBlockServer(
         )
     }
 
-    private suspend fun respond(ref: QBlockRequest, message: CoapMessage, owner: TransmissionOwner? = null) {
+    private suspend fun respond(ref: QBlockRequest, message: CoapMessage, owner: DeliveryOwner? = null) {
         try {
             ref.inbound.respond(ref.unprotected?.protectResponse(message) ?: message, owner)
         } catch (e: CancellationException) {

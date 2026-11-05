@@ -292,7 +292,7 @@ public class CoapServer private constructor(
         if (resource == null) return Reply.Single(CoapResponse(CoapCode.NOT_FOUND))
         val block1 = options.block1
         val block2 = options.block2
-        val limits = endpoint.limits(inbound.connection)
+        val limits = inbound.link.limits
         if (!limits.isReliable && (block1?.isBert == true || block2?.isBert == true)) {
             // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00; it is BERT on RFC 8323 transports only.
             return Reply.Single(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
@@ -365,8 +365,7 @@ public class CoapServer private constructor(
         var observation: ServerObservation? = null
         if (registering && response.isSuccess) {
             observation = ServerObservation(
-                this, observable, peer, request.token, effective, unprotected, unprotected?.identity,
-                block2?.size, key, now, inbound.connection, inbound.peerIdentity,
+                this, observable, inbound.link, request.token, effective, unprotected, unprotected?.identity, block2?.size, key, now,
             )
             val registration = observations.register(observation)
             if (registration == ObservationRegistry.Registration.ADDED) {
@@ -421,8 +420,8 @@ public class CoapServer private constructor(
         val response = acceptable(options, invoke(resource, context))
         if (options.observe == OBSERVE_REGISTER && isObserveMethod && observable != null && response.isSuccess) {
             val observation = ServerObservation(
-                this, observable, inbound.peer, request.token, request, unprotected, unprotected?.identity, null, key,
-                endpoint.now(), inbound.connection, inbound.peerIdentity, qBlockSize = blockSize,
+                this, observable, inbound.link, request.token, request, unprotected, unprotected?.identity, null, key,
+                endpoint.now(), qBlockSize = blockSize,
             )
             val registration = observations.register(observation)
             if (registration == ObservationRegistry.Registration.ADDED) {
@@ -539,7 +538,7 @@ public class CoapServer private constructor(
                     send(inbound, request, unprotected, challenge)
                 } else if (reply.isNew) {
                     // RFC 9177 §4.5: the registration response is a body; notifications follow once it went out.
-                    reply.body.observation?.onRegistrationSent(null, inbound.message.type, endpoint.now())
+                    reply.body.observation?.onRegistrationSent(null, inbound.message.type == CoapMessageType.CON, endpoint.now())
                 }
             }
         }
@@ -561,11 +560,11 @@ public class CoapServer private constructor(
             return
         }
         val observation = reply.observation
-        val separateType = separateType(inbound, request, unprotected, reply)
-        val transmission = try {
+        val confirmable = isSeparateConfirmable(inbound, request, unprotected, reply)
+        val delivery = try {
             val outgoing = unprotected?.protectResponse(message) ?: message
             log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
-            inbound.respond(outgoing, owner = observation ?: reply.owner, separateType = separateType)
+            inbound.respond(outgoing, owner = observation ?: reply.owner, confirmable = confirmable)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -576,7 +575,8 @@ public class CoapServer private constructor(
             answerUnprotected(inbound, internalError())
             return
         }
-        observation?.onRegistrationSent(transmission, transmission?.message?.type ?: CoapMessageType.ACK, endpoint.now())
+        // Piggybacked, or written on a connection, the registration response has no delivery of its own.
+        observation?.onRegistrationSent(delivery, delivery?.isConfirmable == true, endpoint.now())
     }
 
     // ---------------------------------------------------------------- address verification
@@ -585,11 +585,11 @@ public class CoapServer private constructor(
      * Whether [inbound] comes from a client that only its address stands for, whose responses
      * [CoapServerConfig.amplification] may hold back: RFC 9175 §2.6 speaks of unauthenticated clients, so
      * neither message security ([unprotected]) nor channel security (DTLS) may have authenticated it, and it
-     * must have come in a datagram, since a connection's handshake already showed that the client receives
-     * at its address.
+     * must have come on a link that does not verify addresses itself: in a datagram, since a connection's
+     * handshake already showed that the client receives at its address.
      */
     private fun checksAddress(inbound: InboundRequest, unprotected: UnprotectedRequest?): Boolean =
-        config.amplification != AmplificationPolicy.OFF && unprotected == null && inbound.connection == null &&
+        config.amplification != AmplificationPolicy.OFF && unprotected == null && !inbound.link.capabilities.verifiesAddress &&
             inbound.peerIdentity == PeerIdentity.None
 
     /**
@@ -636,27 +636,27 @@ public class CoapServer private constructor(
      */
     internal suspend fun mustConfirmBodies(observation: ServerObservation): Boolean {
         val checked = config.amplification != AmplificationPolicy.OFF && observation.unprotected == null &&
-            observation.connection == null && observation.peerIdentity == PeerIdentity.None
+            !observation.link.capabilities.verifiesAddress && observation.peerIdentity == PeerIdentity.None
         return checked && !addressVerification.verify(observation.peer, null, endpoint.now())
     }
 
     /**
-     * The type of [reply] if it goes separately, after an Empty ACK (RFC 7252 §5.2.2): Confirmable, except
-     * towards an address [CoapServerConfig.amplification] checks and that is not verified yet. Those get
+     * Whether [reply] goes Confirmable if it goes separately, after an Empty ACK (RFC 7252 §5.2.2): it does,
+     * except towards an address [CoapServerConfig.amplification] checks and that is not verified yet. Those get
      * every separate response Non-confirmable, the challenge included, since retransmissions to an address
      * that never acknowledges would multiply what [CoapServerConfig.amplificationFactor] allows, which
-     * counts every byte sent there, as in QUIC (RFC 9175 §2.4 item 3, RFC 9000 §8.1).
+     * counts every byte sent there, as in QUIC (RFC 9175 §2.4 item 3, RFC 9000 §8.1). A link without message
+     * types ignores it.
      */
-    private suspend fun separateType(
+    private suspend fun isSeparateConfirmable(
         inbound: InboundRequest,
         request: CoapMessage,
         unprotected: UnprotectedRequest?,
         reply: Reply.Single,
-    ): CoapMessageType {
-        if (reply.isChallenge) return CoapMessageType.NON
-        if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst = false)) return CoapMessageType.CON
-        val verified = addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
-        return if (verified) CoapMessageType.CON else CoapMessageType.NON
+    ): Boolean {
+        if (reply.isChallenge) return false
+        if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst = false)) return true
+        return addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
     }
 
     /**
@@ -699,7 +699,7 @@ public class CoapServer private constructor(
         )
         var response = invoke(resource, context)
         if (response.isSuccess) response = response.withOptions { observe(resource.nextSequence()) }
-        val limits = endpoint.limits(observation.connection)
+        val limits = observation.link.limits
         if (observation.qBlockSize != null && response.isSuccess) {
             response = qBlock.notify(observation, type, response, limits) ?: return null
         } else {
@@ -720,7 +720,7 @@ public class CoapServer private constructor(
     internal suspend fun sendRemovalNotice(observation: ServerObservation) {
         val message = CoapResponse(CoapCode.NOT_FOUND).toMessage(observation.token)
         val outgoing = observation.unprotected?.protectResponse(message) ?: message
-        endpoint.sendSeparately(observation.peer, outgoing, CoapMessageType.CON, observation, connection = observation.connection)
+        observation.link.notify(outgoing, confirmable = true, owner = observation, slotHold = null)
     }
 
     override fun toString(): String = "CoapServer($endpoint)"

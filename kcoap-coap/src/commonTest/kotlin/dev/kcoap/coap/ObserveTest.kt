@@ -249,6 +249,33 @@ class ObserveTest {
         job.cancel()
     }
 
+    /**
+     * RFC 7641 §4.5: only a resource that asks for Non-confirmable notifications gets them; any other type an
+     * [ObservableResource] subclass names, an ACK for instance, asks for Confirmable ones, as before PeerLink.
+     */
+    @Test
+    fun rfc7641Section4_5AResourceThatNamesNeitherTypeGetsConfirmableNotifications() = runTest {
+        val fixture = StackFixture(this)
+        val resource = object : ObservableResource("ack") {
+            var value = 0
+            override val notificationType: CoapMessageType get() = CoapMessageType.ACK
+            override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("$value")
+        }
+        val server = fixture.server { add(resource) }
+        val client = fixture.client()
+
+        val received = Channel<String>(Channel.UNLIMITED)
+        val job = launch { client.observe(fixture.uri(server, "/ack")).collect { received.send(it.payloadAsText()) } }
+        assertEquals("0", received.receive())
+        resource.value = 1
+        resource.notifyObservers()
+        assertEquals("1", received.receive())
+
+        val types = fixture.traffic.filter { it.from == fixture.address(server.endpoint) }.mapNotNull { it.message?.type }
+        assertEquals(listOf(CoapMessageType.ACK, CoapMessageType.CON), types)
+        job.cancel()
+    }
+
     private suspend fun kotlinx.coroutines.test.TestScope.notificationTypes(security: ServerMessageSecurity?): List<CoapMessageType> {
         val fixture = StackFixture(this)
         val resource = NonCounter()
