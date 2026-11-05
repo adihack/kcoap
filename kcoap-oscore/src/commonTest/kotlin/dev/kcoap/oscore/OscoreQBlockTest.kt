@@ -1,0 +1,277 @@
+package dev.kcoap.oscore
+
+import dev.kcoap.coap.BlockOption
+import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.ContentFormat
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.common.hexToBytes
+import dev.kcoap.common.readUnsigned
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.transport.Endpoint
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
+
+/**
+ * Several responses to one request (RFC 9177 under RFC 8613), through the stack-facing SPI: a request that
+ * carries an Inner Q-Block1 or Q-Block2 option takes the responses of its body, at most one with the request's
+ * nonce and the others each with a Partial IV new in the request's replay window; every other request still
+ * takes one response (RFC 8613 §7.4). The kcoap-to-kcoap bodies over the stack are in `OscoreQBlockEndToEndTest`
+ * (jvmTest).
+ */
+class OscoreQBlockTest {
+    private val crypto = DefaultCryptoBackend()
+    private val peer = Endpoint.Udp("192.0.2.1", 5683)
+    private val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+
+    private suspend fun clientFor(replayWindowSize: Int = 32): Pair<OscoreClient, OscoreServer> {
+        val client = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b), replayWindowSize = replayWindowSize), crypto)
+        val server = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)), crypto)
+        return OscoreClient(client) to OscoreServer(InMemoryContextRepository().apply { add(server) })
+    }
+
+    /** A GET that asks for its response body in Q-Block2 blocks of 64 bytes (RFC 9177 §4.4). */
+    private fun download(): CoapMessage = CoapMessage.request(CoapCode.GET) {
+        messageId = 1
+        token = "b1".hexToBytes()
+        options {
+            uriPath("big")
+            qBlock2(BlockOption(0, true, 2))
+        }
+    }
+
+    /** Block [num] of a Q-Block1 upload of 1000 bytes in blocks of 64 (RFC 9177 §4.3). */
+    private fun uploadBlock(num: Long): CoapMessage = CoapMessage.request(CoapCode.PUT) {
+        messageId = 2
+        token = "c1".hexToBytes()
+        options {
+            uriPath("store")
+            qBlock1(BlockOption(num, true, 2))
+            size1(1000)
+            requestTag("01020304".hexToBytes())
+        }
+        payload = ByteArray(64) { num.toByte() }
+    }
+
+    /** A GET of the second block of a body with Block2 of RFC 7959, which takes one response. */
+    private fun rfc7959Block(): CoapMessage = CoapMessage.request(CoapCode.GET) {
+        messageId = 3
+        token = "d1".hexToBytes()
+        options {
+            uriPath("big")
+            block2(BlockOption(1, false, 2))
+        }
+    }
+
+    private fun block(request: CoapMessage, num: Long, more: Boolean = true): CoapMessage =
+        CoapMessage.response(request, CoapCode.CONTENT) {
+            options {
+                etag("e7".hexToBytes())
+                qBlock2(BlockOption(num, more, 2))
+                size2(1000)
+                contentFormat(ContentFormat.OCTET_STREAM)
+            }
+            payload = ByteArray(64) { num.toByte() }
+        }
+
+    private fun partialIvOf(protected: CoapMessage): Long? =
+        OscoreOptionValue.decode(protected.options.oscore!!).partialIv?.readUnsigned()
+
+    private class Exchange(val client: ProtectedRequest, val server: UnprotectedRequest)
+
+    private suspend fun exchange(client: OscoreClient, server: OscoreServer, request: CoapMessage): Exchange {
+        val protected = client.protectRequest(request, peer)!!
+        return Exchange(protected, server.unprotectRequest(protected.message, peer)!!)
+    }
+
+    @Test
+    fun rfc9177Section4QBlockOptionsGoInsideOscore() = runTest {
+        val (client, server) = clientFor()
+        val download = client.protectRequest(download(), peer)!!
+        val upload = client.protectRequest(uploadBlock(3), peer)!!
+
+        // Table 2: Q-Block1 and Q-Block2 are Class E and U; an endpoint that is not a proxy puts them inside.
+        for (outer in listOf(download.message, upload.message)) {
+            assertNull(outer.options.qBlock1, "no Outer Q-Block1")
+            assertNull(outer.options.qBlock2, "no Outer Q-Block2")
+            assertTrue(CoapOptions.REQUEST_TAG.number !in outer.options && CoapOptions.SIZE1.number !in outer.options)
+        }
+        assertEquals(BlockOption(0, true, 2), server.unprotectRequest(download.message, peer)!!.message.options.qBlock2)
+        val block = server.unprotectRequest(upload.message, peer)!!.message
+        assertEquals(BlockOption(3, true, 2), block.options.qBlock1)
+        assertEquals(1000, block.options.size1)
+    }
+
+    @Test
+    fun rfc9177Section4_4AQBlock2RequestTakesTheBlocksOfASetInAnyOrder() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, download())
+        val inner = exchange.server.message
+        // The server protects the first response with the request's nonce, every later one with a new Partial IV.
+        val set = (0L until 10L).map { exchange.server.protectResponse(block(inner, it)) }
+        assertNull(partialIvOf(set[0]), "block 0 reuses the request's nonce")
+        assertTrue(set.drop(1).all { partialIvOf(it) != null }, "blocks 1-9 carry Partial IVs")
+
+        for (num in listOf(3, 0, 1, 9, 2, 8, 4, 7, 5, 6)) {
+            val block = exchange.client.unprotectResponse(set[num])
+            assertEquals(BlockOption(num.toLong(), true, 2), block.options.qBlock2)
+            assertContentEquals(ByteArray(64) { num.toByte() }, block.payload)
+        }
+    }
+
+    @Test
+    fun rfc8613Section7_4AReplayedBlockResponseIsRejected() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, download())
+        val inner = exchange.server.message
+        val first = exchange.server.protectResponse(block(inner, 0))
+        val second = exchange.server.protectResponse(block(inner, 1))
+        val third = exchange.server.protectResponse(block(inner, 2))
+        exchange.client.unprotectResponse(first)
+        exchange.client.unprotectResponse(second)
+
+        val replay = assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(second) }
+        assertEquals("Replayed or too old response", replay.message)
+        val nonceAgain = assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(first) }
+        assertEquals("Second response without a Partial IV", nonceAgain.message, "the request's nonce serves one response")
+        // The body goes on: the replays changed nothing.
+        assertEquals(BlockOption(2, true, 2), exchange.client.unprotectResponse(third).options.qBlock2)
+    }
+
+    @Test
+    fun rfc8613Section7_4ASecondResponseToARequestWithoutQBlockIsStillRejected() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, rfc7959Block())
+        val inner = exchange.server.message
+        val response = CoapMessage.response(inner, CoapCode.CONTENT) {
+            options { block2(BlockOption(1, true, 2)) }
+            payload = ByteArray(64)
+        }
+        val first = exchange.server.protectResponse(response)
+        val second = exchange.server.protectResponse(response)
+        assertNull(partialIvOf(first))
+        assertNotNull(partialIvOf(second), "a second response would take a new Partial IV")
+
+        exchange.client.unprotectResponse(first)
+        val rejected = assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(second) }
+        assertEquals("Second response to a request that takes one", rejected.message)
+        assertFailsWith<MessageSecurityException>("nor the first again") { exchange.client.unprotectResponse(first) }
+    }
+
+    @Test
+    fun rfc8613Section7_4ASecondResponseIsRejectedAlsoWhenTheFirstHadAPartialIv() = runTest {
+        // §8.3 step 3 lets the server protect even the first response with a new Partial IV; one response it stays.
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)), crypto)
+        val protected = OscoreClient(clientContext).protectRequest(rfc7959Block(), peer)!!
+        val verified = OscoreProtection.unprotectRequest(protected.message) { _, _ -> serverContext }
+        assertFalse(verified.binding.allowsSeveralResponses, "Block2 of RFC 7959 takes one response per block")
+        val response = CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("one") }
+        val first = OscoreProtection.protectResponse(verified.binding, response, newPartialIv = true)
+        val second = OscoreProtection.protectResponse(verified.binding, response, newPartialIv = true)
+
+        assertEquals("one", protected.unprotectResponse(first).payloadAsText())
+        assertFailsWith<MessageSecurityException>("a second response with a new Partial IV") { protected.unprotectResponse(second) }
+        assertFailsWith<MessageSecurityException>("the first one replayed") { protected.unprotectResponse(first) }
+    }
+
+    @Test
+    fun rfc9177Section4_3AQBlock1BlockTakesItsFourEightsAndTheFinalResponse() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, uploadBlock(9))
+        val inner = exchange.server.message
+        // Figure 6: 4.08 lists on the token of the highest block on the NON_RECEIVE_TIMEOUT ladder, then the end.
+        val missing = List(4) {
+            exchange.server.protectResponse(
+                CoapMessage.response(inner, CoapCode.REQUEST_ENTITY_INCOMPLETE) {
+                    options { contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ) }
+                    payload = byteArrayOf(0x01)
+                },
+            )
+        }
+        val changed = exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.CHANGED))
+
+        for (response in missing) assertEquals(CoapCode.REQUEST_ENTITY_INCOMPLETE, exchange.client.unprotectResponse(response).code)
+        assertEquals(CoapCode.CHANGED, exchange.client.unprotectResponse(changed).code)
+        assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(missing[2]) }
+    }
+
+    @Test
+    fun rfc6347Section4_1_2_6ABlockFurtherBehindThanTheWindowIsRejected() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, download())
+        val inner = exchange.server.message
+        exchange.client.unprotectResponse(exchange.server.protectResponse(block(inner, 0)))
+        val late = exchange.server.protectResponse(block(inner, 1))
+        // 32 more responses: block 1's Partial IV is 32 behind the newest, outside the default window.
+        val later = (2L..33L).map { exchange.server.protectResponse(block(inner, it % 10)) }
+        exchange.client.unprotectResponse(later.last())
+        exchange.client.unprotectResponse(later.first())
+
+        assertFailsWith<MessageSecurityException>("too old for the window") { exchange.client.unprotectResponse(late) }
+    }
+
+    @Test
+    fun theResponseWindowHasTheSizeOfTheClientsContextWindow() = runTest {
+        val (client, server) = clientFor(replayWindowSize = 64)
+        val exchange = exchange(client, server, download())
+        val inner = exchange.server.message
+        exchange.client.unprotectResponse(exchange.server.protectResponse(block(inner, 0)))
+        val late = exchange.server.protectResponse(block(inner, 1))
+        val later = (2L..33L).map { exchange.server.protectResponse(block(inner, it % 10)) }
+        exchange.client.unprotectResponse(later.last())
+
+        assertEquals(BlockOption(1, true, 2), exchange.client.unprotectResponse(late).options.qBlock2, "within 64")
+    }
+
+    @Test
+    fun aForgedBlockChangesNothing() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, download())
+        val inner = exchange.server.message
+        val first = exchange.server.protectResponse(block(inner, 0))
+        val second = exchange.server.protectResponse(block(inner, 1))
+        fun forged(message: CoapMessage) = message.toBuilder().apply { payload = payload.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() } }.build()
+
+        assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(forged(first)) }
+        assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(forged(second)) }
+
+        // Neither the request's nonce nor block 1's Partial IV counts as used.
+        assertEquals(BlockOption(0, true, 2), exchange.client.unprotectResponse(first).options.qBlock2)
+        assertEquals(BlockOption(1, true, 2), exchange.client.unprotectResponse(second).options.qBlock2)
+    }
+
+    @Test
+    fun anObserveRegistrationChecksItsOtherResponsesForReplayToo() = runTest {
+        val (client, server) = clientFor()
+        val registration = CoapMessage.request(CoapCode.GET) {
+            token = "e1".hexToBytes()
+            options {
+                uriPath("big")
+                observe(0)
+            }
+        }
+        val exchange = exchange(client, server, registration)
+        val inner = exchange.server.message
+        // A server that does not add the observer answers with plain responses, here a body without Observe.
+        val first = exchange.server.protectResponse(block(inner, 0))
+        val second = exchange.server.protectResponse(block(inner, 1))
+        exchange.client.unprotectResponse(first)
+        exchange.client.unprotectResponse(second)
+
+        assertFailsWith<MessageSecurityException>("replayed") { exchange.client.unprotectResponse(second) }
+        assertFailsWith<MessageSecurityException>("the request's nonce again") { exchange.client.unprotectResponse(first) }
+        val notification = exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.CONTENT) { options { observe(5) } })
+        assertNotNull(exchange.client.unprotectResponse(notification).options.observe, "notifications go on as before")
+    }
+}

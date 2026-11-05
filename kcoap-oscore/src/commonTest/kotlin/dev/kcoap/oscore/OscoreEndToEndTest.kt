@@ -6,7 +6,6 @@ import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.MessageSecurityException
-import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -316,16 +315,20 @@ class OscoreEndToEndTest {
     fun aReplayBetweenChallengeAndAnswerDoesNotRevokeTheEcho() = runTest {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
         val clientParameters = SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b))
-        val client = OscoreClient(ephemeralContext(clientParameters, crypto), loggers)
+        val clientContext = ephemeralContext(clientParameters, crypto)
+        val client = OscoreClient(clientContext, loggers)
         val serverParameters = SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a))
         val server = serverFor(restoredContext(serverParameters, crypto))
-        suspend fun echoOfChallengeTo(request: ProtectedRequest): ByteArray {
-            val challenged = server.unprotectRequest(request.message, peer)!!
-            return request.unprotectResponse(challenged.protectResponse(challenged.challenge!!)).options.echo!!
+        // An OscoreClient takes one response per request (RFC 8613 §7.4), so the challenges to the attacker's
+        // copies are read with the request's binding directly.
+        suspend fun echoOfChallengeTo(request: Pair<CoapMessage, RequestBinding>): ByteArray {
+            val challenged = server.unprotectRequest(request.first, peer)!!
+            val response = OscoreProtection.unprotectResponse(request.second, challenged.protectResponse(challenged.challenge!!))
+            return response.first.options.echo!!
         }
 
-        val recorded = client.protectRequest(request(), peer)!!
-        val first = client.protectRequest(request(), peer)!!
+        val recorded = OscoreProtection.protectRequest(clientContext, request())
+        val first = OscoreProtection.protectRequest(clientContext, request())
         val echo = echoOfChallengeTo(first)
         repeat(3) { assertContentEquals(echo, echoOfChallengeTo(recorded), "replay ${it + 1} gets the same value") }
 
@@ -333,7 +336,7 @@ class OscoreEndToEndTest {
         val accepted = server.unprotectRequest(answer.message, peer)!!
         assertNull(accepted.challenge, "the client's answer is accepted")
         assertFailsWith<MessageSecurityException>("the recorded request is a replay now") {
-            server.unprotectRequest(recorded.message, peer)
+            server.unprotectRequest(recorded.first, peer)
         }
     }
 }

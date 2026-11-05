@@ -90,6 +90,25 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * The OSCORE client side for the CoAP stack: protects requests with the context [contexts] picks and
  * verifies the responses, including Observe notifications with their replay protection
  * (RFC 8613 §4.1.3.5.2, §7.4.1).
+ *
+ * **Replay of responses** (§7.4). A response is bound to its request, and a request takes one response, so a
+ * second response to the same request is rejected, with or without a Partial IV. Two kinds of request take
+ * several:
+ * - An Observe registration takes notifications: at most one without a Partial IV, the others with a Partial
+ *   IV above the Notification Number (§7.4.1, §8.4.2).
+ * - A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177 §4) takes the responses of its body:
+ *   the blocks of a Q-Block2 set and the sets that follow on its token, or a 2.31, 4.08s and the final
+ *   response on the token of a Q-Block1 block (§4.3, §4.4, §10). At most one of them may reuse the request's
+ *   nonce, without a Partial IV (§8.3 step 3); every other one must carry a Partial IV the request has not
+ *   seen, within [SecurityContextParameters.replayWindowSize] (32 by default, §3.2.2) of the highest it has
+ *   seen. That is an RFC 6347 sliding window per request, like the server's per context, so the blocks of a
+ *   set may arrive in any order. A replayed or too old block is dropped like a response that fails
+ *   verification (§8.4 step 8), and its body asks for it again (RFC 9177 §4.4).
+ *
+ * Several responses to one request fall outside RFC 8613's single-response model, so the CoAP stack uses
+ * Q-Block under OSCORE only where both sides opt in (`QBlockClientConfig.withMessageSecurity` and
+ * `QBlockServerConfig.withMessageSecurity` of kcoap-coap); otherwise protected bodies use Inner Block1 and
+ * Block2 (RFC 7959; RFC 8613 §4.1.3.4.1), one response per block.
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
@@ -117,8 +136,16 @@ public class OscoreClient(
         private val binding: RequestBinding,
     ) : ProtectedRequest {
         private val lock = Mutex()
+
+        /** Whether a response without a Partial IV used the request's nonce (§8.3 step 3), which one may. */
         private var usedRequestNonce = false
+
+        /** How many responses that are not notifications were accepted. */
+        private var responses = 0
         private var notificationNumber: Long = -1
+
+        /** The Partial IVs of the responses to a request that takes several, from the first such response on. */
+        private var responseWindow: ReplayWindow? = null
 
         override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
             if (response.options.oscore == null) {
@@ -136,16 +163,38 @@ public class OscoreClient(
             return lock.withLock { checkFreshness(decrypted, piv) }
         }
 
-        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        /**
+         * §7.4: one response per request, except for the requests that take several (see [OscoreClient]).
+         * Called under [lock] once the response verified, so a forged response changes nothing.
+         */
         private fun checkFreshness(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
-            val isNotification = decrypted.options.observe != null
-            if (!isNotification) {
-                if (!binding.isObserveRegistration && usedRequestNonce) {
-                    throw MessageSecurityException("Second response to a non-Observe request")
-                }
-                usedRequestNonce = usedRequestNonce || piv == null
-                return decrypted
+            if (decrypted.options.observe != null) return checkNotification(decrypted, piv)
+            if (binding.allowsSeveralResponses || binding.isObserveRegistration) {
+                admitOneOfSeveral(piv)
+            } else if (responses > 0) {
+                throw MessageSecurityException("Second response to a request that takes one")
             }
+            responses++
+            if (piv == null) usedRequestNonce = true
+            return decrypted
+        }
+
+        /**
+         * A response to a request that takes several: at most one reuses the request's nonce, and every other
+         * one has a Partial IV that is new in the request's window (RFC 6347 §4.1.2.6).
+         */
+        private fun admitOneOfSeveral(piv: ByteArray?) {
+            if (piv == null) {
+                if (usedRequestNonce) throw MessageSecurityException("Second response without a Partial IV")
+                return
+            }
+            val window = responseWindow
+                ?: ReplayWindow(binding.context.parameters.replayWindowSize).also { responseWindow = it }
+            if (!window.accept(piv.readUnsigned())) throw MessageSecurityException("Replayed or too old response")
+        }
+
+        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        private fun checkNotification(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
             if (!binding.isObserveRegistration) throw MessageSecurityException("Notification for a request that did not register")
             if (piv == null) {
                 if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
@@ -206,9 +255,10 @@ public class OscoreServer(
         override val identity: SecurityIdentity = OscoreIdentity(binding.context.recipientId, binding.context.idContext)
 
         /**
-         * The first response reuses the request nonce (RFC 8613 §8.3); later notifications take a new
-         * Partial IV each (§8.3.1), and so does a freshness challenge, whose request may be a replay
-         * (Appendix B.1.2).
+         * The first response reuses the request nonce (RFC 8613 §8.3); every later one takes a new Partial IV
+         * (§8.3 step 3), as notifications must (§8.3.1) and as the further responses of a Q-Block body do
+         * (RFC 9177 §4.3, §4.4: the blocks of a set, 4.08s on the timer), and so does a freshness challenge,
+         * whose request may be a replay (Appendix B.1.2).
          */
         override suspend fun protectResponse(response: CoapMessage): CoapMessage {
             val first = lock.withLock { responses++ == 0 }
