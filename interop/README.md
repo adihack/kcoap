@@ -69,7 +69,29 @@ Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` t
   (`upstreamLibcoapRepeatsTheQBlock2OptionItRejectsInIts402K5`);
 - the blocks of a notification body that it sends for a Continue carry no Observe, where RFC 9177 §4.5 wants
   the body's value on every payload; kcoap's client takes them by their ETag
-  (`upstreamLibcoapLeavesObserveOutOfTheBlocksItSendsForAContinueK6`).
+  (`upstreamLibcoapLeavesObserveOutOfTheBlocksItSendsForAContinueK6`);
+- Q-Block sticks to a session: once a request from an address and port carried Q-Block1 or Q-Block2, every
+  later body its block-wise layer sends there goes in Q-Block2, also to a request that asks for Block2, where RFC 9177 §4.1
+  sends Q-Block2 only to a request that carries Q-Block. All of a kcoap endpoint's clients share its socket,
+  so after one Q-Block body a request that kcoap's client sends with RFC 7959 (one with block options of its
+  own, with No-Response, or protected without `withMessageSecurity`) gets a Q-Block2 answer, rejects it as an
+  unrecognized critical option and fails with `BAD_RESPONSE`
+  (`upstreamLibcoapAnswersABlock2RequestInQBlock2OnceItsSessionUsedQBlock`);
+- a request with both Block2 and Q-Block2 gets 4.00 "Both Block2 and Q-Block2 invalid" instead of the 4.02 of
+  RFC 9177 §4.1 (`upstreamLibcoapAnswersBlock2MixedWithQBlock2With400`, a raw datagram, since kcoap never sends
+  the mix).
+
+Two more deviations named in the plan (§1.6) are known from libcoap's source but not pinned:
+
+- **A descending list of missing blocks** (server). `add_block_send` in `src/coap_block.c` keeps the requested
+  numbers sorted, but when a lower number comes after a higher one it overwrites the slot instead of moving it
+  (its `memmove` also counts bytes, not entries), so a request listing `7` then `2` leaves the second slot
+  uninitialized and the server sends a block whose number is whatever that memory held. That is undefined
+  behaviour, so no test can expect a stable outcome, and it may take the container down. kcoap's client always
+  lists missing blocks in ascending order (RFC 9177 §4.4), and kcoap's server answers a descending list 4.00 (L8).
+- **An upload truncated after a 2.31 without Q-Block1** (client). libcoap's client cuts an upload short when a
+  2.31 comes without Q-Block1 (plan §1.1, row 14). kcoap's server always puts Q-Block1 in a 2.31 for that reason
+  (ADR 0006), so pinning this needs a server that leaves it out, which kcoap does not have.
 
 With `CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true))`, `LibcoapClientAgainstKcoapQBlockTest`
 runs the plan's cases against `coap-client -L 7 -v 7` (`-L` goes before `-f`), reads every message from

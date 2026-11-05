@@ -339,15 +339,15 @@ public class QBlockServerConfig(
 
 ### 1.6 Open risks
 - **OSCORE with several responses** falls outside RFC 8613's single-response replay model. The only evidence will be kcoap against itself: libcoap 4.3.5b breaks (rv/A, rv/A2). That is why it is off by default.
-- **libcoap deviations** limit what interop can test, and some require leniency:
-  - no Observe after a Continue;
-  - missing ETag and Size2 when it re-runs the handler;
-  - its client needs Q-Block1 in a 2.31;
-  - per-session stickiness, including across clients on the same source port (rv/E2);
-  - 4.00 instead of 4.02 for a Block2 + Q-Block2 mix;
-  - a 3-range limit on both roles;
-  - undefined behaviour for a descending missing-block list;
-  - only block 0 of a 2.01/2.04 body is sent;
+- **libcoap deviations** limit what interop can test, and some require leniency (QB-7 pinned them as `upstreamLibcoap…` tests where they can be reproduced; [interop/README.md](../interop/README.md) lists them):
+  - no Observe after a Continue (pinned, K6);
+  - missing ETag and Size2 when it re-runs the handler (pinned, K8);
+  - its client needs Q-Block1 in a 2.31 (not pinned: kcoap's server always sends it, so a test needs a server that leaves it out);
+  - per-session stickiness, including across clients on the same source port (rv/E2) (pinned: a Block2 request after a Q-Block body gets Q-Block2);
+  - 4.00 instead of 4.02 for a Block2 + Q-Block2 mix (pinned, a raw request);
+  - a 3-range limit on both roles (the server's pinned, K4);
+  - undefined behaviour for a descending missing-block list (not pinned: `add_block_send` sends a block number from uninitialized memory, so no outcome is stable, and the container may crash);
+  - only block 0 of a 2.01/2.04 body is sent (pinned, K9);
   - timings of 264 s and 8 s.
 - **Timing.** The interop tests run in real time, from about 4 s up to the 124 s ladder. Ladder tests stay unit tests; the long soak runs nightly.
 - **B1 (PeerLink)** has to move the new endpoint seams. `ExchangeConformanceTest` must cover Q-Block, or regressions slip through.

@@ -30,6 +30,7 @@ import java.util.Collections
 import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -439,6 +440,65 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertEquals(CoapCode.BAD_OPTION, answer.code)
             assertEquals(listOf("0/_/16"), answer.qBlock2, "the deviation: the rejected option comes back")
             assertEquals(QBlockCapabilities.Capability.UNSUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+        }
+    }
+
+    /**
+     * Pinned (per-session stickiness, plan §1.6): libcoap 4.3.5's server marks a session as using Q-Block once a
+     * request on it carried Q-Block1 or Q-Block2, and from then on `coap_add_data_large_response` answers every
+     * request from that address and port in Q-Block2, one asking for Block2 included, where RFC 9177 §4.1 has
+     * Q-Block2 answer only a request that carries a Q-Block option. kcoap's client keeps one socket per endpoint
+     * and sends RFC 7959 for a request that carries block options of its own, carries No-Response, or goes under
+     * OSCORE without `withMessageSecurity`; such a request after a Q-Block body gets a Q-Block2 answer, which it
+     * rejects as an unrecognized critical option (RFC 7252 §5.4.1), and fails.
+     */
+    @Test
+    fun upstreamLibcoapAnswersABlock2RequestInQBlock2OnceItsSessionUsedQBlock() = withServer("-L", "7", "-v", "7") { server ->
+        withClient { client ->
+            assertContentEquals(exampleData, client.get("${server.uri}/example_data") { nonConfirmable() }.payload)
+
+            val error = assertFailsWith<CoapException> {
+                client.get("${server.uri}/example_data") { options { block2(BlockOption(0, false, 2)) } }
+            }
+            assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason, "$error")
+            val request = requests("/example_data").last().message
+            assertEquals(BlockOption(0, false, 2), request.options.block2)
+            assertEquals(emptyList(), request.qBlock2, "an RFC 7959 request")
+            val answer = received().first { it.message.hasToken(request.token) }.message
+            assertEquals(CoapCode.CONTENT, answer.code)
+            assertEquals(listOf("0/M/64"), answer.qBlock2, "the deviation: a Q-Block2 answer to Block2")
+            assertEquals(null, answer.options.block2)
+            assertNoMessageMixesBlockAndQBlock()
+        }
+    }
+
+    /**
+     * Pinned (plan §1.6): libcoap 4.3.5's server answers a request that carries both Block2 and Q-Block2 with 4.00
+     * "Both Block2 and Q-Block2 invalid", where RFC 9177 §4.1 asks for 4.02 (Bad Option). kcoap's client never sends
+     * the mix ([assertNoMessageMixesBlockAndQBlock]), and kcoap's server answers it 4.02 (L8), so this is a raw
+     * datagram.
+     */
+    @Test
+    fun upstreamLibcoapAnswersBlock2MixedWithQBlock2With400() = withServer("-L", "7", "-v", "7") { server ->
+        runBlocking {
+            val raw = KtorUdpTransport.bind("127.0.0.1")
+            try {
+                val request = CoapMessage.request(CoapCode.GET) {
+                    type = CoapMessageType.CON
+                    messageId = 0x3000
+                    token = byteArrayOf(0x31)
+                    options { uriPath("example_data").block2(BlockOption(0, false, 2)).qBlock2(BlockOption(0, true, 2)) }
+                }
+                raw.send(Endpoint.Udp("127.0.0.1", server.port), UdpMessageCodec.encode(request))
+                val answer = UdpMessageCodec.decode((withTimeout(5.seconds) { raw.receive() } as DatagramEvent.Received).datagram)
+
+                assertEquals(CoapMessageType.ACK, answer.type)
+                assertEquals(0x3000, answer.messageId)
+                assertEquals(CoapCode.BAD_REQUEST, answer.code, "the deviation: 4.00, not 4.02")
+                assertEquals("Both Block2 and Q-Block2 invalid", answer.payloadAsText())
+            } finally {
+                raw.close()
+            }
         }
     }
 
