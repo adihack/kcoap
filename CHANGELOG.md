@@ -273,6 +273,10 @@ The CoAP wire vocabulary is its own module, `kcoap-coap-message` (WP-B2, finding
   brings `CoapEndpoint`, `CoapClient` or `CoapServer` along, and kotlinx-coroutines is no longer an `api`
   dependency of it. *Migration:* an application that runs OSCORE through kcoap's client and server and
   declared only `kcoap-oscore` adds `dev.kcoap:kcoap-coap`. `kcoap-edhoc-oscore` still brings both.
+  Without kcoap-coap, `OscoreClient` and `OscoreServer` only verify and report; ADR 0008's fail-closed rules
+  and the Appendix B.1.2 freshness check are kcoap-coap's. A proxy, gateway or other stack that calls them
+  takes over those duties (a challenged request, an unprotected request, an unverified response, tokens),
+  which [kcoap-oscore's README](kcoap-oscore/README.md) lists, or OSCORE fails open.
 
 One endpoint over an internal per-peer link (WP-B1, [ADR 0005](docs/adr/0005-peer-link-seam.md)). Block-wise,
 Observe, Q-Block, Echo/Request-Tag, the access policy and message security now run on the same exchange layer

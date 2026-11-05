@@ -10,6 +10,22 @@ It is the stable layer the rest builds on. [kcoap-coap](../kcoap-coap/README.md)
 without declaring it. [kcoap-oscore](../kcoap-oscore/README.md) depends on this module only, not on the
 stack, so OSCORE can protect messages of another CoAP stack, a proxy or a gateway.
 
+Such a caller takes over what kcoap-coap's stack does with the message-security SPI, as the KDoc of
+[`MessageSecurity.kt`](src/commonMain/kotlin/dev/kcoap/coap/security/MessageSecurity.kt) and
+[`ResponseVerification.kt`](src/commonMain/kotlin/dev/kcoap/coap/security/ResponseVerification.kt) states.
+The security layer only verifies and reports, so a caller that skips one of these duties fails open
+(kcoap-oscore's README gives them with their RFC 8613 sections):
+
+1. Never process the `message` of an `UnprotectedRequest` whose `challenge` is not null; send
+   `protectResponse(challenge)` instead (OSCORE's freshness check after a restart).
+2. Treat null from `unprotectRequest` as an unauthenticated request, refused unless the resource is public
+   ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)).
+3. Act only on `ResponseVerification.Verified`; never repeat a request, continue a body or end an
+   observation on `Unverified`.
+4. Assign the token and the Message ID before `protectRequest`, and keep them.
+5. Use one `UnprotectedRequest` for every response to its request, notifications and Q-Block blocks
+   included, and one `ProtectedRequest` for every response it verifies.
+
 ## Packages
 
 The packages kept their names when they moved here from kcoap-coap, so imports did not change.
