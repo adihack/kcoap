@@ -13,8 +13,8 @@ adds its entry and migration note below.
 ### Added
 
 - kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
-  material listed in [docs/third-party.md](docs/third-party.md). Copyright 2026 Adrian Sołtys and the kcoap
-  contributors.
+  material listed in [third-party material](docs/third-party.md). Copyright 2026 Adrian Sołtys and the
+  kcoap contributors.
 - Contributions follow the [Developer Certificate of Origin 1.1](DCO), with no CLA: every commit carries a
   `Signed-off-by` line matching its author, which a check verifies on every pull request.
 - A [trademark policy](TRADEMARKS.md) for kcoap and kcoap.dev, and the community files

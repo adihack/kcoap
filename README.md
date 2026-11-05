@@ -10,8 +10,7 @@
   <a href="https://github.com/adihack/kcoap/actions/workflows/ci.yml"><img src="https://github.com/adihack/kcoap/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.4.21-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.21"></a>
-  <a href="#platforms"><img src="https://img.shields.io/badge/platforms-JVM%20%7C%20Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Linux%20%7C%20JS%20%7C%20Wasm-0B6E79" alt="Platforms: JVM, Android, iOS, macOS, Linux, JS, Wasm"></a>
-  <a href="https://kcoap.dev"><img src="https://img.shields.io/badge/website-kcoap.dev-0B6E79" alt="Website: kcoap.dev"></a>
+  <a href="#platforms"><img src="https://img.shields.io/badge/platforms-JVM%20%7C%20Android%20%7C%20Apple%20%7C%20Linux%20%7C%20Web-0B6E79" alt="Platforms: JVM, Android, Apple, Linux, Web"></a>
 </p>
 
 <p>
@@ -25,10 +24,11 @@
 
 </div>
 
-kcoap™ is CoAP, OSCORE and EDHOC for Kotlin Multiplatform: one implementation, in common Kotlin, for
-Android, iOS, JVM servers, Linux gateways, browsers and Node.js. It aims at complete compliance with the
-published RFCs and checks its parts against the RFCs' own test vectors where they exist and in live
-interop with libcoap, whose maintainers include RFC authors, and libedhoc.
+kcoap™ implements CoAP, OSCORE and EDHOC once, in common Kotlin, for Android, iOS, JVM servers, Linux
+gateways, browsers and Node.js. It aims at complete compliance with the published RFCs and checks its
+parts against the RFCs' own test vectors where they exist and in live interop with libcoap, whose
+maintainers include RFC authors, and libedhoc. It is in development: nothing is released yet, and the
+version is `0.1.0-SNAPSHOT` ([project status](#project-status)).
 
 ## Highlights
 
@@ -48,15 +48,18 @@ interop with libcoap, whose maintainers include RFC authors, and libedhoc.
 - **Fail-closed message security.** By default a server with OSCORE refuses unprotected requests
   before any handler, buffer or observation sees them, and a client acts only on responses it verified
   ([ADR 0008](docs/adr/0008-fail-closed-message-security.md)).
-- **Sans-IO protocol code.** State machines take bytes and time and return bytes and timers, so each
-  layer is tested with fixed vectors on virtual time; sockets live in thin adapters.
+- **Sans-IO protocol code behind interfaces.** State machines take bytes and time and return
+  bytes and timers, so each layer is tested with fixed vectors on virtual time; sockets live in thin
+  adapters. All cryptography goes through one `CryptoBackend`, so keys can live in a secure element, and
+  transports, credential resolution, EAD, logging sinks and interceptors are interfaces with defaults
+  ([architecture](docs/architecture.md)).
 - **Every target from one code base.** The same common tests pass in CI on the JVM, Linux, macOS, the
   iOS simulator, and JS and Wasm on Node.js; Android uses the JVM artifacts from API level 26.
 
 ## Protocol support
 
-States follow [docs/checklist.md](docs/checklist.md), which names every open item and its next step;
-[docs/rfc-compliance.md](docs/rfc-compliance.md) has the detail section by section.
+States follow the [checklist](docs/checklist.md), which names every open item and its next step;
+[RFC compliance](docs/rfc-compliance.md) has the detail section by section.
 
 | Protocol | RFC | State | Verified by |
 |---|---|---|---|
@@ -104,7 +107,7 @@ dependencies {
     implementation("dev.kcoap:kcoap-transport-ktor:$kcoap")  // UDP and TCP sockets
     implementation("dev.kcoap:kcoap-crypto-default:$kcoap")  // the platform's cryptography
     implementation("dev.kcoap:kcoap-oscore:$kcoap")          // OSCORE
-    implementation("dev.kcoap:kcoap-edhoc-oscore:$kcoap")    // EDHOC, over CoAP and into OSCORE
+    implementation("dev.kcoap:kcoap-edhoc-oscore:$kcoap")    // EDHOC over CoAP, into OSCORE
 }
 ```
 
@@ -115,21 +118,50 @@ module ([versioning](docs/versioning.md)).
 
 ## Quick start
 
+An OSCORE server and a client that talks to it:
+
 ```kotlin
-// A server with message security: its resources take OSCORE requests only, unless they say otherwise.
+// Resources take OSCORE requests only, unless they say otherwise.
 val contexts = InMemoryContextRepository().apply { add(serverContext) }
-val server = CoapServer(KtorUdpTransport.bind("0.0.0.0", 5683), scope, CoapServerConfig(security = OscoreServer(contexts))) {
-    resource("lights") { get { CoapResponse.content("on for ${securityIdentity?.description}") } }
+val server = CoapServer(
+    KtorUdpTransport.bind("0.0.0.0", 5683),
+    scope,
+    CoapServerConfig(security = OscoreServer(contexts)),
+) {
+    resource("lights") {
+        get { CoapResponse.content("on for ${securityIdentity?.description}") }
+    }
     resource("status") {
         access = AccessPolicy.Public // for anyone, with or without OSCORE
         get { CoapResponse.content("up") }
     }
 }
 
-// A client that talks OSCORE to it.
-val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = OscoreClient(clientContext)))
+val client = CoapClient(
+    KtorUdpTransport.bind(),
+    scope,
+    CoapClientConfig(security = OscoreClient(clientContext)),
+)
 println(client.get("coap://192.0.2.1/lights").payloadAsText())
 ```
+
+With EDHOC instead of pre-shared OSCORE keys, the client runs the handshake first and its first OSCORE
+request carries EDHOC message_3 (RFC 9668), two round trips in all:
+
+```kotlin
+val security = PeerSecurity()
+val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = security))
+val server = CoapUri.parse("coap://192.0.2.1")
+val (session, protection) =
+    EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()
+security.install(client, server, protection)
+client.get("coap://192.0.2.1/lights")
+```
+
+<details>
+<summary><strong>How message security fails closed</strong>, and the EDHOC server side</summary>
+
+<br>
 
 Message security fails closed ([ADR 0008](docs/adr/0008-fail-closed-message-security.md)):
 
@@ -142,24 +174,15 @@ Message security fails closed ([ADR 0008](docs/adr/0008-fail-closed-message-secu
   `CoapException(UNVERIFIED_RESPONSE)`, which carries it. A request without a context or installed
   protection fails instead of going out in plaintext, unless `allowUnprotected` says otherwise.
 
-With EDHOC instead of pre-shared OSCORE keys, the client runs the handshake first and its first
-OSCORE request carries EDHOC message_3 (RFC 9668), two round trips in all:
+The EDHOC server mounts `EdhocResource` (public of its own) under `/.well-known` and uses
+`CombinedRequestServer` around its `OscoreServer`; the `EdhocServer` behind both adds a context per
+handshake to a `MutableSecurityContextRepository`, which a production server bounds. Its handlers and
+policies see an `EdhocIdentity` with the client's authenticated credential. See
+[kcoap-edhoc-oscore](kcoap-edhoc-oscore/README.md).
 
-```kotlin
-val security = PeerSecurity()
-val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = security))
-val server = CoapUri.parse("coap://192.0.2.1")
-val (session, protection) = EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()
-security.install(client, server, protection)
-client.get("coap://192.0.2.1/lights")
-```
+</details>
 
-The server side mounts `EdhocResource` (public of its own) under `/.well-known` and uses
-`CombinedRequestServer` around its `OscoreServer`; the `EdhocServer` behind both adds a context per handshake
-to a `MutableSecurityContextRepository`, which a production server bounds. Its handlers and policies see an
-`EdhocIdentity` with the client's authenticated credential. See
-[kcoap-edhoc-oscore](kcoap-edhoc-oscore/README.md). More in the
-[client and server guide](docs/guide-client-server.md).
+More in the [client and server guide](docs/guide-client-server.md).
 
 ## Modules
 
@@ -222,7 +245,7 @@ it. What WebCrypto lacks:
 - X25519 and Ed25519 in browsers that predate them, 192-bit AES keys in Chromium:
   `UnsupportedAlgorithmException`; ask `supports(...)` before offering them.
 
-Details in [docs/architecture.md](docs/architecture.md#browsers) and
+Details in [Architecture: browsers](docs/architecture.md#browsers) and
 [kcoap-crypto-default](kcoap-crypto-default/README.md).
 
 </details>
@@ -239,8 +262,8 @@ the libraries behind them and fails on any use not yet triaged, and CI builds
 [samples/android-consumer](samples/android-consumer/README.md), an app at minSdk 26 that uses kcoap from
 Maven, with R8 on its release builds and lint. Apps need no R8 rules of their own and no core library
 desugaring; the sample's README lists what an app needs (Kotlin 2.3 or newer, Java 17 bytecode) and what
-the check found in ktor, cryptography-kotlin and Bouncy Castle. Not yet run on an emulator or device
-(PL-2).
+the check found in ktor, cryptography-kotlin and Bouncy Castle. Not yet run on an emulator or device;
+that is planned ([Q-Block and platforms plan](docs/plan-qblock-and-platforms.md)).
 
 </details>
 
@@ -255,25 +278,14 @@ The [documentation hub](docs/README.md) lists every guide, design record and ref
 | [RFC compliance](docs/rfc-compliance.md) and [interop](interop/README.md) | what is implemented, section by section, and how it is cross-tested |
 | [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka); published with the first release, until then `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
 
-## Design in one paragraph
-
-Protocol code does no I/O: state machines take bytes and time and return bytes and timers, and thin
-adapters connect them to sockets, so every layer is testable with fixed vectors and on virtual time.
-All cryptography goes through one `CryptoBackend`, so keys can live in a secure element and
-post-quantum algorithms plug in. OSCORE sits between the exchange and messaging layers, as RFC 8613
-draws it, behind a small SPI that EDHOC's combined request decorates. Everything that varies is an
-interface with a default: transports, crypto, credential resolution, EAD, logging sinks, interceptors.
-
 ## Build and test
 
 Needs a JDK 17 or newer; Gradle downloads everything else, Node.js for the web tests included. Each
 test suite is one command:
 
 ```bash
-scripts/test unit       # every unit test on every target this machine builds: JVM, Linux native, JS, Wasm,
-                        # then the build checks (ABI dumps, common-only cores, Android API level,
-                        # build-logic tests)
-scripts/test interop    # cross-tests against libcoap and libedhoc in both roles (builds their Docker images)
+scripts/test unit       # unit tests on every target this machine builds, then the build checks
+scripts/test interop    # libcoap and libedhoc cross-tests in both roles; builds Docker images
 scripts/test coverage   # unit and interop tests with the coverage report and the 90% floor
 scripts/test apple      # the common tests against CryptoKit and CommonCrypto (macOS only)
 scripts/test all        # unit, interop and coverage
@@ -307,8 +319,9 @@ Contributions are welcome. kcoap uses the [Developer Certificate of Origin](DCO)
 off every commit with `git commit -s`, which adds a `Signed-off-by` line matching the commit's author,
 and a check on every pull request verifies it. Contributions are licensed under Apache-2.0 and you keep
 your copyright. [CONTRIBUTING.md](CONTRIBUTING.md) has the workflow, and the
-[Code of Conduct](CODE_OF_CONDUCT.md) applies to everyone who takes part. The [code style](docs/code-style.md) and
-[testing](docs/testing.md) pages say how the code is written and tested.
+[Code of Conduct](CODE_OF_CONDUCT.md) applies to everyone who takes part. The
+[code style](docs/code-style.md) and [testing](docs/testing.md) pages say how the code is written and
+tested.
 
 ## Security
 

@@ -75,7 +75,7 @@ What kcoap sends and accepts follows the published RFCs, and is versioned as fol
 - **A deviation from an RFC is a bug.** Its fix ships in the next patch or minor release, even when a
   peer relied on the old behaviour, and CHANGELOG.md lists it under "Fixed" or "Security" with the RFC
   section it restores.
-- **Deliberate deviations are documented** in [rfc-compliance.md](rfc-compliance.md) with their reason,
+- **Deliberate deviations are documented** in [RFC compliance](rfc-compliance.md) with their reason,
   such as the access check that runs before the critical-option check (RFC 7252 §5.4.1,
   [ADR 0008](adr/0008-fail-closed-message-security.md)).
 - **A changed default that changes the wire**, such as turning Q-Block on, ships only in a minor or

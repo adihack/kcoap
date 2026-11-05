@@ -24,10 +24,10 @@ of its trademarks.
 ## How decisions are made
 
 - **Day to day** in issues and pull requests, in public. Anyone may comment; maintainers merge.
-- **Architecture** through ADRs in [docs/adr](docs/adr/README.md). An ADR is proposed in a pull request,
-  discussed there, and accepted when a maintainer merges it. An accepted ADR's decision is never
-  changed; a later ADR supersedes it. An "As built" section may be appended to record how it was
-  implemented.
+- **Architecture** through architecture [decision records](docs/adr/README.md) (ADRs). An ADR is
+  proposed in a pull request, discussed there, and accepted when a maintainer merges it. An accepted
+  ADR's decision is never changed; a later ADR supersedes it. An "As built" section may be appended to
+  record how it was implemented.
 - **When there is no consensus**, the lead maintainer decides, and records the reasons in the issue,
   the pull request or the ADR.
 - **Security issues** are handled in private, as [SECURITY.md](SECURITY.md) describes, and disclosed
@@ -47,7 +47,7 @@ Maintainers who step back are thanked and listed as former maintainers.
 
 ## Releases
 
-Maintainers publish releases as [docs/releasing.md](docs/releasing.md) describes: a release is a tag,
+Maintainers publish releases as the [Releasing](docs/releasing.md) page describes: a release is a tag,
 CI must pass first, and no tag is made before the release freeze list has merged.
 
 ## The project's assets

@@ -40,7 +40,7 @@ below keep every change reviewable: what it does, why, and how it was proven.
 |---|---|
 | **Bug reports** | the kcoap version, the platform, and the smallest program or test that shows the bug |
 | **Interop reports** | the other implementation and its version, the transport, the security mode, which side kcoap plays, and logs or a capture from both sides |
-| **RFC compliance gaps** | the RFC and section, what it requires, what kcoap does, and the evidence; [docs/rfc-compliance.md](docs/rfc-compliance.md) lists the known gaps |
+| **RFC compliance gaps** | the RFC and section, what it requires, what kcoap does, and the evidence; [RFC compliance](docs/rfc-compliance.md) lists the known gaps |
 | **Documentation** | corrections, missing steps, examples that run; the [docs hub](docs/README.md) shows what exists |
 | **Code** | issues labelled [`good first issue`](https://github.com/adihack/kcoap/labels/good%20first%20issue) and [`help wanted`](https://github.com/adihack/kcoap/labels/help%20wanted) are good places to start |
 
@@ -53,11 +53,11 @@ catches mistakes that tests against kcoap itself cannot.
   behaviour, a new dependency, or a change to the build. Agreeing on the approach first saves you from
   rewriting a finished pull request. Small fixes and documentation can go straight to a pull request.
 - **Record design decisions as ADRs.** A decision that shapes the architecture gets an architecture
-  decision record in [docs/adr](docs/adr/README.md): the next number, the format of the existing
-  records, and a row in the index. An accepted record's decision is never changed; a later record
+  decision record next to the existing [decision records](docs/adr/README.md): the next number, their
+  format, and a row in the index. An accepted record's decision is never changed; a later record
   supersedes it. An "As built" section may be appended to record how it was implemented.
-- **Check what is planned.** [docs/checklist.md](docs/checklist.md) tracks every requirement with its
-  status, and [docs/roadmap.md](docs/roadmap.md) the order of the work.
+- **Check what is planned.** The [checklist](docs/checklist.md) tracks every requirement with its
+  status, and the [roadmap](docs/roadmap.md) the order of the work.
 
 ## Development setup
 
@@ -88,11 +88,11 @@ Each test suite is one command, and every run ends with a table of tests per tar
 | `scripts/test all` | unit, interop and coverage |
 
 Extra arguments go to Gradle, for example `scripts/test interop --tests '*Oscore*'`.
-[docs/testing.md](docs/testing.md) explains each suite, the build checks and how to run single tests.
+[Testing](docs/testing.md) explains each suite, the build checks and how to run single tests.
 
 ## Code style
 
-[docs/code-style.md](docs/code-style.md) is the reference. In short:
+[Code style](docs/code-style.md) is the reference. In short:
 
 - Kotlin official style, 4 spaces, lines up to 120 characters; explicit API mode, so every public
   declaration states its visibility.
@@ -109,7 +109,7 @@ Extra arguments go to Gradle, for example `scripts/test interop --tests '*Oscore
 - **RFC vectors first.** Where an RFC or a NIST document publishes examples, the code is checked
   against them byte for byte, in tests named after the section they come from. Vectors are extracted
   from the source documents by the scripts in `tools/`, not typed in by hand. A vector source kcoap
-  did not use before is also recorded in [docs/third-party.md](docs/third-party.md).
+  did not use before is also recorded in [third-party material](docs/third-party.md).
 - **Then every public behaviour and every error path.** Common tests run on every target, so choose
   algorithms by capability (`crypto.supports(...)`), never by target.
 - **Coverage floors.** The build fails below **90 %** line coverage for the whole library and below
@@ -119,7 +119,7 @@ Extra arguments go to Gradle, for example `scripts/test interop --tests '*Oscore
   the wire or to how messages are processed, and add a cross-test when you add a feature that libcoap
   or libedhoc also implement.
 
-[docs/testing.md](docs/testing.md#writing-tests) has the details: virtual time, `InstantCrypto`, stress
+[Testing: writing tests](docs/testing.md#writing-tests) has the details: virtual time, `InstantCrypto`, stress
 tests for shared state.
 
 ## Public API
@@ -133,7 +133,7 @@ tests for shared state.
   should not use it.
 - **`@ExperimentalKcoapApi`** marks a published SPI that nothing implements yet. Its shape may change
   with the first implementation, which removes the marker in the same change.
-- **Compatibility.** [docs/versioning.md](docs/versioning.md) says what a version number promises.
+- **Compatibility.** [Versioning](docs/versioning.md) says what a version number promises.
   Before 1.0 a minor version may break the API; every breaking change gets a CHANGELOG entry with a
   migration note.
 
@@ -144,7 +144,7 @@ tests for shared state.
   that uses it.
 - Declare `api` exactly when the dependency's types appear in a public signature, otherwise
   `implementation` ([code style](docs/code-style.md#dependencies-and-api)).
-- Record it in [docs/third-party.md](docs/third-party.md) with its license.
+- Record it in [third-party material](docs/third-party.md) with its license.
 
 ## Documentation to update
 
@@ -153,11 +153,11 @@ A change is finished when its documentation is:
 | Change | Update |
 |---|---|
 | anything a user can notice | [CHANGELOG.md](CHANGELOG.md), section "Unreleased", with a migration note for a breaking change |
-| a requirement's status or evidence | [docs/checklist.md](docs/checklist.md) |
-| RFC coverage | [docs/rfc-compliance.md](docs/rfc-compliance.md) |
+| a requirement's status or evidence | [Checklist](docs/checklist.md) |
+| RFC coverage | [RFC compliance](docs/rfc-compliance.md) |
 | a module's behaviour | its README and the KDoc |
-| a dependency or a vector source | [docs/third-party.md](docs/third-party.md) |
-| an architectural decision | a new ADR in [docs/adr](docs/adr/README.md) |
+| a dependency or a vector source | [Third-party material](docs/third-party.md) |
+| an architectural decision | a new record in the [decision records](docs/adr/README.md) |
 
 ## Commit messages
 
@@ -247,7 +247,7 @@ git history records who wrote what.
 
 Do not copy code from other projects unless its license allows it under Apache-2.0. If you do, say so
 in the pull request, keep the original copyright and license notices, and record it in
-[docs/third-party.md](docs/third-party.md).
+[third-party material](docs/third-party.md).
 
 ## Tool-assisted contributions
 

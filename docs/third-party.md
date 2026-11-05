@@ -27,10 +27,10 @@ data is copied into any of them.
 
 ### Per module and target
 
-The targets are those of each module's tier ([target architecture](target-architecture.md#21-tiers-build-logic-plugin-ids-unchanged)
-§2.1): **all** means the
-JVM (Android included), `iosArm64`, `iosSimulatorArm64`, `macosArm64`, `linuxX64`, `js` and `wasmJs`;
-**sockets** means all of these except `js` and `wasmJs`.
+The targets are those of each module's tier
+([target architecture](target-architecture.md#21-tiers-build-logic-plugin-ids-unchanged) §2.1): **all**
+means the JVM (Android included), `iosArm64`, `iosSimulatorArm64`, `macosArm64`, `linuxX64`, `js` and
+`wasmJs`; **sockets** means all of these except `js` and `wasmJs`.
 
 | Module | Targets | Third-party libraries it depends on directly |
 |---|---|---|
