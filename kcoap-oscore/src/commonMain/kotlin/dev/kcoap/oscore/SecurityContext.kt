@@ -19,6 +19,9 @@ import kotlinx.coroutines.sync.withLock
  * The derived Sender and Recipient Keys and the Common IV never leave the object. The input parameters,
  * Master Secret included, stay inside the module for re-deriving the context and are not reachable from
  * here; `toString()` shows only identifiers.
+ *
+ * Use one instance per set of keys and share it. Two live instances derived from the same parameters
+ * hand out the same sequence numbers, so their nonces repeat (see [derive]).
  */
 public class SecurityContext private constructor(
     internal val parameters: SecurityContextParameters,
@@ -162,6 +165,14 @@ public class SecurityContext private constructor(
          *   reuses AEAD nonces, which breaks the confidentiality and integrity of AES-CCM.
          * - Keys that are new in this process run, such as EDHOC output, use
          *   [EphemeralSequenceNumberStore].
+         *
+         * At most one live context may exist per store and context [name][SecurityContextParameters.name].
+         * Deriving again from the same store, after a restart or within the process, is a restore: it is
+         * safe only once the previous context for these parameters is discarded and no call is still
+         * running on it. A context still in use goes on handing out numbers from the block it reserved, and
+         * the new one reserves the next block, which the old one reaches later: the same nonce under the
+         * same Sender Key. Two derivations that run at the same time both find no value and both start at
+         * 0. The library does not detect either case.
          *
          * The store is read, and a new context recorded, before any key exists, so a failing store leaves
          * no key material behind. When the backend cannot build the AEAD, the derived keys and the Common

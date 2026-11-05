@@ -16,6 +16,10 @@ package dev.kcoap.oscore
  *
  * Implementations shared by several contexts must be safe for concurrent calls. Keep the values out of
  * backups that can be restored onto a device: an older value brought back is exactly a nonce reuse.
+ *
+ * At most one live context may use a store under one context name. Discard the previous context before
+ * deriving it again from the same store: the store keeps one limit per name and cannot tell two contexts
+ * apart, so both would hand out the same numbers ([SecurityContext.derive] explains how).
  */
 public interface SequenceNumberStore {
     /** The last value [store]d for [contextName], or null when the store never saw that context. */

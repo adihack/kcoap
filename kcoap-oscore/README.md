@@ -56,6 +56,9 @@ Sender Sequence Number. A context that restarts at 0 with the same key reuses no
   reaches the stack as `UnprotectedRequest.challenge`, and its own Partial IV comes from the durable
   counter. Every challenge repeats the same Echo value until a request returns it, so a replayed
   request cannot revoke the value the client is about to send back.
+- **One live context per store and name.** Deriving again from the same store is a restore: discard
+  the previous context first. Two live contexts with the same keys hand out the same numbers, and two
+  derivations at the same time both start at 0.
 
 ### Writing a durable store
 

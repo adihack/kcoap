@@ -13,8 +13,9 @@ import kotlinx.coroutines.sync.withLock
  * unless [FreshnessPolicy.REQUIRE_PROOF] is chosen, its empty replay window accepts recorded requests
  * once more (Appendix B.1.2). Use a durable store there; `kcoap-oscore/README.md` has recipes.
  *
- * Thread safe: one store may serve several contexts at once. It keeps the highest value stored for
- * each context name, so a value never goes back.
+ * Thread safe: one store may serve several contexts at once, each under its own context name (one live
+ * context per name, see [SecurityContext.derive]). It keeps the highest value stored for each name, so
+ * a value never goes back.
  */
 public class EphemeralSequenceNumberStore : SequenceNumberStore {
     private val lock = Mutex()

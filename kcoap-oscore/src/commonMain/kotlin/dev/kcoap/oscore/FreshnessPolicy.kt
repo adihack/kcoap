@@ -9,6 +9,9 @@ package dev.kcoap.oscore
  * context answers the first request with a protected 4.01 carrying Echo (RFC 9175 §2.3), processes
  * nothing until a request returns that Echo value, and then starts the window at that request's Partial
  * IV. The window guards requests only, so the policy has no effect on a context that only sends them.
+ *
+ * Deriving again is a restore only when the earlier context for the same keys is discarded first: at
+ * most one live context may exist per store and context name ([SecurityContext.derive]).
  */
 public enum class FreshnessPolicy {
     /**
