@@ -30,7 +30,10 @@ public enum class QBlockMode {
  * A body follows the message type of its request (RFC 9177 §7): a Confirmable request (the default) sends
  * and receives Confirmable blocks in lock-step under NSTART (§7.1, Appendix A); a Non-confirmable one
  * (`CoapRequest.Builder.nonConfirmable()`) gets the bursts of §7.2. A request carrying No-Response, Observe,
- * or a Block or Q-Block option of the application's own always uses RFC 7959, as do observations.
+ * or a Block or Q-Block option of the application's own always uses RFC 7959. Observations
+ * ([CoapClient.observe]) use Q-Block like requests (§4.5): every notification body comes in Q-Block2 and is
+ * emitted once it is whole, a FETCH body that needs blocks is uploaded in Q-Block1, and the bodies of a
+ * Non-confirmable observation are bursts.
  *
  * @property mode whether Q-Block is used, and how the client finds out that a server supports it.
  * @property probePath the resource the [QBlockMode.PROBE] probe asks for, with Q-Block2 0/0/16: block 0 of 16

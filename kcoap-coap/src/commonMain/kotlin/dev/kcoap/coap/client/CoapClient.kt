@@ -249,6 +249,10 @@ public class CoapClient private constructor(
      * Collectors of the same target share one registration (RFC 7641 §3.1); when the last one stops, the
      * observation is cancelled as [CoapClientConfig.observeCancellation] says. A slow collector misses
      * intermediate notifications rather than holding up the client.
+     *
+     * With [CoapClientConfig.qBlock] on and a server that supports it, notification bodies come in Q-Block2
+     * (RFC 9177 §4.5) and each is emitted once, whole; a FETCH registration whose body needs blocks is
+     * uploaded in Q-Block1 and, when cancelled, forgets its token instead of deregistering.
      */
     public fun observe(request: CoapRequest): Flow<CoapResponse> = flow {
         require(request.method == CoapCode.GET || request.method == CoapCode.FETCH) { "Only GET and FETCH can be observed" }

@@ -45,8 +45,8 @@ import kotlinx.coroutines.withContext
  * when the peer is on a reliable transport and [QBlockClientConfig.onReliableTransports] is off, when message
  * security is configured (whatever [QBlockClientConfig.withMessageSecurity] says, until OSCORE takes several
  * responses to one request), when the request carries No-Response (its combination with Q-Block1 is
- * undefined), Observe, or a Block or Q-Block option of its own, and when [QBlockSupport] does not know the
- * peer to support Q-Block.
+ * undefined), Observe (outside [observe]), or a Block or Q-Block option of its own, and when [QBlockSupport]
+ * does not know the peer to support Q-Block.
  *
  * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.blockSize], goes in
  * Q-Block1 blocks of one size for the whole body, each a new request on a new token with Size1, the body's
@@ -81,6 +81,21 @@ import kotlinx.coroutines.withContext
  * Non-confirmable body that never got a response forgets the peer's capability and leaves its lease to
  * expire, so the next body waits as PROBING_RATE asks (§7.2). Otherwise a body that hears nothing for
  * [CoapClient.requestTimeout] fails the same way.
+ *
+ * **Observe** ([observe]; RFC 7641, §4.5). A registration goes as a download, or for a FETCH body that needs
+ * blocks as an upload with Observe on every block. The first response with Observe on a request of the
+ * registration (not a follow-up) names the observation's token: the original request's, the one sent again
+ * with Echo, or the upload block that completed the body, which the server answers on (Figure 14). Once that
+ * body is whole the observation is established: every other token is forgotten and the lease given back.
+ * From then on each notification body is assembled by a [QBlock2Receiver] of its own, whose mode follows the
+ * message type of its blocks, and delivered once. A block with a new ETag starts a new body only if it is
+ * fresher than every body before it ([Observer.isFresh], RFC 7641 §3.4), which supersedes the body in
+ * progress; blocks of bodies delivered, given up or stale are ignored. A block without Observe continues the
+ * body of its ETag (libcoap leaves Observe out after a Continue) but starts a body only in answer to a request
+ * of the client's own. The Continues and requests for missing blocks of a Non-confirmable notification body
+ * hold one lease until the body is delivered or given up (§7.2); a body given up only waits for the next
+ * notification. A response without Q-Block2 and without Observe, or an error, ends the observation
+ * (RFC 7641 §3.2).
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class QBlockClient(private val client: CoapClient) {
@@ -98,6 +113,54 @@ internal class QBlockClient(private val client: CoapClient) {
     init {
         if (config.withMessageSecurity && client.config.security != null) {
             log.warn { "QBlockClientConfig.withMessageSecurity has no effect yet: protected requests use RFC 7959" }
+        }
+    }
+
+    /** What a [ClientObservation] learns from an observation whose bodies come in Q-Block2 ([observe]). */
+    interface Observer {
+        /**
+         * Whether a notification with Observe [value], the first block of a new body, is fresher than every one
+         * before it (RFC 7641 §3.4); the blocks of a stale body are ignored.
+         */
+        fun isFresh(value: Long): Boolean
+
+        /**
+         * The registration was answered with a notification on [token], which the observation keeps (RFC 7641
+         * §3.1). [forgets] when the observation ends by forgetting that token rather than deregistering: a
+         * registration uploaded with Q-Block1, whose body sent again would need a new Request-Tag (RFC 9175 §3.4).
+         */
+        fun onEstablished(token: ByteArray, forgets: Boolean)
+
+        /** A whole notification: one per body (RFC 9177 §4.5). */
+        suspend fun onNotification(response: CoapResponse)
+    }
+
+    /**
+     * Observes with [registration], a GET or FETCH carrying Observe 0 (RFC 7641 §3.1), with Q-Block for its
+     * bodies (RFC 9177 §4.5) where [send] would use Q-Block. Notifications go to [observer]. Returns the response
+     * that ended the observation, one without Observe or an error (RFC 7641 §3.2); or null when RFC 7959 must
+     * carry the observation instead: Q-Block does not apply, or the server rejected Q-Block before processing the
+     * registration, or answered it with Block2 (its token is forgotten, so its next notification gets a Reset,
+     * RFC 7641 §3.6). Runs until then; cancelling the caller forgets every token.
+     *
+     * @throws CoapException when the registration gets no response, or the observation fails.
+     */
+    suspend fun observe(peer: Endpoint, registration: CoapMessage, confirmable: Boolean, observer: Observer): CoapResponse? {
+        val reliable = endpoint.isReliable(peer)
+        rfc7959Reason(registration, reliable, isObservation = true)?.let { reason ->
+            log.debug { "RFC 7959 for the observation of ${registration.options.path}: $reason" }
+            return null
+        }
+        val isProtected = client.config.security != null
+        if (support.capability(peer, isProtected) != QBlockCapabilities.Capability.SUPPORTED) return null
+        val transfer = Transfer(peer, registration, confirmable, reliable, endpoint.limits(peer), isProtected, observer)
+        return when (val outcome = transfer.run()) {
+            is Outcome.Done -> outcome.response
+            is Outcome.Fallback -> {
+                support.rejected(peer, isProtected, outcome.reason)
+                null
+            }
+            is Outcome.Rfc7959 -> null
         }
     }
 
@@ -126,15 +189,18 @@ internal class QBlockClient(private val client: CoapClient) {
         }
     }
 
-    /** Why [request] goes with RFC 7959 whatever the peer supports, or null when Q-Block may carry it. */
-    private fun rfc7959Reason(request: CoapMessage, reliable: Boolean): String? {
+    /**
+     * Why [request] goes with RFC 7959 whatever the peer supports, or null when Q-Block may carry it. Only an
+     * [isObservation] registration, which [observe] sends, carries Observe with Q-Block.
+     */
+    private fun rfc7959Reason(request: CoapMessage, reliable: Boolean, isObservation: Boolean = false): String? {
         val options = request.options
         return when {
             reliable && !config.onReliableTransports -> "Q-Block is off on reliable transports"
             // OSCORE takes one response per request (RFC 8613 §7.4), so withMessageSecurity cannot take effect yet.
             client.config.security != null -> "Q-Block is not available with message security yet"
             options.noResponse != null -> "the request carries No-Response"
-            options.observe != null -> "the request carries Observe"
+            options.observe != null && !isObservation -> "the request carries Observe"
             OWN_BLOCK_OPTIONS.any { it in options } -> "the request carries block options of its own"
             else -> null
         }
@@ -178,9 +244,11 @@ internal class QBlockClient(private val client: CoapClient) {
         private val peer: Endpoint,
         private val request: CoapMessage,
         private val confirmable: Boolean,
-        reliable: Boolean,
+        private val reliable: Boolean,
         private val limits: MessageLimits,
         private val isProtected: Boolean,
+        /** The observation the request registers, which every body goes to ([observe]); null for a request. */
+        private val observer: Observer? = null,
     ) {
         private val mode = BodyMode.of(if (confirmable) CoapMessageType.CON else CoapMessageType.NON, reliable)
         private val method = request.code
@@ -235,6 +303,20 @@ internal class QBlockClient(private val client: CoapClient) {
 
         private var outcome: Outcome? = null
 
+        // Observation (RFC 7641; RFC 9177 §4.5).
+        /** The token, and Observe value, of the first response with Observe to a request of the registration. */
+        private var registrationToken: String? = null
+        private var registrationObserve: Long? = null
+
+        /** Whether the registration was answered with a notification: from then on every body is one. */
+        private var isObserving = false
+
+        /** The notification body being assembled. */
+        private var notification: Notification? = null
+
+        /** ETags of notification bodies delivered, given up or stale, so that their late blocks start no body. */
+        private val finished = ArrayDeque<ByteArray>()
+
         suspend fun run(): Outcome {
             try {
                 val upload = uploadBlockSize()
@@ -247,7 +329,12 @@ internal class QBlockClient(private val client: CoapClient) {
                     outcome?.let { return it }
                     val deadline = nextDeadline()
                     val wait = deadline - endpoint.now()
-                    val event = if (wait.isPositive()) inbox.receive(wait) else inbox.tryReceive()
+                    val event = when {
+                        // An observation with no body in progress waits for its next notification, however long.
+                        deadline.isInfinite() -> inbox.receive()
+                        wait.isPositive() -> inbox.receive(wait)
+                        else -> inbox.tryReceive()
+                    }
                     if (event == null) onTimer() else onEvent(event)
                 }
             } finally {
@@ -492,7 +579,12 @@ internal class QBlockClient(private val client: CoapClient) {
                 remove(CoapOptions.SIZE1.number)
                 blocks.forEach { addQBlock2(it) }
             }.build()
+            if (isObserving && lease == null && !confirmable && !reliable) {
+                // §7.2: the requests for a Non-confirmable notification body take one NSTART slot for the body.
+                lease = endpoint.leaseBody(peer, UdpMessageCodec.encode(message).size)
+            }
             val exchange = open(message.withEcho(), sequence = null, blocks = blocks, isEchoRetry = isEchoRetry)
+            notification?.requests?.add(exchange.key.token)
             followUps.addLast(exchange)
             while (followUps.size > MAX_OPEN_FOLLOW_UPS) release(followUps.removeFirst().key.token)
         }
@@ -508,7 +600,20 @@ internal class QBlockClient(private val client: CoapClient) {
             when (event) {
                 is ExchangeEvent.Response -> {
                     val message = event.message
-                    if (sender != null && sequence != null) onUploadEvent(sender, sequence, message) else onDownloadResponse(origin, message)
+                    if (isObserving) {
+                        onObserved(origin, message)
+                    } else {
+                        val observe = message.options.observe
+                        if (observer != null && registrationToken == null && origin.blocks == null && observe != null) {
+                            registrationToken = event.exchange.key.token
+                            registrationObserve = observe
+                        }
+                        if (sender != null && sequence != null) {
+                            onUploadEvent(sender, sequence, message)
+                        } else {
+                            onDownloadResponse(origin, message)
+                        }
+                    }
                     if (message.code != CoapCode.UNAUTHORIZED || message.options.echo == null) answered = true
                 }
                 is ExchangeEvent.Acknowledged -> {
@@ -529,6 +634,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 is ExchangeEvent.TimedOut -> {
                     sent.remove(event.exchange.key.token)
                     when {
+                        isObserving -> logger.debug { "A request for blocks of a notification was not acknowledged" }
                         sender != null && sequence != null -> uploadActions(sender.onTimeout(now, sequence))
                         origin.sequence != null || hasBlock -> logger.debug { "A request of the body was not acknowledged" }
                         else -> fail(CoapException.Reason.TRANSMISSION_TIMEOUT, "No ACK from $peer after MAX_RETRANSMIT retransmissions")
@@ -559,6 +665,7 @@ internal class QBlockClient(private val client: CoapClient) {
         }
 
         private fun nextDeadline(): Duration {
+            if (isObserving) return notification?.receiver?.nextDeadline() ?: Duration.INFINITE
             val machine = sender?.takeIf { !it.isFinished }?.nextDeadline() ?: receiver?.nextDeadline()
             return listOfNotNull(machine, unansweredDeadline(), lastActivity + client.requestTimeout).min()
         }
@@ -575,6 +682,12 @@ internal class QBlockClient(private val client: CoapClient) {
 
         private suspend fun onTimer() {
             val now = endpoint.now()
+            if (isObserving) {
+                notification?.let { body ->
+                    if (body.receiver.nextDeadline()?.let { it <= now } == true) notificationActions(body, body.receiver.onTimer(now))
+                }
+                return
+            }
             sender?.takeIf { !it.isFinished }?.let { sender ->
                 if (sender.nextDeadline()?.let { it <= now } == true) uploadActions(sender.onTimer(now))
             }
@@ -637,13 +750,190 @@ internal class QBlockClient(private val client: CoapClient) {
             return true
         }
 
-        private fun done(message: CoapMessage) {
+        /**
+         * The response [message] ended the request. For a registration, a 2.xx after a response with Observe on a
+         * request of the registration is its first notification, which establishes the observation; the body
+         * delivered may lack Observe when it came in answer to the client's own request for the whole body.
+         */
+        private suspend fun done(message: CoapMessage) {
+            val response = response(message)
+            val observer = observer
+            val token = registrationToken
+            if (observer != null && token != null && response.code.isSuccess) {
+                establish(observer, token, response)
+            } else {
+                outcome = Outcome.Done(response)
+            }
+        }
+
+        /** [message] as the application sees it: without Q-Block1, Q-Block2 and Size2. */
+        private fun response(message: CoapMessage): CoapResponse {
             val options = message.options.toBuilder().apply {
                 remove(CoapOptions.Q_BLOCK1.number)
                 remove(CoapOptions.Q_BLOCK2.number)
                 remove(CoapOptions.SIZE2.number)
             }.build()
-            outcome = Outcome.Done(CoapResponse(message.code, options, message.payload))
+            return CoapResponse(message.code, options, message.payload)
+        }
+
+        // ---------------------------------------------------------------- observation (RFC 7641, RFC 9177 §4.5)
+
+        /**
+         * A notification body being assembled: its ETag, the receiver of its blocks, and the tokens of the requests
+         * for its blocks, whose answers alone may start a body without Observe.
+         */
+        private inner class Notification(val etag: ByteArray, val receiver: QBlock2Receiver) {
+            val requests = HashSet<String>()
+        }
+
+        /**
+         * The registration was answered with its first notification [first], with Observe on [token] (RFC 7641
+         * §3.1): every other request of the registration is forgotten and its lease given back, and from now on
+         * every body is a notification.
+         */
+        private suspend fun establish(observer: Observer, token: String, first: CoapResponse) {
+            val kept = sent[token] ?: fail(CoapException.Reason.BLOCKWISE_FAILED, "The registration's token was released")
+            for ((other, request) in sent.toList()) {
+                if (other == token) continue
+                sent.remove(other)
+                request.exchange.cancel()
+            }
+            followUps.clear()
+            sequences.clear()
+            val forgets = sender != null
+            sender = null
+            receiver = null
+            hasBlock = false
+            original = null
+            releaseLease()
+            isObserving = true
+            logger.debug { "Observing on token $token" }
+            (first.options.observe ?: registrationObserve)?.let { observer.isFresh(it) }
+            observer.onEstablished(kept.exchange.token, forgets)
+            observer.onNotification(first)
+        }
+
+        /** A message on any token of the established observation. */
+        private suspend fun onObserved(origin: Sent, message: CoapMessage) {
+            val observer = checkNotNull(observer)
+            val isFollowUp = origin.blocks != null
+            QBlockCheck.response(message, limits.allowsBert)?.let { return logger.debug { "Dropped a notification: $it" } }
+            val block = message.options.qBlock2
+            if (block != null) return onNotificationBlock(observer, origin.exchange.key.token.takeIf { isFollowUp }, message, block)
+            if (isFollowUp) return onFollowUpAnswer(origin, message)
+            val observe = message.options.observe
+            if (observe == null || !message.code.isSuccess) {
+                // RFC 7641 §3.2: a response without Observe, or an error, ends the observation.
+                outcome = Outcome.Done(response(message))
+                return
+            }
+            if (observer.isFresh(observe)) observer.onNotification(response(message))
+        }
+
+        /** A request for blocks of a notification was answered without a block: Echo is returned once, else nothing. */
+        private suspend fun onFollowUpAnswer(origin: Sent, message: CoapMessage) {
+            val echoValue = message.options.echo
+            val blocks = origin.blocks
+            val isChallenge = message.code == CoapCode.UNAUTHORIZED && echoValue != null && client.config.echoRetry
+            if (isChallenge && blocks != null && !origin.isEchoRetry) {
+                // RFC 9175 §2.3: a server that checks addresses challenges a client whose address changed.
+                echo = echoValue
+                sendFollowUp(blocks, isEchoRetry = true)
+                return
+            }
+            logger.debug { "A request for blocks of a notification was answered with ${message.code}" }
+        }
+
+        /**
+         * A block of a notification body (§4.5): it continues the body in progress when it carries that body's
+         * ETag, or no ETag at all (libcoap's answer after it ran its handler again, which the receiver takes for a
+         * changed representation). Otherwise it starts a new body, which supersedes the one in progress, when it
+         * is fresher than every one before (RFC 7641 §3.4), or, without Observe, when it answers a request for
+         * blocks of the body in progress ([followUp], its token), which the server ran its handler again for: an
+         * answer to a request of an earlier body may be older than the bodies since. A body of one block needs no
+         * assembly.
+         */
+        private suspend fun onNotificationBlock(observer: Observer, followUp: String?, message: CoapMessage, block: BlockOption) {
+            val etag = message.options.etags.singleOrNull()
+            val current = notification
+            if (current != null && (etag == null || current.etag.contentEquals(etag))) {
+                return notificationActions(current, current.receiver.onBlock(endpoint.now(), message))
+            }
+            if (etag != null && finished.any { it.contentEquals(etag) }) {
+                return logger.debug { "Dropped a block of a finished notification" }
+            }
+            val observe = message.options.observe
+            if (observe == null && (current == null || followUp !in current.requests)) {
+                return logger.debug { "Dropped a block of a new body without Observe" }
+            }
+            if (observe != null && !observer.isFresh(observe)) {
+                etag?.let { finish(it) }
+                return logger.debug { "Dropped a stale notification $observe (RFC 7641 §3.4)" }
+            }
+            current?.let {
+                logger.debug { "A newer notification supersedes the one in progress (§4.4)" }
+                finishNotification(it)
+            }
+            if (block.number == 0L && !block.more) {
+                etag?.let { finish(it) }
+                return observer.onNotification(response(message))
+            }
+            if (etag == null) return logger.debug { "Dropped a block without ETag" }
+            sizeExponent = block.sizeExponent
+            val bodyMode = if (reliable) BodyMode.RELIABLE else BodyMode.of(message.type, isReliable = false)
+            val receiver = QBlock2Receiver(
+                mode = bodyMode,
+                timing = timing,
+                maxBodySize = client.config.maxResponseBodySize,
+                restartable = true,
+                missingBlockMBit = config.missingBlockMBit,
+                allowsBert = limits.allowsBert,
+            )
+            val next = Notification(etag, receiver)
+            notification = next
+            notificationActions(next, receiver.onBlock(endpoint.now(), message))
+        }
+
+        private suspend fun notificationActions(body: Notification, actions: List<QBlockAction<Nothing>>) {
+            for (action in actions) {
+                when (action) {
+                    is QBlockAction.SendContinue -> sendFollowUp(listOf(BlockOption(action.num, true, sizeExponent)))
+                    is QBlockAction.RequestMissing -> {
+                        val numbers = action.blocks.map { it.number }
+                        endpoint.report(EndpointEvent.QBlockRecovery(peer, isRequestedByPeer = false, blocks = numbers))
+                        sendFollowUp(action.blocks)
+                    }
+                    is QBlockAction.Deliver -> {
+                        finishNotification(body)
+                        checkNotNull(observer).onNotification(response(action.message))
+                    }
+                    is QBlockAction.Discard -> {
+                        // §4.4: the partial body is given up; the observation waits for the next notification.
+                        endpoint.report(EndpointEvent.PartialBodyDropped(peer, action.reason))
+                        finishNotification(body)
+                    }
+                    is QBlockAction.Fail -> fail(action.reason, action.diagnostic)
+                    is QBlockAction.Drop -> logger.debug { "Dropped a block: ${action.reason}" }
+                    else -> Unit
+                }
+            }
+        }
+
+        /** [body] is delivered or given up: its ETag is remembered, and the lease of its requests given back. */
+        private suspend fun finishNotification(body: Notification) {
+            finish(body.etag)
+            if (notification === body) notification = null
+            releaseLease()
+        }
+
+        private fun finish(etag: ByteArray) {
+            finished.addLast(etag)
+            while (finished.size > MAX_FINISHED) finished.removeFirst()
+        }
+
+        private suspend fun releaseLease() {
+            lease?.let { endpoint.releaseBody(it) }
+            lease = null
         }
 
         private suspend fun fail(reason: CoapException.Reason, diagnostic: String): Nothing {
@@ -675,6 +965,9 @@ internal class QBlockClient(private val client: CoapClient) {
 
         /** How many Continues and requests for missing blocks keep their tokens; older ones are forgotten. */
         const val MAX_OPEN_FOLLOW_UPS = 16
+
+        /** How many ETags of finished notification bodies are remembered: enough for blocks late by a few bodies. */
+        private const val MAX_FINISHED = 8
 
         private const val TAG_LENGTH = 4
         private const val MAX_ETAG_LENGTH = 8
