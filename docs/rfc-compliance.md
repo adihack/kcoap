@@ -26,6 +26,7 @@ vectors where they exist and by interop runs against independent implementations
 | RFC 7252 §5.6–5.7, §8 | Caching, proxying, multicast | todo | |
 | RFC 6690 | Link format, `/.well-known/core`, query filtering | done | RFC 6690 §5 examples, libcoap discovery both ways |
 | RFC 7641 | Observe: server (sequence numbers, NSTART, superseding, 24 h CON, removal rules) and client (aggregation, §3.4 ordering, deregistration) | done; client re-registration on Max-Age (MAY) todo | `ObserveTest`, libcoap `/time` and `coap-client -s` |
+| RFC 7252 §11.3, RFC 7641 §7 | Bounds on what unauthenticated peers can make an endpoint keep: deduplication entries, concurrent handlers (piggybacked 5.03), exchanges per peer, observers (global, per peer, per resource; served without Observe), pending and established connections; each reported as `EndpointEvent.LimitReached`. Confirmable notifications interspersed for unauthenticated observers | done; amplification mitigation by Echo (RFC 9175 §2.4) todo | `ResourceBoundsTest`, `ObserveTest`, `ConcurrencyStressTest` |
 | RFC 7959 | Block1 / Block2, negotiation, 2.31 / 4.08 / 4.13, Size1 / Size2, with Observe | done (inner; outer for proxies todo) | `BlockwiseTest`, libcoap `-b` both ways |
 | RFC 8132 | FETCH, PATCH, iPATCH, observable FETCH | done (methods; patch formats are the application's) | `RequestResponseTest`, `ObserveTest` |
 | RFC 7967 | No-Response | done (server) | `RequestResponseTest`, `EdgeCaseTest` |
