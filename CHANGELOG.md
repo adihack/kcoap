@@ -31,6 +31,18 @@ adds its entry and migration note below.
   `ReliableTransportConfig.maxPendingConnections` (128) and `maxConnections` (1 024) (WP-S1).
 - `kcoap-testkit`: `Stress.run` and `Stress.race`, bounded concurrency stress tests on the real
   `Dispatchers.Default` for common tests (WP-S1).
+- Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
+  Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
+  (QB-0). The Q-Block state machines exist but are not yet used by the client or server (QB-1, ADR 0006).
+  New public API:
+  - `TransmissionParameters.maxPayloads` (10), `nonTimeout` (ACK_TIMEOUT), `nonReceiveTimeout`
+    (2 × NON_TIMEOUT, at least NON_TIMEOUT × ACK_RANDOM_FACTOR + 1 s, which `init` enforces),
+    `nonMaxRetransmit` (MAX_RETRANSMIT) and the derived `nonPartialTimeout` (247 s), RFC 9177 §7.2. They are
+    new trailing constructor parameters with defaults, so source stays compatible; compiled callers of the
+    constructor recompile.
+  - `ContentFormat.MISSING_BLOCKS_CBOR_SEQ` (272, RFC 9177 §5).
+  - `OptionSet.qBlock1`, `qBlock2` and `qBlock2List`, and `OptionSet.Builder.qBlock1()`, `qBlock2()` and
+    `addQBlock2()`.
 
 ### Changed (breaking)
 
