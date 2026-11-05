@@ -12,8 +12,8 @@ public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListen
 }
 
 public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion {
-	public final fun start (Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun start$default (Ldev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion;Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun start (Lio/ktor/server/engine/ApplicationEngineFactory;Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun start$default (Ldev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion;Lio/ktor/server/engine/ApplicationEngineFactory;Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListenerKt {

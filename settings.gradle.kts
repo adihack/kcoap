@@ -57,8 +57,8 @@ include(
     ":kcoap-transport-ktor",
     // Adapter, UNIVERSAL. WebSocket client transport on the ktor client: any ktor engine, browsers included.
     ":kcoap-transport-ktor-websocket",
-    // Adapter, SOCKETS. WebSocket server transport on the ktor server: standalone on CIO, or mounted in a
-    // ktor application.
+    // Adapter, SOCKETS. WebSocket server transport on the ktor server: standalone on the engine the
+    // application passes, or mounted in a ktor application.
     ":kcoap-transport-ktor-websocket-server",
     // Core, unpublished. DTLS 1.2 for coaps (RFC 6347, RFC 7925, RFC 9146): interfaces and registries only,
     // so it is not published until the engine exists.

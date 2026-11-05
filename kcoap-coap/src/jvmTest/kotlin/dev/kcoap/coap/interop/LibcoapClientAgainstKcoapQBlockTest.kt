@@ -22,6 +22,7 @@ import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorTcpListener
 import dev.kcoap.transport.ktor.KtorUdpTransport
 import dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener
+import io.ktor.server.cio.CIO
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -144,7 +145,7 @@ class LibcoapClientAgainstKcoapQBlockTest {
             val verifyingTransport = KtorUdpTransport.bind("127.0.0.1")
             verifying = CoapServer(verifyingTransport, scope, CoapServerConfig(qBlock = qBlock), endpointConfig()) { routes() }
             val tcpListener = KtorTcpListener.bind("127.0.0.1")
-            val wsListener = KtorWebSocketListener.start("127.0.0.1", 0)
+            val wsListener = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
             reliable = CoapServer(listOf(tcpListener, wsListener), scope, CoapServerConfig(qBlock = qBlock), endpointConfig()) { routes() }
             uri = "coap://127.0.0.1:$openPort"
             verifyingUri = "coap://127.0.0.1:${verifyingTransport.localEndpoint.port}"

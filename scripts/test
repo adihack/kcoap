@@ -4,15 +4,22 @@
 #   scripts/test unit       every unit test on every target this machine can build
 #                           (JVM, Linux native, JS and Wasm on Node.js; Apple targets on macOS), and the
 #                           build checks: the build-logic tests, verifyCommonOnly on the core modules,
-#                           checkKotlinAbi against the committed ABI dumps
+#                           verifyNoServerEngine on the WebSocket server, checkKotlinAbi against the
+#                           committed ABI dumps
 #   scripts/test interop    the cross-tests against libcoap and libedhoc (builds their Docker images)
 #   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
 #   scripts/test apple      the common tests on macOS and the iOS simulator, and checkKotlinAbi with
 #                           the Apple klibs built natively (macOS only)
+#   scripts/test browser [command]
+#                           kcoap-transport-ktor-websocket's js tests in a headless browser against a
+#                           JVM WebSocket listener; command is google-chrome (the default), chromium or
+#                           firefox (on Ubuntu /snap/bin/firefox), and Gradle flags may follow it or
+#                           replace it
 #   scripts/test images     only build the pinned libcoap and libedhoc images
 #   scripts/test all        unit, interop and coverage
 #
 # Extra arguments go to Gradle, e.g.  scripts/test interop --tests '*Oscore*'
+#                                     scripts/test browser firefox --max-workers=4
 # A summary of the JUnit results is printed at the end.
 set -euo pipefail
 
@@ -42,7 +49,8 @@ build_images() {
 # build checks run in the same invocation, so a failing test does not hide an ABI or layout problem.
 unit() {
     say "Unit tests and build checks"
-    gradle allTests :build-logic:test verifyCommonOnly checkKotlinAbi -Pkcoap.tests=unit --continue "$@"
+    gradle allTests :build-logic:test verifyCommonOnly verifyNoServerEngine checkKotlinAbi -Pkcoap.tests=unit \
+        --continue "$@"
 }
 
 interop() {
@@ -65,6 +73,25 @@ apple() {
     fi
     say "Apple tests (macOS and the iOS simulator) and the ABI check with native Apple klibs"
     gradle macosArm64Test iosSimulatorArm64Test checkKotlinAbi --continue "$@"
+}
+
+browser() {
+    # The browser command comes first when given; anything starting with '-' is already a Gradle flag.
+    local command=google-chrome
+    if [[ $# -gt 0 && $1 != -* ]]; then
+        command=$1
+        shift
+    fi
+    # The test writes the browser's results here; Gradle passes a filter that matches nothing silently.
+    local report=kcoap-transport-ktor-websocket/build/browser/report.txt
+    rm -f "$report"
+    say "WebSocket js tests in $command against a JVM listener"
+    gradle :kcoap-transport-ktor-websocket:jvmTest --tests '*BrowserAgainstJvmListenerTest' \
+        "-Pkcoap.browser=$command" "$@"
+    if ! grep -q 'JsWebSocketSubprotocolTest' "$report" 2>/dev/null; then
+        echo "No browser results in $report: BrowserAgainstJvmListenerTest did not run." >&2
+        return 1
+    fi
 }
 
 summary() {
@@ -99,7 +126,8 @@ case "$suite" in
     interop) interop "$@" ;;
     coverage) coverage "$@" ;;
     apple) apple "$@" ;;
+    browser) browser "$@" ;;
     images) trap - EXIT; build_images ;;
     all) unit "$@"; interop "$@"; coverage "$@" ;;
-    *) sed -n '2,15p' "$0"; trap - EXIT; exit 2 ;;
+    *) sed -n '2,22p' "$0"; trap - EXIT; exit 2 ;;
 esac

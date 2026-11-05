@@ -26,6 +26,7 @@ import dev.kcoap.transport.ktor.KtorTcpListener
 import dev.kcoap.transport.ktor.KtorUdpTransport
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
 import dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener
+import io.ktor.server.cio.CIO
 import java.net.DatagramSocket
 import java.net.ServerSocket
 import kotlin.random.Random
@@ -131,7 +132,7 @@ class GuideExamplesTest {
     suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
         val listeners = listOf(
             KtorTcpListener.bind("127.0.0.1", tcpPort), // coap+tcp
-            KtorWebSocketListener.start("127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
+            KtorWebSocketListener.start(CIO, "127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
         )
         return CoapServer(listeners, scope) {
             resource("hello") { get { CoapResponse.content("Hello over ${peer::class.simpleName}") } }

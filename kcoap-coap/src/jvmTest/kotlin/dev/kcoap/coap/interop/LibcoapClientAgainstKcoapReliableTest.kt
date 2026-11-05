@@ -13,6 +13,7 @@ import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorTcpListener
 import dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener
+import io.ktor.server.cio.CIO
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -73,7 +74,7 @@ class LibcoapClientAgainstKcoapReliableTest {
         assumeTrue(Libcoap.isAvailable, "docker or ${Libcoap.IMAGE} not available")
         runBlocking {
             val tcpListener = KtorTcpListener.bind("127.0.0.1")
-            val wsListener = KtorWebSocketListener.start("127.0.0.1", 0)
+            val wsListener = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
             server = CoapServer(
                 listOf(tcpListener, wsListener), scope,
                 endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it }),

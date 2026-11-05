@@ -490,6 +490,7 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **API changes:** the listener requires an engine factory.
 - **Depends on:** C1.
 - **Risk:** low to medium. Darwin subprotocol negotiation must be verified first; if it fails, keep CIO on Apple and record the cellular risk.
+- **Merge gate:** the macOS job and the browser job green on the PR; both were written on Linux and have not run yet. The fallback if the macOS job fails is in docs/testing.md ("Continuous integration").
 - **Accept:**
   - The jsTest asserts that `coap` is requested and read back from the negotiated protocol.
   - The browser job runs the same check against a JVM listener. If that proves infeasible, the gap is recorded in docs/platforms.md.

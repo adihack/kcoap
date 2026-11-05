@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kcoap js tests</title>
+</head>
+<body>
+<!--
+  The page of BrowserAgainstJvmListenerTest. It loads the Kotlin/JS test module named by ?module= from
+  /kotlin/, runs its tests with mocha (/mocha.js), and posts one line per test to /report: "pass",
+  "pending" or "fail", a tab and the test's full title, and for a failure a tab and the error. A module
+  that cannot be loaded is reported as one "error" line.
+-->
+<div id="mocha"></div>
+<script src="/mocha.js"></script>
+<script>
+(function () {
+  'use strict';
+  var lines = [];
+  var reported = false;
+
+  function report(line) {
+    if (reported) return;
+    reported = true;
+    if (line) lines.push(line);
+    // Closing the window ends a browser that the test cannot signal (Firefox as a snap); where scripts
+    // may not close it (Chrome), the test ends the browser itself.
+    var close = function () { window.close(); };
+    fetch('/report', { method: 'POST', body: lines.join('\n') }).then(close, close);
+  }
+
+  function oneLine(error) {
+    // Firefox's stack leaves the message out, Chrome's starts with it.
+    var text = String(error && error.message || error) + (error && error.stack ? ' | ' + error.stack : '');
+    return text.replace(/\s+/g, ' ');
+  }
+
+  function Reporter(runner) {
+    runner.on('pass', function (test) { lines.push('pass\t' + test.fullTitle()); });
+    runner.on('pending', function (test) { lines.push('pending\t' + test.fullTitle()); });
+    runner.on('fail', function (test, error) { lines.push('fail\t' + test.fullTitle() + '\t' + oneLine(error)); });
+    runner.on('end', function () { report(); });
+  }
+
+  mocha.setup({ ui: 'bdd', timeout: 60000, reporter: Reporter });
+
+  // The compiler emits UMD modules; their AMD branch is the one a page without a bundler can serve, so
+  // this is the smallest AMD loader that runs them: define(['exports', './dependency.js', ...], factory).
+  var definitions = {};
+  var modules = {};
+
+  window.define = function (dependencies, factory) {
+    definitions[document.currentScript.src] = { dependencies: dependencies, factory: factory };
+  };
+  window.define.amd = true;
+
+  function load(url) {
+    if (!modules[url]) {
+      modules[url] = new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = url;
+        script.onerror = function () { reject(new Error('cannot load ' + url)); };
+        script.onload = function () {
+          var definition = definitions[url];
+          if (!definition) { reject(new Error('no define() in ' + url)); return; }
+          var exports = {};
+          Promise.all(definition.dependencies.map(function (dependency) {
+            return dependency === 'exports' ? exports : load(new URL(dependency, url).href);
+          })).then(function (values) {
+            try {
+              definition.factory.apply(null, values);
+              resolve(exports);
+            } catch (error) {
+              reject(error);
+            }
+          }, reject);
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return modules[url];
+  }
+
+  var module = new URLSearchParams(location.search).get('module');
+  load(new URL('/kotlin/' + module, location.href).href).then(
+    function () { mocha.run(); },
+    function (error) { report('error\t' + oneLine(error)); }
+  );
+})();
+</script>
+</body>
+</html>

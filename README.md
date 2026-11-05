@@ -91,9 +91,11 @@ backend runs. Only adapters that wrap a runtime-bound library build for fewer ta
 
 **In a browser today**: CoAP messages and codecs (UDP and RFC 8323 framing), OSCORE, EDHOC (suites
 0–3, 6 and 24) and the EDHOC→OSCORE glue, and the client and server stack over a `DatagramTransport`
-the application supplies (as `kcoap-testkit`'s in-memory network does in the tests). Browsers have no
-UDP, so reaching a device takes the WebSocket transport (RFC 8323, being built) and a proxy such as
-libcoap's `coap-server`; OSCORE and EDHOC stay end to end across it. What WebCrypto lacks:
+the application supplies (as `kcoap-testkit`'s in-memory network does in the tests), and over
+WebSockets (RFC 8323) with `kcoap-transport-ktor-websocket`, whose js tests also run in a headless
+browser against a JVM listener (Firefox so far; a CI job in Chrome). Browsers have no UDP, so reaching a
+device takes the WebSocket transport and a proxy such as libcoap's `coap-server`; OSCORE and EDHOC stay
+end to end across it. What WebCrypto lacks:
 
 - ChaCha20/Poly1305: `UnsupportedAlgorithmException`, so EDHOC suites 4 and 5 are neither offered nor
   accepted there.

@@ -101,13 +101,14 @@ runs the second command above), to be added by the next owner of the CI files (t
 
 ## Build checks
 
-Three checks guard the build itself. `scripts/test unit` runs all three after the tests, in the same
-Gradle invocation, and `./gradlew check` includes the first two for each module:
+Four checks guard the build itself. `scripts/test unit` runs all four after the tests, in the same
+Gradle invocation, and `./gradlew check` includes the first three in each module that has them:
 
 | Check | Fails when | Fix |
 |---|---|---|
 | `checkKotlinAbi` | the public API of a published module differs from its dumps in `<module>/api` (`<module>.api` for the JVM, `<module>.klib.api` for every other target) | if the change is intended, `./gradlew updateKotlinAbi` and commit the dump diff with the change ([releasing.md](releasing.md#abi-dumps)) |
 | `verifyCommonOnly` | a core module (`kcoap.core`) has files in a main source set other than `commonMain` | move the code to `commonMain`, or into an adapter module |
+| `verifyNoServerEngine` | a ktor server engine (CIO, Netty, Jetty, Tomcat) appears in a Gradle module file or POM that `kcoap-transport-ktor-websocket-server` would publish, or on its JVM runtime classpath; the application chooses the engine (WP-W1) | keep the engine in the test source sets; `KtorWebSocketListener.start` takes it as a parameter |
 | `:build-logic:test` | a convention plugin no longer behaves as its Gradle TestKit fixtures expect | fix the plugin in `build-logic` |
 
 The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit
@@ -126,20 +127,33 @@ machine, or after `build-logic/build` is deleted, needs the network.
 
 | Job | Runner | Runs |
 |---|---|---|
-| Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
+| Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly`, `verifyNoServerEngine` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
 | Interop | Linux | `scripts/test interop` with freshly built images |
 | Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
+| WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
 | API reference | Linux | `dokkaGenerate` |
 
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release
 runs the same workflow first ([releasing](releasing.md)).
+
+WP-W1 added the browser job and moved the WebSocket client to the Darwin engine on Apple; both were
+written on Linux, where the Apple test binaries only compile and the browser tests ran in Firefox. Its
+merge gate is the macOS job and the browser job green on the pull request. If
+`NativeWebSocketLoopbackTest` or `DefaultEngineTest` fails on `macosArm64` or `iosSimulatorArm64`
+because Darwin does not negotiate the subprotocol, Apple goes back to CIO: `DefaultClient.apple.kt`
+names `CIO`, appleMain depends on `ktor-client-cio` instead of `ktor-client-darwin`, and the module
+README records that the WebSocket client then neither brings up the iOS cellular radio nor honours VPN
+On Demand.
 
 ## The same tests on every target
 
 The common tests are one suite for every target: 404 of them run on `linuxX64`, `js` and `wasmJs` alike
 (the JVM adds its own, such as the differential and interop tests). Gradle downloads Node.js for the web
 tests; the browser test tasks are off, because Node.js has the same WebCrypto API and a browser run
-would need a headless browser wherever `check` runs.
+would need a headless browser wherever `check` runs. The one exception is the WebSocket client, whose
+js tests CI's browser job runs in Chrome against a JVM listener (`scripts/test browser`, which also
+takes `firefox`); its own page and a ktor server in a JVM test drive the browser, so no Karma or
+bundler is involved.
 
 A test never asks which target it is on. Where a platform may lack an algorithm, the test asks the
 backend (`crypto.supports(algorithm)`, `CipherSuite.isSupportedBy(crypto, method)`) and covers what is
