@@ -38,6 +38,10 @@ adds its entry and migration note below.
   `ReliableTransportConfig.maxPendingConnections` (128) and `maxConnections` (1 024) (WP-S1).
 - `kcoap-testkit`: `Stress.run` and `Stress.race`, bounded concurrency stress tests on the real
   `Dispatchers.Default` for common tests (WP-S1).
+- `kcoap-testkit`: `InMemoryLink` runs one test over datagrams and over connections (`Datagrams`,
+  `Connections`, each with a server and client `Side`, the server's `uri` and `cut`), and `InMemorySessions`
+  stands in for a DTLS layer whose sessions can end (WP-B1). kcoap's own conformance suites run on them:
+  `ExchangeConformanceTest` (kcoap-coap) and `OscoreOverLinksTest` (kcoap-oscore), on every target.
 - Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
   Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
   (QB-0). The Q-Block state machines (QB-1, ADR 0006) drive the server (QB-3, below), not yet the client.

@@ -19,6 +19,15 @@ applications built on it.
   reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw
   bytes to one side, `reset` breaks a connection, `tap` sees every write. TLS is not simulated; a
   listener reports the identities it is given.
+- `InMemorySessions`: a stand-in for a DTLS layer on an `InMemoryTransport`. Every peer appears as an
+  `Endpoint.Secure`, one session per address with the identity it is given, nothing is encrypted, and
+  `endAll` ends every session as a DTLS layer reports it (`DatagramEvent.SessionEnded`, RFC 7252
+  §9.1.1).
+- `InMemoryLink`: one test, run over both ways a CoAP endpoint reaches a peer. `InMemoryLink.Datagrams`
+  (an `InMemoryNetwork` through `InMemorySessions`) and `InMemoryLink.Connections` (`InMemoryConnections`)
+  give a server `Side` and client `Side`s with the arguments of the endpoint's constructor, the server's
+  `uri`, and `cut`, which ends every session or connection between them at once. kcoap-coap's
+  `ExchangeConformanceTest` and kcoap-oscore's `OscoreOverLinksTest` run on it.
 - `Stress`: concurrency stress tests on real threads. `Stress.run` repeats a body a bounded number of
   times on `Dispatchers.Default`, several iterations at once, within a real-time timeout, and gives each
   iteration a `background` scope that ends with it. An iteration that fails, or is cancelled from inside
@@ -64,5 +73,35 @@ fun closeRacesRequests() = runTest {
 }
 ```
 
-Verified by `InMemoryNetworkTest`, `InMemoryConnectionsTest`, `StressTest` and by every end-to-end test
-of `kcoap-coap`.
+A test that runs once per link takes an `InMemoryLink` and builds its endpoints from the sides:
+
+```kotlin
+abstract class MyConformanceTest {
+    abstract fun link(network: InMemoryNetwork, connections: InMemoryConnections): InMemoryLink
+
+    @Test
+    fun getsTheResource() = runTest {
+        val link = link(InMemoryNetwork(backgroundScope), InMemoryConnections())
+        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val server = link.server()
+        CoapServer(CoapEndpoint(backgroundScope, config, server.transport, server.connectors, server.listeners)) {
+            resource("hello") { get { CoapResponse.content("Hello") } }
+        }
+        val client = link.client()
+        val resolver = EndpointResolver { uri -> client.peer(EndpointResolver.Default.resolve(uri)) }
+        val coap = CoapClient(CoapEndpoint(backgroundScope, config, client.transport, client.connectors), CoapClientConfig(resolver = resolver))
+        assertEquals("Hello", coap.get("${link.uri}/hello").payloadAsText())
+    }
+}
+
+class OverDatagrams : MyConformanceTest() {
+    override fun link(network: InMemoryNetwork, connections: InMemoryConnections) = InMemoryLink.Datagrams(network)
+}
+
+class OnConnections : MyConformanceTest() {
+    override fun link(network: InMemoryNetwork, connections: InMemoryConnections) = InMemoryLink.Connections(connections)
+}
+```
+
+Verified by `InMemoryNetworkTest`, `InMemoryConnectionsTest`, `InMemoryLinkTest`, `StressTest` and by every
+end-to-end test of `kcoap-coap`.
