@@ -1,0 +1,112 @@
+name: Bug report
+description: Something in kcoap does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Use another form when one fits better:
+
+        - **Security vulnerability:** never in an issue. Follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
+        - **kcoap and another implementation disagree:** the interop report form.
+        - **kcoap deviates from an RFC:** the RFC compliance form.
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched the existing issues, and this bug is not reported yet.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: kcoap version
+      description: The released version, or the commit of `main` you built.
+      placeholder: 0.1.0, or main at 1a2b3c4
+    validations:
+      required: true
+  - type: dropdown
+    id: modules
+    attributes:
+      label: Modules
+      description: The modules involved, as far as you know.
+      multiple: true
+      options:
+        - kcoap-coap
+        - kcoap-oscore
+        - kcoap-edhoc
+        - kcoap-edhoc-oscore
+        - kcoap-cbor
+        - kcoap-cose
+        - kcoap-crypto
+        - kcoap-crypto-default
+        - kcoap-crypto-bc
+        - kcoap-transport
+        - kcoap-transport-ktor
+        - kcoap-transport-ktor-websocket
+        - kcoap-transport-ktor-websocket-server
+        - kcoap-testkit
+        - kcoap-common
+        - I do not know
+    validations:
+      required: true
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Platform or target
+      description: Where the bug happens. Choose every one you tried it on.
+      multiple: true
+      options:
+        - JVM
+        - Android
+        - iOS device (iosArm64)
+        - iOS simulator (iosSimulatorArm64)
+        - macOS (macosArm64)
+        - Linux native (linuxX64)
+        - Browser, JavaScript (js)
+        - Browser, WebAssembly (wasmJs)
+        - Node.js (js or wasmJs)
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: The versions that matter for this bug.
+      placeholder: JDK 21, Android API 34, Kotlin 2.4.21, Chrome 140
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What kcoap did, including any exception and its message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened, and where that is documented if you know.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: The smallest program, test or list of steps that shows the bug.
+      placeholder: |
+        1. Start a server with ...
+        2. Send ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output. Remove private keys, OSCORE Master Secrets and other secrets first.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Workarounds you found, related issues, ideas about the cause.

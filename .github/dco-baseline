@@ -1,0 +1,8 @@
+# The DCO baseline: commits from before kcoap adopted the Developer Certificate of Origin carry no
+# sign-off, so scripts/check-dco exempts this commit and every commit before it. The first line that is
+# neither blank nor a comment is read, and it must be a full commit SHA. The maintainer sets it once,
+# when the DCO lands, to the last commit before it; after that it does not change.
+#
+# The check reads this file from the base of a pull request, never from the pull request itself, so a
+# change here applies only once it has merged.
+e99c997fd22d49d1448c8857544956cc4fb768c4

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/adihack/kcoap/security/advisories/new
+    about: Never in a public issue. SECURITY.md says what to include and gives an email fallback.
+  - name: Documentation
+    url: https://github.com/adihack/kcoap/blob/main/docs/README.md
+    about: Guides, architecture, RFC compliance and testing, in one place.
+  - name: Sponsorship and support programs
+    url: https://kcoap.dev/sponsors
+    about: How to sponsor kcoap, and support programs when they exist.
