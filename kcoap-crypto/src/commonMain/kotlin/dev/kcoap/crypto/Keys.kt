@@ -32,11 +32,19 @@ public class SoftwarePrivateKey(type: KeyType, encoded: ByteArray) : PrivateKey(
     /**
      * A copy of the raw private key: scalar for EC, seed for Ed25519, FIPS 203/204 encoding for ML-*.
      *
-     * @throws IllegalStateException after [destroy].
+     * @throws IllegalStateException after [destroy], also when [destroy] runs on another thread while the
+     *   copy is taken.
      */
     public fun encoded(): ByteArray {
-        check(!isDestroyed) { "The private key was destroyed" }
-        return material.copyOf()
+        check(!isDestroyed) { DESTROYED }
+        val copy = material.copyOf()
+        // destroy() sets the flag before it wipes: if the flag is still clear once the copy is complete, the
+        // wipe had not begun while it was taken. Otherwise the copy may hold zeros.
+        if (isDestroyed) {
+            copy.wipe()
+            throw IllegalStateException(DESTROYED)
+        }
+        return copy
     }
 
     /** Overwrites the key material; [encoded] throws afterwards. Calling it again does nothing. */
@@ -45,6 +53,8 @@ public class SoftwarePrivateKey(type: KeyType, encoded: ByteArray) : PrivateKey(
         material.wipe()
     }
 }
+
+private const val DESTROYED = "The private key was destroyed"
 
 /** A public key in the raw encoding of its [KeyType], with the handle of its private key. */
 public class KeyPair(publicKey: ByteArray, public val privateKey: PrivateKey) {

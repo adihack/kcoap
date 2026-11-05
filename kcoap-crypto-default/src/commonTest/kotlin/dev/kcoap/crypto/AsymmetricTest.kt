@@ -1,6 +1,7 @@
 package dev.kcoap.crypto
 
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.testkit.Stress
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -158,6 +159,30 @@ class AsymmetricTest {
         software.destroy()
         assertFailsWith<IllegalStateException> { software.encoded() }
         assertFailsWith<IllegalStateException> { backend.keyAgreement(software, peer.publicKey) }
+    }
+
+    /**
+     * A shutdown racing a handshake: a destroy() on another thread while encoded() copies the key never
+     * hands out the zeroed bytes. Either the whole key comes back, or the call throws.
+     */
+    @Test
+    fun aKeyDestroyedWhileItIsReadIsNeverReadAsZeros() = runTest {
+        val material = ByteArray(32) { (it + 1).toByte() }
+        Stress.run(iterations = 200) {
+            val key = SoftwarePrivateKey(KeyType.X25519, material)
+            // Each reader reads until the key is destroyed and returns what it read before.
+            val reader = suspend {
+                val reads = mutableListOf<ByteArray>()
+                try {
+                    repeat(50) { reads += key.encoded() }
+                } catch (_: IllegalStateException) {
+                }
+                reads
+            }
+            val results = Stress.race(reader, reader, reader, suspend { emptyList<ByteArray>().also { key.destroy() } })
+            for (read in results.flatMap { it.getOrThrow() }) assertContentEquals(material, read)
+            assertFailsWith<IllegalStateException> { key.encoded() }
+        }
     }
 
     @Test
