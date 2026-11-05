@@ -28,7 +28,11 @@ class AsymmetricTest {
         )
     }
 
-    /** RFC 8032 §7.1, test 1 (empty message). Ed25519 is deterministic, so the signature must match. */
+    /**
+     * RFC 8032 §7.1, test 1 (empty message). The RFC's signature must verify everywhere. RFC 8032 signing
+     * is deterministic, so where the backend signs alike twice its signature must be the RFC's; a backend
+     * may instead hedge it with randomness (Apple's CryptoKit does), and then its signature must verify.
+     */
     @Test
     fun ed25519MatchesRfc8032() = runTest {
         val key = backend.importKeyPair(
@@ -37,10 +41,14 @@ class AsymmetricTest {
             publicKey = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a".hex(),
         )
         val expected = "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
+        assertTrue(backend.verify(SignatureAlgorithm.EDDSA, key.publicKey, ByteArray(0), expected.hex()))
+        assertFalse(backend.verify(SignatureAlgorithm.EDDSA, key.publicKey, byteArrayOf(1), expected.hex()))
+
         val signature = backend.sign(SignatureAlgorithm.EDDSA, key.privateKey, ByteArray(0))
-        assertEquals(expected, signature.hex())
         assertTrue(backend.verify(SignatureAlgorithm.EDDSA, key.publicKey, ByteArray(0), signature))
-        assertFalse(backend.verify(SignatureAlgorithm.EDDSA, key.publicKey, byteArrayOf(1), signature))
+        if (signature contentEquals backend.sign(SignatureAlgorithm.EDDSA, key.privateKey, ByteArray(0))) {
+            assertEquals(expected, signature.hex())
+        }
     }
 
     @Test

@@ -5,7 +5,10 @@ import dev.kcoap.common.toHex
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.SignatureAlgorithm
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /** Collects the intermediate values a state machine records, by RFC 9529 name. */
@@ -55,3 +58,26 @@ internal fun sequenceOfIdentifiers(vararg identifiers: ConnectionIdentifier): Co
 }
 
 internal fun cid(hex: String): ConnectionIdentifier = ConnectionIdentifier(hex.hex())
+
+/**
+ * Lets a trace with signatures be replayed byte for byte on every backend.
+ *
+ * Ed25519 is deterministic in RFC 8032, but a platform may hedge it with randomness (Apple's CryptoKit
+ * does), which is allowed and interoperates. Where the backend signs the same data twice alike, its own
+ * signature is used, so the trace checks it. Where it does not, this checks that the backend's signature
+ * verifies and then returns the trace's [expected] signature over the same data, so every other byte of
+ * the trace is still compared.
+ */
+internal class TraceSignatures(
+    private val backend: CryptoBackend,
+    private val publicKeys: List<ByteArray>,
+    private val expected: List<ByteArray>,
+) : CryptoBackend by backend {
+    override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray {
+        val own = backend.sign(algorithm, privateKey, data)
+        if (own contentEquals backend.sign(algorithm, privateKey, data)) return own
+        val publicKey = publicKeys.firstOrNull { backend.verify(algorithm, it, data, own) }
+        assertTrue(publicKey != null, "the backend's own ${algorithm.name} signature must verify")
+        return expected.firstOrNull { backend.verify(algorithm, publicKey, data, it) } ?: own
+    }
+}

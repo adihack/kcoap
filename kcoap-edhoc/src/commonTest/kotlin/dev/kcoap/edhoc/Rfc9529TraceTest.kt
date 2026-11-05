@@ -32,6 +32,12 @@ class Rfc9529TraceTest {
         assertHex(t.PK_R, credR.publicKey)
         assertEquals("EDHOC Responder Ed25519", credR.certificate.subjectCommonName)
 
+        // Apple's CryptoKit randomizes Ed25519 signatures; see TraceSignatures.
+        val signer = TraceSignatures(
+            backend,
+            publicKeys = listOf(t.PK_I.hex(), t.PK_R.hex()),
+            expected = listOf(t.SIGNATURE_OR_MAC_2.hex(), t.SIGNATURE_OR_MAC_3.hex()),
+        )
         val initiator = EdhocInitiator(
             EdhocInitiatorConfig(
                 method = EdhocMethod.SIGNATURE_SIGNATURE,
@@ -41,7 +47,7 @@ class Rfc9529TraceTest {
                 connectionIdentifiers = ConnectionIdentifierProvider.fixed(cid(t.C_I)),
                 ephemeralKeys = sequenceOfKeys(fixedKey(KeyType.X25519, t.X, t.G_X)),
             ),
-            backend,
+            signer,
         )
         val responder = EdhocResponder(
             EdhocResponderConfig(
@@ -52,7 +58,7 @@ class Rfc9529TraceTest {
                 connectionIdentifiers = ConnectionIdentifierProvider.fixed(cid(t.C_R)),
                 ephemeralKeys = sequenceOfKeys(fixedKey(KeyType.X25519, t.Y, t.G_Y)),
             ),
-            backend,
+            signer,
         )
         val initiatorValues = RecordedValues().also { initiator.intermediateValues = it }
         val responderValues = RecordedValues().also { responder.intermediateValues = it }
