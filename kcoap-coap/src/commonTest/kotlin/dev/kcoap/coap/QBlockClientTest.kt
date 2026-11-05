@@ -4,9 +4,9 @@ import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
-import dev.kcoap.coap.client.QBlockSupport
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.stack.MissingBlocks
+import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.common.toHex
@@ -87,7 +87,7 @@ class QBlockClientTest {
         assertEquals(CoapMessageType.CON, probe.type, "RFC 9177 §4.1: a Confirmable probe")
         assertEquals(listOf("0/0/16"), probe.qBlock2)
         assertEquals(
-            QBlockSupport.Capability.SUPPORTED,
+            QBlockCapabilities.Capability.SUPPORTED,
             setup.client.qBlock!!.support.known(setup.server.address, isProtected = false),
         )
         val gets = setup.requests().filter { it.options.path == "/big" }

@@ -10,12 +10,12 @@ import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
-import dev.kcoap.coap.client.QBlockSupport
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
@@ -220,7 +220,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertEquals(CoapMessageType.CON, probe.type)
             assertEquals(listOf("0/_/16"), probe.qBlock2)
             assertTrue(received().first().message.options.qBlock2 != null, "libcoap answers the probe with Q-Block2")
-            assertEquals(QBlockSupport.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+            assertEquals(QBlockCapabilities.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
 
             val gets = requests("/example_data").map { it.message }
             assertEquals(listOf("0/M/64", "10/M/64", "20/M/64"), gets.map { it.qBlock2.single() }, "exactly two Continues")
@@ -378,7 +378,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertEquals(CoapMessageType.ACK, probeAnswer.type)
             assertEquals(CoapCode.BAD_OPTION, probeAnswer.code)
             assertEquals(listOf("0/_/16"), probeAnswer.qBlock2, "upstream: libcoap repeats the option it rejects in its 4.02")
-            assertEquals(QBlockSupport.Capability.UNSUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+            assertEquals(QBlockCapabilities.Capability.UNSUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
             val qBlock = setOf(CoapOptions.Q_BLOCK1.number, CoapOptions.Q_BLOCK2.number)
             val withQBlock = synchronized(wire) { wire.toList() }.filter { line -> line.message.options.any { it.number in qBlock } }
             assertEquals(listOf(probeAnswer.tokenHex), withQBlock.map { it.message.tokenHex }.distinct(), "only the probe and its 4.02")
@@ -517,7 +517,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
             val probes = requests("/.well-known/core").map { it.message }
             assertEquals(2, probes.size, "the probe and its retransmission")
             assertEquals(1, probes.map { it.messageId }.toSet().size)
-            assertEquals(QBlockSupport.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+            assertEquals(QBlockCapabilities.Capability.SUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
             assertTrue(requests("/example_data").all { it.message.options.qBlock2 != null })
             assertNoMessageMixesBlockAndQBlock()
         }

@@ -21,6 +21,7 @@ import dev.kcoap.coap.stack.Pacing
 import dev.kcoap.coap.stack.QBlock1Sender
 import dev.kcoap.coap.stack.QBlock2Receiver
 import dev.kcoap.coap.stack.QBlockAction
+import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockCheck
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.QBlockTiming
@@ -84,19 +85,8 @@ internal class QBlockClient(private val client: CoapClient) {
     /** Which servers support Q-Block. */
     val support = QBlockSupport(client, config, log)
 
-    private val peerEnded: suspend (Endpoint) -> Unit = { support.invalidate(it) }
-
     /** The next Request-Tag, as an unsigned 4-byte counter that starts at a random value (RFC 9177 §4.3). */
     private val nextTag = AtomicInt(endpoint.config.random.nextInt())
-
-    init {
-        endpoint.addPeerEndedListener(peerEnded)
-    }
-
-    /** Stops listening to the endpoint; the client is closing. */
-    fun close() {
-        endpoint.removePeerEndedListener(peerEnded)
-    }
 
     /**
      * Sends [request] with Q-Block and returns its whole response, or returns null when RFC 7959 must carry
@@ -109,7 +99,7 @@ internal class QBlockClient(private val client: CoapClient) {
             return null
         }
         val isProtected = client.config.security != null
-        if (support.capability(peer, isProtected) != QBlockSupport.Capability.SUPPORTED) return null
+        if (support.capability(peer, isProtected) != QBlockCapabilities.Capability.SUPPORTED) return null
         val limits = endpoint.limits(peer)
         val transfer = Transfer(peer, request, confirmable, reliable, limits, isProtected)
         return when (val outcome = transfer.run()) {
@@ -502,13 +492,8 @@ internal class QBlockClient(private val client: CoapClient) {
                         else -> fail(CoapException.Reason.TRANSMISSION_TIMEOUT, "No ACK from $peer after MAX_RETRANSMIT retransmissions")
                     }
                 }
-                is ExchangeEvent.Failed -> {
-                    val cause = event.cause
-                    if (cause.reason == CoapException.Reason.SESSION_ENDED || cause.reason == CoapException.Reason.CONNECTION_CLOSED) {
-                        support.invalidate(peer)
-                    }
-                    throw cause
-                }
+                // The endpoint forgot the peer's capability already if its session ended or its connection closed.
+                is ExchangeEvent.Failed -> throw event.cause
             }
         }
 

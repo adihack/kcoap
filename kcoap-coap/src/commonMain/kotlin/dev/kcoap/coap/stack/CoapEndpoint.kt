@@ -15,8 +15,6 @@ import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.SessionEndedException
 import kotlin.concurrent.Volatile
-import kotlin.concurrent.atomics.AtomicReference
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
@@ -70,7 +68,6 @@ import kotlinx.coroutines.withTimeoutOrNull
  * val client = CoapClient(endpoint)
  * ```
  */
-@OptIn(ExperimentalAtomicApi::class)
 public class CoapEndpoint private constructor(
     datagramTransport: DatagramTransport?,
     connectors: List<Connector>,
@@ -154,38 +151,14 @@ public class CoapEndpoint private constructor(
     internal var requestHandler: RequestHandler? = null
 
     /**
-     * Told when a peer's DTLS session ends or its connection closes, so that what a client learned about the
-     * peer, such as whether it supports Q-Block, is forgotten with it. Copy-on-write: read on every session
-     * end, changed only when a client comes or goes.
+     * Whether the peers support Q-Block (RFC 9177 §4.1), as the clients of this endpoint found out; shared by
+     * them, and forgotten for a peer when its DTLS session ends or its connection closes.
      */
-    private val peerEndedListeners = AtomicReference<List<suspend (Endpoint) -> Unit>>(emptyList())
+    internal val qBlockCapabilities = QBlockCapabilities()
 
-    /** Adds [listener], called with the peer whose DTLS session ended or whose connection closed. */
-    internal fun addPeerEndedListener(listener: suspend (Endpoint) -> Unit) {
-        while (true) {
-            val current = peerEndedListeners.load()
-            if (peerEndedListeners.compareAndSet(current, current + listener)) return
-        }
-    }
-
-    /** Removes a listener that [addPeerEndedListener] added. */
-    internal fun removePeerEndedListener(listener: suspend (Endpoint) -> Unit) {
-        while (true) {
-            val current = peerEndedListeners.load()
-            if (peerEndedListeners.compareAndSet(current, current - listener)) return
-        }
-    }
-
-    private suspend fun notifyPeerEnded(peer: Endpoint) {
-        for (listener in peerEndedListeners.load()) {
-            try {
-                listener(peer)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log.error(e) { "A listener failed on the end of $peer's session" }
-            }
-        }
+    /** What the clients learned about [peer] goes with its session or connection. */
+    private suspend fun forgetPeer(peer: Endpoint) {
+        if (qBlockCapabilities.invalidate(peer)) log.debug { "Forgot whether $peer supports Q-Block" }
     }
 
     /**
@@ -956,8 +929,8 @@ public class CoapEndpoint private constructor(
             exchanges.values.filter { it.peer == peer }
         }
         val cause = CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED)
+        forgetPeer(peer)
         bound.forEach { it.fail(cause) }
-        notifyPeerEnded(peer)
         requestHandler?.onSessionEnded(peer)
     }
 
@@ -1001,8 +974,8 @@ public class CoapEndpoint private constructor(
             exchanges.values.filter { it.connection === connection }
         }
         val cause = CoapException("The connection to $peer closed: $reason", CoapException.Reason.CONNECTION_CLOSED)
+        forgetPeer(peer)
         bound.forEach { it.fail(cause) }
-        notifyPeerEnded(peer)
         requestHandler?.onSessionEnded(peer)
     }
 

@@ -4,10 +4,10 @@ import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
-import dev.kcoap.coap.client.QBlockSupport.Capability
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.stack.QBlockCapabilities.Capability
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.testkit.InMemoryTransport
@@ -357,17 +357,26 @@ class QBlockSupportTest {
     }
 
     @Test
-    fun aClosedClientStopsListeningForEndedSessions() = runTest {
-        val setup = scripted(QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
-        val session = Endpoint.Secure(SessionId(1), 0, setup.server.address, PeerIdentity.None)
-        setup.client.qBlock!!.support.rejected(session, isProtected = false, reason = "4.02")
-        setup.client.ping(setup.server.uri("/"))
+    fun theClientsOfAnEndpointShareWhatItKnowsAndRegisterNothingOfTheirOwn() = runTest {
+        val fixture = StackFixture(this)
+        val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
+        server.resources["/small"] = body(40)
+        val endpoint = fixture.endpoint()
+        val config = CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE))
 
-        setup.client.close()
-        (setup.client.endpoint.transport as InMemoryTransport).inject(DatagramEvent.SessionEnded(session, SessionEndReason.CLOSED_BY_PEER))
+        // Short-lived clients on a long-lived endpoint, never closed.
+        repeat(100) { assertContentEquals(body(40), CoapClient(endpoint, config).get(server.uri("/small")).payload) }
+
+        val probes = fixture.sentBy(endpoint).filter { it.options.path == "/.well-known/core" }
+        assertEquals(1, probes.size, "one probe for every client of the endpoint")
+        assertEquals(1, endpoint.qBlockCapabilities.size())
+        val session = Endpoint.Secure(SessionId(1), 0, server.address, PeerIdentity.None)
+        CoapClient(endpoint, config).qBlock!!.support.rejected(session, isProtected = false, reason = "4.02")
+        (endpoint.transport as InMemoryTransport).inject(DatagramEvent.SessionEnded(session, SessionEndReason.CLOSED_BY_PEER))
         delay(1.seconds)
-
-        assertEquals(Capability.UNSUPPORTED, setup.client.known(session))
+        assertNull(CoapClient(endpoint, config).known(session), "the endpoint forgets for all its clients")
+        assertEquals(Capability.SUPPORTED, CoapClient(endpoint, config).known(server.address))
+        assertTrue(endpoint.qBlockCapabilities.toString().contains("1024"))
     }
 
     @Test

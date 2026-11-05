@@ -4,6 +4,8 @@ import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.stack.QBlockCapabilities
+import dev.kcoap.coap.stack.QBlockCapabilities.Capability
 import dev.kcoap.coap.stack.QBlockCheck
 import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.log.Logger
@@ -30,31 +32,29 @@ import kotlinx.coroutines.withContext
  * - No answer leaves it [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
  *   min(1 minute, [QBlockClientConfig.capabilityLifetime]).
  *
- * The answer is kept for [QBlockClientConfig.capabilityLifetime]. It is forgotten ([invalidate]) when the
- * server's DTLS session ends or its connection closes, when a Non-confirmable body to it got no response at
- * all, and ([rejected]) when it answers a Q-Block message with 4.02 or a Reset. In [QBlockMode.ASSUME_SUPPORTED]
- * nothing is probed and every server counts as supported, except that a 4.02 or a Reset to a Q-Block message
- * marks the server as not supporting it for the lifetime, since that mode has no probe to ask again.
+ * The answer is kept for [QBlockClientConfig.capabilityLifetime] in the endpoint's [QBlockCapabilities], which
+ * all clients of the endpoint share, and which the endpoint clears for a server whose DTLS session ends or
+ * whose connection closes. It is forgotten too ([invalidate]) when a Non-confirmable body to the server got no
+ * response at all, and ([rejected]) when the server answers a Q-Block message with 4.02 or a Reset. In
+ * [QBlockMode.ASSUME_SUPPORTED] nothing is probed and every server counts as supported, except that a 4.02 or
+ * a Reset to a Q-Block message marks the server as not supporting it for the lifetime, since that mode has no
+ * probe to ask again.
  *
- * Entries are bounded by [MAX_ENTRIES]; the oldest goes first. Safe to use from any coroutine.
+ * Safe to use from any coroutine.
  */
 internal class QBlockSupport(
     private val client: CoapClient,
     private val config: QBlockClientConfig,
     private val log: Logger,
 ) {
-    enum class Capability { SUPPORTED, UNSUPPORTED, UNKNOWN }
-
     private data class Key(val peer: Endpoint, val isProtected: Boolean)
 
-    private class Entry(val capability: Capability, val until: Duration)
-
-    /** Guards [entries] and [probes]; never held across a suspension. */
+    /** Guards [probes]; never held across a suspension. */
     private val lock = Mutex()
-    private val entries = LinkedHashMap<Key, Entry>()
     private val probes = HashMap<Key, CompletableDeferred<Capability>>()
 
     private val endpoint get() = client.endpoint
+    private val capabilities: QBlockCapabilities get() = endpoint.qBlockCapabilities
 
     /**
      * Whether [peer] supports Q-Block for requests protected or not ([isProtected]), probing it first in
@@ -64,15 +64,11 @@ internal class QBlockSupport(
      *   endpoint closing.
      */
     suspend fun capability(peer: Endpoint, isProtected: Boolean): Capability {
+        capabilities.get(peer, isProtected, endpoint.now())?.let { return it }
+        if (config.mode == QBlockMode.ASSUME_SUPPORTED) return Capability.SUPPORTED
         val key = Key(peer, isProtected)
         var isOwner = false
         val probe = lock.withLock {
-            val known = entries[key]
-            if (known != null) {
-                if (known.until > endpoint.now()) return known.capability
-                entries.remove(key)
-            }
-            if (config.mode == QBlockMode.ASSUME_SUPPORTED) return Capability.SUPPORTED
             probes.getOrPut(key) {
                 isOwner = true
                 CompletableDeferred()
@@ -81,6 +77,11 @@ internal class QBlockSupport(
         if (!isOwner) return probe.await()
         var result: Capability? = null
         try {
+            // A probe that ended between the look-up and the lock left its answer.
+            capabilities.get(peer, isProtected, endpoint.now())?.let {
+                result = it
+                return it
+            }
             val (capability, reason) = probe(peer)
             result = capability
             record(key, capability, reason)
@@ -98,17 +99,14 @@ internal class QBlockSupport(
     }
 
     /** The capability known for [peer] without probing, or null; for tests. */
-    suspend fun known(peer: Endpoint, isProtected: Boolean): Capability? = lock.withLock {
-        entries[Key(peer, isProtected)]?.takeIf { it.until > endpoint.now() }?.capability
-    }
+    suspend fun known(peer: Endpoint, isProtected: Boolean): Capability? = capabilities.get(peer, isProtected, endpoint.now())
 
-    /** How many servers the client remembers; for tests. */
-    suspend fun size(): Int = lock.withLock { entries.size }
+    /** How many servers the endpoint remembers; for tests. */
+    suspend fun size(): Int = capabilities.size()
 
     /** Forgets what is known about [peer], with and without protection. */
     suspend fun invalidate(peer: Endpoint) {
-        val removed = lock.withLock { entries.keys.removeAll { it.peer == peer } }
-        if (removed) log.debug { "Forgot whether $peer supports Q-Block" }
+        if (capabilities.invalidate(peer)) log.debug { "Forgot whether $peer supports Q-Block" }
     }
 
     /**
@@ -127,13 +125,8 @@ internal class QBlockSupport(
 
     private suspend fun record(key: Key, capability: Capability, reason: String?) {
         val lifetime = if (capability == Capability.UNKNOWN) minOf(UNKNOWN_LIFETIME, config.capabilityLifetime) else config.capabilityLifetime
-        lock.withLock {
-            val now = endpoint.now()
-            entries.remove(key)
-            entries.values.removeAll { it.until <= now }
-            while (entries.size >= MAX_ENTRIES) entries.remove(entries.keys.first())
-            entries[key] = Entry(capability, now + lifetime)
-        }
+        val now = endpoint.now()
+        capabilities.put(key.peer, key.isProtected, capability, now + lifetime, now)
         log.debug { "${key.peer} ${if (key.isProtected) "(protected) " else ""}Q-Block support: $capability" }
         if (reason != null) endpoint.report(QBlockClientEvent.Fallback(key.peer, reason))
     }
@@ -172,9 +165,6 @@ internal class QBlockSupport(
     override fun toString(): String = "QBlockSupport(${config.mode})"
 
     private companion object {
-        /** How many servers are remembered at most. */
-        const val MAX_ENTRIES = 1024
-
         /** How soon a probe that got no answer is repeated, at most (RFC 9177 §4.1 leaves it open). */
         val UNKNOWN_LIFETIME: Duration = 60.seconds
     }

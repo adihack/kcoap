@@ -318,7 +318,6 @@ public class CoapClient private constructor(
 
     /** Closes the endpoint if the client created it. */
     public suspend fun close() {
-        qBlock?.close()
         if (ownsEndpoint) endpoint.close()
     }
 
