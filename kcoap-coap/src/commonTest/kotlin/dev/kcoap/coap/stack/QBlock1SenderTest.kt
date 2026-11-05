@@ -305,6 +305,32 @@ class QBlock1SenderTest {
     }
 
     @Test
+    fun rfc9177Section4_3AnAcknowledgedConfirmableBlockReleasesItsTokenWhileLaterBlocksAreUnsent() {
+        val sender = sender(size = 4 * 64, mode = BodyMode.CON)
+        sender.start(Duration.ZERO)
+
+        val first = sender.onAcknowledged(1.seconds, 0)
+        val second = sender.onAcknowledged(2.seconds, 1)
+        val third = sender.onAcknowledged(3.seconds, 2)
+
+        assertEquals(listOf(0), first.released(), "block 0 cannot complete the body while 1 to 3 are unsent")
+        assertEquals(listOf("1/1@1"), first.sent())
+        assertEquals(listOf(1), second.released())
+        assertEquals(listOf(2), third.released())
+        assertEquals(listOf("3/0@3"), third.sent())
+        assertEquals(emptyList(), sender.onAcknowledged(4.seconds, 3).released(), "the last block may carry the final response")
+    }
+
+    @Test
+    fun rfc9177Section4_3WithNstart2ABlockAcknowledgedOnceEveryBlockWentOutKeepsItsToken() {
+        val sender = sender(size = 3 * 64, mode = BodyMode.CON, parameters = TransmissionParameters(nstart = 2))
+        sender.start(Duration.ZERO)
+
+        assertEquals(listOf(0), sender.onAcknowledged(1.seconds, 0).released())
+        assertEquals(emptyList(), sender.onAcknowledged(2.seconds, 1).released(), "block 1 may arrive after block 2")
+    }
+
+    @Test
     fun rfc9177Section4_3AResetFailsTheBody() {
         val sender = sender()
         sender.start(Duration.ZERO)

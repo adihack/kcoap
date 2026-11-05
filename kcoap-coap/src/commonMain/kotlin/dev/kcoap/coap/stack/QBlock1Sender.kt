@@ -45,8 +45,9 @@ import kotlin.time.Duration
  * - A 4.13 whose Q-Block1 or Block1 names a smaller block size restarts the upload once, with that size and a
  *   new Request-Tag ([QBlockAction.Restart], RFC 7959 §2.9.3).
  * - Tokens: once a 2.31 confirms blocks, their requests are released, except the one that carried the latest
- *   2.31, on which the server may still send a 4.08 (§7.2); when the body ends every request but the one with
- *   the final response is released.
+ *   2.31, on which the server may still send a 4.08 (§7.2); a Confirmable block acknowledged while later
+ *   blocks are still unsent is released too, since it cannot complete the body; when the body ends every
+ *   request but the one with the final response is released.
  *
  * Not thread safe: the driver serializes all calls.
  *
@@ -185,14 +186,23 @@ internal class QBlock1Sender(
         }
     }
 
-    /** The Confirmable block [sequence] was acknowledged with an Empty ACK: the next block may go. */
+    /**
+     * The Confirmable block [sequence] was acknowledged with an Empty ACK: the next block may go. While blocks
+     * remain unsent, the acknowledged one cannot be the block that completes the body, so its token cannot
+     * carry the final response and is released (RFC 9177 §4.3), which keeps a long body from holding a token
+     * per block.
+     */
     fun onAcknowledged(now: Duration, sequence: Int): List<QBlockAction<Int>> {
         if (isFinished || mode != BodyMode.CON || numberOf(sequence) == null) return emptyList()
         lastActivity = now
         val actions = ArrayList<QBlockAction<Int>>()
+        if (sequence in held && hasUnsent()) release(listOf(sequence), actions)
         sendNext(now, actions)
         return actions
     }
+
+    /** Whether some block of the body has not been sent yet. */
+    private fun hasUnsent(): Boolean = sent.received < count
 
     /** The messaging layer gave up on the Confirmable block [sequence] after MAX_RETRANSMIT (RFC 7252 §4.2). */
     fun onTimeout(now: Duration, sequence: Int): List<QBlockAction<Int>> {
