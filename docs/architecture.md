@@ -206,7 +206,9 @@ Transport                     Connection SPI: ByteStreamConnection (TCP) | Messa
   connection (§3.3). The endpoint keeps at most one connection per peer `Endpoint`; a released one takes
   no new requests, and a new one opens only once it is gone, which the release timeout bounds. A request
   counts itself on its connection under the connection's lock, together with the check that it still
-  takes requests, so an idle Release never starts between the two. Every
+  takes requests, so an idle Release never starts between the two. A connection opened on demand is
+  counted busy for its opener until it is handed over, in one step, to every request that waited for it,
+  so even an event loop that resumes them late never finds it released. Every
   exchange and every server observation remembers its connection, so responses and notifications go
   back on it and a closed connection fails exactly what was on it (§3.4, §7.4).
 - **CSM first.** Each side sends its CSM at once, without waiting for the peer's (§3.3). The peer's CSM
