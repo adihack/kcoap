@@ -7,7 +7,7 @@ package dev.kcoap.crypto
  *
  * kcoap ships no validator yet. Until it does, trusting an `x5chain` means pinning its end-entity
  * certificate (kcoap-edhoc's `TrustedCredentials`) or passing a validator the application supplies. The
- * planned default is a common-code validator for a constrained profile (RFC 7925 §4.4.2: explicit trust
+ * planned default is a common-code validator for a constrained profile (RFC 7925 §4.4: explicit trust
  * anchors, the signatures through [CryptoBackend.verify], validity on an injected clock), so it behaves
  * the same on every platform, browsers included; validators on the operating system's trust store (JVM
  * `CertPathValidator`, Apple `SecTrust`) may follow as optional adapters, with this same interface.

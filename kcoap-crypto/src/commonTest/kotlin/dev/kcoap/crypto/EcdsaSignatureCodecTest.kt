@@ -11,7 +11,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * ECDSA signatures between raw `r || s` (RFC 9053 §2.1) and DER `ECDSA-Sig-Value` (RFC 5480 §2.2, RFC 8422
+ * ECDSA signatures between raw `r || s` (RFC 9053 §2.1) and DER `ECDSA-Sig-Value` (RFC 3279 §2.2.3, RFC 8422
  * §5.4). The JVM test `EcdsaSignatureCodecJcaTest` checks the same against the JDK's own signatures.
  */
 class EcdsaSignatureCodecTest {
@@ -19,7 +19,7 @@ class EcdsaSignatureCodecTest {
     private val s = "22".repeat(32)
 
     @Test
-    fun rfc5480Section2_2PositiveIntegersInASequence() {
+    fun rfc3279Section2_2_3PositiveIntegersInASequence() {
         val der = EcdsaSignatureCodec.toDer(SignatureAlgorithm.ES256, (r + s).hexToBytes())
         assertEquals("3044" + "0220$r" + "0220$s", der.toHex())
         assertEquals(r + s, EcdsaSignatureCodec.fromDer(SignatureAlgorithm.ES256, der)!!.toHex())
@@ -93,7 +93,7 @@ class EcdsaSignatureCodecTest {
             EcdsaSignatureCodec.toDer(SignatureAlgorithm.ES256, ("80" + "00".repeat(31) + "00".repeat(31) + "05").hexToBytes()),
             EcdsaSignatureCodec.toDer(SignatureAlgorithm.ES384, ByteArray(96) { (it + 1).toByte() }),
         )
-        val random = Random(5480)
+        val random = Random(3279)
         var decoded = 0
         repeat(4_000) {
             val algorithm = if (it % 3 == 2) SignatureAlgorithm.ES384 else SignatureAlgorithm.ES256

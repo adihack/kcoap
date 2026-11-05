@@ -31,7 +31,7 @@ class DtlsTypesTest {
         assertEquals("PskCredential(6-byte identity)", credential.toString())
     }
 
-    /** RFC 7250 §3 and RFC 7925 §4.4: a P-256 key handle, its SubjectPublicKeyInfo and, optionally, its chain. */
+    /** RFC 7250 §3 and RFC 7925 §4.3, §4.4: a P-256 key handle, its SubjectPublicKeyInfo and, optionally, its chain. */
     @Test
     fun localCredentialsHoldAP256KeyWithItsOwnCopies() {
         val spki = TestCredentials.p256Spki()

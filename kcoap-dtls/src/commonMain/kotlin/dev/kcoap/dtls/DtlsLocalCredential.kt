@@ -18,7 +18,7 @@ import dev.kcoap.crypto.x509.X509Certificate
  * [dev.kcoap.crypto.EcdsaSignatureCodec.toDer].
  *
  * The key is a P-256 key: the ECDHE_ECDSA suites of the RFC 7925 profile sign with ECDSA on secp256r1 and
- * SHA-256 (RFC 7925 §4.4, §4.4.2).
+ * SHA-256 (RFC 7925 §4.3 for raw public keys, §4.4 for certificates).
  *
  * @param privateKey the private key, P-256; it never leaves its backend.
  * @param subjectPublicKeyInfo the DER SubjectPublicKeyInfo of the matching public key.
@@ -37,7 +37,7 @@ public class DtlsLocalCredential(
 
     init {
         require(privateKey.type == KeyType.P256) {
-            "DTLS signs with ECDSA on P-256 (RFC 7925 §4.4), the private key is ${privateKey.type}"
+            "DTLS signs with ECDSA on P-256 (RFC 7925 §4.3, §4.4), the private key is ${privateKey.type}"
         }
         val publicKey = decoded("SubjectPublicKeyInfo") { SubjectPublicKeyInfo.decode(spki) }
         require(publicKey.keyType == privateKey.type) {

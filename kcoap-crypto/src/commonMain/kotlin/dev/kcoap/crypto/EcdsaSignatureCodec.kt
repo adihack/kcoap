@@ -6,7 +6,7 @@ import dev.kcoap.crypto.x509.DerReader
 /**
  * Converts ECDSA signatures between the raw `r || s` of [CryptoBackend.sign] and [CryptoBackend.verify]
  * (COSE, RFC 9053 §2.1) and the DER `ECDSA-Sig-Value ::= SEQUENCE { r INTEGER, s INTEGER }` of X.509 and
- * TLS (RFC 5480 §2.2, RFC 8422 §5.4).
+ * TLS (RFC 3279 §2.2.3, RFC 8422 §5.4).
  *
  * DTLS signs its handshake through [CryptoBackend.sign] and converts the result with [toDer], and turns a
  * peer's DER signature into the raw form with [fromDer] before it verifies. A backend on a platform that

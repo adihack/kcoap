@@ -590,7 +590,7 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > `destroy()` beside `sharedSecret()`, because a copying accessor alone could not overwrite the array the
 > backend handed over; `CertificateFormatException` extends `Exception` until D2 adds `KcoapException`.
 > `DtlsLocalCredential(privateKey, subjectPublicKeyInfo, certificateChain)` is a file of its own, takes P-256
-> only (RFC 7925 §4.4) and checks that the SubjectPublicKeyInfo and the end-entity certificate hold the same
+> only (RFC 7925 §4.3, §4.4) and checks that the SubjectPublicKeyInfo and the end-entity certificate hold the same
 > key. `DerReader` also reads the DER signatures, and the parsers check what they read more strictly (no
 > fields after the subject public key, `04` before a 65-byte point). EDHOC's Diffie-Hellman Responder checks
 > G_X before it generates Y and destroys Y when the agreement fails. The optional COSE_Key sign bit is done.
