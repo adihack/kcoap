@@ -66,7 +66,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | RFC 7925 | DTLS 1.2 IoT profile: resumption, SNI and `max_fragment_length` (RFC 6066), `cached_info` (RFC 7924), no renegotiation, 9 s timer | partial (`DtlsConfig` defaults) |
 | RFC 7627 | Extended master secret (SHOULD in RFC 7925) | todo |
 | RFC 9146 | DTLS 1.2 Connection ID | partial (endpoint semantics, record overhead) |
-| RFC 8323 §9 | TLS for `coaps+tcp` / `coaps+ws`, ALPN `coap`; same three modes via RFC 7925 | partial: `coaps+ws` through the ktor client engine's TLS (`wss`); `coaps+tcp` has its seam (`Endpoint.Tcp(usesTls)`, `Connector`, `StreamSecurity`, `CoapScheme.ALPN`) but no TLS connector yet |
+| RFC 8323 §9 | TLS for `coaps+tcp` / `coaps+ws`, ALPN `coap`; same three modes via RFC 7925 | partial: `coaps+ws` through the ktor client engine's TLS (`wss`); `coaps+tcp` has its seam (`Endpoint.Tcp(usesTls)`, `Connector`, `CoapScheme.ALPN`; TLS lives in the connector, ADR 0003) but no TLS connector yet |
 | RFC 9147 | DTLS 1.3 | later |
 
 ## OSCORE (RFC 8613)
