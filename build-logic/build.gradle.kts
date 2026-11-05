@@ -7,6 +7,9 @@ dependencies {
     implementation(libs.kover.gradle.plugin)
     implementation(libs.maven.publish.plugin)
     implementation(libs.dokka.gradle.plugin)
+    // checkAndroidApi calls animal-sniffer in a worker with its own class loader (CheckAndroidApi.kt), so
+    // animal-sniffer and its ASM stay off the classpath the other plugins share.
+    compileOnly(libs.animal.sniffer)
 
     // Gradle TestKit (added by kotlin-dsl) runs the convention plugins on fixture projects.
     testImplementation(kotlin("test"))

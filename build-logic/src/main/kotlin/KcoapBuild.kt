@@ -111,6 +111,9 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
 
     useSettingsRepositoriesForNodeJs()
 
+    // Android apps use the jvm artifacts: checkAndroidApi keeps them within kcoap's minSdk.
+    pluginManager.apply("kcoap.android-api")
+
     tasks.withType<JavaCompile>().configureEach {
         options.release.set(17)
     }
