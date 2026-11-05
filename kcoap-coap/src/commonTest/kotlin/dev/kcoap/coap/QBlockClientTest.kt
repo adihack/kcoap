@@ -384,6 +384,28 @@ class QBlockClientTest {
     }
 
     @Test
+    fun rfc9177Section7_2ALongNonUploadToAServerThatAnswersOnlyOnItsLadderHoldsBoundedTokens() = runTest {
+        val setup = setup(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+        // libcoap sends no 2.31 while set 0 has a gap, and its first 4.08 NON_RECEIVE_TIMEOUT after the last block.
+        setup.server.answersBlocksAtOnce = false
+        var most = 0
+        setup.server.script = { _, _ ->
+            most = maxOf(most, setup.client.endpoint.exchangeCount())
+            false
+        }
+        val upload = body(300 * 64)
+
+        val response = setup.client.put(setup.server.uri("/store"), upload) { nonConfirmable() }
+
+        assertEquals(CoapCode.CHANGED, response.code)
+        assertContentEquals(upload, setup.server.resources["/store"])
+        assertTrue(setup.responses().none { it.code == CoapCode.CONTINUE })
+        assertTrue(setup.responses().count { it.code == CoapCode.REQUEST_ENTITY_INCOMPLETE } > 5)
+        assertTrue(most <= 50, "four sets unconfirmed, and one sent on a 4.08: $most")
+        setup.assertNothingLeft()
+    }
+
+    @Test
     fun aBodyLargerThanMaxResponseBodySizeFails() = runTest {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })

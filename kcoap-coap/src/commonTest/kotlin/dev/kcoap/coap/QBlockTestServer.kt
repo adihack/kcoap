@@ -63,6 +63,13 @@ internal class QBlockTestServer(
     /** Whether every message is sent twice, as a network that duplicates datagrams would deliver it. */
     var duplicates: Boolean = false
 
+    /**
+     * Whether a Non-confirmable Q-Block1 block gets its 2.31 or 4.08 at once (RFC 9177 §7.2 says SHOULD).
+     * Without, the server answers only with the 4.08s of its NON_RECEIVE_TIMEOUT ladder after the last block
+     * it got, as libcoap does while set 0 has a gap.
+     */
+    var answersBlocksAtOnce: Boolean = true
+
     /** The largest block the server sends. */
     var maxBlockSize: Int = 1024
 
@@ -151,7 +158,7 @@ internal class QBlockTestServer(
     private suspend fun onTimer() {
         val now = clock()
         for ((key, upload) in uploads.entries.toList()) {
-            if (upload.receiver.nextDeadline()?.let { it <= now } == true) uploadActions(key, upload.receiver.onTimer(now))
+            if (upload.receiver.nextDeadline()?.let { it <= now } == true) uploadActions(key, upload.receiver.onTimer(now), atOnce = false)
         }
         for (body in served.values.toList()) {
             if (body.sender.nextDeadline()?.let { it <= now } == true) servedActions(body, body.sender.onTimer(now))
@@ -179,7 +186,7 @@ internal class QBlockTestServer(
     private suspend fun onReset(messageId: Int) {
         requestsOf408.remove(messageId)?.let { key ->
             val upload = uploads[key] ?: return
-            uploadActions(key, upload.receiver.onReset(clock()))
+            uploadActions(key, upload.receiver.onReset(clock()), atOnce = true)
             return
         }
         outstanding.remove(messageId)?.let { (key, _) ->
@@ -245,17 +252,19 @@ internal class QBlockTestServer(
         val upload = uploads.getOrPut(key) {
             Upload(QBlock1Receiver(request, BodyMode.of(request.type, isReliable = false), timing, now), path)
         }
-        uploadActions(key, upload.receiver.onBlock(now, request, ref))
+        uploadActions(key, upload.receiver.onBlock(now, request, ref), atOnce = true)
     }
 
-    private suspend fun uploadActions(key: String, actions: List<QBlockAction<Ref>>) {
+    private suspend fun uploadActions(key: String, actions: List<QBlockAction<Ref>>, atOnce: Boolean) {
         for (action in actions) {
             when (action) {
                 is QBlockAction.NoResponse -> noResponse(action.ref)
-                is QBlockAction.Send231 -> respond(action.ref, CoapCode.CONTINUE) {
-                    options { qBlock1(BlockOption(action.num, true, uploads.getValue(key).receiver.sizeExponent)) }
+                is QBlockAction.Send231 -> if (answersBlocksAtOnce) {
+                    respond(action.ref, CoapCode.CONTINUE) {
+                        options { qBlock1(BlockOption(action.num, true, uploads.getValue(key).receiver.sizeExponent)) }
+                    }
                 }
-                is QBlockAction.Send408 -> {
+                is QBlockAction.Send408 -> if (answersBlocksAtOnce || !atOnce) {
                     val message = CoapMessage.build {
                         type = CoapMessageType.NON
                         code = CoapCode.REQUEST_ENTITY_INCOMPLETE
