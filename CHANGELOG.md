@@ -208,6 +208,16 @@ adds its entry and migration note below.
   macOS and the iOS simulator through the Darwin engine), and in headless Chrome against a JVM listener,
   a new CI job (`scripts/test browser`). Each checks that `coap` is requested and read back from the
   negotiated protocol (RFC 8323 §4.1).
+- Android from API level 26 (Android 8.0) on, through the jvm artifacts (PL-1). `checkAndroidApi`, part of
+  `check` and `scripts/test unit`, runs animal-sniffer over every jvm jar against the API 26 signature and
+  found nothing in kcoap's code; `androidApiDependencyReport` lists what the libraries use, triaged in
+  `samples/android-consumer`. That sample, an app at minSdk 26 that takes kcoap from Maven, is built by a
+  new CI job with AGP, R8 on its release variants and lint. Apps need no R8 rules of their own, no core
+  library desugaring, Kotlin 2.3 or newer and Java 17 bytecode.
+- `kcoap-crypto-default`'s jvm jar carries R8 and ProGuard rules (`META-INF/proguard`), which AGP applies
+  on its own: without them R8 stops on missing classes when it shrinks an app that does not use
+  `kcoap-crypto-bc`, the Bouncy Castle classes that cryptography-kotlin's JDK provider names and loads
+  only when present (PL-1).
 
 ### Changed (breaking)
 

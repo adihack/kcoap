@@ -84,7 +84,7 @@ backend runs. Only adapters that wrap a runtime-bound library build for fewer ta
 
 | Target | Runtime | Crypto under `DefaultCryptoBackend` | Modules |
 |---|---|---|---|
-| `jvm` | JVM servers, Android | JCA | all |
+| `jvm` | JVM servers, Android 8.0 and later (minSdk 26) | JCA | all |
 | `iosArm64`, `iosSimulatorArm64`, `macosArm64` | Apple | CryptoKit, CommonCrypto | all but `kcoap-crypto-bc` |
 | `linuxX64` | Linux gateways | OpenSSL 3 | all but `kcoap-crypto-bc` |
 | `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc`, `kcoap-transport-ktor` and `kcoap-transport-ktor-websocket-server` |
@@ -106,6 +106,15 @@ end to end across it. What WebCrypto lacks:
 
 Details in [docs/architecture.md](docs/architecture.md#browsers) and
 [kcoap-crypto-default](kcoap-crypto-default/README.md).
+
+**On Android** the app uses the `jvm` artifacts, from API level 26 (Android 8.0) on. Two checks hold that
+line: `checkAndroidApi`, part of `check` and `scripts/test unit`, runs animal-sniffer over every module's
+jvm jar against the API 26 signature without the Android SDK, and CI builds
+[samples/android-consumer](samples/android-consumer/README.md), an app at minSdk 26 that uses kcoap from
+Maven, with R8 on its release builds and lint. Apps need no R8 rules of their own and no core library
+desugaring; the sample's README lists what an app needs (Kotlin 2.3 or newer, Java 17 bytecode) and what
+the check found in ktor, cryptography-kotlin and Bouncy Castle. Not yet run on an emulator or device
+(PL-2).
 
 ## Documentation
 
@@ -132,7 +141,8 @@ test suite is one command:
 
 ```bash
 scripts/test unit       # every unit test on every target this machine builds: JVM, Linux native, JS, Wasm,
-                        # then the build checks (ABI dumps, common-only cores, build-logic tests)
+                        # then the build checks (ABI dumps, common-only cores, Android API level,
+                        # build-logic tests)
 scripts/test interop    # cross-tests against libcoap and libedhoc in both roles (builds their Docker images)
 scripts/test coverage   # unit and interop tests with the coverage report and the 90% floor
 scripts/test apple      # the common tests against CryptoKit and CommonCrypto (macOS only)
