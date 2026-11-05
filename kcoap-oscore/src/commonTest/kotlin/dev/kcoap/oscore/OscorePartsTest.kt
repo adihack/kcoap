@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.AeadAlgorithm
+import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.supports
@@ -139,10 +140,37 @@ class OscorePartsTest {
         assertEquals("SecurityContextParameters(sid=01,rid=02,idc=03, AES_CCM_16_64_128)", parameters.toString())
         val context = ephemeralContext(parameters, DefaultCryptoBackend())
         assertEquals("SecurityContext(sid=01,rid=02,idc=03)", context.toString())
-        assertContentEquals(secret, parameters.masterSecret)
-        assertContentEquals(ByteArray(0), parameters.masterSalt)
+        assertEquals("sid=01,rid=02,idc=03", context.name)
+        assertEquals(AeadAlgorithm.AES_CCM_16_64_128, context.aeadAlgorithm)
+        assertContentEquals(secret, parameters.masterSecret())
+        assertContentEquals(ByteArray(0), parameters.masterSalt())
         assertContentEquals(byteArrayOf(3), context.idContext)
         assertEquals("Decryption failed: tag", OscoreException(OscoreError.DECRYPTION_FAILED, "tag").message)
+    }
+
+    /** RFC 8613 §3.2.1 runs on copies of the Master Secret and Salt; they and the PRK are wiped afterwards. */
+    @Test
+    fun derivationWipesItsCopiesOfTheSecrets() = runTest {
+        val default = DefaultCryptoBackend()
+        val calls = mutableListOf<Pair<ByteArray, ByteArray>>()
+        val recording = object : CryptoBackend by default {
+            override suspend fun hmac(algorithm: HashAlgorithm, key: ByteArray, data: ByteArray): ByteArray {
+                calls += key to data
+                return default.hmac(algorithm, key, data)
+            }
+        }
+        val salt = byteArrayOf(9, 8, 7)
+        val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), masterSalt = salt)
+        ephemeralContext(parameters, recording)
+
+        val (saltCopy, secretCopy) = calls.first()
+        val prk = calls[1].first
+        assertTrue(saltCopy.all { it == 0.toByte() } && saltCopy.size == salt.size, "Master Salt copy wiped")
+        assertTrue(secretCopy.all { it == 0.toByte() } && secretCopy.size == secret.size, "Master Secret copy wiped")
+        assertTrue(prk.all { it == 0.toByte() }, "PRK wiped")
+        assertTrue(calls.drop(1).all { (key, _) -> key === prk }, "every Expand step used the same PRK")
+        assertContentEquals(secret, parameters.masterSecret(), "the parameters keep their own copy")
+        assertContentEquals(salt, parameters.masterSalt())
     }
 
     /** A GCM context works end to end too; only the nonce length differs. */
@@ -154,6 +182,7 @@ class OscorePartsTest {
         for (algorithm in candidates.filter { crypto.supports(it) }) {
             val client = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), aeadAlgorithm = algorithm), crypto)
             val server = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), aeadAlgorithm = algorithm), crypto)
+            assertEquals(algorithm, client.aeadAlgorithm)
             val request = dev.kcoap.coap.CoapMessage.request(CoapCode.GET) { options { uriPath("x") } }
             val (protected, _) = OscoreProtection.protectRequest(client, request)
             val decrypted = OscoreProtection.unprotectRequest(protected) { _, _ -> server }.message

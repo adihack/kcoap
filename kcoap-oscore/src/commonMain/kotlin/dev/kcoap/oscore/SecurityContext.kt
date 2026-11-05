@@ -3,6 +3,7 @@ package dev.kcoap.oscore
 import dev.kcoap.cbor.CborWriter
 import dev.kcoap.common.constantTimeEquals
 import dev.kcoap.crypto.Aead
+import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.Hkdf
 import kotlinx.coroutines.sync.Mutex
@@ -14,12 +15,12 @@ import kotlinx.coroutines.sync.withLock
  * Replay Window).
  *
  * Thread safe: sequence numbers are handed out and the replay window updated under a lock (§7.2, §7.4).
- * Keys never leave the object; `toString()` shows only identifiers.
+ * The derived Sender and Recipient Keys and the Common IV never leave the object. The input parameters,
+ * Master Secret included, stay inside the module for re-deriving the context and are not reachable from
+ * here; `toString()` shows only identifiers.
  */
 public class SecurityContext private constructor(
-    public val parameters: SecurityContextParameters,
-    internal val senderKey: ByteArray,
-    internal val recipientKey: ByteArray,
+    internal val parameters: SecurityContextParameters,
     internal val commonIv: ByteArray,
     internal val senderAead: Aead,
     internal val recipientAead: Aead,
@@ -38,8 +39,19 @@ public class SecurityContext private constructor(
     private var persistedLimit: Long = nextSequenceNumber
     private val replayWindow = ReplayWindow(parameters.replayWindowSize)
 
+    /** The name the context is persisted and logged under: its identifiers, never a secret. */
+    public val name: String = parameters.name
+
+    /** The AEAD algorithm that protects messages (RFC 8613 §3.1). */
+    public val aeadAlgorithm: AeadAlgorithm get() = parameters.aeadAlgorithm
+
+    /** This endpoint's Sender ID (RFC 8613 §3.1), a copy. */
     public val senderId: ByteArray get() = parameters.senderId
+
+    /** The peer's Sender ID, which selects this context for its requests (§3.1), a copy. */
     public val recipientId: ByteArray get() = parameters.recipientId
+
+    /** The ID Context, or null when none is used (§3.1), a copy. */
     public val idContext: ByteArray? get() = parameters.idContext
 
     /** The next Sender Sequence Number this context will use. */
@@ -57,7 +69,7 @@ public class SecurityContext private constructor(
         if (number > MAX_SEQUENCE_NUMBER) throw OscoreException(OscoreError.SEQUENCE_EXHAUSTED)
         if (number >= persistedLimit) {
             val limit = minOf(number + persistInterval, MAX_SEQUENCE_NUMBER + 1)
-            sequenceStore.store(parameters.name, limit)
+            sequenceStore.store(name, limit)
             persistedLimit = limit
         }
         nextSequenceNumber = number + 1
@@ -110,7 +122,10 @@ public class SecurityContext private constructor(
         return nonce
     }
 
-    override fun toString(): String = "SecurityContext(${parameters.name})"
+    override fun toString(): String = "SecurityContext($name)"
+
+    /** The output of the key derivation (RFC 8613 §3.2.1), which the Appendix C vectors check. */
+    internal class DerivedKeys(val senderKey: ByteArray, val recipientKey: ByteArray, val commonIv: ByteArray)
 
     public companion object {
         /** RFC 8613 §7.2.1: Sender Sequence Numbers stay below 2^40, the 5-byte Partial IV range. */
@@ -148,14 +163,11 @@ public class SecurityContext private constructor(
             freshness: FreshnessPolicy = FreshnessPolicy.AUTO,
         ): SecurityContext {
             require(persistInterval in 1..MAX_SEQUENCE_NUMBER + 1) { "persistInterval must be in 1..2^40" }
-            val hkdf = Hkdf(crypto, parameters.hkdfAlgorithm)
-            val prk = hkdf.extract(parameters.masterSalt, parameters.masterSecret)
-            val aead = parameters.aeadAlgorithm
-            val senderKey = hkdf.expand(prk, info(parameters, parameters.senderId, "Key", aead.keyLength), aead.keyLength)
-            val recipientKey = hkdf.expand(prk, info(parameters, parameters.recipientId, "Key", aead.keyLength), aead.keyLength)
-            val commonIv = hkdf.expand(prk, info(parameters, ByteArray(0), "IV", aead.nonceLength), aead.nonceLength)
-            val senderAead = crypto.aead(aead, senderKey)
-            val recipientAead = crypto.aead(aead, recipientKey)
+            val keys = deriveKeys(parameters, crypto)
+            val algorithm = parameters.aeadAlgorithm
+            // The backend owns the key arrays from here on: its AEAD objects may keep them.
+            val senderAead = crypto.aead(algorithm, keys.senderKey)
+            val recipientAead = crypto.aead(algorithm, keys.recipientKey)
 
             val name = parameters.name
             val restored = sequenceStore.load(name)
@@ -171,9 +183,7 @@ public class SecurityContext private constructor(
             }
             return SecurityContext(
                 parameters = parameters,
-                senderKey = senderKey,
-                recipientKey = recipientKey,
-                commonIv = commonIv,
+                commonIv = keys.commonIv,
                 senderAead = senderAead,
                 recipientAead = recipientAead,
                 sequenceStore = sequenceStore,
@@ -182,6 +192,32 @@ public class SecurityContext private constructor(
                 crypto = crypto,
                 isFresh = isFresh,
             )
+        }
+
+        /**
+         * HKDF-Extract over the Master Secret and Salt, then HKDF-Expand to the two keys and the Common IV
+         * (RFC 8613 §3.2.1). The copies of the Master Secret and Salt and the PRK are wiped afterwards.
+         */
+        internal suspend fun deriveKeys(parameters: SecurityContextParameters, crypto: CryptoBackend): DerivedKeys {
+            val hkdf = Hkdf(crypto, parameters.hkdfAlgorithm)
+            val secret = parameters.masterSecret()
+            val salt = parameters.masterSalt()
+            val prk = try {
+                hkdf.extract(salt, secret)
+            } finally {
+                secret.fill(0)
+                salt.fill(0)
+            }
+            try {
+                val aead = parameters.aeadAlgorithm
+                return DerivedKeys(
+                    senderKey = hkdf.expand(prk, info(parameters, parameters.senderId, "Key", aead.keyLength), aead.keyLength),
+                    recipientKey = hkdf.expand(prk, info(parameters, parameters.recipientId, "Key", aead.keyLength), aead.keyLength),
+                    commonIv = hkdf.expand(prk, info(parameters, ByteArray(0), "IV", aead.nonceLength), aead.nonceLength),
+                )
+            } finally {
+                prk.fill(0)
+            }
         }
 
         /** `info = [ id, id_context / nil, alg_aead, type, L ]` (RFC 8613 §3.2.1). */

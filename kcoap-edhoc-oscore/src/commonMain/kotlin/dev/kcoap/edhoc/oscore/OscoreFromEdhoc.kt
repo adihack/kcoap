@@ -16,8 +16,9 @@ import dev.kcoap.oscore.SequenceNumberStore
  * - AEAD and HKDF from the application algorithms of the selected cipher suite
  * - Sender ID = the peer's connection identifier, Recipient ID = this side's own (Table 14)
  *
- * An application that persists the parameters, to resume the context after a restart, derives it with
- * [SecurityContext.derive] and a durable [SequenceNumberStore], never with the ephemeral one.
+ * The parameters hold copies of the exported Master Secret and Salt; the exporter outputs themselves are
+ * wiped. An application that persists the parameters, to resume the context after a restart, derives it
+ * with [SecurityContext.derive] and a durable [SequenceNumberStore], never with the ephemeral one.
  *
  * @param keyLength the OSCORE key length, by default that of the application AEAD.
  * @param saltLength the OSCORE Master Salt length, 8 by default.
@@ -29,14 +30,21 @@ public suspend fun EdhocSession.oscoreParameters(
     require(!cipherSuite.appHash.isXof) {
         "Suite ${cipherSuite.value} has no HMAC-based application hash, which OSCORE's HKDF needs"
     }
-    return SecurityContextParameters(
-        masterSecret = oscoreMasterSecret(keyLength),
-        senderId = peerConnectionIdentifier.bytes,
-        recipientId = ownConnectionIdentifier.bytes,
-        masterSalt = oscoreMasterSalt(saltLength),
-        aeadAlgorithm = cipherSuite.appAead,
-        hkdfAlgorithm = cipherSuite.appHash,
-    )
+    val masterSecret = oscoreMasterSecret(keyLength)
+    val masterSalt = oscoreMasterSalt(saltLength)
+    try {
+        return SecurityContextParameters(
+            masterSecret = masterSecret,
+            senderId = peerConnectionIdentifier.bytes,
+            recipientId = ownConnectionIdentifier.bytes,
+            masterSalt = masterSalt,
+            aeadAlgorithm = cipherSuite.appAead,
+            hkdfAlgorithm = cipherSuite.appHash,
+        )
+    } finally {
+        masterSecret.fill(0)
+        masterSalt.fill(0)
+    }
 }
 
 /**
