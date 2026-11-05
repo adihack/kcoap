@@ -23,6 +23,7 @@ import kotlin.time.Duration
  *
  * Any other response ends the body and is delivered: the final 2.01, 2.02, 2.04 or 2.05 on whichever token of
  * the body it comes (§4.3 only requires one of them), and errors such as 4.00, 4.02, 4.13 or 5.xx as they are.
+ * A response whose Q-Block options break [QBlockCheck.response] is dropped (RFC 7252 §5.4.1).
  *
  * Policies where RFC 9177 is silent:
  * - The 2.31 Q-Block1 NUM, or without one the block sent on that token, confirms every block up to it.
@@ -31,11 +32,16 @@ import kotlin.time.Duration
  *   response, at most NON_MAX_RETRANSMIT times; a server that completed the body answers the copy with its
  *   final response again (§4.3), one that lost the body starts asking for blocks. Then, or without
  *   [resendsLastBlock] (POST, PATCH) once the whole ladder (124 s by default) passed without an answer, the
- *   body fails with [CoapException.Reason.RESPONSE_TIMEOUT].
+ *   body fails with [CoapException.Reason.RESPONSE_TIMEOUT]. A 4.08 shows that the server holds the body
+ *   and asks for blocks on its own ladder, which runs on the same times; a copy of the last block would only
+ *   be a duplicate to it. So after a 4.08 the first copy waits until that ladder could have run out, the
+ *   whole ladder after the latest 4.08.
  * - A block asked for in more than NON_MAX_RETRANSMIT + 1 4.08s fails the body: the server is not making
  *   progress.
- * - A 4.01 with Echo (RFC 9175 §2.3) has its block sent again once per body; the driver adds the Echo value to
- *   that and every later block.
+ * - A 4.01 with Echo (RFC 9175 §2.3) to a block sent before the first such challenge has that block sent
+ *   again, once per challenge: a server that checks freshness challenges every block of the burst that was
+ *   already on its way. The driver adds the Echo value to the copy and every later block. A 4.01 with Echo to
+ *   a block that carried Echo ends the body and is delivered, so a server that keeps asking cannot loop.
  * - A 4.13 whose Q-Block1 or Block1 names a smaller block size restarts the upload once, with that size and a
  *   new Request-Tag ([QBlockAction.Restart], RFC 7959 §2.9.3).
  * - Tokens: once a 2.31 confirms blocks, their requests are released, except the one that carried the latest
@@ -46,6 +52,8 @@ import kotlin.time.Duration
  *
  * @param size1 the body size, sent as Size1 on every block (§4.6).
  * @param blockSize the block size, 16 to 1024 bytes, fixed for the body. Never BERT: kcoap does not send SZX 7.
+ * @param allowsBert whether a response may carry SZX 7: only on a connection whose CSMs both indicated BERT
+ *   (RFC 8323 §6).
  */
 internal class QBlock1Sender(
     val size1: Int,
@@ -55,6 +63,7 @@ internal class QBlock1Sender(
     private val nonTimeoutRandom: Duration,
     private val resendsLastBlock: Boolean,
     private val mayRestart: Boolean = true,
+    private val allowsBert: Boolean = false,
 ) {
     init {
         require(size1 >= 0) { "Negative body size: $size1" }
@@ -85,8 +94,14 @@ internal class QBlock1Sender(
     private var lastActivity = Duration.ZERO
     private var lastBlockSent = false
     private var silenceResends = 0
+    private var last408At: Duration? = null
     private var latest231: Int? = null
-    private var echoed = false
+
+    /** The first sequence number sent after a 4.01 with Echo, which the driver gives the Echo value. */
+    private var echoFrom: Int? = null
+
+    /** Sequence numbers whose 4.01 with Echo has had its block sent again. */
+    private val challenged = HashSet<Int>()
 
     /** Whether the body ended: delivered, failed, restarted or abandoned. */
     var isFinished: Boolean = false
@@ -112,11 +127,14 @@ internal class QBlock1Sender(
     /** When [onTimer] must run next: the next set, or the silence ladder after the last block (NON only). */
     fun nextDeadline(): Duration? = if (isFinished || mode != BodyMode.NON) null else nextSetAt ?: silenceDeadline()
 
-    /** The silence ladder runs once every set went out and the last block with it. */
-    private fun silenceDeadline(): Duration? = when {
-        !lastBlockSent || nextSetAt != null -> null
-        resendsLastBlock -> lastActivity + timing.receiveWait(silenceResends)
-        else -> lastActivity + timing.receiveLadder
+    /**
+     * The silence ladder runs once every set went out and the last block with it, and not before the server's
+     * own ladder could have run out after its latest 4.08.
+     */
+    private fun silenceDeadline(): Duration? {
+        if (!lastBlockSent || nextSetAt != null) return null
+        val silence = lastActivity + if (resendsLastBlock) timing.receiveWait(silenceResends) else timing.receiveLadder
+        return last408At?.let { maxOf(silence, it + timing.receiveLadder) } ?: silence
     }
 
     fun onTimer(now: Duration): List<QBlockAction<Int>> {
@@ -143,18 +161,19 @@ internal class QBlock1Sender(
     fun onResponse(now: Duration, sequence: Int, response: CoapMessage): List<QBlockAction<Int>> {
         if (isFinished) return listOf(QBlockAction.Drop("The body has ended"))
         val num = numberOf(sequence) ?: return listOf(QBlockAction.Drop("Not a request of this body: $sequence"))
+        QBlockCheck.response(response, allowsBert)?.let { return listOf(QBlockAction.Drop(it)) }
         lastActivity = now
         silenceResends = 0
         val options = response.options
         return when {
             response.code == CoapCode.CONTINUE -> onContinue(now, sequence, options.qBlock1?.number ?: num)
-            response.code == CoapCode.REQUEST_ENTITY_INCOMPLETE && options.contentFormat == ContentFormat.MISSING_BLOCKS_CBOR_SEQ ->
+            response.code == CoapCode.REQUEST_ENTITY_INCOMPLETE &&
+                options.contentFormat == ContentFormat.MISSING_BLOCKS_CBOR_SEQ -> {
+                last408At = now
                 onMissing(now, response.payload)
-            response.code == CoapCode.UNAUTHORIZED && options.echo != null && !echoed -> {
-                // RFC 9175 §2.3: repeat the block with the Echo value, once per body.
-                echoed = true
-                listOf(send(now, num))
             }
+            response.code == CoapCode.UNAUTHORIZED && options.echo != null && sequence < (echoFrom ?: numbers.size) ->
+                onEchoChallenge(now, sequence, num)
             else -> {
                 val smaller = if (response.code == CoapCode.REQUEST_ENTITY_TOO_LARGE && mayRestart) smallerSize(response) else null
                 if (smaller != null) {
@@ -194,6 +213,13 @@ internal class QBlock1Sender(
     fun abandon(): List<QBlockAction<Int>> = if (isFinished) emptyList() else finish(sequence = null)
 
     // ---------------------------------------------------------------- internals
+
+    /** RFC 9175 §2.3: the block went out without (the latest) Echo; send it again, with the Echo value. */
+    private fun onEchoChallenge(now: Duration, sequence: Int, num: Long): List<QBlockAction<Int>> {
+        if (!challenged.add(sequence)) return listOf(QBlockAction.Drop("Request $sequence was challenged before"))
+        if (echoFrom == null) echoFrom = numbers.size
+        return listOf(send(now, num))
+    }
 
     private fun onContinue(now: Duration, sequence: Int, upTo: Long): List<QBlockAction<Int>> {
         if (mode != BodyMode.NON) {

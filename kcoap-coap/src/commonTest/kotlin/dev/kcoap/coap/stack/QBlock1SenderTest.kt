@@ -3,6 +3,7 @@ package dev.kcoap.coap.stack
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
+import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.stack.QBlockMessages.block
 import dev.kcoap.coap.stack.QBlockMessages.missing
@@ -10,6 +11,7 @@ import dev.kcoap.coap.stack.QBlockMessages.response
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -27,7 +29,8 @@ class QBlock1SenderTest {
         resendsLastBlock: Boolean = true,
         parameters: TransmissionParameters = TransmissionParameters(),
         mayRestart: Boolean = true,
-    ) = QBlock1Sender(size, 64, mode, QBlockTiming(parameters), pause, resendsLastBlock, mayRestart)
+        allowsBert: Boolean = false,
+    ) = QBlock1Sender(size, 64, mode, QBlockTiming(parameters), pause, resendsLastBlock, mayRestart, allowsBert)
 
     private fun List<QBlockAction<Int>>.sent(): List<String> =
         filterIsInstance<QBlockAction.SendBlock<Int>>().map { "${it.num}/${if (it.more) 1 else 0}@${it.ref}" }
@@ -132,14 +135,33 @@ class QBlock1SenderTest {
     }
 
     @Test
-    fun rfc9175Section2_3A401WithEchoHasTheBlockSentAgainOnce() {
+    fun rfc9175Section2_3EveryBlockOfTheBurstChallengedWithEchoIsSentAgain() {
         val sender = sender()
         sender.start(Duration.ZERO)
         val challenge = response(CoapCode.UNAUTHORIZED) { echo(byteArrayOf(1, 2)) }
-        assertEquals(listOf("3/1@10"), sender.onResponse(1.seconds, 3, challenge).sent())
-        val second = sender.onResponse(1.seconds, 10, challenge)
-        assertEquals(CoapCode.UNAUTHORIZED, assertIs<QBlockAction.Deliver<Int>>(second.first()).message.code, "only once per body")
+        assertEquals(listOf("0/1@10"), sender.onResponse(1.seconds, 0, challenge).sent())
+        assertEquals(listOf("1/1@11"), sender.onResponse(1.seconds, 1, challenge).sent(), "sent before the Echo was known")
+        assertIs<QBlockAction.Drop>(sender.onResponse(1.seconds, 0, challenge).single(), "once per challenge")
+        assertFalse(sender.isFinished)
+        val again = assertIs<QBlockAction.Deliver<Int>>(sender.onResponse(2.seconds, 10, challenge).first())
+        assertEquals(CoapCode.UNAUTHORIZED, again.message.code, "the copy carried the Echo")
         assertTrue(sender.isFinished)
+    }
+
+    @Test
+    fun rfc7252Section5_4_1AResponseWithABadQBlockOptionIsDropped() {
+        val sender = sender()
+        sender.start(Duration.ZERO)
+        val tooLong = response(CoapCode.CONTINUE) { add(CoapOptions.Q_BLOCK1.number, ByteArray(4)) }
+        val dropped = assertIs<QBlockAction.Drop>(sender.onResponse(1.seconds, 9, tooLong).single())
+        assertEquals("A Q-Block option longer than 3 bytes", dropped.reason)
+        val mixed = response(CoapCode.CONTINUE) {
+            qBlock1(block(9, true))
+            block1(block(9, true))
+        }
+        assertIs<QBlockAction.Drop>(sender.onResponse(1.seconds, 9, mixed).single())
+        assertEquals(pause, sender.nextDeadline(), "nothing changed")
+        assertFalse(sender.isFinished)
     }
 
     @Test
@@ -158,15 +180,20 @@ class QBlock1SenderTest {
 
     @Test
     fun rfc7959Section2_9_3A413WithoutASmallerSizeIsDelivered() {
-        for (tooLarge in listOf(
-            response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { size1(100) },
-            response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { block1(block(0, true, 128)) },
-            response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { qBlock1(BlockOption(0, true, 7)) },
+        val bert = response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { qBlock1(BlockOption(0, true, 7)) }
+        for ((tooLarge, allowsBert) in listOf(
+            response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { size1(100) } to false,
+            response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { block1(block(0, true, 128)) } to false,
+            bert to true,
         )) {
-            val sender = sender()
+            val sender = sender(allowsBert = allowsBert)
             sender.start(Duration.ZERO)
             assertEquals(tooLarge, assertIs<QBlockAction.Deliver<Int>>(sender.onResponse(1.seconds, 2, tooLarge).first()).message)
         }
+        val udp = sender()
+        udp.start(Duration.ZERO)
+        val reserved = assertIs<QBlockAction.Drop>(udp.onResponse(1.seconds, 2, bert).single())
+        assertEquals("SZX 7 is reserved without BERT", reserved.reason)
         val sender = sender()
         sender.start(Duration.ZERO)
         val smallerBlock1 = response(CoapCode.REQUEST_ENTITY_TOO_LARGE) { block1(block(0, true, 16)) }
@@ -243,8 +270,25 @@ class QBlock1SenderTest {
         sender.start(Duration.ZERO)
         sender.onTimer(4.seconds)
         assertEquals(12.seconds, sender.nextDeadline())
-        sender.onResponse(10.seconds, 0, missing(1))
+        sender.onResponse(10.seconds, 0, continue231)
         assertEquals(14.seconds, sender.nextDeadline())
+    }
+
+    /** The server's 4.08 ladder and the client's silence ladder run on the same times (Figure 6). */
+    @Test
+    fun afterA408TheLastBlockWaitsUntilTheServersLadderCouldHaveRunOut() {
+        val sender = sender(size = 3 * 64)
+        sender.start(Duration.ZERO)
+        assertEquals(listOf("1/1@3"), sender.onResponse(4.seconds, 2, missing(1)).sent())
+        assertEquals(128.seconds, sender.nextDeadline(), "not at 8 s: the server holds the body")
+        assertEquals(listOf("1/1@4"), sender.onResponse(12.seconds, 2, missing(1)).sent())
+        assertEquals(136.seconds, sender.nextDeadline())
+        assertEquals(listOf("2/0@5"), sender.onTimer(136.seconds).sent(), "real silence: the last block again")
+        assertEquals(144.seconds, sender.nextDeadline(), "then the ladder as usual")
+        val post = sender(size = 3 * 64, resendsLastBlock = false)
+        post.start(Duration.ZERO)
+        post.onResponse(4.seconds, 2, missing(1))
+        assertEquals(128.seconds, post.nextDeadline())
     }
 
     @Test

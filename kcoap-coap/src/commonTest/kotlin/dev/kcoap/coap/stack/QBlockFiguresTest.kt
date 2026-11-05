@@ -99,8 +99,18 @@ class QBlockFiguresTest {
      * the client in the middle of the second set; sent as a burst, block 12 is on the wire first.
      */
     @Test
-    fun rfc9177Figure4And5RecoveryAcrossSets() {
+    fun rfc9177Figure4And5RecoveryAcrossSets() = figure4And5(clientTimersFirst = false)
+
+    /**
+     * At 6.5 s the server's 4.08 for block 10 is due, which is also NON_RECEIVE_TIMEOUT after the client's
+     * last send: the client must not send block 12 again first.
+     */
+    @Test
+    fun rfc9177Figure5WithTheClientsTimersFirst() = figure4And5(clientTimersFirst = true)
+
+    private fun figure4And5(clientTimersFirst: Boolean) {
         val wire = QBlockWire()
+        wire.clientTimersFirst = clientTimersFirst
         val upload = body(12 * 1024 + 200)
         wire.drop = { it.fromClient && it.num in setOf(1L, 9L, 10L) && it.copy == 1 }
 
@@ -136,21 +146,40 @@ class QBlockFiguresTest {
         wire.client.upload(body(2 * 1024 + 100))
         wire.runUntil(123.seconds)
         assertEquals(1, wire.server.uploads.size, "the partial body is kept until 124 s")
-        wire.runUntil(124.seconds)
+        wire.runUntil(183.seconds)
 
         assertEquals(
-            listOf("4s S>C NON 4.08 T2 [1]", "12s S>C NON 4.08 T2 [1]", "28s S>C NON 4.08 T2 [1]", "60s S>C NON 4.08 T2 [1]"),
-            wire.trace.filter { !it.fromClient }.map { it.toString() },
-            "§7.2: NON_RECEIVE_TIMEOUT doubled after every request, all on the token of the highest block",
+            listOf("0s C>S NON PUT T0 QB1:0/1/1024", "X 0s C>S NON PUT T1 QB1:1/1/1024", "0s C>S NON PUT T2 QB1:2/0/1024") +
+                listOf(4, 12, 28, 60).flatMapIndexed { index, at ->
+                    listOf("${at}s S>C NON 4.08 T2 [1]", "X ${at}s C>S NON PUT T${index + 3} QB1:1/1/1024")
+                },
+            wire.lines(),
+            "§7.2: NON_RECEIVE_TIMEOUT doubled after every request, all on the token of the highest block; " +
+                "the client sends only block 1 again, never its last block while the server asks",
         )
         assertTrue(wire.server.uploads.isEmpty(), "discarded at 124 s without a fifth 4.08")
         assertEquals(1, wire.server.actions.count { it is QBlockAction.Discard })
-        // The client took all four 4.08s on one token and sent block 1 again for each.
-        assertEquals(5, wire.client.actions.count { it is QBlockAction.SendBlock<*> && it.num == 1L })
         assertTrue(wire.client.actions.none { it is QBlockAction.Fail })
-        wire.runUntil(184.seconds)
+
+        // Beyond the figure: after the server's whole ladder, real silence. The PUT sends its last block again;
+        // the server, which no longer has the body, asks for the rest, and block 1 has then been asked for
+        // more than NON_MAX_RETRANSMIT + 1 times. The server's next 4.08 meets a forgotten token.
+        wire.runUntil(300.seconds)
+        assertEquals(
+            listOf(
+                "184s C>S NON PUT T7 QB1:2/0/1024",
+                "188s S>C NON 4.08 T7 [0, 1]",
+                "188s C>S NON PUT T8 QB1:0/1/1024",
+                "X 188s C>S NON PUT T9 QB1:1/1/1024",
+                "192s S>C NON 4.08 T7 [1]",
+                "200s S>C NON 4.08 T7 [1]",
+                "200s C>S RST 0.00",
+            ),
+            wire.lines(from = 11),
+        )
         val failure = wire.client.actions.filterIsInstance<QBlockAction.Fail>().single()
-        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, failure.reason)
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
+        assertTrue(wire.server.uploads.isEmpty(), "§4.3: the Reset deleted the new partial body")
     }
 
     /**
