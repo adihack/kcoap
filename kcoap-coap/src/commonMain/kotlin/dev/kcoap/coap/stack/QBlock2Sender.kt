@@ -23,6 +23,8 @@ import kotlin.time.Duration
  * - one option `NUM/M=1` with NUM a non-zero multiple of MAX_PAYLOADS is a Continue: that set goes out on the
  *   original request at once, even if it went out before (Figure 10), and the Continue itself gets no answer
  *   of its own. A second Continue for the same set within NON_TIMEOUT_RANDOM is a duplicate and is ignored.
+ *   A body that never started, because its first request asked only for some blocks, takes the Continue as
+ *   its original request.
  * - one option `0/M=1` asks for the whole body again; the driver decides whether the handler runs again
  *   (GET, FETCH) or this machine serves the cache ([restart]).
  * - anything else asks for missing blocks: `NUM/M=0` for that block, any other `NUM/M=1` for the rest of its
@@ -165,7 +167,9 @@ internal class QBlock2Sender<R>(
     private fun onContinue(now: Duration, set: Long, ref: R): List<QBlockAction<R>> {
         if (sets.first(set) >= count) return listOf(QBlockAction.Reject(ref, CoapCode.BAD_REQUEST, "Continue beyond the body"))
         val actions = ArrayList<QBlockAction<R>>()
-        actions += QBlockAction.NoResponse(ref)
+        // A body whose first request asked only for some blocks never started: the Continue becomes its
+        // original request, which the rest of the body goes on.
+        if (original == null) original = ref else actions += QBlockAction.NoResponse(ref)
         val previous = continuedAt[set]
         if (previous != null && now - previous < nonTimeoutRandom) return actions
         continuedAt[set] = now
