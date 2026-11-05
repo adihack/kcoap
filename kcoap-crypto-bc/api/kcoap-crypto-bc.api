@@ -13,6 +13,11 @@ public final class dev/kcoap/crypto/bc/BouncyCastleCryptoBackend : dev/kcoap/cry
 	public fun keyAgreement (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun randomBytes (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun sign (Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun verify (Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

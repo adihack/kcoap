@@ -49,12 +49,6 @@ public final class dev/kcoap/crypto/AesCcm : dev/kcoap/crypto/Aead {
 	public fun getTagLength ()I
 }
 
-public final class dev/kcoap/crypto/CapabilitiesKt {
-	public static final fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
 public final class dev/kcoap/crypto/CertificateValidationException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -76,6 +70,11 @@ public abstract interface class dev/kcoap/crypto/CryptoBackend {
 	public fun keyAgreement (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun randomBytes (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun sign (Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun verify (Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -87,6 +86,11 @@ public final class dev/kcoap/crypto/CryptoBackend$DefaultImpls {
 	public static fun importKeyPair (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun keyAgreement (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun sign (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun verify (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -223,5 +227,6 @@ public final class dev/kcoap/crypto/SoftwarePrivateKey : dev/kcoap/crypto/Privat
 
 public final class dev/kcoap/crypto/UnsupportedAlgorithmException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;)V
+	public final fun getAlgorithm ()Ljava/lang/String;
 }
 
