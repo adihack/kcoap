@@ -828,7 +828,13 @@ internal class QBlockClient(private val client: CoapClient) {
                 outcome = Outcome.Done(response(message))
                 return
             }
-            if (observer.isFresh(observe)) observer.onNotification(response(message))
+            if (!observer.isFresh(observe)) return
+            // RFC 7641 §3.4: fresher than the body in progress, which is given up, never to be emitted after this.
+            notification?.let {
+                logger.debug { "A newer notification of one message supersedes the body in progress" }
+                finishNotification(it)
+            }
+            observer.onNotification(response(message))
         }
 
         /** A request for blocks of a notification was answered without a block: Echo is returned once, else nothing. */

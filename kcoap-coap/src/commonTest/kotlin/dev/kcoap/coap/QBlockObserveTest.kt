@@ -881,6 +881,31 @@ class QBlockObserveTest {
         assertEquals(listOf(5L, 7L, 9L), s.received.map { it.options.observe })
     }
 
+    /**
+     * RFC 7641 §3.4: a notification of one message that is fresher than the body in progress supersedes that body,
+     * whose late blocks then start nothing: the older body is never emitted after the newer notification.
+     */
+    @Test
+    fun rfc7641Section3_4AFresherNotificationOfOneMessageSupersedesTheBodyInProgress() = runTest {
+        val s = scripted()
+        s.observe(this)
+        val (peer, registration) = s.requests.receive()
+        val token = registration.token
+        s.sendBody(peer, token, body(128, 1), 1, 1)
+        val older = body(192, 2)
+        s.server.send(peer, s.block(token, 0, older, 2, 5))
+        s.server.send(peer, s.plain(token, 6, "newer"))
+        s.server.send(peer, s.block(token, 1, older, 2, 5))
+        s.server.send(peer, s.block(token, 2, older, 2, 5))
+        delay(10.seconds)
+
+        val expected = listOf(body(128, 1), "newer".encodeToByteArray()).map { it.toList() }
+        assertEquals(expected, s.received.map { it.payload.toList() })
+        assertEquals(listOf(1L, 6L), s.received.map { it.options.observe })
+        assertNull(s.failure)
+        assertEquals(1, s.client.endpoint.exchangeCount(), "no request for the given-up body's blocks stays")
+    }
+
     @Test
     fun rfc7641Section3_2ANotificationOfOneMessageIsPassedOnAndOneWithoutObserveEndsTheObservation() = runTest {
         val s = scripted()
