@@ -18,7 +18,6 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocException
 import dev.kcoap.oscore.OscoreException
 import dev.kcoap.oscore.OscoreOptionValue
-import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,18 +59,28 @@ public class CombinedRequestSecurity(
 }
 
 /**
- * The server side of the EDHOC + OSCORE request (RFC 9668 §3.3): a request with the EDHOC option has its
- * message_3 split off and processed by [edhoc], which adds the new OSCORE context, and the rest is
- * verified by [oscore] as an ordinary OSCORE request. Requests without the EDHOC option go to [oscore]
- * directly.
+ * The server side of the EDHOC + OSCORE request (RFC 9668 §3.3), a decorator of the server's OSCORE layer: a
+ * request with the EDHOC option has its message_3 split off and processed by [edhoc], which adds the new
+ * OSCORE context to its repository, and the rest is verified by [oscore] as an ordinary OSCORE request.
+ * Requests without the EDHOC option go to [oscore] directly.
+ *
+ * [oscore] is any [ServerMessageSecurity] that verifies OSCORE requests against the contexts [edhoc] adds:
+ * kcoap-oscore's `OscoreServer` on the same repository, or a decorator of it.
+ *
+ * ```
+ * val contexts = InMemoryContextRepository()
+ * val edhoc = EdhocServer(responderConfig, crypto, contexts)
+ * val security = CombinedRequestServer(edhoc, OscoreServer(contexts))
+ * ```
  *
  * Errors follow the RFC: a malformed combined request is answered with 4.00, a failed EDHOC step with
  * an EDHOC error message (Content-Format application/edhoc+cbor-seq), and a failed OSCORE step with the
- * OSCORE errors of RFC 8613 §8.2.
+ * OSCORE errors of RFC 8613 §8.2. A rebuilt request that [oscore] does not take as protected (null) is
+ * malformed as well: it carried the EDHOC option without being an OSCORE request.
  */
 public class CombinedRequestServer(
     private val edhoc: EdhocServer,
-    private val oscore: OscoreServer,
+    private val oscore: ServerMessageSecurity,
 ) : ServerMessageSecurity {
 
     override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
@@ -107,7 +116,7 @@ public class CombinedRequestServer(
             this.payload = ciphertext
             options { remove(CoapOptions.EDHOC.number) }
         }.build()
-        return oscore.unprotectRequest(rebuilt, peer)
+        return oscore.unprotectRequest(rebuilt, peer) ?: throw badRequest("EDHOC option on a request that is not OSCORE")
     }
 
     private companion object {

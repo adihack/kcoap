@@ -11,6 +11,8 @@ import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.ResponseVerification
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.AeadAlgorithm
@@ -251,6 +253,48 @@ class EdhocOscoreTest {
         val second = security.protectRequest(request("lights"), peer)!!
         assertFalse(second.message.options.edhoc)
         assertEquals(listOf("lights"), combined.unprotectRequest(second.message, peer)!!.message.options.uriPath)
+    }
+
+    /**
+     * API-08: the combined-request server decorates any [ServerMessageSecurity], as the client side decorates
+     * any ClientMessageSecurity; here a decorator of OscoreServer that counts what it verifies.
+     */
+    @Test
+    fun combinedRequestServerDecoratesAnyServerMessageSecurity() = runTest {
+        val peers = Peers.create(crypto)
+        val contexts = InMemoryContextRepository()
+        val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts)
+        val oscore = OscoreServer(contexts)
+        val seen = mutableListOf<Boolean>()
+        val counting = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
+                seen += request.options.edhoc
+                return oscore.unprotectRequest(request, peer)
+            }
+        }
+        val (_, security) = handshake(peers, edhoc).runCombined()
+        val combined = CombinedRequestServer(edhoc, counting)
+
+        assertEquals(listOf("x"), combined.unprotectRequest(security.protectRequest(request("x"), peer)!!.message, peer)!!.message.options.uriPath)
+        assertEquals(listOf("y"), combined.unprotectRequest(security.protectRequest(request("y"), peer)!!.message, peer)!!.message.options.uriPath)
+        assertEquals(listOf(false, false), seen, "the rebuilt combined request, then a plain one; never the EDHOC option")
+    }
+
+    /** A rebuilt combined request that the OSCORE layer does not take as protected is a malformed one (4.00). */
+    @Test
+    fun aCombinedRequestTheOscoreLayerDoesNotTakeIsABadRequest() = runTest {
+        val peers = Peers.create(crypto)
+        val edhoc = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository())
+        val (_, security) = handshake(peers, edhoc).runCombined()
+        val notMine = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? = null
+        }
+        val combined = security.protectRequest(request("x"), peer)!!.message
+
+        val failure = assertFailsWith<MessageSecurityException> { CombinedRequestServer(edhoc, notMine).unprotectRequest(combined, peer) }
+        assertEquals(CoapCode.BAD_REQUEST, failure.responseCode)
+        assertEquals("EDHOC option on a request that is not OSCORE", failure.message)
+        assertNull(CombinedRequestServer(edhoc, notMine).unprotectRequest(request("plain"), peer), "no EDHOC option: its answer")
     }
 
     /** RFC 9668 Figure 4, byte for byte: the combined payload and the empty EDHOC option. */
