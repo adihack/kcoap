@@ -506,8 +506,9 @@ common-code fallbacks where those are small and handle only public data:
 | 192-bit AES keys | not in Chromium | `UnsupportedAlgorithmException` there |
 | ML-KEM, ML-DSA | no | only in `kcoap-crypto-bc` (JVM) |
 
-Applications ask in advance with `backend.supports(...)` and `CipherSuite.isSupportedBy(backend)`,
-which put the question the same way on every platform. Two more things differ in practice, not in
+Applications ask in advance with `crypto.supports(...)` and `CipherSuite.isSupportedBy(crypto, method)`,
+which put the question the same way on every platform; EDHOC asks them itself and offers only the suites
+the backend runs (WP-A2). Two more things differ in practice, not in
 code: every WebCrypto call is asynchronous, so CCM costs one promise per AES block (fine at CoAP sizes),
 and a WebCrypto rejection is not a Kotlin exception, so the backend converts it before protocol code
 sees it.

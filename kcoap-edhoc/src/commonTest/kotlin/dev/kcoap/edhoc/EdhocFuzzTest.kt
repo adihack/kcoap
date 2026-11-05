@@ -35,7 +35,7 @@ class EdhocFuzzTest {
                         val responder = EdhocResponder(configs.second, backend)
                         responder.processMessage1(initiator.createMessage1())
                         initiator.processMessage2(responder.createMessage2())
-                        val message3 = initiator.createMessage3()
+                        val message3 = initiator.createMessage3().bytes
                         val mutated = ByteMutator.mutate(message3, random)
                         expectRejection { responder.processMessage3(mutated) }
                         if (responder.session != null && !mutated.contentEquals(message3)) {

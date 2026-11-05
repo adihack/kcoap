@@ -18,5 +18,10 @@ open class dev.kcoap.crypto.backend/DefaultCryptoBackend : dev.kcoap.crypto/Cryp
     open suspend fun keyAgreement(dev.kcoap.crypto/PrivateKey, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.keyAgreement|keyAgreement(dev.kcoap.crypto.PrivateKey;kotlin.ByteArray){}[0]
     open suspend fun randomBytes(kotlin/Int): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.randomBytes|randomBytes(kotlin.Int){}[0]
     open suspend fun sign(dev.kcoap.crypto/SignatureAlgorithm, dev.kcoap.crypto/PrivateKey, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.sign|sign(dev.kcoap.crypto.SignatureAlgorithm;dev.kcoap.crypto.PrivateKey;kotlin.ByteArray){}[0]
+    open suspend fun supports(dev.kcoap.crypto/AeadAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.AeadAlgorithm){}[0]
+    open suspend fun supports(dev.kcoap.crypto/HashAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.HashAlgorithm){}[0]
+    open suspend fun supports(dev.kcoap.crypto/KemAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.KemAlgorithm){}[0]
+    open suspend fun supports(dev.kcoap.crypto/KeyType): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.KeyType){}[0]
+    open suspend fun supports(dev.kcoap.crypto/SignatureAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.SignatureAlgorithm){}[0]
     open suspend fun verify(dev.kcoap.crypto/SignatureAlgorithm, kotlin/ByteArray, kotlin/ByteArray, kotlin/ByteArray): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.verify|verify(dev.kcoap.crypto.SignatureAlgorithm;kotlin.ByteArray;kotlin.ByteArray;kotlin.ByteArray){}[0]
 }

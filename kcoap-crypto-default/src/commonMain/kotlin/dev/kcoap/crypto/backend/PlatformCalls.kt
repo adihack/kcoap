@@ -7,7 +7,8 @@ import kotlin.coroutines.cancellation.CancellationException
 //
 // Protocol code catches exceptions from a backend and turns them into protocol errors (an invalid peer
 // key aborts EDHOC, RFC 9528 §9.8), and it asks a backend what it can do through
-// UnsupportedAlgorithmException (see dev.kcoap.crypto.supports). Platforms do not report failures
+// UnsupportedAlgorithmException (see the supports members of CryptoBackend,
+// docs/adr/0001-crypto-capabilities.md). Platforms do not report failures
 // that way: JCA, CommonCrypto and OpenSSL throw their own exception types, and a WebCrypto rejection is
 // not a Kotlin exception at all (a DOMException on JS, a bare Throwable on Wasm). These helpers map
 // both, without knowing which platform they run on.

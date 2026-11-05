@@ -66,10 +66,12 @@ class CipherSuiteTest {
     @Test
     fun theDefaultBackendRunsTheMandatorySuitesEverywhere() = runTest {
         val backend = DefaultCryptoBackend()
-        assertTrue(CipherSuite.SUITE_2.isSupportedBy(backend))
-        assertTrue(CipherSuite.SUITE_3.isSupportedBy(backend))
-        assertFalse(CipherSuite.SUITE_PQC_1.isSupportedBy(backend), "no ML-KEM or ML-DSA")
-        assertFalse(CipherSuite.SUITE_25.isSupportedBy(backend), "not implemented")
+        for (method in EdhocMethod.entries) {
+            assertTrue(CipherSuite.SUITE_2.isSupportedBy(backend, method), method.name)
+            assertTrue(CipherSuite.SUITE_3.isSupportedBy(backend, method), method.name)
+            assertFalse(CipherSuite.SUITE_PQC_1.isSupportedBy(backend, method), "no ML-KEM or ML-DSA")
+            assertFalse(CipherSuite.SUITE_25.isSupportedBy(backend, method), "not implemented")
+        }
     }
 
     /** A platform without ChaCha20/Poly1305, as WebCrypto is, loses exactly suites 4 and 5. */
@@ -83,9 +85,54 @@ class CipherSuiteTest {
                 } else {
                     default.aead(algorithm, key)
                 }
+
+            override suspend fun supports(algorithm: AeadAlgorithm): Boolean =
+                algorithm != AeadAlgorithm.CHACHA20_POLY1305 && default.supports(algorithm)
         }
-        val supported = CipherSuite.registered.filter { it.isSupportedBy(withoutChaCha) }.map { it.value }
+        val method = EdhocMethod.SIGNATURE_SIGNATURE
+        val supported = CipherSuite.registered.filter { it.isSupportedBy(withoutChaCha, method) }.map { it.value }
         assertEquals(listOf(0, 1, 2, 3, 6, 24), supported)
+        assertEquals("needs CHACHA20_POLY1305", CipherSuite.SUITE_4.missingFor(withoutChaCha, method))
+    }
+
+    /**
+     * The signature algorithm counts only where a side signs: suite 6 (X25519 with ES256) runs method 3,
+     * where both sides use static Diffie-Hellman, on a backend without ES256. Every other piece counts for
+     * every method, the application algorithms (RFC 9528 Appendix A.1) and the hash's HMAC included.
+     */
+    @Test
+    fun whatASuiteNeedsDependsOnTheMethod() = runTest {
+        val suite6 = CipherSuite.SUITE_6
+        val signatures = EdhocMethod.SIGNATURE_SIGNATURE
+        val staticDh = EdhocMethod.STATIC_DH_STATIC_DH
+        val withoutEs256 = RestrictedBackend(signatures = setOf(SignatureAlgorithm.ES256))
+        assertTrue(suite6.isSupportedBy(withoutEs256, staticDh))
+        for (method in EdhocMethod.entries - staticDh) {
+            assertFalse(suite6.isSupportedBy(withoutEs256, method), method.name)
+            assertEquals("needs ES256", suite6.missingFor(withoutEs256, method), method.name)
+        }
+        fun without(vararg algorithms: Any) = RestrictedBackend(
+            aeads = algorithms.filterIsInstance<AeadAlgorithm>().toSet(),
+            keyTypes = algorithms.filterIsInstance<KeyType>().toSet(),
+            hashes = algorithms.filterIsInstance<HashAlgorithm>().toSet(),
+        )
+        assertEquals("needs X25519", suite6.missingFor(without(KeyType.X25519), staticDh))
+        assertEquals("needs A128GCM", suite6.missingFor(without(AeadAlgorithm.A128GCM), staticDh))
+        assertEquals("needs SHA_384", CipherSuite.SUITE_24.missingFor(without(HashAlgorithm.SHA_384), staticDh))
+
+        // Suite -24 takes AES-CCM-16-64-128 and SHA-256 for the application only.
+        val pq = FakePostQuantumBackend()
+        val pqc = CipherSuite.SUITE_PQC_1
+        assertNull(pqc.missingFor(pq, signatures))
+        fun pqWithout(aead: AeadAlgorithm? = null, hash: HashAlgorithm? = null, signature: SignatureAlgorithm? = null) =
+            RestrictedBackend(pq, setOfNotNull(aead), emptySet(), setOfNotNull(signature), setOfNotNull(hash))
+        assertEquals("needs AES_CCM_16_64_128", pqc.missingFor(pqWithout(AeadAlgorithm.AES_CCM_16_64_128), signatures))
+        assertEquals("needs SHAKE256", pqc.missingFor(pqWithout(hash = HashAlgorithm.SHAKE256), signatures))
+        assertEquals("needs SHA_256", pqc.missingFor(pqWithout(hash = HashAlgorithm.SHA_256), signatures))
+        assertEquals("needs ML_DSA_44", pqc.missingFor(pqWithout(signature = SignatureAlgorithm.ML_DSA_44), signatures))
+        assertEquals("needs ML_KEM_512", pqc.missingFor(DefaultCryptoBackend(), signatures))
+        assertEquals("has no static Diffie-Hellman for method 3", pqc.missingFor(pq, staticDh))
+        assertEquals("is not implemented", CipherSuite.SUITE_25.missingFor(pq, signatures))
     }
 
     /** RFC 9528 Table 6 lists suite 25, but its EdDSA uses Ed448, which no backend has. */

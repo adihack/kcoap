@@ -15,7 +15,6 @@ import dev.kcoap.crypto.HashAlgorithm.SHA_384
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
-import dev.kcoap.crypto.supports
 
 /**
  * The EDHOC key exchange algorithm of a cipher suite (RFC 9528 §3.6).
@@ -126,18 +125,51 @@ public class CipherSuite private constructor(
     public val isMandatoryToImplement: Boolean get() = value == 2 || value == 3
 
     /**
-     * Whether [backend] runs everything this suite can need on the platform it is on: both AEADs, the
-     * ephemeral key exchange and the signature algorithm. Platforms differ (WebCrypto has no
-     * ChaCha20/Poly1305, so suites 4 and 5 are not supported there), so an Initiator or Responder
-     * should offer only suites for which this is true. Each check asks the backend for the algorithm,
-     * which costs a key pair or two.
+     * Whether a session with [method] on this suite runs on [crypto] where it is: the suite is
+     * [implemented][isImplemented] and fits the method ([EdhocMethod.isCompatibleWith]), and the backend
+     * supports
+     * - the ephemeral key exchange: key agreement on the curve, which static-DH authentication uses too
+     *   (RFC 9528 §4.1.1), or the KEM (draft-ietf-lake-pqsuites §3);
+     * - the signature algorithm, if either side of [method] signs (RFC 9528 §5.3.2);
+     * - the EDHOC and application AEADs, and the EDHOC and application hashes with HMAC for SHA-2
+     *   (RFC 9528 §3.6, Appendix A.1).
+     *
+     * Platforms differ (WebCrypto has no ChaCha20/Poly1305, so suites 4 and 5 do not run there).
+     * [EdhocInitiator] and [EdhocResponder] offer and accept only the suites for which this is true, and
+     * it is true exactly when a handshake between them on this backend succeeds. Each call asks
+     * [CryptoBackend.supports] up to six questions. `DefaultCryptoBackend` answers them from memory after the
+     * first time, but a backend that keeps the probing defaults runs a probe for each, so call this once per
+     * backend rather than per session; the state machines remember the answers in their configuration
+     * (docs/adr/0001-crypto-capabilities.md).
      */
-    public suspend fun isSupportedBy(backend: CryptoBackend): Boolean =
-        isImplemented &&
-            backend.supports(edhocAead) &&
-            backend.supports(appAead) &&
-            backend.supports(keyExchange.ephemeralKeyType) &&
-            backend.supports(signature)
+    public suspend fun isSupportedBy(crypto: CryptoBackend, method: EdhocMethod): Boolean =
+        missingFor(crypto, method) == null
+
+    /**
+     * Why a session with [method] on this suite cannot run on [crypto], naming the first thing missing
+     * ("needs P_256"), or null when it can.
+     */
+    internal suspend fun missingFor(crypto: CryptoBackend, method: EdhocMethod): String? {
+        if (!isImplemented) return "is not implemented"
+        if (!method.isCompatibleWith(this)) return "has no static Diffie-Hellman for method ${method.value}"
+        val signs = method.initiatorAuthentication == AuthenticationKind.SIGNATURE ||
+            method.responderAuthentication == AuthenticationKind.SIGNATURE
+        val missing = when {
+            !keyExchange.isSupportedBy(crypto) -> keyExchange.toString()
+            signs && !crypto.supports(signature) -> signature.name
+            !crypto.supports(edhocAead) -> edhocAead.name
+            !crypto.supports(appAead) -> appAead.name
+            !crypto.supports(edhocHash) -> edhocHash.name
+            !crypto.supports(appHash) -> appHash.name
+            else -> return null
+        }
+        return "needs $missing"
+    }
+
+    private suspend fun KeyExchangeAlgorithm.isSupportedBy(crypto: CryptoBackend): Boolean = when (this) {
+        is KeyExchangeAlgorithm.DiffieHellman -> crypto.supports(curve.keyType)
+        is KeyExchangeAlgorithm.Kem -> crypto.supports(algorithm)
+    }
 
     /** Whether the value is in the private-use range -24..-21 of RFC 9528 §10.2. */
     public val isPrivateUse: Boolean get() = value in -24..-21

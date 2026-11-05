@@ -77,9 +77,10 @@ reviewed as such; declarations marked `@InternalKcoapApi` are plumbing between k
 ## Platforms
 
 Everything is common Kotlin; the platforms differ only in what their cryptography offers, which the
-crypto backend reports through capability checks (`backend.supports(algorithm)`,
-`CipherSuite.isSupportedBy(backend)`) and fills with common-code fallbacks where they are small and
-safe. Only adapters that wrap a runtime-bound library build for fewer targets.
+crypto backend reports through capability checks (`crypto.supports(algorithm)`,
+`CipherSuite.isSupportedBy(crypto, method)`; [ADR 0001](docs/adr/0001-crypto-capabilities.md)) and fills
+with common-code fallbacks where they are small and safe. EDHOC offers and accepts only the suites the
+backend runs. Only adapters that wrap a runtime-bound library build for fewer targets.
 
 | Target | Runtime | Crypto under `DefaultCryptoBackend` | Modules |
 |---|---|---|---|
@@ -94,7 +95,8 @@ the application supplies (as `kcoap-testkit`'s in-memory network does in the tes
 UDP, so reaching a device takes the WebSocket transport (RFC 8323, being built) and a proxy such as
 libcoap's `coap-server`; OSCORE and EDHOC stay end to end across it. What WebCrypto lacks:
 
-- ChaCha20/Poly1305: `UnsupportedAlgorithmException`, so EDHOC suites 4 and 5 are not available.
+- ChaCha20/Poly1305: `UnsupportedAlgorithmException`, so EDHOC suites 4 and 5 are neither offered nor
+  accepted there.
 - AES-ECB: the AES block under CCM comes from AES-CTR instead, one asynchronous call per block.
 - Compressed points: expanded in common code on every platform.
 - X25519 and Ed25519 in browsers that predate them, 192-bit AES keys in Chromium:

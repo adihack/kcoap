@@ -6,6 +6,7 @@ import dev.kcoap.cbor.CborInt
 import dev.kcoap.cbor.CborText
 import dev.kcoap.cbor.CborValue
 import dev.kcoap.cbor.CborWriter
+import kotlin.jvm.JvmOverloads
 
 /**
  * An EDHOC error message, RFC 9528 §6: the CBOR sequence `( ERR_CODE : int, ERR_INFO : any )`.
@@ -128,13 +129,32 @@ public open class EdhocException(
 
         fun malformed(what: String, cause: Throwable? = null): EdhocException =
             unspecified("Malformed $what", cause)
+
+        /**
+         * This side's crypto backend lacks [algorithm]: a local failure, not the peer's, which the
+         * diagnostic says rather than blaming the peer's input.
+         */
+        fun unavailable(algorithm: String, cause: Throwable? = null): EdhocException =
+            unspecified("$algorithm is not available in this crypto backend", cause)
     }
 }
 
 /**
- * The peer sent an EDHOC error message instead of the expected message. The session is aborted and no
- * error is sent back ([errorMessage] is null): error messages are never answered (RFC 9528 §6, §6.1).
+ * The peer sent an EDHOC error message instead of the expected message. No error is sent back
+ * ([errorMessage] is null): error messages are never answered (RFC 9528 §6, §6.1).
+ *
+ * The session is aborted, except in one case, which [retryWith] tells apart: the Responder answered
+ * message_1 with error code 2 and SUITES_R names a suite the Initiator prefers and its crypto backend runs
+ * (RFC 9528 §6.3.1). Then the Initiator is back at [EdhocPhase.START] with that suite selected, and
+ * [EdhocInitiator.createMessage1] starts the next attempt.
  */
-public class EdhocPeerErrorException(error: EdhocError) : EdhocException(error, "The peer sent $error") {
+public class EdhocPeerErrorException @JvmOverloads constructor(
+    error: EdhocError,
+    /**
+     * The suite selected for the next message_1 when the Initiator can retry after error code 2
+     * (RFC 9528 §6.3.1), or null when the session is aborted.
+     */
+    public val retryWith: CipherSuite? = null,
+) : EdhocException(error, "The peer sent $error") {
     override val errorMessage: ByteArray? get() = null
 }

@@ -21,18 +21,18 @@ internal object Handshake {
         CoseStructures.encStructure(protected = ByteArray(0), externalAad = transcriptHash)
 
     suspend fun encrypt(
-        backend: CryptoBackend,
+        crypto: CryptoBackend,
         suite: CipherSuite,
         key: ByteArray,
         iv: ByteArray,
         plaintext: ByteArray,
         aad: ByteArray,
     ): ByteArray =
-        backend.aead(suite.edhocAead, key).encrypt(iv, plaintext, aad)
+        crypto.aead(suite.edhocAead, key).encrypt(iv, plaintext, aad)
 
     /** Decrypts CIPHERTEXT_3 or CIPHERTEXT_4; a failed tag aborts the session. */
     suspend fun decrypt(
-        backend: CryptoBackend,
+        crypto: CryptoBackend,
         suite: CipherSuite,
         key: ByteArray,
         iv: ByteArray,
@@ -40,7 +40,7 @@ internal object Handshake {
         aad: ByteArray,
         what: String,
     ): ByteArray = try {
-        backend.aead(suite.edhocAead, key).decrypt(iv, ciphertext, aad)
+        crypto.aead(suite.edhocAead, key).decrypt(iv, ciphertext, aad)
     } catch (e: AeadAuthenticationException) {
         throw EdhocException.unspecified("Decryption of $what failed", e)
     }

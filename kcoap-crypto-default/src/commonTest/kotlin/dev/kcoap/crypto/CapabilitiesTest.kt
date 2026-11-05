@@ -26,10 +26,17 @@ class CapabilitiesTest {
         }
     }
 
+    /** The hashes of EDHOC and OSCORE: SHA-2 with its HMAC on the platform, SHAKE256 in common code. */
+    @Test
+    fun everyHashIsSupportedEverywhere() = runTest {
+        for (algorithm in HashAlgorithm.entries) assertTrue(backend.supports(algorithm), algorithm.name)
+    }
+
     @Test
     fun postQuantumAlgorithmsAreNotInTheDefaultBackend() = runTest {
         assertFalse(backend.supports(KeyType.ML_KEM_512))
         assertFalse(backend.supports(SignatureAlgorithm.ML_DSA_44))
+        for (algorithm in KemAlgorithm.entries) assertFalse(backend.supports(algorithm), algorithm.name)
     }
 
     /**

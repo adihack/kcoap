@@ -40,7 +40,9 @@ class ErrorHandlingTest {
         val responder = EdhocResponder(responderConfig, backend)
         val error = assertFailsWith<EdhocException> { responder.processMessage1(initiator.createMessage1()) }
         assertEquals(listOf(2), error.error.cipherSuites, "only suite 2 has a credential at the Responder")
-        assertFailsWith<EdhocPeerErrorException> { initiator.processMessage2(error.errorMessage!!) }
+        val retry = assertFailsWith<EdhocPeerErrorException> { initiator.processMessage2(error.errorMessage!!) }
+        assertEquals(CipherSuite.SUITE_2, retry.retryWith)
+        assertNull(retry.errorMessage, "error messages are not answered")
         assertEquals(CipherSuite.SUITE_2, initiator.cipherSuite)
         assertEquals(EdhocPhase.START, initiator.phase)
         // The next message_1 offers every more preferred suite: SUITES_I = [6, 0, 2].
@@ -55,6 +57,7 @@ class ErrorHandlingTest {
             initiator.processMessage2(EdhocError.wrongSelectedCipherSuite(listOf(24, 25)).encode())
         }
         assertEquals(listOf(24, 25), failure.error.cipherSuites)
+        assertNull(failure.retryWith)
         assertEquals(EdhocPhase.ABORTED, initiator.phase)
         assertSame(failure, initiator.failure)
         assertFailsWith<IllegalStateException> { initiator.createMessage1() }
@@ -65,7 +68,7 @@ class ErrorHandlingTest {
     fun initiatorGivesUpWhenSuitesRNamesTheSelectedSuite() = runTest {
         val (initiator, _) = pair()
         initiator.createMessage1()
-        assertFailsWith<EdhocPeerErrorException> { initiator.processMessage2("0200".hex()) }
+        assertNull(assertFailsWith<EdhocPeerErrorException> { initiator.processMessage2("0200".hex()) }.retryWith)
         assertEquals(EdhocPhase.ABORTED, initiator.phase)
     }
 
@@ -119,14 +122,14 @@ class ErrorHandlingTest {
         val (initiator, responder) = pair(EdhocMethod.STATIC_DH_SIGNATURE, CipherSuite.SUITE_3)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         message3.flip(3)
         assertEquals("Decryption of message_3 failed", diagnosticOf { responder.processMessage3(message3) })
 
         val (initiator2, responder2) = pair(method0, CipherSuite.SUITE_6)
         responder2.processMessage1(initiator2.createMessage1())
         initiator2.processMessage2(responder2.createMessage2())
-        responder2.processMessage3(initiator2.createMessage3())
+        responder2.processMessage3(initiator2.createMessage3().bytes)
         val message4 = responder2.createMessage4()
         message4.flip(1)
         val failure = assertFailsWith<EdhocException> { initiator2.processMessage4(message4) }
@@ -137,7 +140,7 @@ class ErrorHandlingTest {
 
     @Test
     fun tamperedGyBreaksTheSession() = runTest {
-        val (initiator, responder) = pair(method0, CipherSuite.SUITE_4)
+        val (initiator, responder) = pair(method0, CipherSuite.SUITE_6)
         responder.processMessage1(initiator.createMessage1())
         val message2 = responder.createMessage2()
         message2.flip(5)
@@ -156,7 +159,7 @@ class ErrorHandlingTest {
         val responder = EdhocResponder(responderConfig.withResolver(blind), backend)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3()) }
+        val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3().bytes) }
         assertEquals(EdhocError.UNKNOWN_CREDENTIAL_REFERENCED, failure.errorCode)
         assertEquals("03f5", failure.errorMessage!!.toHex())
 
@@ -184,7 +187,7 @@ class ErrorHandlingTest {
             val responder = EdhocResponder(responderConfig.withResolver(nobody), backend)
             responder.processMessage1(initiator.createMessage1())
             initiator.processMessage2(responder.createMessage2())
-            assertEquals(diagnostic, diagnosticOf { responder.processMessage3(initiator.createMessage3()) })
+            assertEquals(diagnostic, diagnosticOf { responder.processMessage3(initiator.createMessage3().bytes) })
         }
     }
 
@@ -240,7 +243,7 @@ class ErrorHandlingTest {
         val responder = EdhocResponder(responderConfig, backend)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3()) }
+        val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3().bytes) }
         assertSame(refusal, failure)
         assertEquals(-1000, failure.errorCode)
         assertNull(failure.error.diagnostic, "only error code 1 has a diagnostic")
@@ -298,7 +301,7 @@ class ErrorHandlingTest {
         val (initiator2, responder2) = pair()
         responder2.processMessage1(initiator2.createMessage1())
         initiator2.processMessage2(responder2.createMessage2())
-        responder2.processMessage3(initiator2.createMessage3())
+        responder2.processMessage3(initiator2.createMessage3().bytes)
         val session = initiator2.session!!
         assertFailsWith<EdhocPeerErrorException> { initiator2.processMessage4(EdhocError.unspecified("late").encode()) }
         assertEquals(EdhocPhase.ABORTED, initiator2.phase)
@@ -348,7 +351,7 @@ class ErrorHandlingTest {
     fun callsOutOfOrderAreRejectedWithoutChangingState() = runTest {
         val (initiator, responder) = pair()
         assertFailsWith<IllegalStateException> { initiator.processMessage2(ByteArray(0)) }
-        assertFailsWith<IllegalStateException> { initiator.createMessage3() }
+        assertFailsWith<IllegalStateException> { initiator.createMessage3().bytes }
         assertFailsWith<IllegalStateException> { initiator.processMessage4(ByteArray(0)) }
         assertFailsWith<IllegalStateException> { responder.createMessage2() }
         assertFailsWith<IllegalStateException> { responder.processMessage3(ByteArray(0)) }
@@ -368,7 +371,7 @@ class ErrorHandlingTest {
         assertNotNull(initiator.peerCredential)
         assertNull(initiator.session)
         assertFailsWith<IllegalStateException> { initiator.processMessage2(message2) }
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         responder.processMessage3(message3)
         assertFailsWith<IllegalStateException> { responder.processMessage3(message3) }
         assertEquals(EdhocPhase.COMPLETED, responder.phase)
@@ -440,7 +443,7 @@ class ErrorHandlingTest {
         val honest = EdhocResponder(responderConfig, backend)
         honest.processMessage1(initiator.createMessage1())
         initiator.processMessage2(honest.createMessage2())
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         assertEquals("Signature_or_MAC_3 has the wrong length", diagnosticOf { honest.processMessage3(message3) })
     }
 
@@ -476,7 +479,7 @@ class ErrorHandlingTest {
         val responder = EdhocResponder(responderConfig, backend)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        assertEquals("No credential for cipher suite 2", diagnosticOf { initiator.createMessage3() })
+        assertEquals("No credential for cipher suite 2", diagnosticOf { initiator.createMessage3().bytes })
     }
 
     // --- configuration ----------------------------------------------------------------------------------

@@ -110,9 +110,11 @@ tests; the browser test tasks are off, because Node.js has the same WebCrypto AP
 would need a headless browser wherever `check` runs.
 
 A test never asks which target it is on. Where a platform may lack an algorithm, the test asks the
-backend (`backend.supports(algorithm)`, `CipherSuite.isSupportedBy(backend)`) and covers what is
+backend (`crypto.supports(algorithm)`, `CipherSuite.isSupportedBy(crypto, method)`) and covers what is
 supported, and the backend's own tests check that whatever is reported unsupported fails with
-`UnsupportedAlgorithmException` and nothing else. On WebCrypto that leaves out:
+`UnsupportedAlgorithmException` and nothing else. `SuiteNegotiationTest` checks the answers themselves
+on every target: for every EDHOC suite and method, `isSupportedBy` is true exactly when a loopback
+handshake succeeds. On WebCrypto that leaves out:
 
 | Test | Left out where unsupported | Unsupported on |
 |---|---|---|

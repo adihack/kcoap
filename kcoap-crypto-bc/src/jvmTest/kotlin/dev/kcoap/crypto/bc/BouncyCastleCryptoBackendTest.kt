@@ -319,6 +319,45 @@ class BouncyCastleCryptoBackendTest {
         assertFailsWith<IllegalStateException> { pq.sign(SignatureAlgorithm.ML_DSA_44, dsa.privateKey, data) }
     }
 
+    /**
+     * ML-KEM and ML-DSA are answered without probing anything; every other question is the classical
+     * backend's to answer, also where it lacks what the default backend has (docs/adr/0001-crypto-capabilities.md).
+     */
+    @Test
+    fun supportsAnswersPostQuantumItselfAndAsksTheClassicalBackendTheRest() = runTest {
+        val asked = mutableListOf<Any>()
+        val classical = object : CryptoBackend by SymmetricOnlyBackend() {
+            override suspend fun supports(algorithm: AeadAlgorithm) =
+                (algorithm != AeadAlgorithm.CHACHA20_POLY1305).also { asked += algorithm }
+
+            override suspend fun supports(type: KeyType) = false.also { asked += type }
+            override suspend fun supports(algorithm: SignatureAlgorithm) = false.also { asked += algorithm }
+            override suspend fun supports(algorithm: KemAlgorithm) = false.also { asked += algorithm }
+            override suspend fun supports(algorithm: HashAlgorithm) = true.also { asked += algorithm }
+        }
+        val pq = BouncyCastleCryptoBackend(classical)
+
+        for (algorithm in KemAlgorithm.entries) {
+            assertTrue(pq.supports(algorithm), algorithm.name)
+            assertTrue(pq.supports(algorithm.keyType), algorithm.name)
+        }
+        for (algorithm in mlDsa) {
+            assertTrue(pq.supports(algorithm), algorithm.name)
+            assertTrue(pq.supports(algorithm.keyType), algorithm.name)
+        }
+        assertEquals(emptyList(), asked, "the post-quantum answers ask nobody")
+
+        assertFalse(pq.supports(KeyType.X25519))
+        assertFalse(pq.supports(SignatureAlgorithm.EDDSA))
+        assertFalse(pq.supports(AeadAlgorithm.CHACHA20_POLY1305))
+        assertTrue(pq.supports(HashAlgorithm.SHA_256))
+        val expected = listOf<Any>(
+            KeyType.X25519, SignatureAlgorithm.EDDSA, AeadAlgorithm.CHACHA20_POLY1305, HashAlgorithm.SHA_256,
+        )
+        assertEquals(expected, asked)
+        assertTrue(backend.supports(KeyType.P256), "the default classical backend has P-256")
+    }
+
     @Test
     fun keysNeverPrintMaterial() = runTest {
         val pair = backend.generateKeyPair(KeyType.ML_KEM_512)

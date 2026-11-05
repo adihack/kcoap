@@ -77,7 +77,7 @@ class PostQuantumBouncyCastleTest {
         val responder = EdhocResponder(responderConfig, backend)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         message3[message3.size - 1] = (message3[message3.size - 1].toInt() xor 1).toByte()
         val failure = assertFailsWith<EdhocException> { responder.processMessage3(message3) }
         assertEquals("Decryption of message_3 failed", failure.error.diagnostic)

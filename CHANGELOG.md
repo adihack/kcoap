@@ -49,8 +49,45 @@ adds its entry and migration note below.
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
   `checkKotlinAbi` in CI, so every API change shows up in review (WP-C1).
+- Capability questions on the crypto seam ([ADR 0001](docs/adr/0001-crypto-capabilities.md), WP-A2):
+  `CryptoBackend.supports(AeadAlgorithm | KeyType | SignatureAlgorithm | KemAlgorithm | HashAlgorithm)`,
+  false exactly when the operations would throw `UnsupportedAlgorithmException`, which now names its
+  `algorithm`. The defaults probe; `DefaultCryptoBackend` probes once per instance and memoizes the answer,
+  `BouncyCastleCryptoBackend` answers ML-KEM and ML-DSA without probing.
+- EDHOC negotiates only suites the crypto backend runs (WP-A2): `CipherSuite.isSupportedBy(crypto, method)`;
+  `EdhocInitiatorConfig.supportedBy(crypto)` and `EdhocResponderConfig.supportedBy(crypto)`, which narrow a
+  configuration once and fail fast; `EdhocPeerErrorException.retryWith`; `Message3`, which
+  `EdhocInitiator.createMessage3()` returns. A configuration asks the backend once and remembers the answers,
+  so sessions do not probe it again, also when the backend keeps the probing defaults; the copies that
+  `supportedBy` and the new `EdhocResponderConfig.withConnectionIdentifiers(provider)` make keep them.
 
 ### Changed (breaking)
+
+EDHOC capability-aware negotiation, typed retry and returned sessions (WP-A2):
+
+- **EDHOC offers and accepts only the cipher suites its crypto backend runs.** The Initiator's SUITES_I and
+  retries draw only on them; the Responder names only them in SUITES_R and answers a selected suite it is
+  configured with but cannot run with error code 2 (RFC 9528 §6.3), where it used to fail later with error
+  code 1. An Initiator that runs none of its suites with a credential, or not its `initialCipherSuite`, fails
+  in `createMessage1()` with an `EdhocException` naming what is missing. *Migration:* none for working
+  configurations; call `config.supportedBy(crypto)` at startup to find a configuration the backend cannot run.
+- **`EdhocInitiator.createMessage3()` returns `Message3(bytes, session)`** instead of the message bytes, and
+  **`EdhocResponder.processMessage3()` returns the `EdhocSession`**. *Migration:* send `message3.bytes`, or
+  write `val (message3, session) = initiator.createMessage3()`; drop `session!!` after these calls.
+- **`CipherSuite.isSupportedBy(backend)` is now `isSupportedBy(crypto, method)`**: what a suite needs depends
+  on the method (method 3 signs nothing), and the check now covers the hashes, HMAC and KEMs too.
+  *Migration:* pass the method.
+- **The `supports(...)` extension functions of kcoap-crypto are `CryptoBackend` members.** *Migration:* drop
+  `import dev.kcoap.crypto.supports`; calls stay the same. A decorator (`CryptoBackend by delegate`) that adds
+  algorithms must override the matching `supports` members, or its delegate answers for it.
+- **`CryptoBackend` parameters are called `crypto`** in `EdhocInitiator`, `EdhocResponder`,
+  `TrustedCredentials`, `ConnectionIdentifierProvider.choose`, `EphemeralKeySource.keyPair`,
+  `CredentialIdentifier.X509Thumbprint.matches`, `CredentialIdentifier.x509Thumbprint` and `Hkdf`.
+  *Migration:* rename the named argument `backend =` to `crypto =`.
+- After error code 2, `EdhocPeerErrorException.retryWith` tells a retry from an abort. *Migration:* replace
+  `if (initiator.phase != EdhocPhase.START) throw e` with `if (e.retryWith == null) throw e`; the old check
+  still works.
+- kcoap-crypto-default depends on kotlinx-coroutines-core (`implementation`) for the capability memo.
 
 OSCORE safe persistence and secret hygiene (WP-A1):
 
@@ -150,6 +187,9 @@ Build governance (WP-C1):
 - kcoap-transport-ktor and the two WebSocket modules export the dependencies their public signatures use
   (`api`): kcoap-common for `LoggerFactory`, and in kcoap-transport-ktor also ktor-network for
   `SelectorManager`, so a caller can pass them without declaring those modules itself (WP-C1).
+- EDHOC: a crypto backend that lacks a curve, KEM or algorithm no longer fails the handshake as if the peer
+  had sent an invalid key or as "Processing message_2 failed"; the diagnostic names what is missing
+  ("P_256 is not available in this crypto backend") (WP-A2).
 
 ### Security
 

@@ -57,17 +57,17 @@ public class ConnectionIdentifier(bytes: ByteArray) {
  */
 public fun interface ConnectionIdentifierProvider {
     /** The identifier to send; [peer] is C_I when the Responder chooses C_R, null for the Initiator. */
-    public suspend fun choose(backend: CryptoBackend, peer: ConnectionIdentifier?): ConnectionIdentifier
+    public suspend fun choose(crypto: CryptoBackend, peer: ConnectionIdentifier?): ConnectionIdentifier
 
     public companion object {
         /**
          * Random one-byte identifiers that encode as a single CBOR integer, the shortest possible, chosen
          * from the 48 values -24..23 and different from the peer's.
          */
-        public val Random: ConnectionIdentifierProvider = ConnectionIdentifierProvider { backend, peer ->
+        public val Random: ConnectionIdentifierProvider = ConnectionIdentifierProvider { crypto, peer ->
             var candidate: ConnectionIdentifier
             do {
-                val random = backend.randomBytes(1)[0].toInt() and 0xFF
+                val random = crypto.randomBytes(1)[0].toInt() and 0xFF
                 candidate = ConnectionIdentifier.ofInt(random % ONE_BYTE_INTEGERS - 24)
             } while (candidate == peer)
             candidate

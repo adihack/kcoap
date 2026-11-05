@@ -42,7 +42,7 @@ public final class dev/kcoap/edhoc/CipherSuite {
 	public final fun isImplemented ()Z
 	public final fun isMandatoryToImplement ()Z
 	public final fun isPrivateUse ()Z
-	public final fun isSupportedBy (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun isSupportedBy (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/edhoc/EdhocMethod;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -237,6 +237,7 @@ public final class dev/kcoap/edhoc/EdhocInitiatorConfig {
 	public final fun getEphemeralKeys ()Ldev/kcoap/edhoc/EphemeralKeySource;
 	public final fun getInitialCipherSuite ()Ldev/kcoap/edhoc/CipherSuite;
 	public final fun getMethod ()Ldev/kcoap/edhoc/EdhocMethod;
+	public final fun supportedBy (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/kcoap/edhoc/EdhocMessage : java/lang/Enum {
@@ -272,7 +273,10 @@ public final class dev/kcoap/edhoc/EdhocMethod$Companion {
 
 public final class dev/kcoap/edhoc/EdhocPeerErrorException : dev/kcoap/edhoc/EdhocException {
 	public fun <init> (Ldev/kcoap/edhoc/EdhocError;)V
+	public fun <init> (Ldev/kcoap/edhoc/EdhocError;Ldev/kcoap/edhoc/CipherSuite;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocError;Ldev/kcoap/edhoc/CipherSuite;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun getErrorMessage ()[B
+	public final fun getRetryWith ()Ldev/kcoap/edhoc/CipherSuite;
 }
 
 public final class dev/kcoap/edhoc/EdhocPhase : java/lang/Enum {
@@ -315,6 +319,8 @@ public final class dev/kcoap/edhoc/EdhocResponderConfig {
 	public final fun getEadHandler ()Ldev/kcoap/edhoc/EadHandler;
 	public final fun getEphemeralKeys ()Ldev/kcoap/edhoc/EphemeralKeySource;
 	public final fun getMethods ()Ljava/util/Set;
+	public final fun supportedBy (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun withConnectionIdentifiers (Ldev/kcoap/edhoc/ConnectionIdentifierProvider;)Ldev/kcoap/edhoc/EdhocResponderConfig;
 }
 
 public final class dev/kcoap/edhoc/EdhocRole : java/lang/Enum {
@@ -414,6 +420,14 @@ public final class dev/kcoap/edhoc/LocalCredential {
 public final class dev/kcoap/edhoc/LocalCredential$Companion {
 	public final fun signature (Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;Ldev/kcoap/crypto/PrivateKey;)Ldev/kcoap/edhoc/LocalCredential;
 	public final fun staticDiffieHellman (Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;Ldev/kcoap/crypto/PrivateKey;)Ldev/kcoap/edhoc/LocalCredential;
+}
+
+public final class dev/kcoap/edhoc/Message3 {
+	public final fun component1 ()[B
+	public final fun component2 ()Ldev/kcoap/edhoc/EdhocSession;
+	public final fun getBytes ()[B
+	public final fun getSession ()Ldev/kcoap/edhoc/EdhocSession;
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/kcoap/edhoc/TrustedCredentials : dev/kcoap/edhoc/CredentialResolver {

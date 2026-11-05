@@ -15,7 +15,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** Complete handshakes between the Initiator and the Responder. */
@@ -29,8 +31,8 @@ class RoundTripTest {
     @Test
     fun everyMethodWithEverySuite() = runTest {
         var round = 0
-        for (suite in Fixtures.registeredSuitesRunBy(backend)) {
-            for (method in EdhocMethod.entries) {
+        for (method in EdhocMethod.entries) {
+            for (suite in Fixtures.registeredSuitesRunBy(backend, method)) {
                 val shortIds = round % 2 == 0
                 val initiatorId = if (shortIds) ConnectionIdentifier.ofInt(-24) else cid("abcd")
                 val responderId = if (shortIds) ConnectionIdentifier.ofInt(23) else ConnectionIdentifier(ByteArray(0))
@@ -49,6 +51,28 @@ class RoundTripTest {
                 round++
             }
         }
+    }
+
+    /** message_3 comes with the session it completes on both sides (RFC 9528 §5.4.2, §5.4.3). */
+    @Test
+    fun theSessionComesWithTheMessageThatCompletesIt() = runTest {
+        val (initiatorConfig, responderConfig) =
+            Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, CipherSuite.SUITE_0)
+        val initiator = EdhocInitiator(initiatorConfig, backend)
+        val responder = EdhocResponder(responderConfig, backend)
+        responder.processMessage1(initiator.createMessage1())
+        initiator.processMessage2(responder.createMessage2())
+
+        val message3 = initiator.createMessage3()
+        val (bytes, session) = message3
+
+        assertSame(initiator.session, session)
+        assertContentEquals(message3.bytes, bytes)
+        assertNotSame(message3.bytes, message3.bytes, "each read is a copy")
+        assertEquals("Message3(${bytes.size} bytes, $session)", message3.toString())
+        val responderSession = responder.processMessage3(bytes)
+        assertSame(responder.session, responderSession)
+        assertContentEquals(session.prkOut(), responderSession.prkOut())
     }
 
     /** Method 3 with compact kids on suite 2 gives the small messages of RFC 9529 §3 (with one suite in SUITES_I). */
@@ -150,7 +174,7 @@ class RoundTripTest {
         val responder = EdhocResponder(responderConfig, backend)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        responder.processMessage3(initiator.createMessage3())
+        responder.processMessage3(initiator.createMessage3().bytes)
         assertEquals(CipherSuite.SUITE_24, responder.session!!.cipherSuite)
         assertEquals(r24.credential, initiator.peerCredential)
     }
@@ -193,7 +217,7 @@ class RoundTripTest {
         val values = RecordedValues().also { initiator.intermediateValues = it }
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        responder.processMessage3(initiator.createMessage3())
+        responder.processMessage3(initiator.createMessage3().bytes)
         val session = initiator.session!!
         val log = sink.dump()
         assertTrue("message_1" in log && "session completed" in log, log)
