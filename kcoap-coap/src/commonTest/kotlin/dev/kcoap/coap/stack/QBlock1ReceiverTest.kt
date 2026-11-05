@@ -195,6 +195,18 @@ class QBlock1ReceiverTest {
     }
 
     @Test
+    fun rfc7959Section7_1TheReceiverHoldsOnlyTheBlocksThatArrivedNotWhatSize1Claims() {
+        val claim = 1 shl 20
+        val receiver = receiver(first = upload(0, claim))
+        assertEquals(0, receiver.heldBytes)
+        receiver.onBlock(Duration.ZERO, upload(0, claim), 0)
+        receiver.onBlock(Duration.ZERO, upload(16383, claim), 16383)
+        receiver.onBlock(Duration.ZERO, upload(0, claim), 0)
+
+        assertEquals(128, receiver.heldBytes, "two blocks of 64 bytes, the copy of block 0 not again")
+    }
+
+    @Test
     fun rfc9177Section4_3AnEmptyBodyIsCompleteWithItsOnlyBlock() {
         val receiver = receiver(first = upload(0, 0))
         assertEquals(1, receiver.count)

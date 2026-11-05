@@ -21,8 +21,9 @@ package dev.kcoap.coap.server
  * request, without adding an observer (RFC 7641 §4.1).
  *
  * Memory is bounded: at most [maxPartialBodies] uploads, each up to [CoapServerConfig.maxBodySize] bytes,
- * are assembled at a time, and at most [maxCachedBodies] response bodies, and as many records of completed
- * uploads, are kept for NON_PARTIAL_TIMEOUT after their last use for requests of missing blocks.
+ * are assembled at a time, each holding only the blocks that arrived (never what its Size1 claims before
+ * they do), and at most [maxCachedBodies] response bodies, and as many records of completed uploads, are
+ * kept for NON_PARTIAL_TIMEOUT after their last use for requests of missing blocks.
  *
  * @property isEnabled whether the server takes Q-Block requests at all.
  * @property withMessageSecurity whether requests protected by [CoapServerConfig.security] may use Q-Block.

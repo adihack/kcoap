@@ -776,6 +776,19 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7959Section7_1AnUploadHoldsWhatArrivedNotWhatItsSize1Claims() = runTest {
+        val f = fixture()
+        val claim = ByteArray(1 shl 20)
+        f.peer.send(upload(f.peer, 0, body = claim))
+        f.peer.send(upload(f.peer, 16383, body = claim))
+        f.peer.drain()
+
+        val state = f.server.qBlock.state()
+        assertEquals(1, state.partialBodies)
+        assertEquals(128L, state.partialBytes, "two blocks of a body that claims 1 MiB")
+    }
+
+    @Test
     fun cachedBodiesBeyondTheBoundsGiveWayOldestFirst() = runTest {
         val config = CoapServerConfig(
             amplification = AmplificationPolicy.OFF,

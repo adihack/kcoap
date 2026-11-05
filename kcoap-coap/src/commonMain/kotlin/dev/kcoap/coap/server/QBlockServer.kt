@@ -676,18 +676,20 @@ internal class QBlockServer(
         }
     }
 
-    /** What the server holds, for tests. */
-    class State(val partialBodies: Int, val servedBodies: Int, val completedBodies: Int, val timers: Int) {
+    /** What the server holds, for tests: [partialBytes] is the payload the partial bodies hold. */
+    class State(val partialBodies: Int, val partialBytes: Long, val servedBodies: Int, val completedBodies: Int, val timers: Int) {
         val isEmpty: Boolean get() = partialBodies == 0 && servedBodies == 0 && completedBodies == 0 && timers == 0
 
         override fun toString(): String =
-            "State(partialBodies=$partialBodies, servedBodies=$servedBodies, completedBodies=$completedBodies, timers=$timers)"
+            "State(partialBodies=$partialBodies, partialBytes=$partialBytes, servedBodies=$servedBodies, " +
+                "completedBodies=$completedBodies, timers=$timers)"
     }
 
     suspend fun state(): State = lock.withLock {
         val bodies = partials.values + served.entryList.map { it.second }
         State(
             partials.size,
+            partials.values.sumOf { it.receiver.heldBytes },
             served.size,
             completed.size,
             bodies.count { it.timer?.isActive == true } + (if (sweeper?.isActive == true) 1 else 0),
