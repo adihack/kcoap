@@ -15,8 +15,11 @@ internal class QBlockRequest(
     val inbound: InboundRequest,
     val request: CoapMessage,
     val unprotected: UnprotectedRequest?,
-) {
-    val token: ByteArray get() = request.token
+) : QBlockTarget {
+    override val token: ByteArray get() = request.token
+
+    /** An Observe registration carries Observe 0, on every block of a Q-Block1 one (RFC 9177 §4.5). */
+    override val carriesObserve: Boolean get() = request.options.observe != null
 
     /**
      * The bytes sent in answer to this request so far, retransmissions counted, against the amplification

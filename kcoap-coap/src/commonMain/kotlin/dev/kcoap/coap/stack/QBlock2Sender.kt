@@ -35,12 +35,14 @@ import kotlin.time.Duration
  * Without a Continue, at most one MAX_PAYLOADS_SET goes out per NON_TIMEOUT_RANDOM, missing blocks and sets
  * of the body alike (§7.2: "a NON_TIMEOUT_RANDOM delay is still observed between each MAX_PAYLOADS_SET").
  *
- * A Reset to any block stops the body ([onReset]). Not thread safe: the driver serializes all calls.
+ * A Reset to any block stops the body ([onReset]); where the driver knows that a Reset speaks only for the
+ * request it answers, one to an answer for missing blocks drops only what is queued for that request. Not
+ * thread safe: the driver serializes all calls.
  */
 internal class QBlock2Sender<R>(
     val bodySize: Int,
     val blockSize: Int,
-    private val mode: BodyMode,
+    val mode: BodyMode,
     private val timing: QBlockTiming,
     private val nonTimeoutRandom: Duration,
     private val firstBlockPiggybacked: Boolean = mode == BodyMode.CON,
@@ -78,6 +80,13 @@ internal class QBlock2Sender<R>(
      */
     val isSending: Boolean
         get() = !isStopped && (nextSetAt != null || pending.isNotEmpty() || (mode == BodyMode.CON && original != null && nextUnsent < count))
+
+    /**
+     * Whether every block of the body went out at least once, and for [BodyMode.CON] was acknowledged too:
+     * a notification body is the outstanding notification until then (RFC 7641 §4.5.1, RFC 9177 §4.5).
+     */
+    val hasSentAll: Boolean
+        get() = nextUnsent >= count && (mode != BodyMode.CON || unacknowledged == 0)
 
     /** Starts sending the body as the response to [ref]. */
     fun start(now: Duration, ref: R): List<QBlockAction<R>> {
@@ -147,6 +156,19 @@ internal class QBlock2Sender<R>(
     /** The client answered a block with a Reset: it does not want this body (any more). */
     fun onReset(now: Duration): List<QBlockAction<R>> {
         stop()
+        return emptyList()
+    }
+
+    /**
+     * The client answered a block sent to [ref] with a Reset, where a Reset says only that it no longer holds
+     * that request (RFC 7252 §4.2), as for a notification body (RFC 9177 §4.5): to the original request the body
+     * stops as with [onReset]; to a request for missing blocks only what is still queued for it goes, and the
+     * rest of the body, which its client may still be waiting for, stays.
+     */
+    fun onReset(now: Duration, ref: R): List<QBlockAction<R>> {
+        if (ref == original) return onReset(now)
+        pending.removeAll { it.second == ref }
+        if (pending.isEmpty()) pendingAt = null
         return emptyList()
     }
 

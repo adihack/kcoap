@@ -15,7 +15,7 @@ internal abstract class TimedBody {
         private set
 
     /** Cancels the timer and marks the body gone. */
-    fun drop() {
+    open fun drop() {
         isDropped = true
         timer?.cancel()
         timer = null

@@ -93,7 +93,35 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   path steer it. libcoap 4.3.5b protects and verifies only the first response to a request, so these bodies
   are tested kcoap against kcoap, and its failure is pinned (QB-5).
 - **Amplification.** A server bursting to an unauthenticated, unverified peer first verifies its address
-  with Echo (RFC 9175 §2.4), for Q-Block bursts only.
+  with Echo (RFC 9175 §2.4), for Q-Block bursts only, and for Observe registrations with Q-Block, whose
+  notification bodies are bursts that no request asks for (QB-6).
+- **Observe** (QB-6). A notification is a Q-Block2 body with a new ETag and the Observe value on every
+  block, also those sent for a Continue, never those answering a request for missing blocks (§4.5). A
+  body is the observation's one outstanding notification until every block went out (Confirmable ones
+  acknowledged) and, Non-confirmable, for at least `nonConfirmableNotificationInterval`, holding one NSTART
+  slot; changes meanwhile fold into the next body, and no body is cut short by a newer one, so a resource
+  that changes faster than its bodies go out does not starve the client. A newer body ends what an older
+  one still had to send. Every block that carries Observe is a notification: a Reset to any of them, or an
+  unacknowledged Confirmable one, removes the observer; a Reset to an answer for missing blocks (no Observe,
+  §4.5) only drops what that request still had queued, since the client may have released its token.
+  Notification bodies are not checked against the amplification factor one by one: under every policy that
+  checks addresses, a Q-Block registration from an unauthenticated client verifies its address with Echo
+  whatever the size of its first response, and once that verification lapses its bodies go Confirmable, so an
+  address that does not acknowledge gets one block and its retransmissions before the observer goes. A body
+  counts as one notification for RFC 7641 §7's run of Non-confirmable ones, and a Non-confirmable body holds
+  its NSTART slot for `nonConfirmableNotificationInterval` (RFC 7641 §4.5.1), not PROBING_RATE: a complete
+  single-set body draws no answer from a compliant client, so silence cannot be told from success. The
+  observation keeps only an `OutstandingBody` handle; the body itself lives in the bounded cache. The client
+  gives each body a receiver of its own, in the mode of its blocks' message type, orders bodies once, on the
+  first block of a new ETag, and takes a body without Observe only in answer to its own request for the body
+  in progress, since an older answer could be staler than the bodies since; a fresher notification of one
+  message supersedes the body in progress too.
+  The client releases the tokens of a body's Continues and requests for missing blocks with the body. A
+  Q-Block1 FETCH registration keeps the token of the 2.05 and ends by forgetting it, because a
+  deregistration would send the body again under a new Request-Tag; when its 2.05 is lost and the client
+  sends the last block again on a new token, the server sends the 2.05 again on the token of the request
+  that completed the upload, where the notifications go (§4.3), and nothing on the copy. Its follow-ups
+  always carry the upload's Request-Tag and no payload (§4.7).
 - **Strict towards libcoap's client.** A Q-Block2 follow-up that carries `Q-Block1 0/M` without payload
   gets 4.00; the deviation is pinned as an `upstream…` test.
 

@@ -34,6 +34,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -424,18 +425,417 @@ class QBlockServerTest {
         assertFalse(etags[0].contentEquals(etags[1]), "each transmitted body has its own")
     }
 
-    @Test
-    fun rfc7641Section4_1ARegistrationWithQBlock2IsServedWithoutAddingAnObserver() = runTest {
-        val counter = object : ObservableResource("counter") {
-            override suspend fun handleGet(context: RequestContext) = CoapResponse.content(big, ContentFormat.OCTET_STREAM)
+    // ---------------------------------------------------------------- Observe (RFC 7641, RFC 9177 §4.5)
+
+    /** An observable resource answering [reply] of its [version], which [change] increases. */
+    private class Counter(
+        name: String = "counter",
+        var reply: (Int) -> CoapResponse = { version -> CoapResponse.content(ByteArray(3000) { (it + version).toByte() }) },
+    ) : ObservableResource(name) {
+        var version = 0
+        override val notificationType: CoapMessageType get() = CoapMessageType.NON
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse = reply(version)
+
+        fun change() {
+            version++
+            notifyObservers()
         }
+    }
+
+    private fun register(peer: QBlockPeer, path: String = "counter", options: OptionSet.Builder.() -> Unit = {}) =
+        get(peer, block(0, true), path = path) {
+            observe(0)
+            options()
+        }
+
+    @Test
+    fun rfc9177Section4_5ARegistrationAddsAnObserverAndEveryBlockOfItsBodyCarriesObserve() = runTest {
+        val counter = Counter()
         val f = fixture { add(counter) }
-        f.peer.send(get(f.peer, block(0, true), path = "counter") { observe(0) })
+        val registration = f.peer.send(register(f.peer))
+
+        val set0 = f.peer.drain()
+        assertEquals((0L..9L).toList(), set0.numbers())
+        assertTrue(set0.all { it.hasToken(registration.token) && it.options.observe == 0L }, "§4.5: Observe on every block")
+        assertEquals(1, counter.observerCount)
+
+        f.peer.send(get(f.peer, block(10, true), path = "counter"))
+        val set1 = f.peer.drain()
+        assertEquals((10L..19L).toList(), set1.numbers())
+        assertTrue(set1.all { it.hasToken(registration.token) && it.options.observe == 0L }, "§7.2: a Continue's set goes on with Observe")
+
+        val missing = f.peer.send(get(f.peer, block(3, false), path = "counter"))
+        val resent = f.peer.drain().single()
+        assertTrue(resent.hasToken(missing.token))
+        assertNull(resent.options.observe, "§4.5: no Observe on a missing block")
+
+        f.peer.drain(5.seconds)
+        counter.change()
+        val notification = f.peer.drain()
+        assertEquals((0L..9L).toList(), notification.numbers())
+        assertTrue(notification.all { it.hasToken(registration.token) && it.options.observe == 1L })
+        assertFalse(notification.first().options.etags.single().contentEquals(set0.first().options.etags.single()), "a new ETag")
+    }
+
+    @Test
+    fun rfc7641Section4_1AResourceThatCannotBeObservedIsServedWithoutObserve() = runTest {
+        val f = fixture()
+        f.peer.send(register(f.peer, path = "big"))
 
         val set = f.peer.drain()
         assertEquals(10, set.size)
         assertTrue(set.none { CoapOptions.OBSERVE.number in it.options })
+        assertTrue(f.events.none { it is EndpointEvent.ObserverAdded })
+    }
+
+    @Test
+    fun rfc7641Section3_6AGetWithObserve1AndQBlock2Deregisters() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        assertEquals(1, counter.observerCount)
+
+        val deregistration = get(f.peer, block(0, true), path = "counter") { observe(1) }
+        f.peer.send(deregistration.toBuilder().apply { token = registration.token }.build())
+
+        val answer = f.peer.drain()
         assertEquals(0, counter.observerCount)
+        assertTrue(answer.isNotEmpty() && answer.none { CoapOptions.OBSERVE.number in it.options }, "served as a plain request")
+    }
+
+    @Test
+    fun rfc7641Section4_1AnObserverBeyondTheBoundsIsServedWithoutObserve() = runTest {
+        val counter = Counter()
+        val config = CoapServerConfig(amplification = AmplificationPolicy.OFF, maxObserversPerResource = 1, qBlock = qBlockOn)
+        val f = fixture(config) { add(counter) }
+        f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        f.peer.send(register(f.peer))
+
+        val second = f.peer.drain()
+        assertTrue(second.isNotEmpty() && second.none { CoapOptions.OBSERVE.number in it.options })
+        assertEquals(1, counter.observerCount)
+        assertEquals(1, f.events.count { it is EndpointEvent.LimitReached && it.limit == Limit.OBSERVERS_PER_RESOURCE })
+    }
+
+    @Test
+    fun rfc7641Section7AQBlock2RegistrationIsChallengedWhenEveryResponseIsChecked() = runTest {
+        val counter = Counter()
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.ALL_RESPONSES, qBlock = qBlockOn)) { add(counter) }
+        f.peer.send(register(f.peer))
+
+        val challenge = f.peer.drain().single()
+        assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
+        assertEquals(0, counter.observerCount)
+        f.peer.send(register(f.peer) { echo(assertNotNull(challenge.options.echo)) })
+        assertTrue(f.peer.drain().all { it.options.observe == 0L })
+        assertEquals(1, counter.observerCount)
+    }
+
+    @Test
+    fun rfc9175Section2_4ARegistrationWhoseFirstBurstIsChallengedAddsNoObserver() = runTest {
+        val counter = Counter()
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn)) { add(counter) }
+        f.peer.send(register(f.peer))
+
+        assertEquals(CoapCode.UNAUTHORIZED, f.peer.drain().single().code)
+        assertEquals(0, counter.observerCount, "RFC 7641 §4.1: a registration whose response is not sent registers nothing")
+        assertEquals(0, f.server.qBlock.state().servedBodies)
+    }
+
+    @Test
+    fun rfc7641Section3_2ANotificationThatIsNotABodyGoesAsOneMessageAndAnErrorEndsTheObservation() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+
+        counter.reply = { CoapResponse(CoapCode.CONTENT) }
+        counter.change()
+        val empty = f.peer.drain(5.seconds).single()
+        assertEquals(1L, empty.options.observe)
+        assertNull(empty.options.qBlock2, "no body, so no Q-Block2")
+
+        counter.reply = { CoapResponse(CoapCode.NOT_FOUND) }
+        counter.change()
+        val error = f.peer.drain(5.seconds).single()
+        assertEquals(CoapCode.NOT_FOUND, error.code)
+        assertTrue(error.hasToken(registration.token))
+        assertNull(error.options.observe)
+        assertEquals(0, counter.observerCount)
+    }
+
+    @Test
+    fun rfc9177Section4_4ANotificationWithoutRoomForA16ByteBlockGets413AndEndsTheObservation() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+
+        counter.reply = { CoapResponse.content(big).withOptions { repeat(5) { locationQuery("q".repeat(250)) } } }
+        counter.change()
+
+        assertEquals(CoapCode.REQUEST_ENTITY_TOO_LARGE, f.peer.drain(5.seconds).single().code)
+        assertEquals(0, counter.observerCount)
+    }
+
+    @Test
+    fun rfc9177Section4_4ARegistrationWithoutRoomForA16ByteBlockGets413AndRegistersNothing() = runTest {
+        val counter = Counter(reply = { CoapResponse.content(big).withOptions { repeat(5) { locationQuery("q".repeat(250)) } } })
+        val f = fixture { add(counter) }
+        f.peer.send(register(f.peer))
+
+        assertEquals(CoapCode.REQUEST_ENTITY_TOO_LARGE, f.peer.drain(5.seconds).single().code)
+        assertEquals(0, counter.observerCount)
+    }
+
+    @Test
+    fun rfc9177Section4_5AFetchUploadedWithQBlock1RegistersOnTheTokenThatCompletedIt() = runTest {
+        val resource = object : ObservableResource("query") {
+            var version = 0
+            override val notificationType: CoapMessageType get() = CoapMessageType.NON
+            override suspend fun handleFetch(context: RequestContext) =
+                CoapResponse.content(context.payload.reversedArray() + byteArrayOf(version.toByte()))
+        }
+        val f = fixture { add(resource) }
+        val query = big.copyOf(200)
+        val blocks = (0L..3L).map { upload(f.peer, it, query, code = CoapCode.FETCH, path = "query") { observe(0) } }
+        // Block 3 comes before block 2, which completes the body: the 2.05 goes on block 2's token (Figure 14).
+        f.peer.send(blocks[0])
+        f.peer.send(blocks[1])
+        f.peer.send(blocks[3])
+        f.peer.send(blocks[2])
+
+        val body = f.peer.drain()
+        assertTrue(body.isNotEmpty() && body.all { it.hasToken(blocks[2].token) && it.options.observe == 0L }, "$body")
+        assertEquals(1, resource.observerCount)
+        f.peer.drain(5.seconds)
+        resource.version++
+        resource.notifyObservers()
+        val notification = f.peer.drain(5.seconds)
+        assertTrue(notification.isNotEmpty() && notification.all { it.hasToken(blocks[2].token) && it.options.observe == 1L })
+        assertEquals(1, notification.last().payload.last().toInt(), "the handler ran on the uploaded query")
+    }
+
+    @Test
+    fun rfc7641Section4_5_1TheNonConfirmableBodiesOfTwoObservationsTakeOneNstartSlotEach() = runTest {
+        val first = Counter("first")
+        val second = Counter("second")
+        val f = fixture {
+            add(first)
+            add(second)
+        }
+        f.peer.send(register(f.peer, path = "first"))
+        f.peer.send(register(f.peer, path = "second"))
+        f.peer.drain(5.seconds)
+
+        val start = f.stack.now
+        first.change()
+        second.change()
+        f.peer.drain(10.seconds)
+
+        val bodies = f.serverSent().filter { it.at >= start }.mapNotNull { wire -> wire.message?.let { wire.at to it } }
+            .groupBy { it.second.tokenHex }.values.map { blocks -> blocks.first().first }
+        assertEquals(2, bodies.size, "two bodies")
+        val gap = bodies.max() - bodies.min()
+        assertTrue(gap >= f.config.nonConfirmableNotificationInterval, "the second waits for the first's slot: $bodies")
+        delay(5.seconds)
+        assertEquals(0, f.server.endpoint.leaseCount())
+    }
+
+    @Test
+    fun rfc7641Section3_6AnObserverRemovedWhileItsBodyWaitsForItsSlotGetsNoBody() = runTest {
+        val first = Counter("first")
+        val second = Counter("second")
+        val f = fixture {
+            add(first)
+            add(second)
+        }
+        f.peer.send(register(f.peer, path = "first"))
+        val registration = f.peer.send(register(f.peer, path = "second"))
+        f.peer.drain(5.seconds)
+
+        val start = f.stack.now
+        first.change()
+        delay(100.milliseconds)
+        // Its handler ran; its body waits for the NSTART slot that the first body holds for 3 s.
+        second.change()
+        delay(1.seconds)
+        f.peer.send(
+            CoapMessage.request(CoapCode.GET) {
+                type = CoapMessageType.NON
+                token = registration.token
+                options {
+                    uriPath("second")
+                    observe(1)
+                }
+            },
+        )
+        f.peer.drain(10.seconds)
+
+        assertEquals(0, second.observerCount)
+        val notifications = f.serverSent().filter { it.at >= start }.mapNotNull { it.message }
+            .filter { it.hasToken(registration.token) && it.options.observe != null }
+        assertEquals(emptyList(), notifications, "RFC 7641 §3.6: nothing of a body for the observer that is gone")
+        delay(5.seconds)
+        assertEquals(0, f.server.endpoint.leaseCount(), "the slot it waited for goes back")
+    }
+
+    @Test
+    fun rfc7641Section4_1AReRegistrationOnTheSameTokenEndsTheBodyOfTheObserverItReplaces() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        val set0 = f.peer.drain()
+        assertEquals((0L..9L).toList(), set0.numbers(), "the first of five sets")
+        val replaced = set0.first().options.etags.single()
+
+        // As libcoap does: the same token again.
+        f.peer.send(register(f.peer).toBuilder().apply { token = registration.token }.build())
+        val after = f.peer.drain(10.seconds)
+
+        assertTrue(after.isNotEmpty() && after.all { it.options.observe != null }, "the new registration's body")
+        assertTrue(after.none { it.options.etags.single().contentEquals(replaced) }, "no later set of the old body")
+        assertEquals(1, counter.observerCount)
+    }
+
+    @Test
+    fun rfc7641Section3_6AResetToAnAnswerForMissingBlocksLeavesTheObserver() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        assertEquals(47, f.peer.drain(5.seconds).size, "the notification body")
+
+        val missing = f.peer.send(get(f.peer, block(3, false), path = "counter"))
+        val answer = f.peer.drain().single()
+        assertTrue(answer.hasToken(missing.token))
+        assertNull(answer.options.observe, "RFC 9177 §4.5: no notification")
+        // A client that released the request's token, as once its body is whole.
+        f.peer.reset(answer)
+        delay(1.seconds)
+
+        assertEquals(1, counter.observerCount, "RFC 7641 §3.6: only a Reset to a notification deregisters")
+        assertTrue(f.events.none { it is EndpointEvent.ObserverRemoved })
+        counter.change()
+        val next = f.peer.drain(5.seconds)
+        assertEquals(47, next.size)
+        assertTrue(next.all { it.hasToken(registration.token) && it.options.observe == 2L })
+    }
+
+    @Test
+    fun rfc7959Section7_1AnObservationKeepsNoBodyOnceItLeftTheCache() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        f.peer.drain(5.seconds)
+
+        delay(TransmissionParameters.Default.nonPartialTimeout + 1.seconds)
+        val state = f.server.qBlock.state()
+        assertTrue(state.isEmpty, "nothing of either body is held for the observation: $state")
+        assertEquals(1, counter.observerCount, "which goes on")
+        counter.change()
+        val next = f.peer.drain(5.seconds)
+        assertEquals(47, next.size)
+        assertTrue(next.all { it.hasToken(registration.token) && it.options.observe == 2L })
+    }
+
+    // ---------------------------------------------------------------- Observe and the address check (RFC 9175 §2.4)
+
+    @Test
+    fun rfc9175Section2_4AQBlock2RegistrationIsChallengedByDefaultWhateverTheSizeOfItsResponse() = runTest {
+        val counter = Counter(reply = { CoapResponse.content("small".encodeToByteArray()) })
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn)) { add(counter) }
+        val first = f.peer.send(register(f.peer))
+
+        val challenge = f.peer.drain().single()
+        assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
+        assertTrue(challenge.hasToken(first.token))
+        assertEquals(0, counter.observerCount, "RFC 7641 §7: notification bodies would follow for as long as it lasts")
+
+        val registration = f.peer.send(register(f.peer) { echo(assertNotNull(challenge.options.echo)) })
+        val answer = f.peer.drain().single()
+        assertEquals("small", answer.payloadAsText())
+        assertEquals(0L, answer.options.observe)
+        assertEquals(1, counter.observerCount)
+
+        // Far beyond the factor of the registration: the address is verified now.
+        counter.reply = { CoapResponse.content(big) }
+        counter.change()
+        val notification = f.peer.drain(5.seconds)
+        assertEquals((0L..46L).toList(), notification.numbers())
+        assertTrue(notification.all { it.hasToken(registration.token) && it.options.observe == 1L })
+        assertTrue(notification.all { it.type == CoapMessageType.NON }, "the address is verified")
+    }
+
+    @Test
+    fun rfc9175Section2_4AFetchRegistrationUploadedInQBlock1IsChallengedUnderEveryPolicyThatChecks() = runTest {
+        for (policy in listOf(AmplificationPolicy.Q_BLOCK_BURSTS, AmplificationPolicy.ALL_RESPONSES)) {
+            val resource = object : ObservableResource("query") {
+                override val notificationType: CoapMessageType get() = CoapMessageType.NON
+                override suspend fun handleFetch(context: RequestContext) =
+                    CoapResponse.content(context.payload.reversedArray())
+            }
+            val f = fixture(CoapServerConfig(amplification = policy, qBlock = qBlockOn)) { add(resource) }
+            val query = big.copyOf(200)
+            fun blocks(echo: ByteArray?) = (0L..3L).map { num ->
+                upload(f.peer, num, query, code = CoapCode.FETCH, path = "query") {
+                    observe(0)
+                    echo?.let { echo(it) }
+                }
+            }
+            blocks(echo = null).forEach { f.peer.send(it) }
+
+            val challenges = f.peer.drain()
+            assertEquals(List(4) { CoapCode.UNAUTHORIZED }, challenges.map { it.code }, "$policy: every block of it")
+            assertEquals(0, resource.observerCount, "$policy")
+            assertEquals(0, f.server.qBlock.state().partialBodies, "$policy: nothing of the upload is kept")
+
+            val again = blocks(echo = assertNotNull(challenges.first().options.echo))
+            again.forEach { f.peer.send(it) }
+            val body = f.peer.drain()
+            val onCompleting = body.isNotEmpty() && body.all { it.hasToken(again[3].token) && it.options.observe == 0L }
+            assertTrue(onCompleting, "$policy: $body")
+            assertEquals(1, resource.observerCount, "$policy")
+        }
+    }
+
+    @Test
+    fun rfc9175Section2_4NotificationBodiesGoConfirmableOnceTheAddressIsNoLongerVerified() = runTest {
+        val counter = Counter()
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn, verifiedAddressLifetime = 1.minutes)) { add(counter) }
+        f.peer.send(register(f.peer))
+        val echo = assertNotNull(f.peer.drain().single().options.echo)
+        val registration = f.peer.send(register(f.peer) { echo(echo) })
+        assertTrue(f.peer.drain(5.seconds).all { it.type == CoapMessageType.NON }, "the address is verified")
+        delay(1.minutes)
+
+        // The verification lapsed: the body goes block by block, each acknowledged.
+        counter.change()
+        val acknowledged = mutableListOf<CoapMessage>()
+        while (true) {
+            val block = f.peer.next(5.seconds) ?: break
+            acknowledged += block
+            f.peer.acknowledge(block)
+        }
+        assertEquals((0L..46L).toList(), acknowledged.numbers())
+        assertTrue(acknowledged.all { it.type == CoapMessageType.CON }, "RFC 9175 §2.4: block by block")
+        assertTrue(acknowledged.all { it.hasToken(registration.token) && it.options.observe == 1L })
+
+        // An address that does not acknowledge gets one block and its retransmissions, and the observer goes.
+        counter.change()
+        val unanswered = f.peer.drain(60.seconds)
+        val copies = 1 + TransmissionParameters.Default.maxRetransmit
+        assertEquals(List(copies) { 0L }, unanswered.numbers(), "RFC 7641 §4.5")
+        assertEquals(0, counter.observerCount)
+        assertTrue(f.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "notification not acknowledged" })
     }
 
     @Test

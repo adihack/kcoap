@@ -26,6 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 
 /** What a [ConnectionDriver] reports to the endpoint that owns it. */
 internal interface ConnectionOwner {
@@ -305,6 +306,13 @@ internal class ConnectionDriver(
         }
     }
 
+    /**
+     * Reads until the connection ends. After each read it yields, so the handlers of the requests it delivered
+     * get to run before the next read on a dispatcher of one thread: a peer that writes many requests back to
+     * back, such as the blocks of a Q-Block1 body (RFC 9177 Appendix B), then does not run the endpoint into
+     * [CoapEndpointConfig.maxConcurrentRequests] while every request is waiting to start. The reader still never
+     * waits for a handler.
+     */
     private suspend fun readLoop() {
         val reason = try {
             when (connection) {
@@ -314,12 +322,14 @@ internal class ConnectionDriver(
                         val count = connection.read(buffer, 0, buffer.size)
                         if (count < 0) break
                         if (count > 0) withMessaging { now -> onReceived(now, buffer.copyOf(count)) }
+                        yield()
                     }
                 }
                 is MessageConnection -> {
                     while (!closed.isCompleted) {
                         val message = connection.receive() ?: break
                         withMessaging { now -> onReceived(now, message) }
+                        yield()
                     }
                 }
             }

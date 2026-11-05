@@ -31,6 +31,13 @@ import kotlinx.coroutines.withContext
  * notification is passed on (RFC 8323 §7.1). Large notifications are completed with Block2 requests
  * (RFC 7959 §2.6). A response without Observe, or a non-2.xx one, ends the observation (§3.2).
  *
+ * Where the client's Q-Block (RFC 9177) applies to the server, the observation registers with Q-Block2, or
+ * uploads a FETCH body in Q-Block1, and every notification body comes in Q-Block2 ([QBlockClient.observe],
+ * §4.5): it is assembled per ETag and passed on once, ordered by §3.4 on its first block. Such an observation
+ * keeps the token the registration was answered on, the token of the request that completed a Q-Block1
+ * upload (Figure 14); one uploaded with Q-Block1 ends by forgetting that token, since its body sent again
+ * with Observe 1 would need a new Request-Tag. A server that rejects Q-Block gets the RFC 7959 registration.
+ *
  * Every observation ends with exactly one terminal event, [Event.Final] or [Event.Failure], whatever ends
  * it: the server, an error, or the endpoint closing, which cancels the coroutine the observation runs
  * in. Collectors therefore always complete or fail and never wait for a flow that will not emit again.
@@ -70,6 +77,34 @@ internal class ClientObservation(
     private val order = NotificationOrder()
     private val isReliable = client.endpoint.isReliable(peer)
 
+    /** The token of an established observation with Q-Block (RFC 9177 §4.5); null otherwise. */
+    @Volatile
+    private var qBlockToken: ByteArray? = null
+
+    /** Whether that observation ends by forgetting its token: it was registered with a Q-Block1 upload. */
+    @Volatile
+    private var forgetsToken = false
+
+    /** Whether that observation already ended: with a final response, or failed and forgot its token. */
+    @Volatile
+    private var qBlockEnded = false
+
+    /** What the Q-Block layer reports to this observation. */
+    private val qBlockObserver = object : QBlockClient.Observer {
+        override fun isFresh(value: Long): Boolean =
+            isReliable || client.config.security != null || order.accept(value, client.endpoint.now())
+
+        override fun onEstablished(token: ByteArray, forgets: Boolean) {
+            qBlockToken = token
+            forgetsToken = forgets
+            established = true
+        }
+
+        override suspend fun onNotification(response: CoapResponse) {
+            mutableEvents.emit(Event.Notification(response))
+        }
+    }
+
     fun start() {
         val launched = client.endpoint.scope.launch { run() }
         job = launched
@@ -92,6 +127,20 @@ internal class ClientObservation(
 
     /** Registers and passes notifications on until the observation ends; returns the terminal event. */
     private suspend fun observe(): Event {
+        client.qBlock?.let { qBlock ->
+            val final = try {
+                qBlock.observe(peer, registration, confirmable, qBlockObserver)
+            } catch (e: CoapException) {
+                // Its token is forgotten, so a notification still on its way gets a Reset (RFC 7641 §3.6).
+                qBlockEnded = true
+                afterRejection(e)
+                throw e
+            }
+            if (final != null) {
+                qBlockEnded = true
+                return Event.Final(final)
+            }
+        }
         val (current, first) = try {
             register()
         } catch (e: CoapException) {
@@ -166,7 +215,7 @@ internal class ClientObservation(
      */
     private fun afterRejection(cause: Throwable) {
         if (!isReliable || cause !is CoapException || cause.reason != CoapException.Reason.BAD_RESPONSE) return
-        val rejected = exchange ?: return
+        val rejected = qBlockToken ?: exchange?.token ?: return
         log.debug { "Deregistering after a rejected response (RFC 8323 §7.4)" }
         client.endpoint.launchGuarded("deregister a rejected observation") {
             withContext(NonCancellable) { deregister(rejected) }
@@ -180,7 +229,20 @@ internal class ClientObservation(
      * already needs nothing: the server ended the observation, or [afterRejection] deregistered.
      */
     fun stop() {
+        val job = job
         job?.cancel()
+        val qBlockToken = qBlockToken
+        if (qBlockToken != null) {
+            client.endpoint.launchGuarded("deregister an observation") {
+                withContext(NonCancellable) {
+                    // Its transfer forgets every token as it ends; the deregistration then takes the token over.
+                    job?.join()
+                    val forget = (client.config.observeCancellation == ObserveCancellation.FORGET || forgetsToken) && !isReliable
+                    if (!forget && !qBlockEnded) deregister(qBlockToken)
+                }
+            }
+            return
+        }
         val current = exchange ?: return
         client.endpoint.launchGuarded("deregister an observation") {
             withContext(NonCancellable) {
@@ -189,18 +251,18 @@ internal class ClientObservation(
                     current.cancel()
                     return@withContext
                 }
-                deregister(current)
+                deregister(current.token)
             }
         }
     }
 
-    /** §3.6: the registration with [current]'s token and Observe 1, which takes over the token from it. */
-    private suspend fun deregister(current: ClientExchange) {
+    /** §3.6: the registration with [token] and Observe 1, which takes the token over from the observation. */
+    private suspend fun deregister(token: ByteArray) {
         val deregistration = registration.toBuilder().options { observe(1) }.build()
         try {
             val exchange = client.endpoint.openExchange(
                 peer, deregistration, confirmable, client.config.security, ResponseMode.Single,
-                token = current.token, recognizedOptions = client.recognizedOptions,
+                token = token, recognizedOptions = client.recognizedOptions,
             )
             client.endpoint.awaitResponse(exchange, client.requestTimeout)
         } catch (e: Exception) {

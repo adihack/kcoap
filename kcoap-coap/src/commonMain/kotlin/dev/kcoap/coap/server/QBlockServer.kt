@@ -11,6 +11,7 @@ import dev.kcoap.coap.OptionSet
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
+import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.EndpointEvent
@@ -37,11 +38,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The server side of Q-Block (RFC 9177) for a [CoapServer] with [QBlockServerConfig.isEnabled]: it drives the
@@ -79,7 +82,26 @@ import kotlinx.coroutines.sync.withLock
  *   a single 16-byte block, stays within the factor. What counts is everything sent in answer to one
  *   request: its first set and every later set on the timer, a separate Confirmable block with all its
  *   retransmissions. Sets that would take it beyond the factor stop; a Continue is a request of its own and
- *   is checked, or challenged, for its set.
+ *   is checked, or challenged, for its set. An Observe registration with Q-Block is challenged before it
+ *   gets here, whatever the size of its response ([CoapServer]).
+ * - **Observe** (RFC 7641, RFC 9177 §4.5). A GET or FETCH registration with Q-Block2, or a FETCH one uploaded
+ *   with Q-Block1, adds an observer whose notifications are Q-Block2 bodies ([notify]): each change gives one
+ *   body with an ETag of its own and the next Observe value on every block, all of them Confirmable or all
+ *   Non-confirmable, on the registration's token (the token of the request that completed a Q-Block1
+ *   registration, Figure 14). The registration response carries the Observe value on every block too. Blocks
+ *   sent for a Continue carry it; those that answer a request for missing blocks do not. A body is the
+ *   observation's one outstanding notification until every block went out (Confirmable ones acknowledged),
+ *   and a Non-confirmable one, which holds one NSTART slot towards the client ([NotificationBody.lease]), for
+ *   at least [CoapServerConfig.nonConfirmableNotificationInterval]; changes meanwhile fold into the next body,
+ *   which ends whatever the older one still had to send. A Reset to any block of a notification (one that
+ *   carries Observe), or such a Confirmable block that is not acknowledged, removes the observer (RFC 7641
+ *   §3.6, §4.5); a Reset to an answer for missing blocks only drops what that request still had queued, since
+ *   a client may have forgotten its token. Notification bodies are not checked against the amplification
+ *   factor: a client whose address is checked verified it to register ([CoapServer]), and once that
+ *   verification lapses its bodies go Confirmable ([CoapServer.mustConfirmBodies]), so an address that does
+ *   not acknowledge gets one block before the observer goes. A FETCH registration uploaded in Q-Block1 whose
+ *   2.05 was lost gets it again on the token of the request that completed it, where its notifications go
+ *   (§4.3), when the client sends a block again on a new token, which gets nothing of its own.
  * - **Teardown** ([forget], [close]). A peer's session or connection ending drops its bodies and timers.
  *
  * Bodies are bounded by [QBlockServerConfig]. Room in the cache is made from the bodies done sending first;
@@ -123,12 +145,14 @@ internal class QBlockServer(
 
     /**
      * A Q-Block1 body that was completed: the final [response] (null while the handler still runs), the
-     * number of the block that completed it, and the ETag of the Q-Block2 body that carried the response, if
-     * one did.
+     * number of the block that completed it and that block's request ([completing]), the ETag of the Q-Block2
+     * body that carried the response, if one did, and the [observation] a FETCH registration added.
      */
     private class CompletedBody(val completingNumber: Long) {
         var response: CoapResponse? = null
         var etag: ByteArray? = null
+        var completing: QBlockRequest? = null
+        var observation: ServerObservation? = null
     }
 
     /** Whether Q-Block may run for [inbound]: it is on, and allowed with the request's security and transport. */
@@ -265,33 +289,51 @@ internal class QBlockServer(
         limits: MessageLimits,
     ): Reply {
         log.debug { "Q-Block1 body of ${assembled.payloadSize} bytes from ${ref.inbound.peer} is complete" }
-        val response = try {
-            server.respondTo(resource, assembled, ref.inbound, ref.unprotected)
+        val answered = try {
+            // A FETCH registration is uploaded with Observe on every block; its token is the completing one's (Figure 14).
+            server.respondTo(resource, assembled, ref.inbound, ref.unprotected, key, requestedBlockSize(ref))
         } catch (e: Throwable) {
             lock.withLock { if (completed.peek(key, endpoint.now()) === record) completed.remove(key) }
             throw e
         }
-        val reply = shape(ref, response, key, limits)
+        val response = answered.response
+        val reply = shape(ref, response, key, limits, answered.observation)
         lock.withLock {
             record.response = response
             record.etag = (reply as? Reply.Body)?.body?.etag
+            record.completing = ref
+            record.observation = answered.observation
         }
         return reply
     }
 
-    /** A block of a completed body that asks for the final response again (§4.3). */
+    /**
+     * A block of a completed body, [ref], that asks for the final response again (§4.3). For a FETCH whose upload
+     * registered an observer that is still there, the client did not get the 2.05: it goes again on the request
+     * that completed the body, whose token the client still holds for the body and the observation's
+     * notifications use (§4.3: "the same token as used for the 2.05 (Content) response"), and [ref] gets nothing
+     * of its own. Sent again as a new body, it never replaces the observation's latest body in the cache, which
+     * its client's follow-ups need. An observer removed meanwhile gets the response without Observe (RFC 7641
+     * §4.1), which ends the client's observation.
+     */
     private suspend fun repeat(ref: QBlockRequest, key: OperationKey, record: CompletedBody, limits: MessageLimits): Reply {
-        val response = checkNotNull(record.response)
+        val registered = record.observation
+        val observation = registered?.takeIf { it.isActive }
+        val response = checkNotNull(record.response).let { response ->
+            val isGone = registered != null && observation == null
+            if (isGone) response.withOptions { remove(CoapOptions.OBSERVE.number) } else response
+        }
+        val target = if (observation != null) checkNotNull(record.completing) else ref
         val etag = record.etag
-        if (etag != null) {
+        if (etag != null && (registered == null || observation != null)) {
             val now = endpoint.now()
             val again = lock.withLock {
                 val body = served.get(key, now)?.takeIf { !it.isDropped && it.etag.contentEquals(etag) } ?: return@withLock null
-                Reply.Body(body, body.sender.restart(now, ref).also { schedule(body) }, isNew = false)
+                Reply.Body(body, body.sender.restart(now, target).also { schedule(body) }, isNew = false)
             }
             if (again != null) return again
         }
-        return shape(ref, response, key, limits)
+        return shape(target, response, key, limits, repeatOf = observation)
     }
 
     private fun refuse(peer: Endpoint, limit: Limit): Reply {
@@ -416,8 +458,21 @@ internal class QBlockServer(
             if (reply != null) return reply
         }
         // §4.4: a GET or FETCH runs again, also for a body that is no longer cached, which then has a new ETag;
-        // a new request runs, and its body replaces the one cached for the same operation.
-        return shape(ref, server.respondTo(resource, request, ref.inbound, ref.unprotected), key, limits)
+        // a new request runs, and its body replaces the one cached for the same operation. A registration
+        // adds its observer here (RFC 7641 §4.1).
+        val answered = server.respondTo(resource, request, ref.inbound, ref.unprotected, key, requestedBlockSize(ref))
+        return shape(ref, answered.response, key, limits, answered.observation)
+    }
+
+    /**
+     * The block size the client of [ref] takes: that of its Q-Block2, else of its own Q-Block1 blocks, which
+     * shows what it can take, else [CoapServerConfig.maxBlockSize]; at most that. SZX 7 is never sent: a BERT
+     * request is answered in 1024-byte blocks.
+     */
+    private fun requestedBlockSize(ref: QBlockRequest): Int {
+        val options = ref.request.options
+        val requested = (options.qBlock2 ?: options.qBlock1)?.takeIf { !it.isBert }?.size ?: config.maxBlockSize
+        return minOf(requested, config.maxBlockSize)
     }
 
     /** RFC 7252 §5.1, RFC 8132 §2: the methods whose handler may run again for a body that is gone. */
@@ -426,7 +481,7 @@ internal class QBlockServer(
     private fun reportRecovery(ref: QBlockRequest, reply: Reply.Body) {
         val single = ref.request.options.qBlock2List.singleOrNull()
         if (single != null && single.more && (single.number == 0L || timing.sets.isContinue(single.number))) return
-        val resent = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockRequest>>().filter { it.ref === ref }.map { it.num }
+        val resent = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockTarget>>().filter { it.ref === ref }.map { it.num }
         if (resent.isNotEmpty()) endpoint.report(EndpointEvent.QBlockRecovery(ref.inbound.peer, isRequestedByPeer = true, blocks = resent))
     }
 
@@ -453,24 +508,34 @@ internal class QBlockServer(
 
     /**
      * [response] to [ref], which carried Q-Block1 or Q-Block2: a [ServedBody] when it is a 2.01, 2.02, 2.04 or
-     * 2.05 with a payload (§4.4, §4.7), otherwise the response as it is.
+     * 2.05 with a payload (§4.4, §4.7), otherwise the response as it is. [observation] is the observer the
+     * request registered, whose first notification the response is (RFC 7641 §4.1); [repeatOf] the observer
+     * whose registration response this sends again ([repeat]), whose latest body it does not replace in the cache.
      */
-    private suspend fun shape(ref: QBlockRequest, response: CoapResponse, key: OperationKey, limits: MessageLimits): Reply {
-        if (!isBody(response)) return Reply.Single(response)
-        // The size the client asked for with Q-Block2, else the size of its own Q-Block1 blocks, which shows what
-        // it can take. SZX 7 is never sent: a BERT request is answered in 1024-byte blocks.
-        val options = ref.request.options
-        val requested = (options.qBlock2 ?: options.qBlock1)?.takeIf { !it.isBert }?.size ?: config.maxBlockSize
-        val size = blockSize(response, limits, minOf(requested, config.maxBlockSize))
-            ?: return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The response options leave no room for a block"))
+    private suspend fun shape(
+        ref: QBlockRequest,
+        response: CoapResponse,
+        key: OperationKey,
+        limits: MessageLimits,
+        observation: ServerObservation? = null,
+        repeatOf: ServerObservation? = null,
+    ): Reply {
+        if (!isBody(response)) return Reply.Single(response, observation)
+        val size = blockSize(response, limits, requestedBlockSize(ref)) ?: run {
+            // An error ends the client's observation (RFC 7641 §3.2), so the server keeps no observer either.
+            observation?.let { server.observations.remove(it, "registration response 4.13") }
+            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The response options leave no room for a block"))
+        }
         val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.connection != null)
         val now = endpoint.now()
         val evicted = ArrayList<Pair<Endpoint, Limit>>()
         val reply = lock.withLock {
-            val sender = QBlock2Sender<QBlockRequest>(response.payloadSize, size, mode, timing, timing.drawNonTimeoutRandom(random))
-            val body = ServedBody(key, response, nextETag(), sender)
+            val sender = QBlock2Sender<QBlockTarget>(response.payloadSize, size, mode, timing, timing.drawNonTimeoutRandom(random))
+            val body = ServedBody(key, response, nextETag(), sender, now, observation)
+            observation?.let { follow(body, it) }
             // A GET or FETCH body of one block is not kept: asking for it again runs the handler, as cheaply.
-            if (!isSafe(ref.request.code) || sender.count > 1) store(body, now, evicted)
+            val keeps = !isSafe(ref.request.code) || sender.count > 1
+            if (keeps && (repeatOf == null || cachedOf(repeatOf, now) == null)) store(body, now, evicted)
             Reply.Body(body, first(body, ref, now).also { schedule(body) }, isNew = true)
         }
         evicted.forEach { (peer, limit) -> endpoint.report(EndpointEvent.LimitReached(peer, limit)) }
@@ -499,7 +564,7 @@ internal class QBlockServer(
     }
 
     /** Under [lock]: the first blocks of a new body, as [ref]'s Q-Block2 options ask (§4.4). */
-    private fun first(body: ServedBody, ref: QBlockRequest, now: Duration): List<QBlockAction<QBlockRequest>> {
+    private fun first(body: ServedBody, ref: QBlockRequest, now: Duration): List<QBlockAction<QBlockTarget>> {
         val options = ref.request.options.qBlock2List
         val single = options.singleOrNull()
         val whole = options.isEmpty() || options.any { it.sizeExponent != body.sender.sizeExponent } ||
@@ -514,7 +579,11 @@ internal class QBlockServer(
      */
     private fun store(body: ServedBody, now: Duration, evicted: MutableList<Pair<Endpoint, Limit>>) {
         served.prune(now).forEach { it.drop() }
-        served.remove(body.key)?.let { retire(it, evicted) }
+        served.remove(body.key)?.let { old ->
+            // RFC 9177 §4.4: the client gives up an older body of its observation once a newer one comes.
+            if (old.observation != null && old.observation === body.observation) end(old, now)
+            retire(old, evicted)
+        }
         val own = served.entryList.filter { it.first.peer == body.peer }
         if (own.size >= qBlock.maxBodiesPerPeer) {
             retire(checkNotNull(served.remove(idlest(own).key)), evicted)
@@ -570,7 +639,7 @@ internal class QBlockServer(
      */
     suspend fun send(trigger: QBlockRequest, reply: Reply.Body): Reply? {
         val body = reply.body
-        val blocks = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockRequest>>()
+        val blocks = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockTarget>>()
         var bytes = 0L
         val mustVerify = blocks.isNotEmpty() &&
             server.mustVerifyAddress(trigger.inbound, trigger.request, trigger.unprotected, isBurst = true) {
@@ -582,6 +651,8 @@ internal class QBlockServer(
                     if (served.peek(body.key, endpoint.now()) === body) served.remove(body.key)
                     body.drop()
                 }
+                // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
+                body.observation?.let { server.observations.remove(it, "address not verified") }
             }
             val kept = if (reply.isNew && AddressVerification.isRepeatSensitive(trigger.request.code)) {
                 AddressVerification.Withheld(trigger.request, body.response)
@@ -591,40 +662,74 @@ internal class QBlockServer(
             return server.challenge(trigger.inbound.peer, endpoint.now(), kept)
         }
         // One reply's blocks all go on one request: the trigger's own, or the original one of a Continue.
-        val own = blocks.firstOrNull()?.ref?.takeIf { it.inbound === trigger.inbound }
+        val own = (blocks.firstOrNull()?.ref as? QBlockRequest)?.takeIf { it.inbound === trigger.inbound }
         if (own != null && bytes > 0) lock.withLock { own.sentBytes += bytes }
         execute(body, reply.actions)
         // A request the body did not answer, such as a Continue whose set went out before, gets no response.
         if (!trigger.inbound.isAnswered) trigger.inbound.finishWithoutResponse()
+        settleIfDone(body)
         return null
     }
 
-    private suspend fun execute(body: ServedBody, actions: List<QBlockAction<QBlockRequest>>) {
+    private suspend fun execute(body: ServedBody, actions: List<QBlockAction<QBlockTarget>>) {
         for (action in actions) {
             when (action) {
-                is QBlockAction.SendBlock -> respond(action.ref, body.block(action.num, action.more, action.ref.token), blockOwner(body, action.num))
-                is QBlockAction.NoResponse -> action.ref.inbound.finishWithoutResponse()
-                is QBlockAction.Reject -> respond(action.ref, CoapResponse.error(action.code, action.diagnostic).toMessage(action.ref.token))
+                is QBlockAction.SendBlock -> when (val target = action.ref) {
+                    is QBlockRequest -> respond(
+                        target,
+                        body.block(action.num, action.more, target.token, body.observeFor(target)),
+                        blockOwner(body, action.num, target),
+                    )
+                    is NotificationBody -> notifyBlock(body, target, action.num, action.more)
+                }
+                is QBlockAction.NoResponse -> (action.ref as? QBlockRequest)?.inbound?.finishWithoutResponse()
+                is QBlockAction.Reject -> (action.ref as? QBlockRequest)?.let { ref ->
+                    respond(ref, CoapResponse.error(action.code, action.diagnostic).toMessage(ref.token))
+                }
                 else -> log.debug { "Ignored $action of $body" }
             }
         }
     }
 
-    /** How a block went: an acknowledgement sends the next Confirmable one, a Reset or a failure ends the body. */
-    private fun blockOwner(body: ServedBody, num: Long) = TransmissionOwner { _, outcome ->
-        val event: ((QBlock2Sender<QBlockRequest>, Duration) -> List<QBlockAction<QBlockRequest>>)? = when (outcome) {
+    /**
+     * How block [num] of [body], sent to [target], went: an acknowledgement sends the next Confirmable one, a
+     * Reset or a failure ends the body. For a body of an observation, every block that carries Observe is a
+     * notification (RFC 9177 §4.5): a Reset, a failure or such a Confirmable block that is not acknowledged
+     * removes the observer too (RFC 7641 §3.6, §4.5). A block that answers a request for missing blocks carries
+     * no Observe and is no notification: a Reset to it shows only that its client forgot that request's token,
+     * so only what is still queued for that request goes, and the observer and the rest of the body stay.
+     */
+    private fun blockOwner(body: ServedBody, num: Long, target: QBlockTarget) = TransmissionOwner { _, outcome ->
+        val isObserved = body.observation != null
+        val event: ((QBlock2Sender<QBlockTarget>, Duration) -> List<QBlockAction<QBlockTarget>>)? = when (outcome) {
             is TransmissionOutcome.Acknowledged -> { sender, now -> sender.onAcknowledged(now, num) }
             TransmissionOutcome.TimedOut -> { sender, now -> sender.onTimeout(now, num) }
             TransmissionOutcome.Reset, is TransmissionOutcome.Failed -> { sender, now ->
-                log.debug { "Block $num of $body ended with $outcome: the body stops" }
-                sender.onReset(now)
+                log.debug { "Block $num of $body to $target ended with $outcome" }
+                if (isObserved) sender.onReset(now, target) else sender.onReset(now)
             }
             TransmissionOutcome.SlotReleased -> null
         }
-        if (event != null) launch("continue a Q-Block2 body") { step(body, event) }
+        val removal = if (!isObserved || !target.carriesObserve) {
+            null
+        } else {
+            when (outcome) {
+                TransmissionOutcome.Reset -> "reset by client"
+                TransmissionOutcome.TimedOut -> "notification not acknowledged"
+                is TransmissionOutcome.Failed -> outcome.cause.message ?: "failed"
+                else -> null
+            }
+        }
+        if (event != null) {
+            launch("continue a Q-Block2 body") {
+                step(body, event)
+                val observation = body.observation
+                if (observation != null && removal != null) server.observations.remove(observation, removal)
+            }
+        }
     }
 
-    private suspend fun step(body: ServedBody, event: (QBlock2Sender<QBlockRequest>, Duration) -> List<QBlockAction<QBlockRequest>>) {
+    private suspend fun step(body: ServedBody, event: (QBlock2Sender<QBlockTarget>, Duration) -> List<QBlockAction<QBlockTarget>>) {
         val actions = lock.withLock {
             if (body.isDropped) return
             val now = endpoint.now()
@@ -635,6 +740,7 @@ internal class QBlockServer(
             }
         }
         execute(body, actions)
+        settleIfDone(body)
     }
 
     private suspend fun onServedTimer(body: ServedBody, at: Duration) {
@@ -651,8 +757,9 @@ internal class QBlockServer(
         }
         // A later set adds to what the request it answers has had, which must stay within the factor until the
         // address is verified (RFC 9175 §2.4 item 3); beyond, the sets stop, and a Continue is a request of its own.
-        val blocks = actions.filterIsInstance<QBlockAction.SendBlock<QBlockRequest>>()
-        val ref = blocks.firstOrNull()?.ref
+        // A notification's sets answer no request (see the class comment).
+        val blocks = actions.filterIsInstance<QBlockAction.SendBlock<QBlockTarget>>()
+        val ref = blocks.firstOrNull()?.ref as? QBlockRequest
         if (ref != null) {
             val before = lock.withLock { ref.sentBytes }
             var bytes = 0L
@@ -667,11 +774,13 @@ internal class QBlockServer(
                     schedule(body)
                     settle(body)
                 }
+                settleIfDone(body)
                 return
             }
             if (bytes > 0) lock.withLock { ref.sentBytes += bytes }
         }
         execute(body, actions)
+        settleIfDone(body)
     }
 
     /**
@@ -680,12 +789,13 @@ internal class QBlockServer(
      * Confirmable response counts with the MAX_RETRANSMIT retransmissions an address that never acknowledges
      * gets. Only the first block on a Confirmable request not answered yet is piggybacked.
      */
-    private fun wireBytes(body: ServedBody, blocks: List<QBlockAction.SendBlock<QBlockRequest>>): Long {
+    private fun wireBytes(body: ServedBody, blocks: List<QBlockAction.SendBlock<QBlockTarget>>): Long {
         val piggybacked = HashSet<InboundRequest>()
         val copies = 1L + endpoint.parameters.maxRetransmit
         return blocks.sumOf { action ->
-            val inbound = action.ref.inbound
-            val size = UdpMessageCodec.encode(body.block(action.num, action.more, action.ref.token)).size.toLong()
+            val target = action.ref
+            val size = UdpMessageCodec.encode(body.block(action.num, action.more, target.token, body.observeFor(target))).size.toLong()
+            val inbound = (target as? QBlockRequest)?.inbound ?: return@sumOf size
             val isConfirmable = inbound.connection == null && inbound.message.type == CoapMessageType.CON
             if (isConfirmable && (inbound.isAnswered || !piggybacked.add(inbound))) size * copies else size
         }
@@ -694,6 +804,157 @@ internal class QBlockServer(
     /** Under [lock]: a body that is still sending stays cached as long. */
     private fun keepAlive(body: ServedBody, now: Duration) {
         if (served.peek(body.key, now) === body) served.get(body.key, now)
+    }
+
+    // ---------------------------------------------------------------- Observe (RFC 7641, RFC 9177 §4.5)
+
+    /**
+     * [response], a notification of [observation] of [type] (RFC 7641 §4.2), as a Q-Block2 body on the
+     * observation's token (RFC 9177 §4.5). Returns null once its first blocks went out; otherwise the response
+     * to send as one message: the response itself when it is no body, or a 4.13 when not even a block of 16
+     * bytes fits next to its options. Its later sets go out NON_TIMEOUT_RANDOM apart or on Continues, and
+     * requests for its missing blocks find it under the registration's operation, where it replaces the
+     * observation's older body and ends whatever that still had to send (§4.4). A Non-confirmable body first
+     * takes the lease of one NSTART slot towards the client, which may wait (RFC 7641 §4.5.1, RFC 9177 §7.2);
+     * an observer removed or replaced meanwhile gets nothing (RFC 7641 §3.6).
+     */
+    suspend fun notify(
+        observation: ServerObservation,
+        type: CoapMessageType,
+        response: CoapResponse,
+        limits: MessageLimits,
+    ): CoapResponse? {
+        if (!isBody(response)) return response
+        val requested = checkNotNull(observation.qBlockSize) { "$observation was not registered with Q-Block" }
+        val size = blockSize(response, limits, requested)
+            ?: return CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The notification options leave no room for a block")
+        val mode = BodyMode.of(type, observation.connection != null)
+        val nonTimeoutRandom = lock.withLock { timing.drawNonTimeoutRandom(random) }
+        val lease = if (mode == BodyMode.NON) endpoint.leaseBody(observation.peer, response.payloadSize, nonTimeoutRandom) else null
+        val target = NotificationBody(observation, type, lease)
+        val evicted = ArrayList<Pair<Endpoint, Limit>>()
+        val started = try {
+            lock.withLock {
+                // Checked under the lock that stop() takes after the observation was deactivated.
+                if (!observation.isActive) return@withLock null
+                val now = endpoint.now()
+                // No request to piggyback block 0 on: every block goes in a message of its own.
+                val sender = QBlock2Sender<QBlockTarget>(
+                    response.payloadSize, size, mode, timing, nonTimeoutRandom, firstBlockPiggybacked = false,
+                )
+                val body = ServedBody(observation.operationKey, response, nextETag(), sender, now, observation, target)
+                bodiesOf(observation).forEach { older -> end(older, now) }
+                follow(body, observation)
+                // A body of one block is not kept: asking for it again runs the handler, as cheaply.
+                if (sender.count > 1) store(body, now, evicted)
+                body to sender.start(now, target).also { schedule(body) }
+            }
+        } catch (e: Throwable) {
+            lease?.let { endpoint.releaseBody(it) }
+            throw e
+        }
+        if (started == null) {
+            lease?.let { endpoint.releaseBody(it) }
+            log.debug { "No notification body for $observation: the observer is gone" }
+            return null
+        }
+        val (body, actions) = started
+        evicted.forEach { (peer, limit) -> endpoint.report(EndpointEvent.LimitReached(peer, limit)) }
+        log.debug {
+            "Notification of ${response.payloadSize} bytes to ${observation.peer} in ${body.sender.count} Q-Block2 blocks of $size, $type"
+        }
+        execute(body, actions)
+        settleIfDone(body)
+        return null
+    }
+
+    /** Sends block [num] of the notification [body] in a message of its own on the observation's token (RFC 7641 §4.2). */
+    private suspend fun notifyBlock(body: ServedBody, target: NotificationBody, num: Long, more: Boolean) {
+        val observation = target.observation
+        try {
+            val message = body.block(num, more, observation.token, body.observeFor(target))
+            val outgoing = observation.unprotected?.protectResponse(message) ?: message
+            val owner = blockOwner(body, num, target)
+            endpoint.sendSeparately(observation.peer, outgoing, target.type, owner, connection = observation.connection)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The security layer, its sequence-number store or the messaging layer failed: the observer goes.
+            log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
+            lock.withLock { stop(body, endpoint.now()) }
+            server.observations.remove(observation, "notification failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Stops the bodies of [observation], whose observer was removed or replaced (RFC 7641 §3.6): nothing more of
+     * them goes out, and their leases are given back. The bodies are those the server still holds, cached or
+     * still sending; one of a single block is out already.
+     */
+    suspend fun stop(observation: ServerObservation) {
+        if (observation.qBlockSize == null) return
+        lock.withLock {
+            val now = endpoint.now()
+            bodiesOf(observation).forEach { stop(it, now) }
+        }
+    }
+
+    /** Under [lock]: [body] sends nothing more, and is done. */
+    private fun stop(body: ServedBody, now: Duration) {
+        if (!body.isDropped) end(body, now)
+        body.markDone()
+    }
+
+    /** Under [lock]: the bodies of [observation] the server holds, cached or still sending. */
+    private fun bodiesOf(observation: ServerObservation): List<ServedBody> =
+        (served.entryList.map { it.second } + sending).filter { it.observation === observation && !it.isDropped }
+
+    /** Under [lock]: the body of [observation] cached for its client's follow-ups, if one is. */
+    private fun cachedOf(observation: ServerObservation, now: Duration): ServedBody? =
+        served.peek(observation.operationKey, now)?.takeIf { it.observation === observation }
+
+    /** Under [lock]: [body] sends nothing more by itself, but stays cached for what its client asks. */
+    private fun end(body: ServedBody, now: Duration) {
+        body.sender.onReset(now)
+        schedule(body)
+        settle(body)
+    }
+
+    /**
+     * Under [lock]: [body] is now the outstanding notification of [observation], which keeps an [OutstandingBody]
+     * of it and learns when it is settled ([OutstandingBody.isSettled]): then its lease goes back, and a change
+     * meanwhile sends the next body. Nothing the observation keeps refers to the body, which goes once it leaves
+     * the cache.
+     */
+    private fun follow(body: ServedBody, observation: ServerObservation) {
+        val outstanding = OutstandingBody(body.sender.mode, body.startedAt)
+        val lease = body.notification?.lease
+        body.onDone = {
+            outstanding.markDone()
+            // In the endpoint's scope, so that a lease is given back also when the server stops on a shared endpoint.
+            endpoint.launchGuarded("settle a notification of ${observation.resource.path}") {
+                settled(outstanding, lease, observation)
+            }
+        }
+        observation.latest = outstanding
+    }
+
+    private suspend fun settled(body: OutstandingBody, lease: BodyLease?, observation: ServerObservation) {
+        try {
+            // A Non-confirmable body keeps its slot as long as a single Non-confirmable notification would.
+            if (body.mode == BodyMode.NON) {
+                delay(body.startedAt + config.nonConfirmableNotificationInterval - endpoint.now())
+            }
+        } finally {
+            withContext(NonCancellable) { lease?.let { endpoint.releaseBody(it) } }
+        }
+        observation.onBodySettled(body)
+    }
+
+    /** A body of an observation is done once every block went out (Confirmable ones acknowledged), or it stopped. */
+    private suspend fun settleIfDone(body: ServedBody) {
+        if (body.observation == null || body.isDone) return
+        lock.withLock { if (body.sender.isStopped || body.sender.hasSentAll) body.markDone() }
     }
 
     // ---------------------------------------------------------------- timers and teardown
@@ -830,7 +1091,7 @@ internal class QBlockServer(
 
         private const val ETAG_LENGTH = 4
 
-        /** The largest Observe value, 3 bytes, which QB-6 puts on every block of a notification body (§4.5). */
+        /** The largest Observe value, 3 bytes, which every block of a body of an observation carries (§4.5). */
         private const val MAX_OBSERVE = 0xFFFFFFL
     }
 }
