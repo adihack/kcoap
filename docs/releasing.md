@@ -129,8 +129,9 @@ workflow's own token cannot turn it on.
 
    Without `dig`: `nslookup -type=TXT kcoap.dev 1.1.1.1`.
 4. **Only then press *Verify Namespace*** on the namespace's card, and wait until it shows as verified.
-   If the Portal looks before the record resolves, its resolver may cache the negative answer (an
-   NXDOMAIN or no record) for the zone's negative-caching time, which can delay verification for hours.
+   If the Portal looks before the record resolves, its resolver may cache the empty answer for the
+   zone's negative-caching time (30 minutes with Cloudflare's default SOA, which kcoap.dev has), which
+   delays verification by that long.
 5. **Keep the record** after the namespace is verified. Removing it gains nothing, and it shows how the
    namespace was verified.
 

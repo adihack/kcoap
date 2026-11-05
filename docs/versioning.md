@@ -22,7 +22,7 @@ Nothing is released yet. The repository carries `0.1.0-SNAPSHOT`, and the first 
 | Release | Before 1.0 | From 1.0 |
 |---|---|---|
 | Major (`1.4.2` → `2.0.0`) | — | Breaking changes, after deprecation (below) |
-| Minor (`0.1.0` → `0.2.0`, `1.4.2` → `1.5.0`) | New API, behaviour changes and **breaking changes**, each listed in [CHANGELOG.md](../CHANGELOG.md) under "Changed (breaking)" with a migration note | New API and behaviour changes; no breaking change to the stable API |
+| Minor (`0.1.0` → `0.2.0`, `1.4.2` → `1.5.0`) | New API, behaviour changes and **breaking changes**, each listed in [CHANGELOG.md](../CHANGELOG.md) under "Changed (breaking)" with a migration note | New API and behaviour changes; no breaking change to the stable API, other than a security fix that cannot avoid one or a raised platform or toolchain minimum (both below) |
 | Patch (`0.2.0` → `0.2.1`) | Fixes only; never breaks the API | Fixes only; never breaks the API |
 
 "Breaking" means that code written or compiled against the previous release of the stable API, below,
@@ -94,7 +94,8 @@ What kcoap sends and accepts follows the published RFCs, and is versioned as fol
   let unprotected requests reach every handler ([ADR 0008](adr/0008-fail-closed-message-security.md)).
   A change of behaviour is not a break of the API, so such a fix can ship in a patch.
 - If a fix cannot be made without breaking the API, it ships in the next minor release with a migration
-  note, also after 1.0. This is the one exception to the rules above, and the advisory says so.
+  note, also after 1.0. This is one of the two exceptions to the rules above, with a raised minimum
+  ([below](#platform-and-toolchain-minimums)), and the advisory says so.
 - [SECURITY.md](../SECURITY.md) says how to report a vulnerability and which releases receive fixes.
 
 ## Platform and toolchain minimums
@@ -107,8 +108,10 @@ What kcoap sends and accepts follows the published RFCs, and is versioned as fol
 | Building kcoap | JDK 17 | [README](../README.md#build-and-test) |
 
 The Kotlin minimum follows the Kotlin version that builds kcoap: it rises when kcoap moves to a newer
-Kotlin. Raising any minimum is listed in CHANGELOG.md as a breaking change and ships only in a minor or
-major release, never in a patch.
+Kotlin. Raising any minimum is listed in CHANGELOG.md under "Changed (breaking)" and ships only in a
+minor or major release, never in a patch. From 1.0 this is the second exception to the rule that a minor
+release breaks nothing, next to [security fixes](#security-fixes): kcoap cannot stay on one Kotlin
+version for a whole major version.
 
 ## The release freeze
 
