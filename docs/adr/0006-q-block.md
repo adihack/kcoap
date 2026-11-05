@@ -135,7 +135,9 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   carries Inner Q-Block checks its notifications against a replay window of the request (the context's
   `replayWindowSize`, 32 by default, as for the other responses of a Q-Block body), and decides freshness per
   body: a notification below the Notification Number passes only as a block of the body whose block holds
-  the highest Partial IV, identified by its ETag. Replays, blocks of older bodies, older notifications of one
+  the highest Partial IV, identified by its ETag. Every Partial IV that verifies is recorded in the window
+  before freshness is decided, so a stale block is a replay if it comes again after a later block of its body
+  made that body the freshest. Replays, blocks of older bodies, older notifications of one
   message and a late notification without a Partial IV (the oldest of all) are dropped, so the stack still
   gets only the freshest notification or a part of it, and leaves the order of protected notifications to
   the security layer, as before. A block further back than the window is dropped and asked for again with a
