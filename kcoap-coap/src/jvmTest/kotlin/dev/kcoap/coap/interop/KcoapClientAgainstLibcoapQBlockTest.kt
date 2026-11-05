@@ -36,6 +36,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
@@ -315,7 +318,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
     // ---------------------------------------------------------------- K4
 
     @Test
-    fun k4BlocksLostOnTheWayAreAskedForWithA408AfterTheLastBlock() = withServer("-L", "7", "-v", "7") { server ->
+    fun k4BlocksLostOnTheWayAreAskedForWithA408AfterTheLastBlockSent() = withServer("-L", "7", "-v", "7") { server ->
         val lost = mutableSetOf<Long>()
         withClient(dropOut = { message ->
             val num = message.options.qBlock1?.number
@@ -328,20 +331,48 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertTrue(response.code == CoapCode.CHANGED || response.code == CoapCode.CREATED, "PUT answered ${response.code}")
             assertTrue(received().none { it.message.code == CoapCode.CONTINUE }, "no 2.31 while set 0 has gaps")
             val puts = requests("/example_data")
-            val setStarts = listOf(10L, 20L, 30L, 40L).map { num -> puts.first { it.message.options.qBlock1!!.number == num }.at }
+            val setStarts = listOf(10L, 20L, 30L).map { num -> puts.first { it.message.options.qBlock1!!.number == num }.at }
             val firstSet = puts.first().at
             (listOf(firstSet) + setStarts).zipWithNext().forEach { (a, b) ->
                 assertTrue(b - a in 1.9.seconds..3.5.seconds, "sets NON_TIMEOUT_RANDOM apart: ${b - a}")
             }
+            // Four sets unconfirmed: set 4 waits for libcoap's 4.08, NON_RECEIVE_TIMEOUT after the last block it got.
             val missing = received().single { it.message.code == CoapCode.REQUEST_ENTITY_INCOMPLETE }
             assertEquals(ContentFormat.MISSING_BLOCKS_CBOR_SEQ, missing.message.options.contentFormat)
             assertContentEquals(byteArrayOf(0x02, 0x07), missing.message.payload)
-            assertEquals(puts.last { it.message.options.qBlock1!!.number == 46L }.message.tokenHex, missing.message.tokenHex)
-            val lastBlock = puts.first { it.message.options.qBlock1!!.number == 46L }.at
-            assertTrue(missing.at - lastBlock in 3.seconds..6.seconds, "4.08 ${missing.at - lastBlock} after the last block")
-            val resent = puts.filter { it.at > missing.at }.map { it.message.options.qBlock1!!.number }
-            assertEquals(listOf(2L, 7L), resent)
+            val lastSent = puts.last { it.message.options.qBlock1!!.number == 39L }
+            assertEquals(lastSent.message.tokenHex, missing.message.tokenHex)
+            assertTrue(missing.at - lastSent.at in 3.seconds..6.seconds, "4.08 ${missing.at - lastSent.at} after the last block sent")
+            val after = puts.filter { it.at > missing.at }.map { it.message.options.qBlock1!!.number }
+            assertEquals(listOf(2L, 7L) + (40L..46L), after, "the lost blocks, then the set that waited")
             assertContentEquals(upload, client.get("${server.uri}/example_data") { nonConfirmable() }.payload)
+        }
+    }
+
+    @Test
+    fun k4ALongUploadWithAnEarlyLossWaitsForTheFirst408WithBoundedTokens() = withServer("-L", "7", "-v", "7") { server ->
+        val lost = mutableSetOf<Long>()
+        withClient(dropOut = { message -> message.options.qBlock1?.number == 2L && lost.add(2L) }) { client ->
+            // 300 blocks, and no 2.31 from libcoap while block 2 is missing: more than the 256 exchanges per peer.
+            val upload = body(300 * 64, 13)
+            var most = 0
+
+            val response = coroutineScope {
+                val sampler = launch {
+                    while (true) {
+                        most = maxOf(most, client.endpoint.exchangeCount())
+                        delay(5.milliseconds)
+                    }
+                }
+                client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() }.also { sampler.cancel() }
+            }
+
+            assertTrue(response.code == CoapCode.CHANGED || response.code == CoapCode.CREATED, "PUT answered ${response.code}")
+            assertTrue(most <= 50, "unconfirmed requests at most four sets and a few: $most")
+            val missing = received().first { it.message.code == CoapCode.REQUEST_ENTITY_INCOMPLETE }
+            assertContentEquals(byteArrayOf(0x02), missing.message.payload)
+            assertContentEquals(upload, client.get("${server.uri}/example_data") { nonConfirmable() }.payload)
+            assertNoMessageMixesBlockAndQBlock()
         }
     }
 
@@ -488,7 +519,8 @@ class KcoapClientAgainstLibcoapQBlockTest {
         withServer("-L", "7", "-X", "1152", "-v", "7", webSockets = true) { server ->
             for (base in listOf(server.tcpUri, server.webSocketUri)) {
                 withReliableClient { client ->
-                    val upload = body(3000, 11)
+                    // 320 blocks: more than a body's inbox holds on datagrams, and than exchanges per peer.
+                    val upload = body(20 * 1024, 11)
 
                     val put = client.put("$base/example_data", upload, ContentFormat.TEXT_PLAIN)
                     val got = client.get("$base/example_data")
@@ -496,11 +528,11 @@ class KcoapClientAgainstLibcoapQBlockTest {
                     assertTrue(put.isSuccess, "$base: PUT answered ${put.code}")
                     assertContentEquals(upload, got.payload, base)
                     val puts = requests("/example_data").filter { it.message.options.qBlock1 != null }
-                    assertEquals(47, puts.size, base)
+                    assertEquals(320, puts.size, base)
                     assertTrue(received().none { it.message.code == CoapCode.CONTINUE }, "$base: no 2.31")
                     val gets = requests("/example_data").filter { it.message.code == CoapCode.GET }
                     assertEquals(listOf(listOf("0/M/64")), gets.map { it.message.qBlock2 }, "$base: no Continue")
-                    assertEquals(47, blocks().size, base)
+                    assertEquals(320, blocks().size, base)
                     assertNoMessageMixesBlockAndQBlock()
                 }
             }
