@@ -571,7 +571,7 @@ public class QBlockServerConfig(
     `security`, since such a server answers those unprotected and lets them use Q-Block.
   - The blocks of a burst are handled concurrently, so on a multi-threaded dispatcher the request that
     completes an upload, or shows a gap, need not be the last to arrive; §4.3 allows any token of the body.
-  - Tests: `KT/QBlockServerTest.kt` (57, a scripted client, `KT/QBlockPeer.kt`, including the refusal half of
+  - Tests: `KT/QBlockServerTest.kt` (58, a scripted client, `KT/QBlockPeer.kt`, including the refusal half of
     Figure 12), `KT/QBlockReliableTest.kt` (4, Custody), `KJ/LibcoapClientAgainstKcoapQBlockTest.kt` (13), with
     `KJ/DroppingTransport.kt` and `Libcoap.wire`. libcoap needed no leniency; its one deviation met here (a
     Continue after an upload repeating `Q-Block1 0/M` without payload) is pinned as an `upstream…` test.

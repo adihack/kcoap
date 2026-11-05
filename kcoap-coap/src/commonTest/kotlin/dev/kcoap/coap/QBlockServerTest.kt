@@ -1109,6 +1109,22 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7252Section9_1_1APeerWhoseSessionEndedLosesEveryBodyAlsoOnesStillSending() = runTest {
+        val f = fixture()
+        f.peer.send(upload(f.peer, 0))
+        f.peer.send(get(f.peer, block(0, true)))
+        f.peer.send(get(f.peer, block(0, true)))
+        f.peer.drain()
+        assertEquals(1, f.server.qBlock.state().sendingBodies)
+
+        f.server.qBlock.forget(f.peer.address)
+
+        assertTrue(f.server.qBlock.state().isEmpty, "${f.server.qBlock.state()}")
+        assertEquals(emptyList(), f.peer.drain(10.seconds), "no later set of either body")
+        assertEquals("the session ended", f.events.filterIsInstance<EndpointEvent.PartialBodyDropped>().single().reason)
+    }
+
+    @Test
     fun closingTheServerDropsEveryBodyAndTimer() = runTest {
         val f = fixture()
         f.peer.send(upload(f.peer, 0))
