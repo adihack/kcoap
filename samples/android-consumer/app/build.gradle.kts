@@ -60,8 +60,8 @@ android {
     lint {
         // InvalidPackage flags every reference a library jar makes to a Java package Android lacks, used or
         // not: ktor-utils' java.lang.management, Bouncy Castle's javax.naming. Each is triaged in README.md
-        // ("API level findings"); R8 fails the release build if a reachable one goes missing, and
-        // androidApiDependencyReport lists them all. Reported, then, but not fatal.
+        // ("API level findings"); R8 fails the release build if a reachable one goes missing, and kcoap's
+        // checkAndroidApiDependencies fails on one nobody triaged. Reported, then, but not fatal.
         warning += "InvalidPackage"
     }
 }

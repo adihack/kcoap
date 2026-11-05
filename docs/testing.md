@@ -106,7 +106,7 @@ runs the second command above), to be added by the next owner of the CI files (t
 
 ## Build checks
 
-Five checks guard the build itself. `scripts/test unit` runs all five after the tests, in the same
+Six checks guard the build itself. `scripts/test unit` runs all six after the tests, in the same
 Gradle invocation, and `./gradlew check` includes all but the build-logic tests in each module that has
 them:
 
@@ -116,6 +116,7 @@ them:
 | `verifyCommonOnly` | a core module (`kcoap.core`) has files in a main source set other than `commonMain` | move the code to `commonMain`, or into an adapter module |
 | `verifyNoServerEngine` | a ktor server engine (CIO, Netty, Jetty, Tomcat) appears in a Gradle module file or POM that `kcoap-transport-ktor-websocket-server` would publish, or on its JVM runtime classpath; the application chooses the engine (WP-W1) | keep the engine in the test source sets; `KtorWebSocketListener.start` takes it as a parameter |
 | `checkAndroidApi` | a module's jvm jar, which Android apps use, calls a Java class, method or field that Android API level 26 (kcoap's minSdk, `android-minSdk` in the version catalog) lacks; animal-sniffer checks the jar against that level's API signature, and the jar's runtime classpath ships with it, so uses of it pass (PL-1) | use an API the level has, or move the code behind a capability check in an adapter module; raising minSdk is the owner's decision ([plan](plan-qblock-and-platforms.md) §4, question 8) |
+| `checkAndroidApiDependencies` | the same check over a module's external jvm runtime dependencies (ktor, cryptography-kotlin, Bouncy Castle, ...) finds a use that [`gradle/android-api-dependencies.baseline`](../gradle/android-api-dependencies.baseline) does not list, typically after a library update; the baseline holds the uses triaged as safe in [samples/android-consumer](../samples/android-consumer/README.md#api-level-findings), by jar without version, class file and use (PL-1) | triage the new use there (kept by R8, reachable from kcoap, guarded?), then add the line the failure prints to the baseline; if it is not safe, keep the old library or raise minSdk |
 | `:build-logic:test` | a convention plugin no longer behaves as its Gradle TestKit fixtures expect | fix the plugin in `build-logic` |
 
 The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit

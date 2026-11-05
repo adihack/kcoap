@@ -107,9 +107,10 @@ end to end across it. What WebCrypto lacks:
 Details in [docs/architecture.md](docs/architecture.md#browsers) and
 [kcoap-crypto-default](kcoap-crypto-default/README.md).
 
-**On Android** the app uses the `jvm` artifacts, from API level 26 (Android 8.0) on. Two checks hold that
+**On Android** the app uses the `jvm` artifacts, from API level 26 (Android 8.0) on. Checks hold that
 line: `checkAndroidApi`, part of `check` and `scripts/test unit`, runs animal-sniffer over every module's
-jvm jar against the API 26 signature without the Android SDK, and CI builds
+jvm jar against the API 26 signature without the Android SDK, `checkAndroidApiDependencies` does the same
+for the libraries behind them and fails on any use not yet triaged, and CI builds
 [samples/android-consumer](samples/android-consumer/README.md), an app at minSdk 26 that uses kcoap from
 Maven, with R8 on its release builds and lint. Apps need no R8 rules of their own and no core library
 desugaring; the sample's README lists what an app needs (Kotlin 2.3 or newer, Java 17 bytecode) and what
