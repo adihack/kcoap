@@ -181,7 +181,7 @@ public class QBlockServerConfig(
      - Sets of `maxPayloads` blocks, each block a new token. Every token goes to the body inbox in INBOX mode.
      - **2.31.** Its NUM, or if it has none, the NUM sent on that token, marks every block up to it as received. If it ends the current set, the next set goes out at once.
      - **4.08 with CF 272.** Decode it (row 16), resend the listed blocks in ascending order (at most `maxPayloads`, new tokens, the same Request-Tag, Size1, NUM/M/SZX, Observe and Content-Format), then send the rest of the current set, then wait NON_TIMEOUT_RANDOM.
-     - **4.01 with Echo.** Resend that block with Echo, and keep Echo on later blocks (once per body).
+     - **4.01 with Echo.** Resend that block with Echo, and keep Echo on later blocks. Every block sent before the first challenge is resent once when challenged; a challenge to a block that carried Echo ends the body.
      - **Errors.**
        - 4.08 without 272, 4.00, 4.02, 4.13 or 5.xx: stop, release everything, return that response.
        - 4.13 that names a smaller size: restart once with that size and a new Request-Tag.
@@ -226,7 +226,7 @@ public class QBlockServerConfig(
    - **NON, before completion.**
      - A block of a later set while earlier gaps remain: 4.08 at once.
      - Every set up to k complete and k not the last: one 2.31 carrying Q-Block1.
-     - Timer at max(lastActivity, last408At) + NON_RECEIVE_TIMEOUT × 2^retry: a 4.08 with the gaps, or, after a 2.31 with nothing since, the next set's numbers. It goes on lastToken.
+     - Timer at max(lastActivity, last408At) + NON_RECEIVE_TIMEOUT × 2^retry: a 4.08 with the gaps, or, after a 2.31 with nothing since, the next set's numbers. It goes on a token the client still holds: the highest block's, or the latest 2.31's until a higher block arrives (ADR 0006).
      - Retry above `nonMaxRetransmit`: discard the body.
      - A Reset answering a 4.08: discard the body.
    - **CON.** `Reply.None` (empty ACK) per block; no 2.31 and no CF-272 4.08.
@@ -291,7 +291,7 @@ public class QBlockServerConfig(
 | 9 | `9MissingAfterLaterSet` | Immediate [1, 9] on block 10; a lost answer leads to [1] after NON_RECEIVE_TIMEOUT |
 | 10 | `10MBitRecoveryAndResentSet` | QB2 2/1 gives blocks 2–9 on T:f5 without Observe; Continue 10/1 sends block 10 again on T:f0 |
 | 11 | `11FetchObserveToken` | Observation token = the 2.05's token; the other tokens released |
-| 12 | `12ContinueWithoutRequestTag` | Accepted when unambiguous; refused when two bodies match |
+| 12 | `12ContinueWithoutRequestTag` | Accepted when unambiguous; refused when two bodies match (the refusal needs the server's body matching and is tested in `QBlockServerTest` under QB-3) |
 | 13–15 | `13To15LossBothWays` | Final response on T:c3; lost last block found from Size2; fresh MIDs (Figure 15 reuses 0xa7) |
 | 16–17 | `16And17ConQBlock1` | No 2.31; NSTART 1 lock-step (the NSTART 3 variant with custom parameters); same MID and token on retransmission; MAX_RETRANSMIT failure |
 | 18 | `18ConQBlock2` | Block 0 piggybacked, CON blocks ACKed, Observe on every block |
@@ -514,7 +514,7 @@ public class QBlockServerConfig(
 **QB-3: Q-Block server**
 - **Scope:**
   - `KC/server/QBlockServer.kt`, `QBlockServerConfig.kt`, `CoapServer.kt` (sealed `Reply`, the Q-Block branch, probe answer), `CoapServerConfig.kt`, `OptionCheck.kt`, `EndpointEvent.kt` (all Q-Block events).
-  - `KT/QBlockServerTest.kt`: a raw scripted client for every server rule.
+  - `KT/QBlockServerTest.kt`: a raw scripted client for every server rule, including the refusal half of Figure 12 (a Continue without Request-Tag that matches two cached bodies is refused), which the QB-1 figure script cannot show.
   - The server parts of `QBlockTest`/`QBlockReliableTest`.
   - `KJ/Libcoap.kt` (`wire` helper), a `DroppingTransport` in jvmTest, and `KJ/LibcoapClientAgainstKcoapQBlockTest.kt`: L1–L5, L7, L8, L10, L12.
 - **Accept:**

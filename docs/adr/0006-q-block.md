@@ -50,10 +50,18 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
 - **Resending the last block.** RFC 9177 does not say what a client does when the last block meets
   silence. A PUT, FETCH or iPATCH sends it again on the NON_RECEIVE_TIMEOUT ladder (4, 12, 28 and 60 s),
   which brings the final response from a server that completed the body, or 4.08s from one that lost it;
-  POST and PATCH, which must not repeat, fail after the ladder (124 s) without resending.
+  POST and PATCH, which must not repeat, fail after the ladder (124 s) without resending. A 4.08 shows that
+  the server holds the body and runs its own ladder on the same times, so after one the client resends
+  nothing until that ladder could have run out (124 s after the latest 4.08); Figure 6 then shows only the
+  resends of the lost block.
 - **Partial-body lifetime floor.** A client keeps a partial body for min(NON_PARTIAL_TIMEOUT, Max-Age)
   (§4.4), but at least as long as the retry ladder; otherwise a Max-Age of 60 s or 0 would end recovery
-  before it could work.
+  before it could work. Like the server, it counts from the latest new block, so a large body over a slow
+  link is not discarded while its blocks still arrive.
+- **One ETag per Q-Block2 block.** A block without ETag is dropped (§4.4), except libcoap's answer without
+  ETag and Size2 while a body is assembled, which counts as a changed representation.
+- **Echo.** A 4.01 with Echo resends each block of the burst that was sent before the first challenge;
+  a challenge to a block that carried Echo ends the body.
 - **Body lease.** A Non-confirmable body takes one NSTART slot for its whole life, released at
   min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT); a Confirmable body uses per-message NSTART (a lease plus
   Confirmable blocks would deadlock at NSTART 1). This lands with the endpoint seams (QB-2).
