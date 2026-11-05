@@ -59,7 +59,9 @@ import kotlinx.coroutines.withContext
  * assembled by [QBlock2Receiver]; its Continues and requests for missing blocks repeat the request's method
  * and options without Observe, ETag, payload (a FETCH keeps its payload unless it was uploaded with Q-Block1)
  * or Q-Block1, with the Request-Tag of the upload. Tokens are kept until the body ends, except those the
- * cores release and, for a long download, the oldest of [MAX_OPEN_FOLLOW_UPS] follow-ups.
+ * cores release and, for a long download, the oldest of [MAX_OPEN_FOLLOW_UPS] follow-ups. On a reliable
+ * transport nothing is asked for again (Appendix B), so the inbox there has room for every block of the
+ * largest body ([ExchangeInbox.forReliableBody]) and never drops one.
  *
  * **Fallback.** A 4.02 or a Reset that answers a body before anything else did shows a server that does not
  * take Q-Block after all; such a request was not processed (RFC 7252 §5.4.1), so it is sent again with
@@ -168,7 +170,11 @@ internal class QBlockClient(private val client: CoapClient) {
     ) {
         private val mode = BodyMode.of(if (confirmable) CoapMessageType.CON else CoapMessageType.NON, reliable)
         private val method = request.code
-        private val inbox = ExchangeInbox.forBody(endpoint.parameters)
+        private val inbox = if (mode == BodyMode.RELIABLE) {
+            ExchangeInbox.forReliableBody(endpoint.parameters, client.config.maxResponseBodySize)
+        } else {
+            ExchangeInbox.forBody(endpoint.parameters)
+        }
         private val logger = log.with("peer" to peer, "path" to request.options.path)
         private var lease: BodyLease? = null
 

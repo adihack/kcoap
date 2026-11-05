@@ -18,7 +18,8 @@ import kotlinx.coroutines.test.runTest
 
 /**
  * The Q-Block client on a reliable transport (RFC 9177 Appendix B, RFC 8323) against a peer scripted by hand
- * on an in-memory connection: bodies of more blocks than the endpoint has exchanges per peer, back to back.
+ * on an in-memory connection: bodies of more blocks than the endpoint has exchanges per peer, and than a
+ * body's inbox holds on an unreliable transport, back to back.
  */
 class QBlockClientReliableTest {
     /** The server side of one connection: it sends its CSM and hands every request to the script. */
@@ -82,6 +83,36 @@ class QBlockClientReliableTest {
         assertContentEquals(upload, stored)
         assertEquals((0L until 300L).toList(), peer.value.requests.map { it.options.qBlock1!!.number })
         assertTrue(most <= 3, "block 0, the block before and the block being sent: $most")
+        assertEquals(0, client.endpoint.exchangeCount())
+    }
+
+    @Test
+    fun rfc9177AppendixBAResponseBodyOfMoreBlocksThanAnInboxHoldsOnDatagramsArrivesWhole() = runTest {
+        val fixture = ReliableFixture(this)
+        val whole = body(20 * 1024)
+        val peer = peer(fixture) { request ->
+            val count = whole.size / 64
+            // Every block back to back in one write: the client reads them all before its driver runs.
+            write(
+                (0 until count).map { num ->
+                    CoapMessage.response(request, CoapCode.CONTENT) {
+                        payload = whole.copyOfRange(num * 64, num * 64 + 64)
+                        options {
+                            etag(byteArrayOf(9))
+                            size2(whole.size.toLong())
+                            qBlock2(BlockOption(num.toLong(), num < count - 1, 2))
+                        }
+                    }
+                },
+            )
+        }
+        val client = fixture.qBlockClient()
+
+        val response = client.get(fixture.uri("/big"))
+
+        assertEquals(CoapCode.CONTENT, response.code)
+        assertContentEquals(whole, response.payload)
+        assertEquals(listOf(listOf(0L)), peer.value.requests.map { request -> request.options.qBlock2List.map { it.number } }, "no Continue")
         assertEquals(0, client.endpoint.exchangeCount())
     }
 
