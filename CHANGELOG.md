@@ -60,8 +60,44 @@ adds its entry and migration note below.
   `EdhocInitiator.createMessage3()` returns. A configuration asks the backend once and remembers the answers,
   so sessions do not probe it again, also when the backend keeps the probing defaults; the copies that
   `supportedBy` and the new `EdhocResponderConfig.withConnectionIdentifiers(provider)` make keep them.
+- EDHOC server session bounds and events (WP-SEC1): `EdhocServer` takes `maxPendingSessionsPerPeer` (8),
+  `pendingSessionLifetime` (EXCHANGE_LIFETIME, 247 s), `timeSource` (`TimeSource.Monotonic`) and
+  `eventListener`, which receives the new `EdhocServerEvent`s: `LimitReached` (with `Limit.PENDING_SESSIONS`
+  or `PENDING_SESSIONS_PER_PEER`), `SessionExpired` and `ContinuationFromAnotherPeer`, through the new
+  `EdhocServerEventListener`.
+- `EdhocServer`, `EdhocClientHandshake` and `EdhocClientHandshake.over` take a `sequenceStore`
+  (`EphemeralSequenceNumberStore()` by default) and derive their OSCORE contexts with it, so a durable store
+  can make those contexts resumable (WP-SEC1, a WP-A1 follow-up).
 
 ### Changed (breaking)
+
+EDHOC server session safety (WP-SEC1):
+
+- **`EdhocServer.handle(request, peer)` and `completeCombined(responderId, message3, peer)` take the peer.**
+  A session now continues only for the peer that sent its message_1 (for DTLS, the same session in any
+  epoch); a message_3, an error message or a combined request from another peer gets the answer for an
+  unknown C_R and leaves the session waiting. `EdhocResource` and `CombinedRequestServer` pass the peer
+  themselves. *Migration:* pass `RequestContext.peer`, or the `peer` of `unprotectRequest`, where you call
+  these directly. A client whose address changes between message_1 and message_3 has to start again.
+- **Beyond `maxPendingSessions`, a new message_1 is refused instead of evicting the oldest session**, and so
+  is one beyond the new per-peer bound: an EDHOC error ("Too many pending EDHOC sessions") in a 5.00
+  response, before any cryptography, reported as `EdhocServerEvent.LimitReached`. Pending sessions now also
+  expire after `pendingSessionLifetime`. *Migration:* raise the bounds for gateways that start many
+  handshakes from one address, and count `LimitReached` in production.
+- **The `EdhocServer` constructor has new parameters between `maxPendingSessions` and `loggers`**
+  (`maxPendingSessionsPerPeer`, `pendingSessionLifetime`, `sequenceStore`, `timeSource`, before `listener`;
+  `eventListener` after it). *Migration:* pass `listener` and `loggers` by name. `EdhocClientHandshake` has
+  `sequenceStore` after `loggers`, so its trailing `exchange` lambda is unchanged.
+- **A destroyed `EdhocSession` or `SoftwarePrivateKey` throws `IllegalStateException`** from `prkOut`,
+  `prkExporter`, `exporter`, `oscoreMasterSecret`, `oscoreMasterSalt`, `keyUpdate` and `encoded` instead of
+  returning, or deriving from, zeroed bytes, which are valid, publicly known keys. *Migration:* do not use a
+  session or key after `destroy()`; tests that asserted the zeros assert the exception.
+- **Every peer-authentication failure sends the same EDHOC error**, code 1 "Authentication failed": an
+  untrusted credential sent by value, one that does not fit the cipher suite, a certificate chain the
+  `CertificateValidator` rejects, and a Signature_or_MAC_2 or _3 that does not verify. The reason stays in
+  `EdhocException.message` and the log; `EdhocException.error.diagnostic` is the generic text. Error code 3
+  for an unknown 'kid' or 'x5t' is unchanged (RFC 9528 §6.4). *Migration:* read `message`, not
+  `error.diagnostic`, for the local reason.
 
 EDHOC capability-aware negotiation, typed retry and returned sessions (WP-A2):
 
@@ -200,3 +236,15 @@ Build governance (WP-C1):
   request can no longer revoke the value the client is about to send back (Appendix B.1.2).
 - OSCORE and EDHOC: derivation copies of the Master Secret, Salt, PRK and exporter outputs are wiped,
   also when derivation fails.
+- EDHOC server (WP-SEC1): two concurrent handshakes could get the same C_R (it was checked under the lock
+  but recorded only after message_2), so both failed, and a C_R could equal the Recipient ID of a context
+  being added (RFC 9668 §4.1.2). C_R is now reserved in the step that checks it and held until the context
+  is in the repository.
+- EDHOC server (WP-SEC1): any client could abort or consume another client's pending handshake by sending
+  a message_3, an error message or a combined request with its C_R; such continuations are now ignored
+  unless they come from the peer that sent message_1. Pending sessions expire, and dropped ones (expired,
+  aborted by their client) have their ephemeral key and PRK_3e2m wiped (RFC 9528 §9.7, §9.8).
+- EDHOC (WP-SEC1): the error sent for a failed peer authentication no longer tells a probing Initiator
+  whether a credential it presents by value is trusted.
+- EDHOC and kcoap-crypto (WP-SEC1): a destroyed `EdhocSession` handed out OSCORE secrets derived from
+  zeros, and a destroyed `SoftwarePrivateKey` its zeroed bytes; both now fail closed.
