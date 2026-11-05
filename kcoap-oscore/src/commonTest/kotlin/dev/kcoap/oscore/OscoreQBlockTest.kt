@@ -3,6 +3,7 @@ package dev.kcoap.oscore
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.security.MessageSecurityException
@@ -19,6 +20,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -276,5 +278,115 @@ class OscoreQBlockTest {
         assertEquals("Second response to a request that takes one", second.message)
         assertFailsWith<MessageSecurityException>("nor the first again") { exchange.client.unprotectResponse(last) }
         assertNotNull(exchange.client.unprotectResponse(notification(7)).options.observe, "a notification is still accepted")
+    }
+
+    /** An unprotected response to [request] as it went on the wire, sent by anyone who saw its token. */
+    private fun unprotected(request: ProtectedRequest, code: CoapCode, block: CoapMessage.Builder.() -> Unit = {}): CoapMessage =
+        CoapMessage.response(request.message, code) {
+            type = CoapMessageType.NON
+            block()
+        }
+
+    /** A response the Q-Block client acts on in a body, and why OSCORE drops it unprotected to a Q-Block request. */
+    private class Control(val name: String, val response: CoapMessage, val rejection: String)
+
+    /** Each [Control], sent unprotected to a request of [exchange]. */
+    private fun bodyControls(exchange: Exchange): List<Control> = listOf(
+        Control(
+            "a 4.08 listing blocks 0-9",
+            unprotected(exchange.client, CoapCode.REQUEST_ENTITY_INCOMPLETE) {
+                options { contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ) }
+                payload = ByteArray(10) { it.toByte() }
+            },
+            "Unprotected 4.08 Request Entity Incomplete to a Q-Block request",
+        ),
+        Control(
+            "a 4.13 for blocks of 16 bytes",
+            unprotected(exchange.client, CoapCode.REQUEST_ENTITY_TOO_LARGE) {
+                options {
+                    qBlock1(BlockOption(0, true, 0))
+                    size1(16)
+                }
+            },
+            "Unprotected 4.13 Request Entity Too Large to a Q-Block request",
+        ),
+        Control(
+            "a 4.01 with Echo",
+            unprotected(exchange.client, CoapCode.UNAUTHORIZED) { options { echo("0102030405060708".hexToBytes()) } },
+            "Unprotected 4.01 Unauthorized with Echo to a Q-Block request",
+        ),
+        Control(
+            "a 4.02 before any answer",
+            unprotected(exchange.client, CoapCode.BAD_OPTION) { payload("Unrecognized critical option 19") },
+            "Unprotected 4.02 Bad Option to a Q-Block request",
+        ),
+        Control(
+            "a 4.00 carrying a block",
+            unprotected(exchange.client, CoapCode.BAD_REQUEST) {
+                options { qBlock2(BlockOption(0, true, 2)) }
+                payload = ByteArray(64)
+            },
+            "Unprotected 4.00 Bad Request with a block option to a Q-Block request",
+        ),
+        Control(
+            "a 5.03 carrying a Block2",
+            unprotected(exchange.client, CoapCode.SERVICE_UNAVAILABLE) { options { block2(BlockOption(0, true, 2)) } },
+            "Unprotected 5.03 Service Unavailable with a block option to a Q-Block request",
+        ),
+        Control(
+            "a 2.31",
+            unprotected(exchange.client, CoapCode.CONTINUE) { options { qBlock1(BlockOption(9, true, 2)) } },
+            "Unprotected response to an OSCORE request",
+        ),
+    )
+
+    @Test
+    fun rfc9177Section11UnprotectedResponsesThatWouldSteerAQBlockBodyAreDropped() = runTest {
+        val (client, server) = clientFor()
+        val upload = exchange(client, server, uploadBlock(9))
+        val download = exchange(client, server, download())
+
+        for (exchange in listOf(upload, download)) {
+            for (control in bodyControls(exchange)) {
+                val dropped = assertFailsWith<MessageSecurityException>(control.name) { exchange.client.unprotectResponse(control.response) }
+                assertEquals(control.rejection, dropped.message, control.name)
+            }
+        }
+        // Nothing of either body changed: their protected responses are taken as before.
+        val changed = upload.server.protectResponse(CoapMessage.response(upload.server.message, CoapCode.CHANGED))
+        assertEquals(CoapCode.CHANGED, upload.client.unprotectResponse(changed).code)
+        val first = download.server.protectResponse(block(download.server.message, 0))
+        assertEquals(BlockOption(0, true, 2), download.client.unprotectResponse(first).options.qBlock2)
+    }
+
+    @Test
+    fun rfc8613Section8_2OscoreErrorsToAQBlockRequestStillPassUnprotected() = runTest {
+        val (client, server) = clientFor()
+        val upload = exchange(client, server, uploadBlock(9))
+        // Context not found or replay (4.01), decryption failed (4.00), an overloaded server or an intermediary (5.xx).
+        val errors = listOf(
+            unprotected(upload.client, CoapCode.UNAUTHORIZED) { payload("Security context not found") },
+            unprotected(upload.client, CoapCode.BAD_REQUEST) { payload("Decryption failed") },
+            unprotected(upload.client, CoapCode.SERVICE_UNAVAILABLE) { options { maxAge(2) } },
+            unprotected(upload.client, CoapCode.of(5, 4)),
+        )
+
+        for (error in errors) assertSame(error, upload.client.unprotectResponse(error), "${error.code} ends the body")
+    }
+
+    @Test
+    fun unprotectedErrorsToARequestWithoutQBlockAreStillPassedOn() = runTest {
+        val (client, server) = clientFor()
+        val plain = exchange(client, server, rfc7959Block())
+
+        for (control in bodyControls(plain)) {
+            val response = control.response
+            if (response.code.isSuccess) {
+                val dropped = assertFailsWith<MessageSecurityException>(control.name) { plain.client.unprotectResponse(response) }
+                assertEquals("Unprotected response to an OSCORE request", dropped.message)
+            } else {
+                assertSame(response, plain.client.unprotectResponse(response), "${control.name}, unauthenticated, for the application")
+            }
+        }
     }
 }

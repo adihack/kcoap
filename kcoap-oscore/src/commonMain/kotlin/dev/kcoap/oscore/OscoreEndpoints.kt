@@ -110,6 +110,12 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * Q-Block under OSCORE only where both sides opt in (`QBlockClientConfig.withMessageSecurity` and
  * `QBlockServerConfig.withMessageSecurity` of kcoap-coap); otherwise protected bodies use Inner Block1 and
  * Block2 (RFC 7959; RFC 8613 §4.1.3.4.1), one response per block.
+ *
+ * **Unprotected responses** are not authenticated. The unprotected 4.xx and 5.xx errors of OSCORE and of
+ * intermediaries (§8.2) are passed on to a request that takes one response. To a request carrying an Inner
+ * Q-Block option only 4.00, 4.01 and 5.xx are, without Echo or a block option: those end the body, whereas an
+ * unprotected 4.08, 4.13, 4.02, Echo challenge or block would steer it from outside OSCORE (RFC 9177 §11), so
+ * they are dropped like a response that fails verification ([UnprotectedResponses]).
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
@@ -150,10 +156,12 @@ public class OscoreClient(
 
         override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
             if (response.options.oscore == null) {
-                // OSCORE errors are sent unprotected (RFC 8613 §8.2); pass them on so the application can
-                // react, for example by re-deriving the context. They are not authenticated.
-                if (response.code.isClientError || response.code.isServerError) return response
-                throw MessageSecurityException("Unprotected response to an OSCORE request")
+                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: only those that
+                // can do no more than end the request are passed on (UnprotectedResponses).
+                val rejection = UnprotectedResponses.rejection(response, takesSeveral = binding.allowsSeveralResponses)
+                    ?: return response
+                log.warn { "Dropped a response: $rejection" }
+                throw MessageSecurityException(rejection)
             }
             val (decrypted, piv) = try {
                 OscoreProtection.unprotectResponse(binding, response)

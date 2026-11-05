@@ -38,7 +38,9 @@ public interface ProtectedRequest {
      * Verifies and decrypts a response to this request. Called once per response, so also for every
      * Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
      * `QBlockClientConfig.withMessageSecurity` lets protected requests use Q-Block, possibly from different
-     * coroutines (see [ClientMessageSecurity]).
+     * coroutines (see [ClientMessageSecurity]). The stack trusts what this returns: a response returned
+     * without verification, such as an unprotected error, is acted on like a verified one, and in a Q-Block
+     * body for the whole body (a 4.08 has blocks sent again, a 4.02 turns Q-Block off for the peer).
      *
      * @throws MessageSecurityException when the response does not verify; the stack drops it.
      */

@@ -124,11 +124,15 @@ adds its entry and migration note below.
   an inner 4.02 (or a Reset to a Non-confirmable request) and falls back to RFC 7959. `OscoreClient` takes the
   several responses of a body to a request that carries an Inner Q-Block1 or Q-Block2 option: at most one
   with the request's nonce, every other with a Partial IV new in a replay window of that request, of the
-  context's `replayWindowSize` (32 by default); a replayed block is dropped and asked for again. This falls
-  outside RFC 8613's single-response model (§7.4), which is why it is opt-in; it is tested kcoap against kcoap,
-  at 10 % loss too. libcoap 4.3.5b protects, or verifies, only the first response to a request, so with
-  `withMessageSecurity` its Q-Block2 bodies break in both roles (pinned as `upstream…` tests); Q-Block1 uploads
-  to its server work. No API change.
+  context's `replayWindowSize` (32 by default); a replayed block is dropped and asked for again. To such a
+  request it passes on only the unprotected errors that end the body (4.00, 4.01 and 5.xx, without Echo or a
+  block option) and drops every other unprotected response, so a 4.08, 4.13, 4.02, Echo challenge or block
+  from outside OSCORE cannot steer a protected body or turn Q-Block off for the peer (RFC 9177 §11); a server
+  without OSCORE answers with such a 4.02, so the request ends as a timeout. Other requests still get every
+  unprotected 4.xx and 5.xx. This falls outside RFC 8613's single-response model
+  (§7.4), which is why it is opt-in; it is tested kcoap against kcoap, at 10 % loss too. libcoap 4.3.5b
+  protects, or verifies, only the first response to a request, so with `withMessageSecurity` its Q-Block2
+  bodies break in both roles (pinned as `upstream…` tests); Q-Block1 uploads to its server work. No API change.
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by

@@ -48,8 +48,10 @@ public enum class QBlockMode {
  *   RFC 8613 §4.1.3.4.1). Several responses to one request fall outside OSCORE's single-response replay model
  *   (RFC 8613 §7.4): turned on, Q-Block1 and Q-Block2 go inside OSCORE (RFC 9177 §4, Table 2), and the
  *   security layer must accept several responses to a request carrying them, as kcoap-oscore's `OscoreClient`
- *   does with a replay window per request. The probe and the capability it finds are kept apart from those of
- *   unprotected requests. The server has to opt in too (`QBlockServerConfig.withMessageSecurity`), or it
+ *   does with a replay window per request. It must also drop the unprotected responses that would steer the
+ *   body (a 4.08, 4.13, 4.02, Echo challenge or block), since the client acts on what it hands on for the
+ *   whole body (RFC 9177 §11); `OscoreClient` hands on only the 4.00, 4.01 and 5.xx that end it. The probe and
+ *   the capability it finds are kept apart from those of unprotected requests. The server has to opt in too (`QBlockServerConfig.withMessageSecurity`), or it
  *   answers 4.02, or a Reset to a Non-confirmable request, and the request is sent again with RFC 7959.
  * @property missingBlockMBit whether a request for missing blocks asks for the missing tail of a
  *   MAX_PAYLOADS set with one Q-Block2 option with M set (RFC 9177 §4.4), instead of one option per block.

@@ -43,9 +43,10 @@ import kotlinx.coroutines.test.runTest
 /**
  * Q-Block (RFC 9177) under OSCORE (RFC 8613) between kcoap's client and server on the in-memory network and
  * virtual time: what each side's `withMessageSecurity` chooses, bodies both ways with their Q-Block options
- * inside OSCORE, a replayed block response, a restarted server's freshness challenge, and 10 % loss over
- * many seeds. On the JVM only: elsewhere the crypto backend suspends on the platform (WebCrypto), and
- * virtual time would run ahead of it. The rules themselves are tested on every target in [OscoreQBlockTest].
+ * inside OSCORE, a replayed block response, unprotected responses injected on a body's tokens, a restarted
+ * server's freshness challenge, and 10 % loss over many seeds. On the JVM only: elsewhere the crypto backend
+ * suspends on the platform (WebCrypto), and virtual time would run ahead of it. The rules themselves are tested
+ * on every target in [OscoreQBlockTest].
  */
 class OscoreQBlockEndToEndTest {
     private val crypto = DefaultCryptoBackend()
@@ -241,6 +242,83 @@ class OscoreQBlockEndToEndTest {
         assertContentEquals(big, setup.stored.single())
         assertTrue(setup.inner.any { it.options.qBlock1 != null } && setup.inner.any { it.options.block1 != null })
         assertTrue(setup.fromServer().any { it.type == CoapMessageType.RST }, "the Q-Block1 block was rejected")
+        setup.close()
+    }
+
+    /**
+     * Sends [forged] to the client as if from the server, on the token of the client's request that [isTarget]
+     * picks among those on the wire, once. The token is visible on the wire, so anyone on the path can do this.
+     */
+    private fun Setup.inject(forged: (token: ByteArray) -> CoapMessage, isTarget: (request: CoapMessage, index: Int) -> Boolean) {
+        var requests = 0
+        var injected = false
+        network.filter = { datagram ->
+            val message = if (datagram.from == clientTransport.localEndpoint) runCatching { UdpMessageCodec.decode(datagram.bytes) }.getOrNull() else null
+            if (!injected && message != null && message.code.isRequest && isTarget(message, requests++)) {
+                injected = true
+                val bytes = UdpMessageCodec.encode(forged(message.token))
+                clientTransport.inject(DatagramEvent.Received(serverTransport.localEndpoint, bytes))
+            }
+            true
+        }
+    }
+
+    @Test
+    fun rfc9177Section11AnUnprotected402ToAQBlockRequestDoesNotTurnQBlockOff() = runTest {
+        val setup = setup()
+        val big = body(3000, 1)
+        // A 4.02 before the server answers the GET's first request, which a Q-Block client takes as a rejection.
+        setup.inject(
+            forged = { token ->
+                CoapMessage.build {
+                    type = CoapMessageType.NON
+                    code = CoapCode.BAD_OPTION
+                    messageId = 0x4242
+                    this.token = token
+                }
+            },
+            isTarget = { _, _ -> setup.inner.any { it.options.path == "/big" } },
+        )
+
+        assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
+        assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
+
+        assertTrue(setup.events.none { it is EndpointEvent.QBlockFallback }, "the capability stayed SUPPORTED")
+        assertTrue(setup.inner.none { it.has(blockOptions) }, "RFC 7959 never took over")
+        assertEquals(1, setup.inner.count { it.options.path == "/.well-known/core" }, "one probe for both GETs")
+        val gets = setup.inner.filter { it.options.path == "/big" }
+        assertTrue(gets.all { it.options.qBlock2 != null }, "both GETs went in Q-Block2")
+        assertEquals(listOf("Unprotected 4.02 Bad Option to a Q-Block request"), setup.rejected.toList())
+        setup.close()
+    }
+
+    @Test
+    fun rfc9177Section11AnUnprotected408DuringAnUploadHasNoBlockSentAgain() = runTest {
+        val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true))
+        val big = body(3000, 1)
+        // A 4.08 listing blocks 0-9 on the token of block 9, the last of set 0, where the server's 4.08 would come.
+        setup.inject(
+            forged = { token ->
+                CoapMessage.build {
+                    type = CoapMessageType.NON
+                    code = CoapCode.REQUEST_ENTITY_INCOMPLETE
+                    messageId = 0x4243
+                    this.token = token
+                    options { contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ) }
+                    payload = ByteArray(10) { it.toByte() }
+                }
+            },
+            isTarget = { _, index -> index == 9 },
+        )
+
+        val put = setup.client.put(setup.uri("/store"), big) { nonConfirmable() }
+
+        assertEquals(CoapCode.CHANGED, put.code)
+        assertContentEquals(big, setup.stored.single())
+        val sent = setup.inner.mapNotNull { it.options.qBlock1?.number }
+        assertEquals((0L until 47L).toList(), sent, "every block once, in order")
+        assertEquals(listOf("Unprotected 4.08 Request Entity Incomplete to a Q-Block request"), setup.rejected.toList())
+        assertTrue(setup.events.none { it is EndpointEvent.QBlockRecovery }, "no recovery was asked for")
         setup.close()
     }
 

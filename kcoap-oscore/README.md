@@ -134,7 +134,7 @@ B.2 once it is implemented.
 | §5 | COSE_Encrypt0, nonce construction, AAD (Enc_structure over aad_array) |
 | §6 | OSCORE option compression ('kid', 'kid context', Partial IV) |
 | §7.2.1 | Sequence numbers below 2^40; the context stops when exhausted |
-| §8 | Request and response protection and verification, error responses with the RFC's diagnostics |
+| §8 | Request and response protection and verification, error responses with the RFC's diagnostics. Unprotected responses are not authenticated: the client passes the unprotected 4.xx and 5.xx errors (§8.2) on to a request that takes one response, and to a request carrying Inner Q-Block only 4.00, 4.01 and 5.xx without Echo or a block option, which end its body; every other one would steer the body from outside OSCORE (RFC 9177 §11) and is dropped |
 | App. B.1.1 | Sequence-number persistence through the application's `SequenceNumberStore`: blocks reserved ahead, each durable before its first number is used; a failed or cancelled write hands out nothing and is retried |
 | App. B.1.2 | Echo freshness proof for contexts whose replay window may be lost (`FreshnessPolicy`, `AUTO` by default), surfaced to the stack as `UnprotectedRequest.challenge` |
 
@@ -147,9 +147,10 @@ Not yet: Appendix B.2
   on both the client and the server side.
 - End-to-end exchanges through the SPI, Observe ordering and replay, every error path.
 - Q-Block bodies (RFC 9177) under OSCORE: the blocks of a set in any order, a replayed block, a second
-  response to a request without Q-Block, a block beyond the window, forged blocks (`OscoreQBlockTest`, every
-  target); kcoap's Q-Block client and server through the stack on the in-memory network, both ways, with a
-  replayed block on the wire, a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
+  response to a request without Q-Block, a block beyond the window, forged blocks, unprotected responses
+  that would steer a body (`OscoreQBlockTest`, every target); kcoap's Q-Block client and server through the
+  stack on the in-memory network, both ways, with a replayed block on the wire, an unprotected 4.02 and 4.08
+  injected on a body's tokens, a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
   (`OscoreQBlockEndToEndTest`).
 - Appendix B.1.1 and B.1.2 under simulated restarts:
   - a recording store and AEAD show that every Partial IV is durable before its nonce is used;
