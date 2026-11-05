@@ -290,7 +290,7 @@ public class OscoreClient(
  * contexts in [contexts] and protects the responses. Each verified request carries its context's
  * [SecurityContext.identity]. Requests without the option are left to the stack (null). On a server with
  * message security its default access policy refuses them, so only the resources the application makes
- * [dev.kcoap.coap.server.AccessPolicy.Public] serve them (ADR 0008).
+ * `AccessPolicy.Public` (kcoap-coap's server) serve them (ADR 0008).
  */
 public class OscoreServer(
     private val contexts: SecurityContextRepository,

@@ -6,7 +6,9 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            api(project(":kcoap-coap"))
+            // The message model, the option codec and the message-security SPI that OSCORE implements; not the
+            // endpoint stack, so OSCORE's API does not carry CoapEndpoint, CoapClient or CoapServer.
+            api(project(":kcoap-coap-message"))
             api(project(":kcoap-cose"))
             api(project(":kcoap-crypto"))
             // Endpoint and LoggerFactory appear in the public API.
@@ -16,6 +18,9 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
+            // OscoreOverLinksTest, and in jvmTest the Q-Block end-to-end and stack interop tests, run OSCORE through
+            // CoapClient and CoapServer.
+            implementation(project(":kcoap-coap"))
             implementation(project(":kcoap-testkit"))
             implementation(project(":kcoap-crypto-default"))
         }

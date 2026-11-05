@@ -8,8 +8,10 @@ kotlin {
         commonMain.dependencies {
             api(project(":kcoap-edhoc"))
             api(project(":kcoap-oscore"))
-            // CoapClient and CoapMessage, CryptoBackend, Endpoint and LoggerFactory appear in the public API.
+            // CoapClient and CoapResource (kcoap-coap), CoapRequest and the message-security SPI
+            // (kcoap-coap-message), CryptoBackend, Endpoint and LoggerFactory appear in the public API.
             api(project(":kcoap-coap"))
+            api(project(":kcoap-coap-message"))
             api(project(":kcoap-crypto"))
             api(project(":kcoap-transport"))
             api(project(":kcoap-common"))
