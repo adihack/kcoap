@@ -55,8 +55,8 @@ libcoap's own PUT) arrive whole, once each, and that deregisters on its token (K
 answered in Q-Block2 on the last Q-Block1 token; 20 KiB (320 blocks) over TCP and WebSockets (`-X 1152`) back
 to back; and a lost probe answer. The **K soak** (`kSoakBodiesBothWaysAt10PercentLoss`) puts 3000 bytes and
 gets them back with 10 % loss on both sides (`-l 10%` and a lossy transport on kcoap's side), 3 runs here and
-20 in the nightly soak ([docs/testing.md](../docs/testing.md#nightly-soak)): every run ends with the right body,
-a clean `CoapException` or libcoap's plain 4.08 below, and leaves no exchange.
+20 with `-Pkcoap.soak=true` (not yet scheduled in CI; [docs/testing.md](../docs/testing.md#nightly-soak)): every
+run ends with the right body, a clean `CoapException` or libcoap's plain 4.08 below, and leaves no exchange.
 Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` test named:
 
 - three separate gaps in an upload get a plain 4.08 ("Too many missing blocks"), and the body is given up

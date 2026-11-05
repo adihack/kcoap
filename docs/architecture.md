@@ -141,8 +141,8 @@ virtual time. Thin drivers turn them into messages:
 
 Its tests run the cores figure by figure (`QBlockFiguresTest`), the client and server against each other on
 the in-memory network at 10 % and 30 % loss (`QBlockTest`), on real threads (`QBlockStressTest`), under
-OSCORE (`OscoreQBlockEndToEndTest`), and against libcoap both ways with a nightly soak
-([testing.md](testing.md#nightly-soak)).
+OSCORE (`OscoreQBlockEndToEndTest`), and against libcoap both ways, with a soak of 20 runs behind
+`-Pkcoap.soak=true` (not yet scheduled in CI; [testing.md](testing.md#nightly-soak)).
 
 **Concurrency rules.** Every stateful component follows them, and `ConcurrencyStressTest` checks them on
 real threads, on the JVM and Kotlin/Native, through `kcoap-testkit`'s `Stress` helper:

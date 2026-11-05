@@ -150,6 +150,6 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
 - Q-Block (RFC 9177): every figure of §10 and Appendices A–B as a script on virtual time
   (`QBlockFiguresTest`), the server, the client and both together at 10 % and 30 % loss (`QBlockTest`),
   Observe (`QBlockObserveTest`), Q-Block bodies on real threads (`QBlockStressTest`), and libcoap
-  4.3.5b in both roles with its deviations pinned, plus a soak run 20 times nightly
-  ([docs/testing.md](../docs/testing.md#nightly-soak)).
+  4.3.5b in both roles with its deviations pinned, plus a soak of 20 runs with `-Pkcoap.soak=true` (not yet
+  scheduled in CI; [docs/testing.md](../docs/testing.md#nightly-soak)).
 - Line coverage 98% (`./gradlew :kcoap-coap:koverXmlReport`).

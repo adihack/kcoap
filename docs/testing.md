@@ -85,7 +85,7 @@ scripts/test interop --tests '*QBlock*' -Pkcoap.soak=true                  # the
 ```
 
 At 20 runs L9 takes about a quarter of an hour and the K soak about half an hour, mostly libcoap's timers
-(3 runs: about 2½ and 4 minutes). The first nightly L9 completed 14 of 20 uploads and 10 of 20 downloads;
+(3 runs: about 2½ and 4 minutes). The first 20-run L9 completed 14 of 20 uploads and 10 of 20 downloads;
 8 downloads met libcoap's pinned deviation and 2 were given up by libcoap. Only at 20 runs do the soaks
 also assert how many complete (L9: half the uploads and half the downloads reach their end; K soak: a
 quarter of the uploads, since libcoap gives up those with three gaps, and half the downloads); 3 runs say
