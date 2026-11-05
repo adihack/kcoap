@@ -104,6 +104,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
             registered
         }
         observation.deactivate()
+        // RFC 9177 §4.5: the rest of a Q-Block2 notification body would only be answered with Resets.
+        observation.body?.let { server.qBlock.stop(it) }
         if (removed) server.endpoint.report(EndpointEvent.ObserverRemoved(observation.peer, observation.resource.path, reason))
     }
 
@@ -165,6 +167,13 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * Observe values and takes notifications in the order they arrive (RFC 8323 §7.1), so the order of
  * sending is the order of freshness. There, notifications have no message type (§7.2) and go on the
  * registration's [connection].
+ *
+ * An observation registered with Q-Block ([qBlockSize]) gets its notifications as Q-Block2 bodies
+ * (RFC 9177 §4.5, [QBlockServer.notify]): its latest [body] is the one outstanding notification until it is
+ * settled ([ServedBody.isSettled]), every block out, and a Non-confirmable body for at least
+ * [CoapServerConfig.nonConfirmableNotificationInterval]. Changes meanwhile fold into the next body, and a body
+ * is never replaced by a newer one while it goes out, so a resource that changes faster than its bodies go out
+ * still has whole bodies reach the client.
  */
 internal class ServerObservation(
     private val server: CoapServer,
@@ -184,6 +193,11 @@ internal class ServerObservation(
     val connection: ConnectionDriver? = null,
     /** What channel security authenticated when the client registered. */
     val peerIdentity: PeerIdentity = PeerIdentity.None,
+    /**
+     * For a registration that carried Q-Block1 or Q-Block2 (RFC 9177 §4.5): the most bytes a block of its
+     * notification bodies takes; null for a registration without Q-Block.
+     */
+    val qBlockSize: Int? = null,
 ) : TransmissionOwner {
     val key: ExchangeKey = ExchangeKey(peer, token.toHex())
     private val mutex = Mutex()
@@ -208,6 +222,13 @@ internal class ServerObservation(
 
     /** Non-confirmable notifications since the last Confirmable one; under [mutex]. */
     private var nonConfirmableInRow = 0
+
+    /**
+     * The Q-Block2 body of the latest notification, or of the registration response, of an observation with
+     * [qBlockSize]; written under [QBlockServer]'s lock.
+     */
+    @Volatile
+    var body: ServedBody? = null
 
     /** Whether message or channel security authenticated the client when it registered. */
     private val isAuthenticated: Boolean get() = identity != null || peerIdentity != PeerIdentity.None
@@ -271,11 +292,27 @@ internal class ServerObservation(
         isActive = false
     }
 
+    /**
+     * The Q-Block2 [body] of this observation is settled: a change meanwhile sends the next notification
+     * (RFC 9177 §4.5). Taken under [mutex], so a change that found the body outstanding is not missed.
+     */
+    suspend fun onBodySettled(body: ServedBody) {
+        val changed = mutex.withLock { this.body === body && changedMeanwhile }
+        if (changed) schedule()
+    }
+
     private suspend fun notifyNow() = mutex.withLock {
         scheduled = false
         if (!isActive) return@withLock
         if (!registrationSent) {
             // Sent when the registration response is out, so that it stays the oldest state.
+            changedMeanwhile = true
+            return@withLock
+        }
+        val now = server.endpoint.now()
+        val body = body
+        if (body != null && !body.isSettled(now, server.config.nonConfirmableNotificationInterval)) {
+            // RFC 9177 §4.5: a body is never cut short by a newer one; onBodySettled sends the latest state.
             changedMeanwhile = true
             return@withLock
         }
@@ -286,12 +323,27 @@ internal class ServerObservation(
             return@withLock
         }
         changedMeanwhile = false
-        val notification = server.notification(this) ?: return@withLock
+        val type = nextType(now)
+        val notification = server.notification(this, type)
+        if (notification == null) {
+            // A Q-Block2 body went out (or the observation ended meanwhile).
+            if (this.body !== body) count(type, now)
+            return@withLock
+        }
         if (current != null && server.endpoint.replaceOutstanding(current, notification)) return@withLock
-        val now = server.endpoint.now()
-        // RFC 7641 §7: without client authentication, Non-confirmable notifications MUST be interspersed with
-        // Confirmable ones, whose ACKs confirm that the client still wants them; a spoofed one does not.
-        val type = if (resource.notificationType == CoapMessageType.NON &&
+        count(type, now)
+        val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
+        // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
+        outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
+    }
+
+    /**
+     * Under [mutex]: the type of the next notification. RFC 7641 §7: without client authentication,
+     * Non-confirmable notifications MUST be interspersed with Confirmable ones, whose ACKs confirm that the
+     * client still wants them; a spoofed one does not.
+     */
+    private fun nextType(now: Duration): CoapMessageType =
+        if (resource.notificationType == CoapMessageType.NON &&
             now - lastConfirmableAt < server.config.confirmableNotificationInterval &&
             (isAuthenticated || nonConfirmableInRow < UNAUTHENTICATED_NON_CONFIRMABLE_RUN)
         ) {
@@ -299,15 +351,15 @@ internal class ServerObservation(
         } else {
             CoapMessageType.CON
         }
+
+    /** Under [mutex]: a notification of [type] went out. */
+    private fun count(type: CoapMessageType, now: Duration) {
         if (type == CoapMessageType.CON) {
             lastConfirmableAt = now
             nonConfirmableInRow = 0
         } else {
             nonConfirmableInRow++
         }
-        val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
-        // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
-        outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"

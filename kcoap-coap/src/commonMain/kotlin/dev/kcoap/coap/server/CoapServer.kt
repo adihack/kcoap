@@ -303,7 +303,18 @@ public class CoapServer private constructor(
                 return if (isQBlock) qBlock.serve(QBlockRequest(inbound, request, unprotected), withheld, key, limits) else Reply.Single(withheld)
             }
         }
-        if (isQBlock) return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
+        if (isQBlock) {
+            val asksForWholeBody = options.qBlock2List.singleOrNull()?.let { it.number == 0L && it.more } == true
+            val registers = options.observe == OBSERVE_REGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH) &&
+                (resource as? ObservableResource)?.isObservable == true && asksForWholeBody
+            if (registers && checksAddress && config.amplification == AmplificationPolicy.ALL_RESPONSES &&
+                !addressVerification.verify(peer, echo, now)
+            ) {
+                // RFC 7641 §7, as below: a Q-Block2 registration has notification bodies sent for as long as it lasts.
+                return challenge(peer, now)
+            }
+            return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
+        }
 
         var effective = request
         var block1Control: BlockOption? = null
@@ -378,22 +389,42 @@ public class CoapServer private constructor(
     /**
      * The handler's response to [request] for the Q-Block layer ([QBlockServer]): the whole body of a Q-Block1
      * upload, or a request carrying Q-Block2, after the checks of [answer]. A GET or FETCH with Observe 1
-     * deregisters as always; one with Observe 0 is served as a plain request without adding an observer,
-     * which RFC 7641 §4.1 allows, so no Observe goes out. Accept is honoured (RFC 7252 §5.10.4).
+     * deregisters as always. One with Observe 0 to an observable resource that answers 2.xx adds an observer
+     * (RFC 7641 §4.1), returned with the response, which then carries the Observe value: its notifications go
+     * on the request's token as Q-Block2 bodies of at most [blockSize] bytes (RFC 9177 §4.5), and are found by
+     * the client's follow-ups under [key]. A server unwilling or unable to add it answers as to a plain request,
+     * without Observe. Accept is honoured (RFC 7252 §5.10.4).
      */
     internal suspend fun respondTo(
         resource: CoapResource,
         request: CoapMessage,
         inbound: InboundRequest,
         unprotected: UnprotectedRequest?,
-    ): CoapResponse {
+        key: OperationKey,
+        blockSize: Int,
+    ): Reply.Single {
         val options = request.options
-        if (options.observe == OBSERVE_DEREGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH)) {
+        val isObserveMethod = request.code == CoapCode.GET || request.code == CoapCode.FETCH
+        if (options.observe == OBSERVE_DEREGISTER && isObserveMethod) {
             observations.remove(inbound.peer, request.token, "deregistered")
         }
+        val observable = (resource as? ObservableResource)?.takeIf { it.isObservable }
         val context = RequestContext(request, inbound.peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
         val response = acceptable(options, invoke(resource, context))
-        return if (CoapOptions.OBSERVE.number in response.options) response.withOptions { remove(CoapOptions.OBSERVE.number) } else response
+        if (options.observe == OBSERVE_REGISTER && isObserveMethod && observable != null && response.isSuccess) {
+            val observation = ServerObservation(
+                this, observable, inbound.peer, request.token, request, unprotected, unprotected?.identity, null, key,
+                endpoint.now(), inbound.connection, inbound.peerIdentity, qBlockSize = blockSize,
+            )
+            val registration = observations.register(observation)
+            if (registration == ObservationRegistry.Registration.ADDED) {
+                return Reply.Single(response.withOptions { observe(observable.nextSequence()) }, observation)
+            }
+            limitOf(registration)?.let { endpoint.report(EndpointEvent.LimitReached(inbound.peer, it)) }
+        }
+        // RFC 7641 §4.1: only a registered observer gets a response with Observe.
+        val plain = if (CoapOptions.OBSERVE.number in response.options) response.withOptions { remove(CoapOptions.OBSERVE.number) } else response
+        return Reply.Single(plain)
     }
 
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
@@ -429,7 +460,15 @@ public class CoapServer private constructor(
             is Reply.Single -> send(inbound, request, unprotected, reply)
             // RFC 9177 §4.3, Appendix B: an Empty ACK for a Confirmable block, and on a connection it counts as answered.
             Reply.None -> inbound.finishWithoutResponse()
-            is Reply.Body -> qBlock.send(QBlockRequest(inbound, request, unprotected), reply)?.let { send(inbound, request, unprotected, it) }
+            is Reply.Body -> {
+                val challenge = qBlock.send(QBlockRequest(inbound, request, unprotected), reply)
+                if (challenge != null) {
+                    send(inbound, request, unprotected, challenge)
+                } else if (reply.isNew) {
+                    // RFC 9177 §4.5: the registration response is a body; notifications follow once it went out.
+                    reply.body.observation?.onRegistrationSent(null, inbound.message.type, endpoint.now())
+                }
+            }
         }
     }
 
@@ -562,9 +601,10 @@ public class CoapServer private constructor(
      * A notification for [observation] with the resource's current state (RFC 7641 §4.2): the handler's
      * 2.xx response with a new Observe value, the first block if it is large (RFC 7959 §2.6), protected
      * with the registration's context. A non-2.xx response ends the observation and goes out without
-     * Observe.
+     * Observe. For an observation registered with Q-Block, a 2.xx body goes out as a Q-Block2 body of [type]
+     * instead ([QBlockServer.notify]; RFC 9177 §4.5), and null is returned, as for an observation that ended.
      */
-    internal suspend fun notification(observation: ServerObservation): CoapMessage? {
+    internal suspend fun notification(observation: ServerObservation, type: CoapMessageType): CoapMessage? {
         if (!observation.isActive) return null
         val resource = observation.resource
         val context = RequestContext(
@@ -572,9 +612,13 @@ public class CoapServer private constructor(
         )
         var response = invoke(resource, context)
         if (response.isSuccess) response = response.withOptions { observe(resource.nextSequence()) }
-        val requested = observation.blockSize?.let { Blockwise.block(0, false, it) }
         val limits = endpoint.limits(observation.connection)
-        response = blockwise.serve(observation.operationKey, observation.token, requested, response, reserve, endpoint.now(), limits)
+        if (observation.qBlockSize != null && response.isSuccess) {
+            response = qBlock.notify(observation, type, response, limits) ?: return null
+        } else {
+            val requested = observation.blockSize?.let { Blockwise.block(0, false, it) }
+            response = blockwise.serve(observation.operationKey, observation.token, requested, response, reserve, endpoint.now(), limits)
+        }
         if (!response.isSuccess) {
             // The handler's error, or block-wise's 5.00 for a representation that fits no block: either
             // way the client's observation ends with it, so the server's does too.

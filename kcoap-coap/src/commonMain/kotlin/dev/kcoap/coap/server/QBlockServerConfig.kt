@@ -19,8 +19,10 @@ package dev.kcoap.coap.server
  *
  * Every Q-Block2 body gets a 4-byte ETag of its own from a counter with a random start, which replaces an
  * ETag the resource set (§4.4: unique for every transmitted body), so 2.03 validation by the resource's own
- * ETag does not work on such bodies. A registration for Observe that carries Q-Block2 is served as a plain
- * request, without adding an observer (RFC 7641 §4.1).
+ * ETag does not work on such bodies. A registration for Observe that carries Q-Block2, or a FETCH registration
+ * uploaded in Q-Block1, gets its notifications as Q-Block2 bodies (§4.5), Confirmable or Non-confirmable as
+ * [ObservableResource.notificationType] and RFC 7641 §4.5 decide: one body per change with the Observe value
+ * on every block, never cut short by the next change, which waits until the body went out.
  *
  * Memory is bounded: at most [maxPartialBodies] uploads, each up to [CoapServerConfig.maxBodySize] bytes,
  * are assembled at a time, each holding only the blocks that arrived (never what its Size1 claims before

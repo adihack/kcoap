@@ -40,7 +40,7 @@ import kotlin.time.Duration
 internal class QBlock2Sender<R>(
     val bodySize: Int,
     val blockSize: Int,
-    private val mode: BodyMode,
+    val mode: BodyMode,
     private val timing: QBlockTiming,
     private val nonTimeoutRandom: Duration,
     private val firstBlockPiggybacked: Boolean = mode == BodyMode.CON,
@@ -78,6 +78,13 @@ internal class QBlock2Sender<R>(
      */
     val isSending: Boolean
         get() = !isStopped && (nextSetAt != null || pending.isNotEmpty() || (mode == BodyMode.CON && original != null && nextUnsent < count))
+
+    /**
+     * Whether every block of the body went out at least once, and for [BodyMode.CON] was acknowledged too:
+     * a notification body is the outstanding notification until then (RFC 7641 §4.5.1, RFC 9177 §4.5).
+     */
+    val hasSentAll: Boolean
+        get() = nextUnsent >= count && (mode != BodyMode.CON || unacknowledged == 0)
 
     /** Starts sending the body as the response to [ref]. */
     fun start(now: Duration, ref: R): List<QBlockAction<R>> {

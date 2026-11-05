@@ -28,11 +28,12 @@ internal sealed interface Reply {
     /**
      * Blocks of the Q-Block2 [body] (RFC 9177 §4.4): [actions] of its sender, which send blocks on this request
      * or others of the body and say how this request is answered. [isNew] when this request created the body,
-     * which a 4.01 with Echo then replaces (RFC 9175 §2.4).
+     * which a 4.01 with Echo then replaces (RFC 9175 §2.4). A registration's body names its observation
+     * ([ServedBody.observation]; RFC 7641 §4.1, RFC 9177 §4.5).
      */
     class Body(
         val body: ServedBody,
-        val actions: List<QBlockAction<QBlockRequest>>,
+        val actions: List<QBlockAction<QBlockTarget>>,
         val isNew: Boolean,
     ) : Reply
 }
