@@ -150,6 +150,7 @@ class QBlockServerTest {
         type: CoapMessageType = CoapMessageType.NON,
         code: CoapCode = CoapCode.PUT,
         requestTag: ByteArray = tag,
+        path: String = "store",
         options: OptionSet.Builder.() -> Unit = {},
     ): CoapMessage {
         val offset = (num * size).toInt()
@@ -159,7 +160,7 @@ class QBlockServerTest {
             token = peer.token()
             payload = body.copyOfRange(offset, end)
             options {
-                uriPath("store")
+                uriPath(path)
                 requestTag(requestTag)
                 size1(body.size.toLong())
                 qBlock1(block(num, end < body.size, size))
@@ -407,6 +408,23 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc9177Section4_4EveryBodyHasAnETagOfItsOwnInPlaceOfTheResources() = runTest {
+        val f = fixture { resource("tagged") { get { CoapResponse.content(big).withOptions { etag(byteArrayOf(9, 9)) } } } }
+        val etags = List(2) {
+            f.peer.send(get(f.peer, block(0, true), path = "tagged"))
+            val body = f.peer.collect().values.single()
+            assertEquals(47, body.size)
+            assertTrue(body.all { block -> block.options.etags.size == 1 }, "RFC 9177 §4.4: one ETag per block")
+            val etag = body.first().options.etags.single()
+            assertTrue(body.all { block -> block.options.etags.single().contentEquals(etag) })
+            assertEquals(4, etag.size)
+            assertFalse(etag.contentEquals(byteArrayOf(9, 9)), "not the resource's")
+            etag
+        }
+        assertFalse(etags[0].contentEquals(etags[1]), "each transmitted body has its own")
+    }
+
+    @Test
     fun rfc7641Section4_1ARegistrationWithQBlock2IsServedWithoutAddingAnObserver() = runTest {
         val counter = object : ObservableResource("counter") {
             override suspend fun handleGet(context: RequestContext) = CoapResponse.content(big, ContentFormat.OCTET_STREAM)
@@ -551,6 +569,22 @@ class QBlockServerTest {
         f.peer.send(upload(f.peer, 5))
         assertEquals(emptyList(), f.peer.drain(), "a copy of a block in the middle gets nothing, as the first did")
         assertEquals(1, f.stored.size, "the handler ran once")
+    }
+
+    @Test
+    fun rfc9177Section4_3AHandlerFailingOnACompletedUploadGets500AndSoDoesACopyOfItsLastBlock() = runTest {
+        val f = fixture { resource("fail") { put { error("the handler failed") } } }
+        val body = ByteArray(200) { it.toByte() }
+        val requests = (0L..3L).map { f.peer.send(upload(f.peer, it, body = body, path = "fail")) }
+        val answer = f.peer.drain().single()
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, answer.code)
+        assertTrue(answer.hasToken(requests.last().token))
+        assertEquals(0, f.server.qBlock.state().partialBodies)
+
+        val copy = f.peer.send(upload(f.peer, 3, body = body, path = "fail"))
+        val again = f.peer.drain().single()
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, again.code, "answered as the first copy was, not with nothing")
+        assertTrue(again.hasToken(copy.token))
     }
 
     @Test
@@ -880,6 +914,24 @@ class QBlockServerTest {
         assertTrue(answer.hasToken(again.token))
         assertEquals("tiny", answer.payloadAsText())
         assertEquals(2, f.bigRuns)
+    }
+
+    @Test
+    fun recordsOfCompletedUploadsBeyondTheBoundGiveWayOldestFirst() = runTest {
+        val config = CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true, maxCachedBodies = 1))
+        val f = fixture(config)
+        val body = ByteArray(200) { it.toByte() }
+        for (requestTag in listOf(tag, byteArrayOf(9))) {
+            (0L..3L).forEach { f.peer.send(upload(f.peer, it, body = body, requestTag = requestTag)) }
+            assertEquals(CoapCode.CHANGED, f.peer.drain().single().code)
+        }
+        assertEquals(listOf(Limit.CACHED_BODIES to f.peer.address), f.events.filterIsInstance<EndpointEvent.LimitReached>().map { it.limit to it.peer })
+
+        f.peer.send(upload(f.peer, 3, body = body))
+        assertEquals(emptyList(), f.peer.drain(), "the first upload's final response is no longer remembered")
+        val ask = assertNotNull(f.peer.next(5.seconds), "the copy starts a body of its own")
+        assertEquals(listOf(0L, 1L, 2L), MissingBlocks.decode(ask.payload))
+        assertEquals(2, f.stored.size)
     }
 
     @Test
