@@ -19,6 +19,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -116,8 +117,18 @@ public class CoapEndpoint private constructor(
     private val clockStart = config.timeSource.markNow()
     private val job = SupervisorJob(scope.coroutineContext[Job])
 
-    /** Where the endpoint runs its own coroutines and those of request handlers. */
-    internal val scope: CoroutineScope = CoroutineScope(scope.coroutineContext + job + CoroutineName("coap-endpoint"))
+    /**
+     * Where the endpoint runs its own coroutines and those of request handlers. Every coroutine it launches
+     * handles its own failures; as a last resort, when the application's scope has no
+     * [CoroutineExceptionHandler], one that logs keeps an escaped exception from reaching the platform's
+     * handler, which ends the process on Android and Kotlin/Native. One the application installed is kept.
+     */
+    internal val scope: CoroutineScope = CoroutineScope(
+        scope.coroutineContext + job + CoroutineName("coap-endpoint") +
+            (scope.coroutineContext[CoroutineExceptionHandler] ?: CoroutineExceptionHandler { _, e ->
+                log.error(e) { "A coroutine of the endpoint failed" }
+            }),
+    )
 
     private val reliable = ReliableConnections(this, connectors, listeners, this.scope, config)
 
@@ -410,7 +421,32 @@ public class CoapEndpoint private constructor(
 
     private fun ClientExchange.markReplaced() {
         // The new exchange took over the token; the old one gets no more responses.
-        scope.launch { cancel() }
+        launchGuarded("cancel a replaced exchange") { cancel() }
+    }
+
+    /**
+     * Launches [block] in the endpoint's scope as a failure boundary: an exception is logged and handed to
+     * [onFailure], and never escapes to the scope's exception handler.
+     */
+    internal fun launchGuarded(
+        name: String,
+        onFailure: suspend (Exception) -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
+    ): Job = scope.launch(CoroutineName(name)) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "Failed to $name" }
+            try {
+                withContext(NonCancellable) { onFailure(e) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error(e) { "Cleaning up after a failure to $name failed" }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- server side
@@ -589,7 +625,7 @@ public class CoapEndpoint private constructor(
     private suspend fun execute(effects: List<MessagingEffect>) {
         for (effect in effects) {
             when (effect) {
-                is MessagingEffect.Transmit -> transmit(effect.to, effect.bytes)
+                is MessagingEffect.Transmit -> transmit(effect)
                 is MessagingEffect.DeliverRequest -> onRequest(effect.from, effect.message)
                 is MessagingEffect.DeliverResponse -> onSeparateResponse(effect.from, effect.message)
                 is MessagingEffect.Completed -> effect.transmission.owner?.let { owner ->
@@ -606,16 +642,30 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    private suspend fun transmit(to: Endpoint, bytes: ByteArray) {
+    /**
+     * Sends one datagram. A [SessionEndedException] ends the peer's DTLS session. An
+     * [IllegalArgumentException] means the transport cannot carry this datagram to this peer at all, such
+     * as an endpoint type it does not serve: a local error that no retransmission fixes, so the message
+     * fails at once with [CoapException.Reason.TRANSPORT_FAILED] instead of looking like a silent peer
+     * after MAX_TRANSMIT_WAIT. Any other failure is transient, and retransmission covers it, as it covers a
+     * datagram the network lost.
+     */
+    private suspend fun transmit(effect: MessagingEffect.Transmit) {
+        val to = effect.to
         try {
-            transport.send(to, bytes)
+            transport.send(to, effect.bytes)
         } catch (e: SessionEndedException) {
             onSessionEnded(e.endpoint)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: IllegalArgumentException) {
+            log.error(e) { "The transport refused to send ${effect.bytes.size} bytes to $to" }
+            val transmission = effect.transmission ?: return
+            val cause = CoapException("The transport cannot send to $to: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
+            withMessaging { now -> abandon(now, transmission, cause) }
         } catch (e: Exception) {
             // UDP gives no delivery guarantee anyway; retransmission covers a failed send.
-            log.warn(e) { "Sending ${bytes.size} bytes to $to failed" }
+            log.warn(e) { "Sending ${effect.bytes.size} bytes to $to failed" }
         }
     }
 

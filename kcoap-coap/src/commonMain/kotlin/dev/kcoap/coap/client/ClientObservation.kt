@@ -150,7 +150,7 @@ internal class ClientObservation(
     fun stop() {
         job?.cancel()
         val current = exchange ?: return
-        client.endpoint.scope.launch {
+        client.endpoint.launchGuarded("deregister an observation") {
             withContext(NonCancellable) {
                 val forget = client.config.observeCancellation == ObserveCancellation.FORGET && !isReliable
                 if (!established || forget || !current.isOpen) {

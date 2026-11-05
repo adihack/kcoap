@@ -376,7 +376,7 @@ internal class UdpMessaging(
             transmission.replaceWith(message, encodeForSending(peer, message))
             outbound[MessageKey(peer, messageId)] = transmission
             debug(peer, messageId) { "Superseded MID ${transmission.messageIds[transmission.messageIds.size - 2]}" }
-            transmission.bytes?.let { transmit(peer, message, it) }
+            transmission.bytes?.let { transmit(peer, message, it, transmission) }
             return
         }
         // §4.2: every retransmission stays within MAX_TRANSMIT_SPAN, even if one is missed.
@@ -388,7 +388,7 @@ internal class UdpMessaging(
         effects += MessagingEffect.Event(
             EndpointEvent.Retransmitted(peer, transmission.message.messageId, transmission.retransmissions),
         )
-        transmission.bytes?.let { effects += MessagingEffect.Transmit(peer, it) }
+        transmission.bytes?.let { effects += MessagingEffect.Transmit(peer, it, transmission) }
     }
 
     private fun pruneNonConfirmable(now: Duration) {
@@ -417,6 +417,14 @@ internal class UdpMessaging(
         received.forget(peer)
         messageIds.forget(peer)
         effects += MessagingEffect.Event(EndpointEvent.SessionEnded(peer))
+    }
+
+    /**
+     * The transport refused to carry [transmission] at all, a local error no retransmission fixes: it fails
+     * at once with [cause] instead of timing out after MAX_TRANSMIT_WAIT as if the peer were silent.
+     */
+    fun abandon(now: Duration, transmission: Transmission, cause: CoapException) {
+        finish(now, transmission, TransmissionOutcome.Failed(cause))
     }
 
     /** Fails every transmission with [cause]; the endpoint is closing. */
@@ -462,7 +470,7 @@ internal class UdpMessaging(
                 timed += transmission
             }
         }
-        transmission.bytes?.let { transmit(peer, transmission.message, it) }
+        transmission.bytes?.let { transmit(peer, transmission.message, it, transmission) }
     }
 
     /** §4.2: a random duration between ACK_TIMEOUT and ACK_TIMEOUT × ACK_RANDOM_FACTOR. */
@@ -535,9 +543,9 @@ internal class UdpMessaging(
         return bytes
     }
 
-    private fun transmit(peer: Endpoint, message: CoapMessage, bytes: ByteArray) {
+    private fun transmit(peer: Endpoint, message: CoapMessage, bytes: ByteArray, transmission: Transmission? = null) {
         if (log.isEnabled(LogLevel.TRACE)) log.trace { "Sending $message to $peer: ${log.payload(bytes)}" }
-        effects += MessagingEffect.Transmit(peer, bytes)
+        effects += MessagingEffect.Transmit(peer, bytes, transmission)
     }
 
     private inline fun debug(peer: Endpoint, messageId: Int, message: () -> String) {

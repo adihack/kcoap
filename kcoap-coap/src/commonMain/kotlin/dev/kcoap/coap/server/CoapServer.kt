@@ -39,6 +39,16 @@ import kotlinx.coroutines.SupervisorJob
  * 5. the response is protected with the request's security context and sent, piggybacked when it is
  *    ready in time, otherwise separately (RFC 7252 §5.2). No-Response (RFC 7967) suppresses it.
  *
+ * The pipeline is one failure boundary: whatever throws in it, a resource handler, the security layer, an
+ * application callback behind it (a context repository, a sequence-number store) or the sending, the
+ * client gets an answer instead of a timeout, and nothing escapes to the application's exception handler.
+ * A security failure is answered as the security layer says (RFC 8613 §8.2), anything else with an
+ * unprotected 5.00 Internal Server Error with Max-Age 0. A failure while sending a notification removes
+ * that observer. When even the 5.00 cannot be sent, the failure is logged.
+ *
+ * The server is safe to use from any number of coroutines. Its handlers run on the endpoint's scope, one
+ * coroutine per request, and [close] cancels those still running.
+ *
  * Block-wise state is kept per peer [Endpoint] and per message-security identity, compared with
  * `equals`, so blocks of different security contexts never mix: a [CoapServerConfig.security]
  * implementation should return equal [dev.kcoap.coap.security.SecurityIdentity] objects for requests of
@@ -156,9 +166,16 @@ public class CoapServer private constructor(
         } else {
             try {
                 security.unprotectRequest(inbound.message, inbound.peer)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: MessageSecurityException) {
                 log.warn { "Rejected a protected request from ${inbound.peer}: ${e.message}" }
-                inbound.respond(securityError(e).toMessage(inbound.message.token))
+                answerUnprotected(inbound, securityError(e))
+                return
+            } catch (e: Exception) {
+                // An application callback behind the security layer failed, such as a context repository.
+                log.error(e) { "The security layer failed on a request from ${inbound.peer}" }
+                answerUnprotected(inbound, internalError())
                 return
             }
         }
@@ -167,7 +184,14 @@ public class CoapServer private constructor(
         if (unprotected != null && challenge != null) {
             // RFC 8613 Appendix B.1.2: the security layer answers instead of the resource.
             log.debug { "Security challenge ${challenge.code} for ${inbound.peer}" }
-            inbound.respond(unprotected.protectResponse(challenge.toBuilder().apply { token = request.token }.build()))
+            try {
+                inbound.respond(unprotected.protectResponse(challenge.toBuilder().apply { token = request.token }.build()))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error(e) { "Could not send the security challenge to ${inbound.peer}" }
+                answerUnprotected(inbound, internalError())
+            }
             return
         }
         val reply = try {
@@ -179,6 +203,20 @@ public class CoapServer private constructor(
             Reply(CoapResponse(CoapCode.INTERNAL_SERVER_ERROR))
         }
         send(inbound, request, unprotected, reply)
+    }
+
+    /** 5.00 with Max-Age 0, the shape of [securityError]: the answer when the pipeline itself failed. */
+    private fun internalError(): CoapResponse = CoapResponse(CoapCode.INTERNAL_SERVER_ERROR, OptionSet.build { maxAge(0) })
+
+    /** Answers without message security; a failure to send even that is only logged, as nothing else can be sent. */
+    private suspend fun answerUnprotected(inbound: InboundRequest, response: CoapResponse) {
+        try {
+            inbound.respond(response.toMessage(inbound.message.token))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "Could not answer ${inbound.message.code} from ${inbound.peer}" }
+        }
     }
 
     /**
@@ -309,14 +347,20 @@ public class CoapServer private constructor(
             return
         }
         val message = response.toMessage(request.token)
-        val outgoing = unprotected?.protectResponse(message) ?: message
-        log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
         val observation = reply.observation
         val transmission = try {
+            val outgoing = unprotected?.protectResponse(message) ?: message
+            log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
             inbound.respond(outgoing, owner = observation)
-        } catch (e: Exception) {
-            observation?.let { observations.remove(it, "registration response failed") }
+        } catch (e: CancellationException) {
             throw e
+        } catch (e: Exception) {
+            // Protecting or sending failed, for example the protected response does not fit: no observer
+            // stays registered for a registration that was never answered, and a plain 5.00 is tried.
+            log.error(e) { "Could not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}" }
+            observation?.let { observations.remove(it, "registration response failed") }
+            answerUnprotected(inbound, internalError())
+            return
         }
         observation?.onRegistrationSent(transmission, transmission?.message?.type ?: CoapMessageType.ACK, endpoint.now())
     }
@@ -348,15 +392,16 @@ public class CoapServer private constructor(
             observation.request, observation.peer, observation.identity, resource, inbound = null, observation.peerIdentity,
         )
         var response = invoke(resource, context)
-        response = if (response.isSuccess) {
-            response.withOptions { observe(resource.nextSequence()) }
-        } else {
-            observations.remove(observation, "non-2.xx notification ${response.code}")
-            response.withOptions { remove(CoapOptions.OBSERVE.number) }
-        }
+        if (response.isSuccess) response = response.withOptions { observe(resource.nextSequence()) }
         val requested = observation.blockSize?.let { Blockwise.block(0, false, it) }
         val limits = endpoint.limits(observation.connection)
         response = blockwise.serve(observation.operationKey, observation.token, requested, response, reserve, endpoint.now(), limits)
+        if (!response.isSuccess) {
+            // The handler's error, or block-wise's 5.00 for a representation that fits no block: either
+            // way the client's observation ends with it, so the server's does too.
+            observations.remove(observation, "non-2.xx notification ${response.code}")
+            response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
+        }
         val message = response.toMessage(observation.token)
         return observation.unprotected?.protectResponse(message) ?: message
     }

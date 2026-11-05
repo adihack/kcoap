@@ -330,7 +330,13 @@ internal class ConnectionDriver(
                 wait == null -> wakeups.receive()
                 wait.isPositive() -> withTimeoutOrNull(wait) { wakeups.receive() }
             }
-            withMessaging(signal = false) { now -> onTimer(now) }
+            try {
+                withMessaging(signal = false) { now -> onTimer(now) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error(e) { "Timer processing failed" }
+            }
         }
     }
 

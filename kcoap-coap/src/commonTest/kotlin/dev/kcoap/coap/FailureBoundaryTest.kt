@@ -1,0 +1,219 @@
+package dev.kcoap.coap
+
+import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
+import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapEndpoint
+import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
+import dev.kcoap.testkit.InMemoryTransport
+import dev.kcoap.transport.DatagramTransport
+import dev.kcoap.transport.Endpoint
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+
+/**
+ * The server pipeline is one failure boundary (EO-1): whatever throws in it, the client gets an answer
+ * and nothing escapes to the exception handler of the scope, which runTest turns into a failed test.
+ * Local send failures are not peer timeouts (EO-2).
+ */
+class FailureBoundaryTest {
+    private val anyone = object : SecurityIdentity {
+        override val description: String = "anyone"
+    }
+
+    /** Passes requests through; [protect] decides what protecting the n-th response (from 1) does. */
+    private inner class PassThrough(private val protect: (Int, CoapMessage) -> CoapMessage = { _, it -> it }) : ServerMessageSecurity {
+        var protected = 0
+
+        override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest = object : UnprotectedRequest {
+            override val message: CoapMessage = request
+            override val identity: SecurityIdentity = anyone
+
+            override suspend fun protectResponse(response: CoapMessage): CoapMessage = protect(++protected, response)
+        }
+    }
+
+    private class Gauge(var big: Boolean = false) : ObservableResource("gauge") {
+        override suspend fun handleGet(context: RequestContext): CoapResponse =
+            if (big) CoapResponse.content("1").withOptions { locationPath("x".repeat(200)) } else CoapResponse.content("1")
+
+        fun change() = notifyObservers()
+    }
+
+    private fun assertInternalError(response: CoapResponse) {
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, response.code)
+        assertEquals(0L, response.options.maxAge, "RFC 8613 §8.2 shape: Max-Age 0")
+    }
+
+    @Test
+    fun aFailingCallbackBehindTheSecurityLayerIsAnsweredWith5_00() = runTest {
+        val fixture = StackFixture(this)
+        val failing = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest =
+                error("context repository unavailable")
+        }
+        val server = fixture.server(CoapServerConfig(security = failing)) { resource("r") { get { CoapResponse.content("x") } } }
+        val client = fixture.client()
+
+        val started = fixture.now
+        assertInternalError(client.get(fixture.uri(server, "/r")))
+        assertTrue(fixture.now - started < 1.seconds, "answered at once, not left to time out")
+    }
+
+    @Test
+    fun aFailingResponseProtectionIsAnsweredWithAnUnprotected5_00() = runTest {
+        val fixture = StackFixture(this)
+        val security = PassThrough { _, _ -> error("key store unavailable") }
+        val server = fixture.server(CoapServerConfig(security = security)) { resource("r") { get { CoapResponse.content("x") } } }
+        val client = fixture.client()
+
+        assertInternalError(client.get(fixture.uri(server, "/r")))
+    }
+
+    @Test
+    fun aChallengeThatCannotBeProtectedIsAnsweredWith5_00() = runTest {
+        val fixture = StackFixture(this)
+        val challenging = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest = object : UnprotectedRequest {
+                override val message: CoapMessage = request
+                override val identity: SecurityIdentity = anyone
+                override val challenge: CoapMessage = CoapMessage.response(request, CoapCode.UNAUTHORIZED)
+
+                override suspend fun protectResponse(response: CoapMessage): CoapMessage = error("sequence number store unavailable")
+            }
+        }
+        val server = fixture.server(CoapServerConfig(security = challenging)) { resource("r") { get { CoapResponse.content("x") } } }
+        val client = fixture.client()
+
+        assertInternalError(client.get(fixture.uri(server, "/r")))
+    }
+
+    @Test
+    fun aNotificationThatCannotBeProtectedRemovesTheObserverAndEscapesNothing() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge()
+        // The registration response is protected; the first notification is not, as when the
+        // sequence-number store fails on its next write.
+        val security = PassThrough { count, response -> if (count == 1) response else error("sequence number store unavailable") }
+        val server = fixture.server(CoapServerConfig(security = security)) { add(gauge) }
+        val client = fixture.client()
+        val collector = launch { client.observe(fixture.uri(server, "/gauge")).collect() }
+        delay(1.seconds)
+        assertEquals(1, gauge.observerCount)
+
+        gauge.change()
+        delay(1.seconds)
+        assertEquals(0, gauge.observerCount)
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertTrue("notification failed" in removed.reason, removed.reason)
+        collector.cancel()
+    }
+
+    @Test
+    fun aNotificationLargerThanTheDatagramRemovesTheObserverAndEscapesNothing() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge()
+        val server = fixture.server(maxDatagramSize = 128) { add(gauge) }
+        val client = fixture.client()
+        val collector = launch { client.observe(fixture.uri(server, "/gauge")).collect() }
+        delay(1.seconds)
+        assertEquals(1, gauge.observerCount)
+
+        gauge.big = true
+        gauge.change()
+        delay(1.seconds)
+        // Block-wise answers a representation that fits no block with 5.00, which ends both sides.
+        assertEquals(0, gauge.observerCount)
+        assertTrue("5.00" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
+        assertTrue(collector.isCompleted, "the client's observation ended with the 5.00")
+    }
+
+    @Test
+    fun aNotificationTheMessagingLayerCannotSendRemovesTheObserverAndEscapesNothing() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge()
+        // The server's own interceptor makes the notification exceed the datagram after block-wise sized it.
+        val inflate = object : dev.kcoap.coap.stack.MessageInterceptor {
+            override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage? =
+                if (message.type == CoapMessageType.CON && message.isResponse) message.toBuilder().apply { payload = ByteArray(2000) }.build() else message
+        }
+        val server = fixture.server(endpointConfig = fixture.endpointConfig(interceptors = listOf(inflate))) { add(gauge) }
+        val client = fixture.client()
+        val collector = launch { client.observe(fixture.uri(server, "/gauge")).collect() }
+        delay(1.seconds)
+        assertEquals(1, gauge.observerCount)
+
+        gauge.change()
+        delay(1.seconds)
+        assertEquals(0, gauge.observerCount)
+        assertTrue("notification failed" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
+        collector.cancel()
+    }
+
+    /** Refuses to send to one address, as a transport refuses an endpoint type it does not serve. */
+    private class Refusing(private val inner: InMemoryTransport, private val refused: Endpoint) : DatagramTransport by inner {
+        override suspend fun send(to: Endpoint, datagram: ByteArray) {
+            require(to != refused) { "cannot send to $to" }
+            inner.send(to, datagram)
+        }
+    }
+
+    @Test
+    fun aSendTheTransportRefusesFailsAtOnceAndIsNoPeerTimeout() = runTest {
+        val fixture = StackFixture(this)
+        val refused = Endpoint.Udp("127.0.0.1", 9)
+        val client = CoapClient(CoapEndpoint(Refusing(fixture.transport(), refused), backgroundScope, fixture.endpointConfig()))
+
+        val started = fixture.now
+        val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, error.reason)
+        assertTrue(error.cause is IllegalArgumentException)
+        assertEquals(started, fixture.now, "no MAX_TRANSMIT_WAIT before the failure")
+        assertTrue(fixture.events.none { it is EndpointEvent.Retransmitted })
+        assertEquals(
+            CoapException.Reason.TRANSPORT_FAILED,
+            assertFailsWith<CoapException> { client.ping("coap://127.0.0.1:9") }.reason,
+        )
+    }
+
+    @Test
+    fun aFailureEscapingAnEndpointCoroutineIsLoggedWhenTheScopeHasNoHandler() = runTest {
+        val fixture = StackFixture(this)
+        val records = mutableListOf<LogRecord>()
+        val loggers = LoggerFactory(
+            LogConfig.build {
+                level = LogLevel.ERROR
+                sink = LogSink { records += it }
+            },
+        )
+        val bare = CoroutineScope(StandardTestDispatcher(testScheduler) + Job())
+        val endpoint = CoapEndpoint(fixture.transport(), bare, CoapEndpointConfig(loggerFactory = loggers, timeSource = testScheduler.timeSource))
+
+        endpoint.scope.launch { error("a bug in an endpoint coroutine") }
+        runCurrent()
+        assertTrue(records.any { it.error?.message == "a bug in an endpoint coroutine" }, "logged instead of crashing the process")
+        bare.cancel()
+    }
+}

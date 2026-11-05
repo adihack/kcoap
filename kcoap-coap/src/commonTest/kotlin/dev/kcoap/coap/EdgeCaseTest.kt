@@ -165,26 +165,6 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun aFailingResponseProtectionLeavesTheRequestUnanswered() = runTest {
-        val fixture = StackFixture(this)
-        val security = object : ServerMessageSecurity {
-            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint) = object : UnprotectedRequest {
-                override val message: CoapMessage = request
-                override val identity = object : SecurityIdentity {
-                    override val description: String = "anyone"
-                }
-
-                override suspend fun protectResponse(response: CoapMessage): CoapMessage = error("key store unavailable")
-            }
-        }
-        val server = fixture.server(CoapServerConfig(security = security)) { resource("r") { get { CoapResponse.content("x") } } }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 10.seconds))
-
-        val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/r")) }
-        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
-    }
-
-    @Test
     fun rfc7252Section5_4_1AResponseWithAnUnrecognizedCriticalOptionIsRejected() = runTest {
         val fixture = StackFixture(this)
         val transport = fixture.transport()

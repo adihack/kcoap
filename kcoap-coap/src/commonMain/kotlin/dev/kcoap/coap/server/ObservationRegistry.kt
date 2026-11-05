@@ -18,7 +18,6 @@ import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -197,22 +196,32 @@ internal class ServerObservation(
         }
     }
 
-    /** Arranges for a notification with the current state; calls that overlap are coalesced. */
+    /**
+     * Arranges for a notification with the current state; calls that overlap are coalesced. A notification
+     * that cannot be produced, protected or sent (a failing handler aside, which ends the observation with
+     * 5.00) removes the observer instead of escaping: the security layer or its sequence-number store may
+     * fail, or the notification may not fit the datagram.
+     */
     fun schedule() {
         if (!isActive || scheduled) return
         scheduled = true
-        server.endpoint.scope.launch { notifyNow() }
+        server.endpoint.launchGuarded("notify ${resource.path}", onFailure = ::failed) { notifyNow() }
     }
 
     /** Sends a final 4.04 notification and removes the observer (RFC 7641 §3.2). */
     fun end() {
-        server.endpoint.scope.launch {
+        server.endpoint.launchGuarded("send the removal notice of ${resource.path}", onFailure = ::failed) {
             mutex.withLock {
                 if (!isActive) return@withLock
                 server.observations.remove(this@ServerObservation, "resource removed")
                 server.sendRemovalNotice(this@ServerObservation)
             }
         }
+    }
+
+    private suspend fun failed(error: Exception) {
+        scheduled = false
+        server.observations.remove(this, "notification failed: ${error.message}")
     }
 
     fun deactivate() {
