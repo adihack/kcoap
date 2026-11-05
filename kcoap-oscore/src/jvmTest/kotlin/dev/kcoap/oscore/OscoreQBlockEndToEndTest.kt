@@ -14,7 +14,9 @@ import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
+import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
@@ -37,6 +39,7 @@ import kotlin.test.fail
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
@@ -59,6 +62,25 @@ class OscoreQBlockEndToEndTest {
 
     private fun CoapMessage.has(numbers: Set<Int>): Boolean = options.any { it.number in numbers }
 
+    /** An observable resource whose representation is a body of 3000 bytes of its current version. */
+    private class Observed : ObservableResource("obs") {
+        var version = 0
+            private set
+
+        override val notificationType: CoapMessageType get() = CoapMessageType.NON
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content(body(version), ContentFormat.OCTET_STREAM)
+
+        fun change() {
+            version++
+            notifyObservers()
+        }
+
+        companion object {
+            fun body(version: Int): ByteArray = ByteArray(3000) { (it * 7 + version).toByte() }
+        }
+    }
+
     /** A datagram on the network, decoded, and what the network did with it. */
     private class Wire(val from: Endpoint, val message: CoapMessage?, val fate: DatagramFate)
 
@@ -73,6 +95,7 @@ class OscoreQBlockEndToEndTest {
         val client: CoapClient,
         val clientTransport: InMemoryTransport,
         val stored: MutableList<ByteArray>,
+        val observed: Observed,
         val inner: MutableList<CoapMessage>,
         val rejected: MutableList<String>,
         val wire: MutableList<Wire>,
@@ -109,6 +132,7 @@ class OscoreQBlockEndToEndTest {
         val serverContext = if (restartedServer) restoredContext(serverParameters, crypto) else ephemeralContext(serverParameters, crypto)
 
         val stored = Collections.synchronizedList(mutableListOf<ByteArray>())
+        val observed = Observed()
         val big = body(3000, seed)
         val serverTransport = network.attach()
         val coapServer = CoapServer(
@@ -116,6 +140,7 @@ class OscoreQBlockEndToEndTest {
             CoapServerConfig(security = OscoreServer(InMemoryContextRepository().apply { add(serverContext) }), qBlock = server),
         ) {
             resource("big") { get { CoapResponse.content(big, ContentFormat.OCTET_STREAM) } }
+            add(observed)
             resource("store") {
                 put {
                     stored += payload
@@ -134,7 +159,7 @@ class OscoreQBlockEndToEndTest {
             CoapEndpoint(clientTransport, backgroundScope, endpointConfig(2)),
             CoapClientConfig(security = recording, blockSize = 64, qBlock = client),
         )
-        return Setup(network, coapServer, serverTransport, coapClient, clientTransport, stored, recording.requests, recording.rejected, wire, events)
+        return Setup(network, coapServer, serverTransport, coapClient, clientTransport, stored, observed, recording.requests, recording.rejected, wire, events)
     }
 
     /**
@@ -283,6 +308,39 @@ class OscoreQBlockEndToEndTest {
      * Sends [forged] to the client as if from the server, on the token of the client's request that [isTarget]
      * picks among those on the wire, once. The token is visible on the wire, so anyone on the path can do this.
      */
+    /**
+     * An observation keeps Inner Block2 (RFC 8613 §4.1.3.4.1) where both sides opt in to Q-Block: OSCORE takes a
+     * notification only with a Partial IV above every one before (§7.4.1), which would drop the blocks of a
+     * notification body that arrive out of order (RFC 9177 §4.5). The notifications arrive whole, and a GET of
+     * the same client still goes in Q-Block.
+     */
+    @Test
+    fun rfc8613Section7_4_1AProtectedObservationKeepsInnerBlock2WhenBothSidesOptIn() = runTest {
+        val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true))
+        val received = Collections.synchronizedList(mutableListOf<CoapResponse>())
+        val observation = backgroundScope.launch {
+            setup.client.observe(setup.uri("/obs")) { nonConfirmable() }.collect { received += it }
+        }
+        delay(10.seconds)
+        setup.observed.change()
+        delay(10.seconds)
+
+        assertEquals(listOf(Observed.body(0), Observed.body(1)).map { it.toList() }, received.map { it.payload.toList() })
+        val registration = setup.inner.first { it.options.observe != null }
+        assertTrue(!registration.has(qBlockOptions), "the registration carries no Q-Block option")
+        assertTrue(setup.inner.none { it.has(qBlockOptions) }, "no Q-Block option inside OSCORE")
+        assertTrue(setup.inner.any { it.options.block2 != null }, "Inner Block2 completed the notifications")
+        assertEquals(1, setup.observed.observerCount)
+        assertEquals(emptyList(), setup.rejected.toList(), "OSCORE took every notification")
+
+        val got = setup.client.get(setup.uri("/big")) { nonConfirmable() }
+        assertContentEquals(body(3000, 1), got.payload)
+        assertTrue(setup.inner.last().has(qBlockOptions), "the GET went in Q-Block")
+        assertProtectedOnTheWire(setup)
+        observation.cancel()
+        setup.close()
+    }
+
     private fun Setup.inject(forged: (token: ByteArray) -> CoapMessage, isTarget: (request: CoapMessage, index: Int) -> Boolean) {
         var requests = 0
         var injected = false

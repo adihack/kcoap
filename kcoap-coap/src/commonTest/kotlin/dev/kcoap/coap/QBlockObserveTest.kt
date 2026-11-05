@@ -6,6 +6,8 @@ import dev.kcoap.coap.client.ObserveCancellation
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
@@ -1144,6 +1146,42 @@ class QBlockObserveTest {
         assertEquals(listOf(body(3000, 0), body(3000, 1)).map { it.toList() }, received.map { it.payload.toList() })
         assertEquals(1, fixture.events.count { it is EndpointEvent.QBlockFallback }, "the 4.02 to the Q-Block registration")
         assertEquals(1, resource.observerCount)
+    }
+
+    /**
+     * Under message security an observation keeps RFC 7959 even where `withMessageSecurity` lets the client's
+     * other bodies use Q-Block: OSCORE takes a notification only with a Partial IV above every one before
+     * (RFC 8613 §7.4.1), which would drop the blocks of a notification body that arrive out of order.
+     */
+    @Test
+    fun rfc8613Section7_4_1AnObservationUnderMessageSecurityKeepsRfc7959() = runTest {
+        val fixture = StackFixture(this)
+        val resource = Resource("obs", CoapMessageType.NON) { body(3000, it) }
+        val server = fixture.server(
+            CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true)),
+        ) { add(resource) }
+        // Protects nothing, so the server sees plain requests, but the client counts as one with message security.
+        val security = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
+        }
+        val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
+        val client = fixture.client(CoapClientConfig(security = security, blockSize = 64, qBlock = qBlock))
+        val received = mutableListOf<CoapResponse>()
+        backgroundScope.launch { client.observe(fixture.uri(server, "/obs")) { nonConfirmable() }.collect { received += it } }
+        delay(10.seconds)
+        resource.change()
+        delay(10.seconds)
+
+        assertEquals(listOf(body(3000, 0), body(3000, 1)).map { it.toList() }, received.map { it.payload.toList() })
+        val requests = fixture.sentBy(client.endpoint).filter { it.isRequest }
+        assertTrue(requests.none { it.options.qBlock1 != null || it.options.qBlock2 != null }, "no Q-Block option")
+        assertTrue(requests.any { it.options.block2 != null }, "RFC 7959 completed the notification bodies")
+        assertEquals(1, resource.observerCount)
+
+        val got = client.get(fixture.uri(server, "/obs")) { nonConfirmable() }
+        assertContentEquals(body(3000, 1), got.payload)
+        val get = fixture.sentBy(client.endpoint).filter { it.isRequest }.drop(requests.size)
+        assertTrue(get.first().options.qBlock2 != null, "withMessageSecurity still takes effect on other requests")
     }
 
     private fun seconds(value: Double): String {

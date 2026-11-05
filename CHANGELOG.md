@@ -137,7 +137,9 @@ adds its entry and migration note below.
   gets a 4.01 with Echo first, whatever the size of its first response, since its notification bodies are
   bursts no request asks for (RFC 7641 §7, RFC 9175 §2.4); a FETCH uploaded in Q-Block1 gets it for each
   block until one carries the Echo value. Once the verification lapses (`verifiedAddressLifetime`), its
-  notification bodies go Confirmable. No API change. Tested end to end on Figures 7 to 15
+  notification bodies go Confirmable. An observation under message security keeps RFC 7959 (Inner Block2)
+  also with `QBlockClientConfig.withMessageSecurity` on (QB-5, below), since OSCORE takes notifications only
+  in the order of their Partial IVs. No API change. Tested end to end on Figures 7 to 15
   (`QBlockObserveTest`) and against libcoap both ways (K6, L6). The kcoap-to-kcoap soak of the plan
   (`QBlockTest`: 20 seeds, 10 % and 30 % loss, 3000 B and 20 KiB, PUT, GET and POST) and bodies of 320 blocks
   and notifications over connections (`QBlockReliableTest`) came with it.

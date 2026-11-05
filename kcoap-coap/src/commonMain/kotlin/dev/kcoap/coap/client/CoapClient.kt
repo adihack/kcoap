@@ -252,7 +252,9 @@ public class CoapClient private constructor(
      *
      * With [CoapClientConfig.qBlock] on and a server that supports it, notification bodies come in Q-Block2
      * (RFC 9177 §4.5) and each is emitted once, whole; a FETCH registration whose body needs blocks is
-     * uploaded in Q-Block1 and, when cancelled, forgets its token instead of deregistering.
+     * uploaded in Q-Block1 and, when cancelled, forgets its token instead of deregistering. Under message
+     * security ([CoapClientConfig.security]) observations keep RFC 7959, also with
+     * [QBlockClientConfig.withMessageSecurity] on.
      */
     public fun observe(request: CoapRequest): Flow<CoapResponse> = flow {
         require(request.method == CoapCode.GET || request.method == CoapCode.FETCH) { "Only GET and FETCH can be observed" }

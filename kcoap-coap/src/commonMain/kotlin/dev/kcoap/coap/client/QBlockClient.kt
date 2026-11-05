@@ -46,7 +46,10 @@ import kotlinx.coroutines.withContext
  * security is configured and [QBlockClientConfig.withMessageSecurity] is off (several responses to one
  * request fall outside OSCORE's single-response model, RFC 8613 §7.4), when the request carries No-Response
  * (its combination with Q-Block1 is undefined), Observe (outside [observe]), or a Block or Q-Block option of
- * its own, and when [QBlockSupport] does not know the peer to support Q-Block.
+ * its own, and when [QBlockSupport] does not know the peer to support Q-Block. An observation under message
+ * security keeps RFC 7959 whatever [QBlockClientConfig.withMessageSecurity] says: OSCORE takes notifications
+ * only with a Partial IV above every one before (RFC 8613 §7.4.1), so the blocks of a notification body that
+ * arrive out of order would be dropped.
  *
  * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.blockSize], goes in
  * Q-Block1 blocks of one size for the whole body, each a new request on a new token with Size1, the body's
@@ -196,6 +199,9 @@ internal class QBlockClient(private val client: CoapClient) {
             reliable && !config.onReliableTransports -> "Q-Block is off on reliable transports"
             // OSCORE takes one response per request (RFC 8613 §7.4) unless the application opts in.
             client.config.security != null && !config.withMessageSecurity -> "Q-Block with message security is off"
+            // OSCORE drops a notification whose Partial IV is not above every one before (RFC 8613 §7.4.1), so
+            // the blocks of a notification body could not arrive out of order.
+            client.config.security != null && isObservation -> "Q-Block notification bodies are not taken under message security"
             options.noResponse != null -> "the request carries No-Response"
             options.observe != null && !isObservation -> "the request carries Observe"
             OWN_BLOCK_OPTIONS.any { it in options } -> "the request carries block options of its own"
