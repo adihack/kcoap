@@ -86,7 +86,7 @@ safe. Only adapters that wrap a runtime-bound library build for fewer targets.
 | `jvm` | JVM servers, Android | JCA | all |
 | `iosArm64`, `iosSimulatorArm64`, `macosArm64` | Apple | CryptoKit, CommonCrypto | all but `kcoap-crypto-bc` |
 | `linuxX64` | Linux gateways | OpenSSL 3 | all but `kcoap-crypto-bc` |
-| `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc` and `kcoap-transport-ktor` |
+| `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc`, `kcoap-transport-ktor` and `kcoap-transport-ktor-websocket-server` |
 
 **In a browser today**: CoAP messages and codecs (UDP and RFC 8323 framing), OSCORE, EDHOC (suites
 0–3, 6 and 24) and the EDHOC→OSCORE glue, and the client and server stack over a `DatagramTransport`

@@ -29,8 +29,8 @@ val server = CoapServer(transport, scope) { resource("hello") { get { CoapRespon
 
 ## Why ktor-network
 
-It is the one socket library that runs on every kcoap target from common code, so one transport serves
-the JVM and iOS; a JVM-only `DatagramChannel` transport would need a second one for Apple. It worked
+It is the one socket library that runs from common code on every kcoap target that has sockets (JVM,
+Apple and Linux), so one transport serves the JVM and iOS; a JVM-only `DatagramChannel` transport would need a second one for Apple. It worked
 without trouble on the JVM. Apple builds compile against the same common API but are only verified on
 macOS CI.
 

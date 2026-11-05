@@ -114,6 +114,9 @@ Build governance (WP-C1):
   `wipe` and `toHex` stay public API.
 - **kcoap-dtls is no longer published** until its engine exists (it held interfaces only). *Migration:*
   drop the dependency; nothing could use it without an implementation.
+- **kcoap-transport depends on kcoap-common (`api`)**, for the opt-in markers (`ExperimentalKcoapApi` on
+  `DatagramSecurity`); it still has no third-party dependencies. A custom transport that depends on
+  kcoap-transport alone now has kcoap-common on its compile classpath. *Migration:* none.
 
 ### Fixed
 

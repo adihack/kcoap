@@ -43,7 +43,7 @@ fun survivesALossyNetwork() = runTest {
 
 ## Why a separate module
 
-`kcoap-transport` holds the transport interfaces and has no dependencies; the network needs
+`kcoap-transport` holds the transport interfaces and depends only on `kcoap-common`; the network needs
 kotlinx-coroutines and is only useful in tests, so applications depend on it with
 `testImplementation` and do not ship it. It depends on `kcoap-transport` only, so `kcoap-coap`'s own
 tests can use it without a dependency cycle.
