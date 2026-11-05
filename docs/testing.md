@@ -104,6 +104,15 @@ machine, or after `build-logic/build` is deleted, needs the network.
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release
 runs the same workflow first ([releasing](releasing.md)).
 
+WP-W1 added the browser job and moved the WebSocket client to the Darwin engine on Apple; both were
+written on Linux, where the Apple test binaries only compile and the browser tests ran in Firefox. Its
+merge gate is the macOS job and the browser job green on the pull request. If
+`NativeWebSocketLoopbackTest` or `DefaultEngineTest` fails on `macosArm64` or `iosSimulatorArm64`
+because Darwin does not negotiate the subprotocol, Apple goes back to CIO: `DefaultClient.apple.kt`
+names `CIO`, appleMain depends on `ktor-client-cio` instead of `ktor-client-darwin`, and the module
+README records that the WebSocket client then neither brings up the iOS cellular radio nor honours VPN
+On Demand.
+
 ## The same tests on every target
 
 The common tests are one suite for every target: 404 of them run on `linuxX64`, `js` and `wasmJs` alike

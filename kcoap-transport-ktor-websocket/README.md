@@ -46,11 +46,14 @@ client never depends on ktor-server.
 - `KtorWebSocketTransportTest` (JVM): real loopback sockets, the subprotocol required both ways,
   mounting in an application.
 - `NativeWebSocketLoopbackTest` (native): the default client against the listener on loopback sockets,
-  and refused by a server that selects no subprotocol. On macOS and the iOS simulator that is the Darwin
-  engine, checked in CI's macOS job (`scripts/test apple`); on Linux it is CIO.
-- `DefaultEngineTest`: the default client's engine on the JVM, Apple (in a test binary that links
-  ktor-client-cio too), Linux, and on `js` and `wasmJs` (`webTest`, on Node.js), where an application's
-  `HttpClient()` also finds the Js engine.
+  and refused by a server that selects no subprotocol. On Linux it is CIO. On macOS and the iOS
+  simulator it is the Darwin engine, in CI's macOS job (`scripts/test apple`): **pending the first
+  apple-job run**. Until then the Apple test binaries have only been compiled, and Darwin's subprotocol
+  negotiation is unverified (see [docs/testing.md](../docs/testing.md#continuous-integration) for the
+  fallback to CIO if that job fails).
+- `DefaultEngineTest`: the default client's engine on the JVM, Linux, and on `js` and `wasmJs`
+  (`webTest`, on Node.js), where an application's `HttpClient()` also finds the Js engine; on Apple, in
+  a test binary that links ktor-client-cio too, pending the first apple-job run.
 - `KtorWebSocketConnectorTest`: `KtorWebSocketConnector()` builds its client and refuses non-WebSocket
   endpoints, on every target.
 - `JsWebSocketSubprotocolTest` (js, on Node.js): an npm `ws` server whose `handleProtocols` records the
@@ -58,10 +61,11 @@ client never depends on ktor-server.
   negotiated protocol and exchanges a message; a server that selects none is refused.
 - `BrowserAgainstJvmListenerTest` (JVM, with `-Pkcoap.browser`): the js tests above in a headless
   browser against a `KtorWebSocketListener` on the JVM, which accepts only handshakes that ask for
-  `coap`. CI's browser job runs them in Chrome; `scripts/test browser firefox` runs them locally. The
+  `coap`. CI's browser job runs them in Chrome, **pending its first run**; so far they have passed in
+  headless Firefox (`scripts/test browser firefox`). The
   page loads the compiled js tests with a small AMD loader and runs them with mocha, both served by the
   test; no bundler and no extra npm packages are involved.
 - The libcoap interop tests over `coap+ws` in `kcoap-coap/src/jvmTest`.
 
-Not covered: the `wasmJs` engine against a real server (only the in-memory tests run there), and
-`coaps+ws` against a real TLS server.
+Not covered: the `wasmJs` engine against a real server (only the in-memory tests and the engine checks
+run there), and `coaps+ws` against a real TLS server.
