@@ -1,0 +1,58 @@
+# kcoap-crypto-default
+
+The default `CryptoBackend`, on [cryptography-kotlin](https://github.com/whyoleg/cryptography-kotlin)
+0.6: one common-code implementation over whatever provider the platform has.
+
+| Target | Provider |
+|---|---|
+| `jvm` (servers, Android) | JCA (the JDK's own providers) |
+| iOS, macOS | CryptoKit and CommonCrypto |
+| `linuxX64` | OpenSSL 3 (prebuilt, linked in) |
+| `js`, `wasmJs` (browsers, Node.js) | WebCrypto |
+
+```kotlin
+val crypto = DefaultCryptoBackend()
+val context = SecurityContext.derive(parameters, crypto)
+if (!crypto.supports(AeadAlgorithm.CHACHA20_POLY1305)) { /* offer another AEAD */ }
+```
+
+## What it implements
+
+SHA-256, SHA-384, SHAKE256 (common code), HMAC, AES-CCM (common code on the provider's AES block),
+AES-GCM, ChaCha20/Poly1305, X25519, X448, Ed25519, and ECDH and ECDSA on P-256 and P-384, with raw key
+encodings as `KeyType` documents them. Post-quantum algorithms are in `kcoap-crypto-bc`.
+
+## Capabilities and fallbacks
+
+The code is the same on every target; providers differ in what they offer, and the backend adapts by
+asking the provider, never by checking the platform:
+
+| Need | Provider has it | Provider lacks it |
+|---|---|---|
+| AES block for CCM | AES-ECB on single blocks | AES-CTR: a zero block encrypted with the input as the counter is `AES_K(input)` (WebCrypto) |
+| ECDH or ECDSA from a compressed point (EDHOC sends x only) | — | always expanded in common code first: `y = sqrt(x^3 - 3x + b)` with the parity of the prefix |
+| An AEAD, curve or key size | used | `UnsupportedAlgorithmException`: ChaCha20/Poly1305 on WebCrypto, 192-bit AES in Chromium, X25519 or Ed25519 in browsers that predate them |
+
+`supports(...)` in `kcoap-crypto` asks a backend in advance, the same way for every platform and every
+backend; `CipherSuite.isSupportedBy(backend)` in `kcoap-edhoc` builds on it. Every other failure of the
+platform leaves as an exception, also on WebCrypto, whose rejections are not Kotlin exceptions, so
+protocol code turns them into protocol errors.
+
+ChaCha20/Poly1305, X25519 and Ed25519 have no common-code fallback: they process secret keys, and
+constant-time arithmetic is not something Kotlin/JS can promise. Point decompression only sees public
+values.
+
+## Verified by
+
+| Test | What |
+|---|---|
+| `AesCcmTest` | all 24 RFC 3610 packets, the RFC 8613 Appendix C AEAD vectors, tampering |
+| `AesBlockTest` | FIPS 197 Appendix C through both AES-block constructions, ECB and CTR agree where ECB exists, RFC 3610 through CTR |
+| `HkdfTest` | RFC 5869, RFC 8613 Appendix C key derivation |
+| `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, unusable peer keys |
+| `EcPointDecompressionTest` | the SEC 2 base points, fresh platform keys of both parities, off-curve and out-of-range x |
+| `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
+| `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |
+
+All but the last run on every target: JVM, Linux native, Apple native (on macOS), and Node.js as
+JavaScript and as Wasm.

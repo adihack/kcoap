@@ -10,7 +10,7 @@ first byte that differs, which pins down the exact step that is wrong.
 | Module | Vectors |
 |---|---|
 | `kcoap-crypto` | FIPS 202 (SHAKE256), NIST SP 800-185 (KMAC256) |
-| `kcoap-crypto-default` | RFC 3610 (AES-CCM, all 24), RFC 5869 (HKDF), RFC 7748 (X25519), RFC 8032 (Ed25519), RFC 8613 Appendix C (AEAD and key derivation) |
+| `kcoap-crypto-default` | FIPS 197 (the AES block, through ECB and CTR), RFC 3610 (AES-CCM, all 24), RFC 5869 (HKDF), RFC 7748 (X25519), RFC 8032 (Ed25519), RFC 8613 Appendix C (AEAD and key derivation), SEC 2 base points (point decompression) |
 | `kcoap-crypto-bc` | NIST ACVP ML-KEM and ML-DSA key generation, encapsulation, signing |
 | `kcoap-cbor` | RFC 8949 Appendix A |
 | `kcoap-cose` | RFC 8613 C.4 (AAD), RFC 9529 credentials |
@@ -41,10 +41,34 @@ docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
 export JAVA_HOME=/path/to/jdk-17-or-newer
 ./gradlew jvmTest                 # every test on the JVM
 ./gradlew linuxX64Test            # the common tests as native code: Kotlin/Native runtime, OpenSSL crypto
+./gradlew jsNodeTest              # the common tests as JavaScript on Node.js, WebCrypto underneath
+./gradlew wasmJsNodeTest          # the common tests as WebAssembly on Node.js, WebCrypto underneath
 ./gradlew macosArm64Test          # the common tests against Apple crypto (macOS only)
 ./gradlew koverHtmlReport         # coverage report: build/reports/kover/html/index.html
 ./gradlew koverVerify             # fails below the coverage floor
 ```
+
+## The same tests on every target
+
+The common tests are one suite for every target: 404 of them run on `linuxX64`, `js` and `wasmJs` alike
+(the JVM adds its own, such as the differential and interop tests). Gradle downloads Node.js for the web
+tests; the browser test tasks are off, because Node.js has the same WebCrypto API and a browser run
+would need a headless browser wherever `check` runs.
+
+A test never asks which target it is on. Where a platform may lack an algorithm, the test asks the
+backend (`backend.supports(algorithm)`, `CipherSuite.isSupportedBy(backend)`) and covers what is
+supported, and the backend's own tests check that whatever is reported unsupported fails with
+`UnsupportedAlgorithmException` and nothing else. On WebCrypto that leaves out:
+
+| Test | Left out where unsupported | Unsupported on |
+|---|---|---|
+| `PlatformAeadTest.everyAeadRoundTripsAndRejectsTamperingOrIsUnsupported` | ChaCha20/Poly1305 round trip (checked to be unsupported instead) | WebCrypto |
+| `OscorePartsTest.otherAeadAlgorithms` | the ChaCha20/Poly1305 context | WebCrypto |
+| `RoundTripTest.everyMethodWithEverySuite` | suites 4 and 5 | WebCrypto |
+| `AesBlockTest.ctrConstructionAgreesWithEcbOnRandomBlocks` | the whole test: no ECB to compare with | WebCrypto |
+
+What must work everywhere is asserted, not probed: the mandatory AEADs, the classical key types and
+signatures, EDHOC suites 2 and 3 (`PlatformAeadTest`, `CapabilitiesTest`, `CipherSuiteTest`).
 
 ## Coverage
 
@@ -57,4 +81,10 @@ error path, so the floor only ever goes up.
 - Name the test after the expectation, or after the RFC section its vector comes from.
 - Use `runTest` for anything that suspends; time-dependent code takes an injected clock or runs on the
   test dispatcher's virtual time.
+- Cryptography can really suspend (WebCrypto answers through promises). While it does, `runTest` finds
+  nothing to run and jumps virtual time to the next timer, so a handshake under CoAP timers would see
+  retransmissions and timeouts fire. Tests that run real cryptography under timers wrap the backend in
+  `InstantCrypto` (`kcoap-edhoc-oscore` tests), and advance time with `delay`, not `advanceTimeBy`.
+- Choose algorithms by capability, never by target, and keep regexes valid in JavaScript's Unicode
+  mode (escape a literal `]`, `{` or `}`).
 - Keep fixed keys and randomness explicit, so a failure reproduces exactly.

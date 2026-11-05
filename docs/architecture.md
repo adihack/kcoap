@@ -1,10 +1,11 @@
 # Architecture
 
-Status: **built for UDP**. The CoAP endpoint with client and server APIs, OSCORE, EDHOC (including the
-post-quantum suite), the EDHOC→OSCORE glue, the crypto backends and the UDP transport exist and are
-cross-tested; DTLS, TCP and WebSocket transports and the browser target are designed here and come
-later. This records how kcoap stays one protocol core while running in mobile apps, browsers and
-server applications. The RFC checklist is in `rfc-compliance.md`.
+Status: **built for UDP, on every target**. The CoAP endpoint with client and server APIs, OSCORE,
+EDHOC (including the post-quantum suite), the EDHOC→OSCORE glue, the crypto backends and the UDP
+transport exist and are cross-tested; the protocol modules build for the JVM, Apple, Linux and the web
+(`js`, `wasmJs`) and pass the same common tests on each. DTLS, TCP and WebSocket transports are
+designed here and come later. This records how kcoap stays one protocol core while running in mobile
+apps, browsers and server applications. The RFC checklist is in `rfc-compliance.md`.
 
 ## Module dependencies
 
@@ -334,6 +335,41 @@ entitlement on iOS. iOS also needs the Local Network permission for LAN peers.
 
 ## Browsers
 
+kcoap runs in browsers and in Node.js as the `js` and `wasmJs` targets, from the same common code as
+everywhere else. What works there today:
+
+| Works in the browser now | Comes with the WebSocket transport (RFC 8323, in progress) |
+|---|---|
+| CoAP messages, options, URIs, the UDP and RFC 8323 codecs | `coap+ws` / `coaps+ws` to a proxy, the reliable messaging layer (CSM, Ping/Pong) |
+| OSCORE: contexts, protect/verify, replay windows, Observe | OSCORE end to end through the proxy, as RFC 8613 §11 intends |
+| EDHOC: all methods, suites 0–3, 6 and 24; EDHOC→OSCORE, the combined request | EDHOC over CoAP to a real device |
+| The client and server API over a `DatagramTransport` the application supplies, `kcoap-testkit` | — |
+
+`kcoap-transport-ktor` builds no web targets: browsers have no UDP. (ktor-network does reach UDP and
+TCP on Node.js through `node:dgram` and `node:net`, so a Node.js target for it is possible; a browser
+WebSocket transport needs a module that builds for the web, since this one depends on ktor-network.)
+
+**Cryptography in the browser** is WebCrypto through `DefaultCryptoBackend`, plus common code. The
+backend never asks which platform it is on; it asks the provider what it has, and fills gaps with
+common-code fallbacks where those are small and handle only public data:
+
+| Need | WebCrypto | How kcoap handles it, on every platform |
+|---|---|---|
+| SHA-256/384, HMAC, AES-GCM, ECDH and ECDSA on P-256/P-384 | yes | used directly |
+| SHAKE256, KMAC256, HKDF, AES-CCM | no | common code (CCM on the AES block below) |
+| AES block for CCM | no ECB | AES-ECB where the provider has it, else AES-CTR on a zero block with the input as the counter |
+| ECDH from an x-only EDHOC key (`02 \|\| x`) | not reliably | compressed points expanded in common code before any provider sees them |
+| X25519, Ed25519 | in current browsers and Node.js | used directly; `UnsupportedAlgorithmException` where missing |
+| ChaCha20/Poly1305 | no | `UnsupportedAlgorithmException`: EDHOC suites 4 and 5 cannot run |
+| 192-bit AES keys | not in Chromium | `UnsupportedAlgorithmException` there |
+| ML-KEM, ML-DSA | no | only in `kcoap-crypto-bc` (JVM) |
+
+Applications ask in advance with `backend.supports(...)` and `CipherSuite.isSupportedBy(backend)`,
+which put the question the same way on every platform. Two more things differ in practice, not in
+code: every WebCrypto call is asynchronous, so CCM costs one promise per AES block (fine at CoAP sizes),
+and a WebCrypto rejection is not a Kotlin exception, so the backend converts it before protocol code
+sees it.
+
 A browser can only open WebSockets or make HTTP requests, so it reaches devices through a proxy:
 
 ```
@@ -372,12 +408,18 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 ## Decisions taken for multiplatform
 
 1. **`CryptoBackend` is `suspend`**, because WebCrypto is promise based. Done.
-2. **AES-CCM is common code on the platform AES block**; on WebCrypto the block will come from AES-CTR
-   (encrypting a zero block with the input as the counter yields the encrypted input).
+2. **AES-CCM is common code on the platform AES block**, from AES-ECB where the provider has it and
+   from AES-CTR otherwise (encrypting a zero block with the input as the counter yields the encrypted
+   input), as on WebCrypto. Done.
 3. **ECDH, ECDSA, EdDSA, KEMs and signatures are in the SPI**, with opaque private-key handles. COSE
    uses raw `r || s` ECDSA signatures; DTLS will need DER and converts.
-4. **`js` and `wasmJs` targets** are next, without DTLS adapters; the common code already compiles
-   against the common standard library only.
+4. **`js` and `wasmJs` targets**, with `browser()` and `nodejs()`, for every module except the
+   adapters around runtime-bound libraries (`kcoap-transport-ktor`: sockets; `kcoap-crypto-bc`: JVM).
+   The common tests run on Node.js for both. Done.
+5. **Capabilities, not platforms.** Code never branches on the target. A backend reports what its
+   platform lacks with `UnsupportedAlgorithmException`, `supports(...)` asks that question in advance,
+   and gaps get common-code fallbacks where they are small and safe (the AES block, point
+   decompression). Tests skip by capability too.
 
 ## Modules
 
@@ -390,7 +432,7 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
 | `kcoap-testkit` | In-memory datagram network with fault injection, for tests | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders; engine last |
-| `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on all targets except browser UDP/TCP | UDP done; TCP, WebSocket, HTTP planned |
+| `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on ktor; JVM, Apple and Linux (no web targets: ktor-network) | UDP done; TCP, WebSocket, HTTP planned |
 | `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
 | `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
 | `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |

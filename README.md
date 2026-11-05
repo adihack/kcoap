@@ -1,7 +1,7 @@
 # kcoap
 
 CoAP, OSCORE and EDHOC for Kotlin Multiplatform: one implementation for Android, iOS, JVM servers,
-Linux gateways and, later, browsers. kcoap aims at complete compliance with the published RFCs, proven by the RFCs'
+Linux gateways, browsers and Node.js. kcoap aims at complete compliance with the published RFCs, proven by the RFCs'
 own test vectors and by live interop with libcoap (by RFC authors) and libedhoc. It also supports the
 post-quantum EDHOC suite.
 
@@ -54,18 +54,47 @@ The server side mounts `EdhocResource` under `/.well-known` and uses `CombinedRe
 |---|---|
 | [`kcoap-common`](kcoap-common) | Logging API and sinks, hex, constant-time helpers |
 | [`kcoap-crypto`](kcoap-crypto) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256 |
-| [`kcoap-crypto-default`](kcoap-crypto-default) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple |
+| [`kcoap-crypto-default`](kcoap-crypto-default/README.md) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple, OpenSSL on Linux, WebCrypto in browsers and Node.js |
 | [`kcoap-crypto-bc`](kcoap-crypto-bc/README.md) | Post-quantum backend on Bouncy Castle: ML-KEM and ML-DSA (JVM, Android) |
 | [`kcoap-cbor`](kcoap-cbor/README.md) | Deterministic CBOR and CBOR sequences |
 | [`kcoap-cose`](kcoap-cose/README.md) | COSE structures, COSE_Key, CWT Claims Sets |
 | [`kcoap-transport`](kcoap-transport/README.md) | Transport interfaces, endpoints, peer identities, URI schemes |
-| [`kcoap-transport-ktor`](kcoap-transport-ktor) | UDP on ktor-network (JVM, Apple) |
+| [`kcoap-transport-ktor`](kcoap-transport-ktor) | UDP on ktor-network (JVM, Apple, Linux; not the web) |
 | [`kcoap-testkit`](kcoap-testkit/README.md) | Simulated network with loss, duplication and reordering, for tests |
 | [`kcoap-coap`](kcoap-coap) | Messages, codecs, the CoAP endpoint, `CoapClient`, `CoapServer` |
 | [`kcoap-oscore`](kcoap-oscore/README.md) | OSCORE |
 | [`kcoap-edhoc`](kcoap-edhoc/README.md) | EDHOC Initiator and Responder |
 | [`kcoap-edhoc-oscore`](kcoap-edhoc-oscore/README.md) | EDHOC over CoAP, EDHOC→OSCORE, the combined request |
 | [`kcoap-dtls`](kcoap-dtls/README.md) | DTLS interfaces and registries; the engine is implemented last |
+
+## Platforms
+
+Everything is common Kotlin; the platforms differ only in what their cryptography offers, which the
+crypto backend reports through capability checks (`backend.supports(algorithm)`,
+`CipherSuite.isSupportedBy(backend)`) and fills with common-code fallbacks where they are small and
+safe. Only adapters that wrap a runtime-bound library build for fewer targets.
+
+| Target | Runtime | Crypto under `DefaultCryptoBackend` | Modules |
+|---|---|---|---|
+| `jvm` | JVM servers, Android | JCA | all |
+| `iosArm64`, `iosSimulatorArm64`, `macosArm64` | Apple | CryptoKit, CommonCrypto | all but `kcoap-crypto-bc` |
+| `linuxX64` | Linux gateways | OpenSSL 3 | all but `kcoap-crypto-bc` |
+| `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc` and `kcoap-transport-ktor` |
+
+**In a browser today**: CoAP messages and codecs (UDP and RFC 8323 framing), OSCORE, EDHOC (suites
+0–3, 6 and 24) and the EDHOC→OSCORE glue, and the client and server stack over a `DatagramTransport`
+the application supplies (as `kcoap-testkit`'s in-memory network does in the tests). Browsers have no
+UDP, so reaching a device takes the WebSocket transport (RFC 8323, being built) and a proxy such as
+libcoap's `coap-server`; OSCORE and EDHOC stay end to end across it. What WebCrypto lacks:
+
+- ChaCha20/Poly1305: `UnsupportedAlgorithmException`, so EDHOC suites 4 and 5 are not available.
+- AES-ECB: the AES block under CCM comes from AES-CTR instead, one asynchronous call per block.
+- Compressed points: expanded in common code on every platform.
+- X25519 and Ed25519 in browsers that predate them, 192-bit AES keys in Chromium:
+  `UnsupportedAlgorithmException`; ask `supports(...)` before offering them.
+
+Details in [docs/architecture.md](docs/architecture.md#browsers) and
+[kcoap-crypto-default](kcoap-crypto-default/README.md).
 
 ## Documentation
 
@@ -89,11 +118,15 @@ interface with a default: transports, crypto, credential resolution, EAD, loggin
 Needs a JDK 17 or newer.
 
 ```bash
-./gradlew jvmTest                  # every test on the JVM
-./gradlew koverHtmlReport          # coverage report in build/reports/kover/html
-./gradlew linuxX64Test             # the common tests as native code (Kotlin/Native, OpenSSL)
-./gradlew macosArm64Test           # common tests against Apple crypto, on macOS
+./gradlew jvmTest                    # every test on the JVM
+./gradlew koverHtmlReport            # coverage report in build/reports/kover/html
+./gradlew linuxX64Test               # the common tests as native code (Kotlin/Native, OpenSSL)
+./gradlew jsNodeTest wasmJsNodeTest  # the common tests as JavaScript and Wasm on Node.js (WebCrypto)
+./gradlew macosArm64Test             # common tests against Apple crypto, on macOS
 ```
+
+Gradle downloads Node.js for the web tests. The browser test tasks are off: Node.js has the same
+WebCrypto API, and a browser run would need a headless browser wherever `check` runs.
 
 The interop tests run when Docker and the pinned images are present and skip otherwise:
 

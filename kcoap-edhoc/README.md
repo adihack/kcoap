@@ -60,6 +60,8 @@ both in the configuration and when a Responder receives such a message_1.
   implemented (its EdDSA needs Ed448, which no backend provides). Suite -24 = libedhoc's
   `EDHOC_CIPHER_SUITE_PQC_1` (ML-KEM-512, ML-DSA-44, AES-CCM-16-128-128, SHAKE256) with a backend that
   provides ML-KEM and ML-DSA. Private suites can be declared with the `CipherSuite` constructor.
+  `suite.isSupportedBy(backend)` tells whether a backend runs a suite where it is: in browsers,
+  WebCrypto has no ChaCha20/Poly1305, so suites 4 and 5 are not available there.
 - Key schedule of §4: HKDF for SHA-2, KMAC256 with empty customization for SHAKE256, the EDHOC_KDF info
   encoding, TH_2/TH_3/TH_4, PRK_2e / PRK_3e2m / PRK_4e3m / PRK_out, and the long-PLAINTEXT_2 keystream
   of Appendix G.
@@ -86,7 +88,7 @@ because with OSCORE both would become the same Recipient ID (§3.3.3).
 | RFC 9529 §2 (trace 1) | Method 0, suite 0, Ed25519 certificates by `x5t`: every message byte for byte on both sides; H(message_1), G_XY, TH_2, PRK_2e, KEYSTREAM_2, PLAINTEXT_2, MAC_2, Signature_or_MAC_2, TH_3, PRK_3e2m, PRK_4e3m, MAC_3, Signature_or_MAC_3, PLAINTEXT_3, K_3, IV_3, TH_4, K_4, IV_4, PRK_out, PRK_exporter, OSCORE Master Secret/Salt, key update; context_2/3, info encodings, messages to be signed, A_3/A_4 |
 | RFC 9529 §3 (trace 2) | Method 3, suite 2, CCS by `kid`: the rejected first message_1 and the error `02 02`, renegotiation to SUITES_I = [6, 2], then the same values as trace 1 plus SALT_3e2m, G_RX, SALT_4e3m, G_IY |
 | RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve, the low-order X25519 point, a short MAC, non-deterministic CBOR |
-| Round trips | Every method × suites 0–6 and 24; both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
+| Round trips | Every method × suites 0–6 and 24 (every suite the backend supports: on WebCrypto not 4 and 5); both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
 | Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation; on the JVM with real ML-KEM and ML-DSA from `kcoap-crypto-bc` (`PostQuantumBouncyCastleTest`), with CCS (AKP COSE_Key) and ML-DSA X.509 credentials |
 | libedhoc (live, JVM) | `LibedhocInteropTest`: sessions with fresh ephemeral keys against libedhoc 0363bd3 in a container, kcoap as Initiator and as Responder, for suites 0, 2, 4, 24 × methods 0–3 and suite -24 (liboqs) × method 0; kid/CCS and x5chain; integer and byte-string identifiers; message_4; negotiation (error code 2) both ways; tampering; EAD. Both sides must agree on OSCORE secret/salt, Sender/Recipient IDs, EDHOC_Exporter and PRK_out, before and after key update |
 
