@@ -3,7 +3,6 @@ package dev.kcoap.coap.client
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
-import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapRequest
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.CoapUri
@@ -11,9 +10,11 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.LinkFormat
 import dev.kcoap.coap.WebLink
 import dev.kcoap.coap.stack.Blockwise
+import dev.kcoap.coap.stack.ClientExchange
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.OperationKey
+import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
@@ -98,6 +99,13 @@ public class CoapClient private constructor(
 
     internal val requestTimeout: Duration get() = config.requestTimeout ?: endpoint.parameters.exchangeLifetime
     internal val securityReserve: Int get() = if (config.security != null) config.securityReserve else 0
+
+    /**
+     * The critical options the client processes in a response: Block1 and Block2 (RFC 7959); OSCORE is gone
+     * after verification. The endpoint rejects a response with any other one (RFC 7252 §5.4.1): a separate
+     * response with a Reset, and the request fails with [CoapException.Reason.BAD_RESPONSE].
+     */
+    internal val recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS
 
     // ---------------------------------------------------------------- methods
 
@@ -320,9 +328,10 @@ public class CoapClient private constructor(
         var current = request
         var echoed = false
         while (true) {
-            val exchange = endpoint.openExchange(peer, current, confirmable, config.security, isObservation = false)
+            val exchange = endpoint.openExchange(
+                peer, current, confirmable, config.security, ResponseMode.Single, recognizedOptions = recognizedOptions,
+            )
             val response = endpoint.awaitResponse(exchange, requestTimeout)
-            checkResponse(response)
             val echo = response.options.echo
             if (response.code == CoapCode.UNAUTHORIZED && echo != null && config.echoRetry && !echoed) {
                 log.debug { "4.01 with Echo from $peer; repeating the request with it" }
@@ -331,20 +340,6 @@ public class CoapClient private constructor(
                 continue
             }
             return response
-        }
-    }
-
-    /**
-     * RFC 7252 §5.4.1: a response with an unrecognized critical option is rejected. The client processes
-     * Block1 and Block2; OSCORE is gone after verification.
-     */
-    internal fun checkResponse(response: CoapMessage) {
-        val unrecognized = response.options.filter { it.number % 2 == 1 && it.number !in RESPONSE_RECOGNIZED }
-        if (unrecognized.isNotEmpty()) {
-            throw CoapException(
-                "Response with unrecognized critical options ${unrecognized.joinToString { it.number.toString() }}",
-                CoapException.Reason.BAD_RESPONSE,
-            )
         }
     }
 
@@ -380,8 +375,4 @@ public class CoapClient private constructor(
     internal suspend fun observationCount(): Int = observationLock.withLock { observations.size }
 
     override fun toString(): String = "CoapClient($endpoint)"
-
-    private companion object {
-        val RESPONSE_RECOGNIZED = setOf(CoapOptions.BLOCK1.number, CoapOptions.BLOCK2.number)
-    }
 }

@@ -53,7 +53,8 @@ import kotlin.time.TimeSource
  * @property maxExchangesPerPeer the most exchanges in progress with one peer: requests of this endpoint
  *   awaiting their response and its observations, and over datagrams also every Confirmable message
  *   awaiting its ACK or queued behind NSTART (RFC 7252 §4.7), separate responses and notifications
- *   included. A request beyond it fails at once with [dev.kcoap.coap.CoapException.Reason.IDENTIFIERS_EXHAUSTED];
+ *   included, and every Non-confirmable Q-Block body holding or awaiting its NSTART slot. A request beyond
+ *   it fails at once with [dev.kcoap.coap.CoapException.Reason.IDENTIFIERS_EXHAUSTED];
  *   a separate response or notification beyond it is not sent. It bounds the queue that a peer which never
  *   acknowledges, such as a spoofed one, can build up (§11.3).
  */

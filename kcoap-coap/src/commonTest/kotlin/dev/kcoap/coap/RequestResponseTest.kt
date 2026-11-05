@@ -448,7 +448,7 @@ class RequestResponseTest {
 
         val pending = async {
             runCatching {
-                client.endpoint.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+                client.endpoint.openExchange(session, CoapMessage.request(CoapCode.GET), true, null)
                     .let { client.endpoint.awaitResponse(it, 100.seconds) }
             }
         }

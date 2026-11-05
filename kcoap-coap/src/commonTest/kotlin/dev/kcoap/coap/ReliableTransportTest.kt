@@ -12,6 +12,7 @@ import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.Signal
 import dev.kcoap.testkit.InMemoryByteStream
@@ -270,6 +271,68 @@ class ReliableTransportTest {
         val requests = fixture.sent(CoapCode.GET)
         assertEquals(listOf(0L, 1L), requests.map { it.options.observe })
         assertEquals(requests[0].tokenHex, requests[1].tokenHex)
+    }
+
+    /** A server-side interceptor that adds option 9999, critical and unknown to the client, to the responses [matching] selects. */
+    private fun unknownCriticalOptionOn(matching: (CoapMessage) -> Boolean) = object : MessageInterceptor {
+        override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = if (message.isResponse && matching(message)) {
+            message.toBuilder().options { add(CoapOption(9999, byteArrayOf(1))) }.build()
+        } else {
+            message
+        }
+    }
+
+    /**
+     * RFC 8323 §7.4: a connection has no Reset, so after the client rejects a notification with an unknown
+     * critical option (RFC 7252 §5.4.1) it MUST deregister, or the server would notify it for good.
+     */
+    @Test
+    fun rfc8323Section7_4ARejectedNotificationIsFollowedByADeregistration() = runTest {
+        val fixture = ReliableFixture(this)
+        val counter = Counter()
+        val serverConfig = fixture.endpointConfig(interceptors = listOf(unknownCriticalOptionOn { it.options.observe != null && it.payloadAsText() == "1" }))
+        fixture.server(endpointConfig = serverConfig) { add(counter) }
+        val client = fixture.client()
+        val received = mutableListOf<String>()
+        val observing = async { runCatching { client.observe(fixture.uri("/counter")).collect { received += it.payloadAsText() } } }
+        runCurrent()
+        assertEquals(1, counter.observerCount)
+
+        counter.change()
+        val error = assertIs<CoapException>(observing.await().exceptionOrNull())
+        assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
+        assertEquals(listOf("0"), received)
+        runCurrent()
+        val requests = fixture.sent(CoapCode.GET, byServer = false)
+        assertEquals(listOf(0L, 1L), requests.map { it.options.observe }, "§7.4: deregistered by GET with Observe 1")
+        assertEquals(requests[0].tokenHex, requests[1].tokenHex)
+        assertEquals(0, counter.observerCount)
+
+        counter.change()
+        runCurrent()
+        val notifications = fixture.sent(CoapCode.CONTENT, byServer = true).map { it.payloadAsText() }
+        assertEquals(listOf("0", "1", "1"), notifications, "the registration, the rejected notification, the deregistration's answer")
+        assertEquals(0, client.endpoint.exchangeCount())
+        assertEquals(0, client.observationCount())
+    }
+
+    /** RFC 8323 §7.4: a rejected registration response may have registered the client too, so it deregisters. */
+    @Test
+    fun rfc8323Section7_4ARejectedRegistrationResponseIsFollowedByADeregistration() = runTest {
+        val fixture = ReliableFixture(this)
+        val counter = Counter()
+        val serverConfig = fixture.endpointConfig(interceptors = listOf(unknownCriticalOptionOn { it.options.observe != null }))
+        fixture.server(endpointConfig = serverConfig) { add(counter) }
+        val client = fixture.client()
+
+        val error = assertFailsWith<CoapException> { client.observe(fixture.uri("/counter")).toList() }
+        assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
+        runCurrent()
+        val requests = fixture.sent(CoapCode.GET, byServer = false)
+        assertEquals(listOf(0L, 1L), requests.map { it.options.observe })
+        assertEquals(requests[0].tokenHex, requests[1].tokenHex)
+        assertEquals(0, counter.observerCount)
+        assertEquals(0, client.endpoint.exchangeCount())
     }
 
     /** RFC 8323 §7.1: the Observe value MUST be ignored on reception; arrival order is what counts. */

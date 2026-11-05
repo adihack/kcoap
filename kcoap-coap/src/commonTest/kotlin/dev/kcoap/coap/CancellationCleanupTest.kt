@@ -88,7 +88,6 @@ class CancellationCleanupTest {
         CoapMessage.request(CoapCode.GET) { options { uriPath("r") } },
         confirmable = true,
         security = null,
-        isObservation = false,
     )
 
     @Test

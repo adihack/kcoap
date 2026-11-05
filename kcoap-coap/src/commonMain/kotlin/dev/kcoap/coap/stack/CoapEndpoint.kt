@@ -238,28 +238,42 @@ public class CoapEndpoint private constructor(
 
     /**
      * Sends [request] (code, options and payload; header fields are set here) to [peer] and returns the
-     * exchange that collects its responses. The token comes from [CoapEndpointConfig.tokenGenerator]
-     * unless [token] is given, which re-registers or cancels an observation (RFC 7641 §3.3.1, §3.6) and
-     * replaces the exchange that had it. The token and Message ID are assigned before [security]
-     * protects the request, and kept afterwards. Over a reliable transport, [confirmable] does not apply.
+     * exchange that collects its responses as [mode] says. The token comes from
+     * [CoapEndpointConfig.tokenGenerator] unless [token] is given, which re-registers or cancels an
+     * observation (RFC 7641 §3.3.1, §3.6) and replaces the exchange that had it. The token and Message ID
+     * are assigned before [security] protects the request, and kept afterwards. A response with a critical
+     * option outside [recognizedOptions] is rejected (RFC 7252 §5.4.1). Over a reliable transport,
+     * [confirmable] and [pacing] do not apply.
+     *
+     * @param pacing [Pacing.PerMessage], or [Pacing.Body] for a Non-confirmable message of a Q-Block body
+     *   whose granted [BodyLease] towards [peer] holds the slot (RFC 9177 §7.2).
+     * @throws IllegalArgumentException for a Confirmable request with [Pacing.Body], which would deadlock
+     *   at NSTART 1 (RFC 9177 §7.1), or a lease towards another peer.
+     * @throws IllegalStateException for a lease not yet granted or already released.
      */
     internal suspend fun openExchange(
         peer: Endpoint,
         request: CoapMessage,
         confirmable: Boolean,
         security: ClientMessageSecurity?,
-        isObservation: Boolean,
+        mode: ResponseMode = ResponseMode.Single,
         token: ByteArray? = null,
+        pacing: Pacing = Pacing.PerMessage,
+        recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS,
     ): ClientExchange {
         attach()
-        if (isReliable(peer)) return openReliableExchange(peer, request, security, isObservation, token)
+        if (isReliable(peer)) return openReliableExchange(peer, request, security, mode, token, recognizedOptions)
         requireDatagramTransport(peer)
+        if (pacing is Pacing.Body) {
+            require(!confirmable) { "A Confirmable body takes a slot per message (RFC 9177 §7.1), not a body lease" }
+            require(pacing.lease.peer == peer) { "The body lease is towards ${pacing.lease.peer}, not $peer" }
+        }
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         val (exchange, messageId) = lock.withLock {
             // Checked under the lock that the terminal transition takes, so no exchange is added after they
             // were all failed: it fails at once instead of waiting for a response that never comes.
             ensureOpen()
-            register(peer, token, isObservation)?.let { it to messaging.allocateMessageId(peer, now()) }
+            register(peer, token, mode, recognizedOptions)?.let { it to messaging.allocateMessageId(peer, now()) }
         } ?: throw tooManyExchanges(peer)
         val plain = request.toBuilder().apply {
             this.type = type
@@ -275,11 +289,13 @@ public class CoapEndpoint private constructor(
                 this.token = exchange.token
             }?.build() ?: plain
             exchange.request = wire
-            val slotHold = if (confirmable) null else nonConfirmableSlotHold(wire)
+            // A message of a body takes no slot of its own: the body's lease holds one for all of them.
+            val slotHold = if (confirmable || pacing is Pacing.Body) null else nonConfirmableSlotHold(wire)
             // Recorded under the lock, before the datagram goes out: a cancellation while sending can then
             // still settle the transmission, which would otherwise retransmit for nobody and hold NSTART.
             withMessaging { now ->
                 ensureOpen()
+                (pacing as? Pacing.Body)?.lease?.checkUsable()
                 exchange.transmission = send(now, peer, wire, exchange, slotHold)
             }
             log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path} as $type" }
@@ -298,8 +314,9 @@ public class CoapEndpoint private constructor(
         peer: Endpoint,
         request: CoapMessage,
         security: ClientMessageSecurity?,
-        isObservation: Boolean,
+        mode: ResponseMode,
         token: ByteArray?,
+        recognizedOptions: Set<Int>,
     ): ClientExchange {
         lock.withLock { ensureOpen() }
         // Counted on the connection before the request is, so its idle Release cannot start in between.
@@ -307,7 +324,7 @@ public class CoapEndpoint private constructor(
         val exchange = try {
             lock.withLock {
                 ensureOpen()
-                register(peer, token, isObservation)?.also { it.connection = connection }
+                register(peer, token, mode, recognizedOptions)?.also { it.connection = connection }
             } ?: throw tooManyExchanges(peer)
         } catch (e: Throwable) {
             withContext(NonCancellable) { connection.exchangeClosed(null) }
@@ -332,11 +349,17 @@ public class CoapEndpoint private constructor(
      * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
      * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.
      */
-    private fun register(peer: Endpoint, token: ByteArray?, isObservation: Boolean): ClientExchange? {
+    private fun register(
+        peer: Endpoint,
+        token: ByteArray?,
+        mode: ResponseMode,
+        recognizedOptions: Set<Int>,
+    ): ClientExchange? {
         val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
         if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
-        val exchange = ClientExchange(this, peer, chosen, isObservation, log.with("peer" to peer, "token" to chosen.toHex()))
+        val logger = log.with("peer" to peer, "token" to chosen.toHex())
+        val exchange = ClientExchange(this, peer, chosen, mode, recognizedOptions, logger)
         val previous = exchanges.put(exchange.key, exchange)
         if (previous == null) {
             exchangesPerPeer[peer] = (exchangesPerPeer[peer] ?: 0) + 1
@@ -459,6 +482,55 @@ public class CoapEndpoint private constructor(
     internal suspend fun settle(transmission: Transmission): Unit = withContext(NonCancellable) {
         withMessaging { now -> settle(now, transmission) }
     }
+
+    /**
+     * Takes the NSTART slot (RFC 7252 §4.7) of a whole Non-confirmable Q-Block body of [bodyBytes] bytes
+     * towards [peer] (RFC 9177 §7.2), waiting while the peer's slots are taken, as a request would. The
+     * body's messages then go out with [Pacing.Body] and take no slot of their own. The lease holds the slot
+     * until [releaseBody], or for min([bodyBytes] ÷ PROBING_RATE, NON_PROBING_WAIT) at most, with the body's
+     * NON_TIMEOUT_RANDOM [nonTimeoutRandom], drawn from [CoapEndpointConfig.random] when null and kept in
+     * [BodyLease.nonTimeoutRandom]. A body that ends because the peer never answered may leave the lease to
+     * expire instead of releasing it, so the next body to that peer waits as PROBING_RATE asks.
+     *
+     * Towards a reliable peer the lease is granted at once and paces nothing (RFC 8323 has no NSTART). A
+     * caller cancelled while waiting leaves the queue.
+     *
+     * @throws CoapException like [closeCause] once the endpoint is closed, with
+     *   [CoapException.Reason.SESSION_ENDED] when the peer's DTLS session ends while it waits, or with
+     *   [CoapException.Reason.IDENTIFIERS_EXHAUSTED] beyond [CoapEndpointConfig.maxExchangesPerPeer].
+     */
+    internal suspend fun leaseBody(peer: Endpoint, bodyBytes: Int, nonTimeoutRandom: Duration? = null): BodyLease {
+        require(bodyBytes >= 0) { "A body cannot have a negative size: $bodyBytes" }
+        attach()
+        if (isReliable(peer)) {
+            lock.withLock { ensureOpen() }
+            return BodyLease.unpaced(peer, nonTimeoutRandom ?: Duration.ZERO)
+        }
+        requireDatagramTransport(peer)
+        val lease = withMessaging { now ->
+            ensureOpen()
+            lease(now, peer, bodyBytes, nonTimeoutRandom)
+        }
+        try {
+            lease.granted.await()
+        } catch (e: Throwable) {
+            // A caller cancelled while waiting, or just after the grant, must not keep the peer's slot.
+            releaseBody(lease)
+            throw e
+        }
+        return lease
+    }
+
+    /**
+     * The body of [lease] ended: its slot is free at once (RFC 7252 §4.7), and later messages may no longer
+     * use the lease. Idempotent; cleanup, so it runs to the end in a cancelled coroutine too.
+     */
+    internal suspend fun releaseBody(lease: BodyLease): Unit = withContext(NonCancellable) {
+        withMessaging { now -> releaseLease(now, lease) }
+    }
+
+    /** Body leases that hold a slot or wait for one, for tests. */
+    internal suspend fun leaseCount(): Int = lock.withLock { messaging.leaseCount }
 
     /** Exchanges in the registry, for tests. */
     internal suspend fun exchangeCount(): Int = lock.withLock { exchanges.size }
@@ -697,6 +769,8 @@ public class CoapEndpoint private constructor(
                     }
                 }
                 is MessagingEffect.Event -> emit(effect.event)
+                is MessagingEffect.LeaseGranted -> effect.lease.granted.complete(Unit)
+                is MessagingEffect.LeaseFailed -> effect.lease.granted.completeExceptionally(closedError(effect.cause))
             }
         }
     }
@@ -811,8 +885,29 @@ public class CoapEndpoint private constructor(
             withMessaging { reject(from, message.messageId, "no exchange for token ${message.tokenHex}") }
             return
         }
-        withMessaging { acknowledge(from, message.messageId) }
-        exchange.onSeparateResponse(message)
+        // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
+        // options, which only the verified response shows; so it is answered after both, and before it is
+        // handed on. No timer answers it meanwhile (UdpMessaging), so every way out of here answers it.
+        val inspection = try {
+            exchange.inspect(message)
+        } catch (e: Throwable) {
+            // An unexpected failure of the message security: the response is dropped, as one that failed
+            // verification, but acknowledged, so the peer does not retransmit it until it gives up.
+            withMessaging { acknowledge(from, message.messageId) }
+            throw e
+        }
+        when (inspection) {
+            is ClientExchange.Inspection.Accepted -> {
+                withMessaging { acknowledge(from, message.messageId) }
+                exchange.accept(inspection.response)
+            }
+            is ClientExchange.Inspection.Rejected -> {
+                val reason = inspection.cause.message ?: "unrecognized critical option"
+                withMessaging { reject(from, message.messageId, reason) }
+                exchange.refuse(inspection.cause)
+            }
+            ClientExchange.Inspection.Unverified -> withMessaging { acknowledge(from, message.messageId) }
+        }
     }
 
     private suspend fun onSessionEnded(peer: Endpoint) {
@@ -855,7 +950,7 @@ public class CoapEndpoint private constructor(
             emit(EndpointEvent.MessageRejected(connection.peer, 0, "no exchange for token ${message.tokenHex}"))
             return
         }
-        exchange.onSeparateResponse(message)
+        exchange.onResponse(message)
     }
 
     /** RFC 8323 §3.4, §7.4: the connection's exchanges fail, and its observers and transfers are dropped. */

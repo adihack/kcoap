@@ -21,12 +21,20 @@ internal sealed interface MessagingEffect {
 
     /**
      * A new separate response arrived in a Confirmable or Non-confirmable message. The upper layer must
-     * call [UdpMessaging.acknowledge] if it matches an exchange, or [UdpMessaging.reject] if not.
+     * answer it, with [UdpMessaging.acknowledge] if it accepts it, or [UdpMessaging.reject] if it matches
+     * no exchange or has a critical option the exchange does not recognize (RFC 7252 §5.4.1). No timer
+     * answers a Confirmable one in its place.
      */
     class DeliverResponse(val from: Endpoint, val message: CoapMessage) : MessagingEffect
 
     /** A transmission ended or released its NSTART slot. */
     class Completed(val transmission: Transmission, val outcome: TransmissionOutcome) : MessagingEffect
+
+    /** A [BodyLease] got its NSTART slot; its body may start. */
+    class LeaseGranted(val lease: BodyLease) : MessagingEffect
+
+    /** A [BodyLease] failed with [cause]: the endpoint closed or the peer's DTLS session ended. */
+    class LeaseFailed(val lease: BodyLease, val cause: CoapException) : MessagingEffect
 
     /** Something worth reporting to [EndpointEventListener]. */
     class Event(val event: EndpointEvent) : MessagingEffect

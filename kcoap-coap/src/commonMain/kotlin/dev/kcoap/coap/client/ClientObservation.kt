@@ -1,10 +1,12 @@
 package dev.kcoap.coap.client
 
 import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.ClientExchange
 import dev.kcoap.coap.stack.OperationKey
+import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.Logger
 import dev.kcoap.transport.Endpoint
 import kotlin.concurrent.Volatile
@@ -90,7 +92,12 @@ internal class ClientObservation(
 
     /** Registers and passes notifications on until the observation ends; returns the terminal event. */
     private suspend fun observe(): Event {
-        val (current, first) = register()
+        val (current, first) = try {
+            register()
+        } catch (e: CoapException) {
+            afterRejection(e)
+            throw e
+        }
         if (first.options.observe == null || !first.code.isSuccess) {
             // §3.1: no Observe in the response means the server does not notify; §3.2 for errors.
             current.cancel()
@@ -100,10 +107,14 @@ internal class ClientObservation(
         if (!isReliable) order.accept(first.options.observe!!, client.endpoint.now())
         mutableEvents.emit(Event.Notification(client.blockwise.complete(peer, registration, first, confirmable)))
         while (true) {
+            // A notification with an unrecognized critical option ends the exchange with BAD_RESPONSE: the
+            // endpoint rejected it (RFC 7252 §5.4.1), see afterRejection for how that reaches the server.
             val result = current.receiveCatching()
-            val notification = result.getOrNull()
-                ?: return Event.Failure(result.exceptionOrNull() ?: CancellationException("Observation cancelled"))
-            client.checkResponse(notification)
+            val notification = result.getOrNull() ?: run {
+                val cause = result.exceptionOrNull() ?: CancellationException("Observation cancelled")
+                afterRejection(cause)
+                return Event.Failure(cause)
+            }
             val value = notification.options.observe
             if (value == null) {
                 current.cancel()
@@ -122,10 +133,12 @@ internal class ClientObservation(
         var request = registration
         var echoed = false
         while (true) {
-            val current = client.endpoint.openExchange(peer, request, confirmable, client.config.security, isObservation = true)
+            val current = client.endpoint.openExchange(
+                peer, request, confirmable, client.config.security, ResponseMode.Stream,
+                recognizedOptions = client.recognizedOptions,
+            )
             exchange = current
             val first = client.endpoint.awaitResponse(current, client.requestTimeout)
-            client.checkResponse(first)
             val echo = first.options.echo
             if (first.code == CoapCode.UNAUTHORIZED && echo != null && client.config.echoRetry && !echoed) {
                 current.cancel()
@@ -143,9 +156,28 @@ internal class ClientObservation(
     }
 
     /**
+     * The endpoint rejected a response to the registration (RFC 7252 §5.4.1) when [cause] is
+     * [CoapException.Reason.BAD_RESPONSE], which ended the exchange. Over UDP the endpoint's Reset ends the
+     * observation on the server (RFC 7641 §3.6), or a later notification gets one, its token being
+     * forgotten. A reliable transport has no Reset, so there the client MUST deregister (RFC 8323 §7.4), or
+     * the server notifies for as long as the connection lasts; it does so at once, whatever the collectors
+     * do. A rejected registration response may have registered the client as well, and a deregistration
+     * that finds no observer is an ordinary GET, so it deregisters after that too.
+     */
+    private fun afterRejection(cause: Throwable) {
+        if (!isReliable || cause !is CoapException || cause.reason != CoapException.Reason.BAD_RESPONSE) return
+        val rejected = exchange ?: return
+        log.debug { "Deregistering after a rejected response (RFC 8323 §7.4)" }
+        client.endpoint.launchGuarded("deregister a rejected observation") {
+            withContext(NonCancellable) { deregister(rejected) }
+        }
+    }
+
+    /**
      * The last collector left: stop, and deregister if the observation was established (§3.6). On a
      * reliable transport the client MUST deregister (RFC 8323 §7.4), since there is no Reset to answer the
-     * next notification with, so [ObserveCancellation.FORGET] does not apply there.
+     * next notification with, so [ObserveCancellation.FORGET] does not apply there. An exchange that ended
+     * already needs nothing: the server ended the observation, or [afterRejection] deregistered.
      */
     fun stop() {
         job?.cancel()
@@ -157,17 +189,22 @@ internal class ClientObservation(
                     current.cancel()
                     return@withContext
                 }
-                // §3.6: same token and options, Observe 1; it takes over the token from the observation.
-                val deregistration = registration.toBuilder().options { observe(1) }.build()
-                try {
-                    val exchange = client.endpoint.openExchange(
-                        peer, deregistration, confirmable, client.config.security, isObservation = false, token = current.token,
-                    )
-                    client.endpoint.awaitResponse(exchange, client.requestTimeout)
-                } catch (e: Exception) {
-                    log.debug { "Deregistration got no response: ${e.message}" }
-                }
+                deregister(current)
             }
+        }
+    }
+
+    /** §3.6: the registration with [current]'s token and Observe 1, which takes over the token from it. */
+    private suspend fun deregister(current: ClientExchange) {
+        val deregistration = registration.toBuilder().options { observe(1) }.build()
+        try {
+            val exchange = client.endpoint.openExchange(
+                peer, deregistration, confirmable, client.config.security, ResponseMode.Single,
+                token = current.token, recognizedOptions = client.recognizedOptions,
+            )
+            client.endpoint.awaitResponse(exchange, client.requestTimeout)
+        } catch (e: Exception) {
+            log.debug { "Deregistration got no response: ${e.message}" }
         }
     }
 

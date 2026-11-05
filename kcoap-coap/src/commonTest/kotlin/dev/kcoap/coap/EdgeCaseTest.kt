@@ -67,7 +67,7 @@ class EdgeCaseTest {
         transport.sendFailure = { to -> if (to is Endpoint.Secure) SessionEndedException(to, SessionEndReason.ALERT) else null }
         val endpoint = CoapEndpoint(transport, backgroundScope, fixture.endpointConfig())
 
-        val exchange = endpoint.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        val exchange = endpoint.openExchange(session, CoapMessage.request(CoapCode.GET), true, null)
         val error = assertFailsWith<CoapException> { endpoint.awaitResponse(exchange, 10.seconds) }
         assertEquals(CoapException.Reason.SESSION_ENDED, error.reason)
         assertTrue(fixture.events.any { it is EndpointEvent.SessionEnded })
@@ -142,8 +142,8 @@ class EdgeCaseTest {
         val first = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
         val second = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
 
-        val a = first.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
-        val b = second.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        val a = first.openExchange(session, CoapMessage.request(CoapCode.GET), true, null)
+        val b = second.openExchange(session, CoapMessage.request(CoapCode.GET), true, null)
         assertEquals(0, a.token.size, "sequence number 0 of the first endpoint")
         assertEquals(0, b.token.size, "sequence number 0 of the second endpoint, not 1 of a shared one")
         a.cancel()

@@ -169,3 +169,19 @@ Kotlin/Native and interleaves at suspension points on JS and Wasm:
   not thousands) and wait for invariants with `withTimeoutOrNull(...) ?: fail(...)`.
 - `kcoap-coap`'s `ConcurrencyStressTest` shows the pattern: close racing requests, observe collectors,
   observer churn against the bounds, the connection pool and connection setup.
+
+**Known flake.** `ConcurrencyStressTest.closeRacingConnectionSetupFailsTheWaitingRequestsAndClosesEveryConnection`
+fails now and then, on the JVM and on linuxX64, and did so before QB-2. Scaled to 600 iterations a run
+(it has 30), it failed in 3 of 20 runs on the JVM and 2 of 40 on linuxX64 at `e3383d8`, before QB-2, and
+in 5 of 20 and 3 of 40 with QB-2; at 30 iterations that is roughly one run in a hundred on the JVM. It
+fails in one of two ways:
+
+- `IllegalStateException: Already started`, thrown in the server's accept loop
+  (`ReliableConnections.accepted`). An accepted connection's driver is registered under the lock and
+  started after it, so an endpoint that closes in between (the iteration's background scope is cancelled)
+  closes the driver before `ConnectionDriver.start`, whose check then fails. `open` registers and starts
+  in one step; `accepted` does not.
+- `a connection stayed open after close() raced its setup` (seen on linuxX64): a client connection opened
+  while `close()` ran was still open 5 s later.
+
+Neither path changed in QB-2. The fix belongs to the connection pool's setup and close (coap-core-20).

@@ -40,7 +40,10 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Exchanges, RFC 7252 §5.2–5.3**: random 8-byte tokens from the platform CSPRNG, sequence-number
   tokens on DTLS sessions (RFC 9175 §4.2); matching by peer `Endpoint` equality and token; piggybacked,
   separate and Non-confirmable responses; response timeouts; cancellation through coroutines; the
-  message-security SPI around each message.
+  message-security SPI around each message. A separate response is answered only after it was verified
+  and its critical options checked: one with an unknown critical option gets a Reset and fails the
+  request (§5.4.1). For Q-Block (RFC 9177, being wired up) exchanges can take several responses on one
+  token into a per-body inbox, and a body lease holds one NSTART slot for a whole Non-confirmable body.
 - **Server**: resource tree by Uri-Path with template methods (`handleGet` … `handleIPatch`, 4.05 by
   default) or a DSL; 4.04; 4.02 with a diagnostic for unrecognized critical options, wrong lengths and
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
