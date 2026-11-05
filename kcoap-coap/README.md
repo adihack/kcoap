@@ -67,7 +67,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a 4.01
   with an Echo value instead, piggybacked or Non-confirmable, and returning the value verifies the
   address for an hour. `CoapServerConfig.amplification` checks Q-Block2 bursts by default (none are sent
-  yet), every response with `ALL_RESPONSES`, or nothing.
+  yet), every response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
+  Non-confirmable, and keeps each POST's or PATCH's response for its repeat), or nothing.
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and

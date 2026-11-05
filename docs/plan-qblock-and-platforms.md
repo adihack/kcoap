@@ -138,9 +138,9 @@ public class QBlockServerConfig(
     public val maxPartialBodies: Int = 64,
     public val maxCachedBodies: Int = 64,
     public val maxBodiesPerPeer: Int = 4,
-    public val verifyUnauthenticatedPeers: Boolean = true,
 )
 // CoapServerConfig(…, qBlock: QBlockServerConfig = QBlockServerConfig())
+// The amplification gate is server-wide: CoapServerConfig.amplification (SRV-1), Q_BLOCK_BURSTS by default.
 ```
 
 ### 1.3 Configuration parameters
@@ -323,7 +323,7 @@ public class QBlockServerConfig(
 | K10 | `… -L 7 -w $W -v 7` | `onReliableTransports = true`, block size 64, coap+tcp and coap+ws: blocks back to back, no 2.31 and no Continue. Without a set block size libcoap sends a single message (rv/D) |
 | K11 | `… -L 7 -E /data/server.conf -v 7` | Defaults: protected requests use inner Block1/Block2 and pass. With `withMessageSecurity = true`: `upstreamLibcoapCannotProtectQBlock2Bursts`, expected to fail, pinned |
 | K12 | `… -L 7 -v 7 -l 1` | The probe's ACK is lost: kcoap retransmits the CON probe and gets SUPPORTED; no message mixes Block2 and Q-Block2 |
-| **libcoap client → kcoap server** (Q-Block on; `verifyUnauthenticatedPeers = false` except in L12) | | |
+| **libcoap client → kcoap server** (Q-Block on; L1–L11 with `CoapServerConfig(amplification = AmplificationPolicy.OFF)`) | | |
 | L1 | `$C -L 7 -v 7 -B 10 coap://127.0.0.1:$P/` | Piggybacked 2.05 with Q-Block2 0/M/16, ETag and Size2; the log shows "Q-Block support available" |
 | L2 | `$C -L 7 -N -b 64 -v 7 -B 30 -o /data/out.bin coap://127.0.0.1:$P/big` (3000 B) | Sets of 10, ETag and Size2 on every block; Continues 10–40 answered on the original token; out.bin equal; under 1.5 s. Variants: `-L 15`, and no `-b` (record whether libcoap completes with Block2 from a server without stickiness) |
 | L3 | as L2; kcoap drops blocks 2 and 7 | One request [2, 7] when block 10 arrives, answered on its token with ETag and Size2, without Observe. Variant drop 3–9 with `-L 15`: QB2 3/M answered with 3–9 only |
@@ -335,7 +335,7 @@ public class QBlockServerConfig(
 | L9 | L4 and L2 with `-l 10%`: 3 runs in `interop`, 20 in a nightly soak | Each run gives the correct body or a clean error; afterwards no partial bodies remain on kcoap |
 | L10 | `$C -L 7 -b 64 -v 7 -m put -f /data/big3000.txt coap+tcp://127.0.0.1:$P/store`, `coap+ws://127.0.0.1:$W/store`, GET `/big` | Back to back; only the final response; Custody and Release not stuck |
 | L11 | `$C -L 7 -N -b 64 -E /data/client.conf,/data/seq coap://127.0.0.1:$P/big` | kcoap with `withMessageSecurity = false` answers an inner 4.02 and libcoap falls back. The 5 s stalls are libcoap's, recorded |
-| L12 | L2 with `verifyUnauthenticatedPeers = true` | The first burst request gets a NON 4.01 with Echo; record whether libcoap repeats it (pin it if not) |
+| L12 | L2 with the default amplification policy (`Q_BLOCK_BURSTS`) | The first burst request gets a NON 4.01 with Echo; record whether libcoap repeats it (pin it if not) |
 
 ### 1.6 Open risks
 - **OSCORE with several responses** falls outside RFC 8613's single-response replay model. The only evidence will be kcoap against itself: libcoap 4.3.5b breaks (rv/A, rv/A2). That is why it is off by default.
@@ -511,14 +511,18 @@ public class QBlockServerConfig(
   - Exempt: OSCORE, reliable transports, and responses up to 3× the request size.
   - The libcoap `/.well-known/core` probe is never challenged.
 - **Status: done.** `KC/server/AddressVerification.kt` (Echo values per challenged address, verified
-  addresses, responses kept for the repeat of a POST or PATCH) and `KC/server/AmplificationPolicy.kt`;
-  in `CoapServer.kt` the gate is `checksAddress`, `mustVerifyAddress(inbound, request, responseSize, isBurst)`
-  and `challenge`. QB-3 calls `mustVerifyAddress` with `isBurst = true` and the bytes of the set it is
-  about to send, and sends `challenge(...)` instead when it says so. The server-wide
+  addresses), `KC/server/HeldBackResponses.kt` (the response of each POST or PATCH kept for the repeat of
+  that request, keyed by address and request, bounded by `maxConcurrentTransfers`, evictions reported as
+  `HELD_BACK_RESPONSES`) and `KC/server/AmplificationPolicy.kt`. In `CoapServer.kt` the gate is
+  `mustVerifyAddress(inbound, request, unprotected, responses, isBurst)`, which itself skips clients that
+  OSCORE, DTLS or a connection authenticated (`checksAddress`) and answers the policy, and `challenge`.
+  QB-3 calls only `mustVerifyAddress`, with `isBurst = true` and the messages of the set it is about to
+  send, and sends `challenge(...)` instead when it returns true. The server-wide
   `CoapServerConfig.amplification` replaces the planned `QBlockServerConfig.verifyUnauthenticatedPeers`, so
-  L12 runs with the default policy. Under `ALL_RESPONSES` an Observe registration is challenged whatever
-  its size (RFC 7641 §7). Tests: `AmplificationTest`, `AddressVerificationTest`,
-  `LibcoapClientAgainstKcoapAddressVerificationTest`.
+  L1–L11 run with `AmplificationPolicy.OFF` and L12 with the default policy. Under `ALL_RESPONSES` an
+  Observe registration is challenged whatever its size (RFC 7641 §7), and a separate response to an
+  unverified address is Non-confirmable. Tests: `AmplificationTest`, `AddressVerificationTest`,
+  `HeldBackResponsesTest`, `LibcoapClientAgainstKcoapAddressVerificationTest`.
 
 **QB-3: Q-Block server**
 - **Scope:**

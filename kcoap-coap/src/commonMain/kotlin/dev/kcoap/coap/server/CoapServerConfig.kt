@@ -41,12 +41,16 @@ import kotlin.time.Duration.Companion.seconds
  *   item 3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a
  *   4.01 Unauthorized with an Echo option instead, piggybacked or Non-confirmable, never as a separate
  *   Confirmable response, whose retransmissions would amplify again. Each such answer is reported as
- *   [dev.kcoap.coap.stack.EndpointEvent.LimitReached] with `AMPLIFICATION_FACTOR`. The response to a POST
- *   or PATCH, which must not take effect twice, is kept for the repeat with the Echo value, which gets it
- *   without running the handler again; [maxConcurrentTransfers] bounds how many are kept.
+ *   [dev.kcoap.coap.stack.EndpointEvent.LimitReached] with `AMPLIFICATION_FACTOR`. Under
+ *   [AmplificationPolicy.ALL_RESPONSES] every separate response to an address not yet verified is
+ *   Non-confirmable for the same reason. The response to a POST or PATCH, which must not take effect
+ *   twice, is kept for the repeat of that request with the Echo value, which gets it without running the
+ *   handler again; [maxConcurrentTransfers] bounds how many are kept, and one evicted for room is reported
+ *   with `HELD_BACK_RESPONSES` (its repeat then runs the handler again).
  * @property amplificationFactor the largest response, as a multiple of the size of its request, that goes to
  *   an address not yet verified (RFC 9175 §2.4 item 3 takes 3 from QUIC, RFC 9000 §8, as acceptable for
- *   unconstrained applications). Sizes are those of the CoAP messages, header, token and options included.
+ *   unconstrained applications). Sizes are those of the CoAP messages, header, token and options included;
+ *   the 4-byte Empty ACK that precedes a separate response is not counted.
  * @property maxVerifiedAddresses the most client addresses the server remembers as verified, and,
  *   separately, the most Echo challenges it keeps outstanding. Verified addresses come only from clients
  *   that received an Echo value, so they fill slowly; challenges can come from spoofed requests, so the

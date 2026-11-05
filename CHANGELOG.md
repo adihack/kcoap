@@ -52,11 +52,14 @@ adds its entry and migration note below.
   separate Confirmable response, and a request that returns the value verifies the address for
   `verifiedAddressLifetime` (1 hour). `CoapServerConfig.amplification` chooses what is checked:
   `AmplificationPolicy.Q_BLOCK_BURSTS` (the default; the server sends no Q-Block bursts yet, so nothing
-  changes for now), `ALL_RESPONSES` (also every Observe registration, and a POST or PATCH keeps its
-  response for the repeat, so it does not run twice) or `OFF`. `maxVerifiedAddresses` (10 000) bounds the
-  verified addresses and, separately, the outstanding challenges. New `EndpointEvent.LimitReached.Limit`
-  values: `AMPLIFICATION_FACTOR` (a response was held back), `VERIFIED_ADDRESSES` and `ADDRESS_CHALLENGES`
-  (an entry was evicted for room); an exhaustive `when` over `Limit` needs the three new branches. The
+  changes for now), `ALL_RESPONSES` (also every Observe registration; a separate response to an address
+  not yet verified goes Non-confirmable, so it is never retransmitted there; and each POST or PATCH keeps
+  its own response for the repeat of that request, so it does not run twice, up to `maxConcurrentTransfers`
+  of them) or `OFF`. `maxVerifiedAddresses` (10 000) bounds the verified addresses and, separately, the
+  outstanding challenges. New `EndpointEvent.LimitReached.Limit` values: `AMPLIFICATION_FACTOR` (a
+  response was held back), `VERIFIED_ADDRESSES`, `ADDRESS_CHALLENGES` and `HELD_BACK_RESPONSES` (an entry
+  was evicted for room; for the last, that POST or PATCH runs again when it is repeated); an exhaustive
+  `when` over `Limit` needs the four new branches. The
   configuration properties are new trailing constructor parameters with defaults, so source stays
   compatible; compiled callers of the constructor recompile. libcoap's `coap-client` repeats its request
   with the Echo value and completes, and its Q-Block probe of `/.well-known/core` is never challenged.
