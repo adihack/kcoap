@@ -6,19 +6,11 @@ import java.io.File
  * Gradle TestKit. The plugins come from this build's classpath; the version catalog is the repository's.
  */
 class Fixture(private val directory: File, vararg plugins: String) {
+    /** Versions that replace the catalog's, as calls in the settings script. */
+    private val catalogVersions = mutableListOf<String>()
+
     init {
-        file(
-            "settings.gradle.kts",
-            """
-            rootProject.name = "fixture"
-            dependencyResolutionManagement {
-                repositories { mavenCentral() }
-                versionCatalogs {
-                    create("libs") { from(files("${systemProperty("kcoap.versionCatalog")}")) }
-                }
-            }
-            """,
-        )
+        writeSettings()
         file(
             "gradle.properties",
             """
@@ -28,6 +20,8 @@ class Fixture(private val directory: File, vararg plugins: String) {
             org.gradle.jvmargs=-Xmx1g -XX:MaxMetaspaceSize=512m
             # One small daemon for the whole test run, gone two minutes after the last fixture build.
             org.gradle.daemon.idletimeout=120000
+            # A fixture that compiles Kotlin does so in that daemon, without a Kotlin daemon of its own.
+            kotlin.compiler.execution.strategy=in-process
             """,
         )
         file(
@@ -48,6 +42,12 @@ class Fixture(private val directory: File, vararg plugins: String) {
         file("src/commonMain/kotlin/dev/kcoap/fixture/Common.kt", "package dev.kcoap.fixture\n\npublic fun common(): Int = 1\n")
     }
 
+    /** Replaces the version [alias] of the repository's version catalog with [version] in this fixture. */
+    fun catalogVersion(alias: String, version: String): Fixture = apply {
+        catalogVersions += "version(\"$alias\", \"$version\")"
+        writeSettings()
+    }
+
     /** Writes [content], without its common indentation, to [path] inside the fixture. */
     fun file(path: String, content: String): Fixture = apply {
         directory.resolve(path).apply { parentFile.mkdirs() }.writeText(content.trimIndent() + "\n")
@@ -64,6 +64,23 @@ class Fixture(private val directory: File, vararg plugins: String) {
         .withPluginClasspath()
         .withArguments(*arguments, "--stacktrace")
         .forwardOutput()
+
+    private fun writeSettings() {
+        val catalog = (listOf("from(files(\"${systemProperty("kcoap.versionCatalog")}\"))") + catalogVersions)
+            .joinToString("; ")
+        file(
+            "settings.gradle.kts",
+            """
+            rootProject.name = "fixture"
+            dependencyResolutionManagement {
+                repositories { mavenCentral() }
+                versionCatalogs {
+                    create("libs") { $catalog }
+                }
+            }
+            """,
+        )
+    }
 
     private fun systemProperty(name: String): String =
         checkNotNull(System.getProperty(name)) { "$name is set by build-logic/build.gradle.kts" }

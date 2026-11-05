@@ -7,15 +7,98 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 /**
- * checkAndroidApi keeps a module's jvm jar within kcoap's minSdk, Android API level 26: animal-sniffer
- * fails a jar that uses a Java API the level lacks, and passes the level's own API, the classes that ship
- * with the jar and the bootstraps D8 rewrites; with a baseline, as checkAndroidApiDependencies has, only
- * the uses it does not list fail. The fixtures compile Java, which is quick, and run the task on their jar;
- * a multiplatform fixture shows that check includes both tasks.
+ * kcoap.android-api keeps a module's jvm jar within kcoap's minSdk, Android API level 26, and its libraries
+ * within what was triaged.
+ *
+ * The multiplatform fixtures apply a tier plugin, as kcoap's modules do, and look at the tasks the plugin
+ * registers: how they are configured, that `check` runs them, and that checkAndroidApi fails a module whose
+ * Kotlin calls an API the level lacks. The Java fixtures compile quicker and test the task type,
+ * CheckAndroidApi, configured from the version catalog in the same way: animal-sniffer fails a jar that
+ * uses a Java API the level lacks, and passes the level's own API, the classes that ship with the jar and
+ * the bootstraps D8 rewrites; a baseline lets through only the uses it lists.
  */
 class AndroidApiPluginTest {
     @TempDir
     lateinit var directory: File
+
+    @Test
+    fun checkRunsCheckAndroidApiOnTheJvmJarAndCheckAndroidApiDependenciesOnTheLibraries() {
+        val module = Fixture(directory, "kcoap.kmp-library").buildScript(
+            """
+            val checks = listOf("checkAndroidApi", "checkAndroidApiDependencies").map { tasks.named<CheckAndroidApi>(it) }
+            val projectDirectory = layout.projectDirectory.asFile
+            tasks.register("printAndroidApiChecks") {
+                doLast {
+                    for (task in checks.map { it.get() }) {
+                        println("${'$'}{task.name} classes: " + task.classes.files.map { it.name }.sorted().joinToString())
+                        println("${'$'}{task.name} signature: " + task.signature.files.joinToString { it.name })
+                        println("${'$'}{task.name} apiLevel: " + task.apiLevel.get())
+                        println("${'$'}{task.name} failOnViolation: " + task.failOnViolation.get())
+                        val baseline = task.baseline.orNull?.asFile?.relativeTo(projectDirectory)
+                        println("${'$'}{task.name} baseline: " + (baseline ?: "none"))
+                    }
+                }
+            }
+            """,
+        )
+
+        val result = module.runner("checkDependencies", "printAndroidApiChecks").build()
+
+        val lines = result.output.lines()
+        val checkDependencies = lines.single { it.startsWith("check depends on: ") }.substringAfter(": ").split(", ")
+        assertContains(checkDependencies, "checkAndroidApi")
+        assertContains(checkDependencies, "checkAndroidApiDependencies")
+        val signature = "android-api-level-26-8.0.0_r2.signature"
+        for (expected in listOf(
+            "checkAndroidApi classes: fixture-jvm-1.0.0.jar",
+            "checkAndroidApi signature: $signature",
+            "checkAndroidApi apiLevel: 26",
+            "checkAndroidApi failOnViolation: true",
+            "checkAndroidApi baseline: none",
+            "checkAndroidApiDependencies signature: $signature",
+            "checkAndroidApiDependencies apiLevel: 26",
+            "checkAndroidApiDependencies failOnViolation: true",
+            "checkAndroidApiDependencies baseline: gradle/android-api-dependencies.baseline",
+        )) {
+            assertContains(lines, expected)
+        }
+        // The external libraries only: the module's own jar is checkAndroidApi's.
+        val libraries = lines.single { it.startsWith("checkAndroidApiDependencies classes: ") }
+        assertContains(libraries, "kotlin-stdlib-")
+        assertFalse(libraries.contains("fixture-jvm"), libraries)
+    }
+
+    @Test
+    fun aMultiplatformModuleWhoseJvmCodeCallsAnApiAboveMinSdkFailsCheckAndroidApi() {
+        val module = Fixture(directory, "kcoap.kmp-library").file(
+            "src/jvmMain/kotlin/dev/kcoap/fixture/Hex.kt",
+            """
+            package dev.kcoap.fixture
+
+            public fun hex(bytes: ByteArray): String = java.util.HexFormat.of().formatHex(bytes)
+            """,
+        )
+
+        val result = module.runner("checkAndroidApi").buildAndFail()
+
+        assertEquals(TaskOutcome.FAILED, result.task(":checkAndroidApi")?.outcome)
+        assertContains(result.output, "uses of Java APIs that Android API level 26 does not have")
+        assertContains(result.output, "fixture-jvm-1.0.0.jar: dev/kcoap/fixture/HexKt.class:")
+        assertContains(result.output, "Undefined reference: java.util.HexFormat java.util.HexFormat.of()")
+        assertContains(directory.resolve("build/reports/android-api/jvm.txt").readText(), "HexKt.class")
+    }
+
+    @Test
+    fun anApiSignatureOfAnotherLevelThanMinSdkFailsTheBuild() {
+        val module = Fixture(directory, "kcoap.kmp-library").catalogVersion("android-minSdk", "24")
+
+        val result = module.runner("help").buildAndFail()
+
+        assertContains(
+            result.output,
+            "The version catalog's android-api-signature (android-api-level-26) must be the one of android-minSdk (24)",
+        )
+    }
 
     @Test
     fun aJarUsingAJavaApiAboveMinSdkFailsCheckAndroidApi() {
@@ -122,17 +205,6 @@ class AndroidApiPluginTest {
             "fixture: a/B\$1.class: Undefined reference: void ClassValue.<init>()",
             baselineEntry("fixture.jar: a/B\$1.class:7: Undefined reference: void ClassValue.<init>()"),
         )
-    }
-
-    @Test
-    fun aMultiplatformModuleChecksItsJvmJarAndItsLibrariesAsPartOfCheck() {
-        val module = Fixture(directory, "kcoap.kmp-library")
-
-        val result = module.runner("checkDependencies").build()
-
-        val checkDependencies = result.output.lines().single { it.startsWith("check depends on: ") }
-        assertContains(checkDependencies, "checkAndroidApi")
-        assertContains(checkDependencies, "checkAndroidApiDependencies")
     }
 
     private fun report(): String = directory.resolve("build/android-api.txt").readText()

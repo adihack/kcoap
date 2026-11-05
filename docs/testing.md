@@ -125,17 +125,19 @@ Gradle home under `build-logic/build/testkit`: a core fixture with a `jvmMain` f
 verification, a published fixture's Maven publications must carry `kcoap.group` and `kcoap.version`
 (and the version given with `-Pkcoap.version`, as the release workflow passes it), and
 `kcoap.unpublished` must remove the publication and the ABI tasks (and fail when it is applied after the
-tier plugin), and `checkAndroidApi` must fail a jar that calls an API above level 26 (`java.util.HexFormat`)
-and pass one that uses only level 26, its own classpath, lambdas and string concatenation. The fixtures
-compile no Kotlin (the Android ones compile a little Java) and take seconds, but the Kotlin plugin
-resolves the Kotlin standard libraries for them, and the Android ones animal-sniffer and the API
-signature, from Maven Central into the TestKit Gradle home, so the first run on a machine, or after
-`build-logic/build` is deleted, needs the network.
+tier plugin). For the Android API level, a multiplatform fixture must get `checkAndroidApi` over its jvm
+jar and `checkAndroidApiDependencies` over its libraries, both failing on violations, against the API 26
+signature and in `check`; a jvm function that calls `java.util.HexFormat` (API 34) must fail its
+`checkAndroidApi`; and a catalog whose API signature is not that of `android-minSdk` must fail the
+build. Java fixtures test the task itself: a jar that calls `HexFormat` fails, also inside a `try`, one
+that uses only level 26, its own classpath, lambdas and string concatenation passes, and a baseline lets
+through exactly the uses it lists. One fixture compiles a Kotlin function, the Android ones a little
+Java, and they take seconds, but the Kotlin plugin resolves the Kotlin standard libraries for them, and
+the Android ones animal-sniffer and the API signature, from Maven Central into the TestKit Gradle home,
+so the first run on a machine, or after `build-logic/build` is deleted, needs the network.
 
-`./gradlew androidApiDependencyReport` runs the same check over each module's external jvm runtime
-dependencies and writes `<module>/build/reports/android-api/dependencies.txt` without failing; the
-findings for ktor, cryptography-kotlin and Bouncy Castle are triaged in
-[samples/android-consumer](../samples/android-consumer/README.md#api-level-findings).
+Both Android checks write everything they find to `<module>/build/reports/android-api/` (`jvm.txt`,
+`dependencies.txt`), also what the baseline lists.
 
 ## Continuous integration
 
