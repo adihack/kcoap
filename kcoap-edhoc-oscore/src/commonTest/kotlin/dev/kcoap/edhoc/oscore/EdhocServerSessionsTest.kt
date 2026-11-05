@@ -39,6 +39,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 
@@ -249,7 +250,8 @@ class EdhocServerSessionsTest {
         val events = mutableListOf<EdhocServerEvent>()
         val server = EdhocServer(
             peers.responderConfig(), counting, InMemoryContextRepository(),
-            maxPendingSessions = 3, maxPendingSessionsPerPeer = 2, eventListener = { events += it },
+            maxPendingSessions = 3, maxPendingSessionsPerPeer = 2, timeSource = TestTimeSource(),
+            eventListener = { events += it },
         )
         suspend fun start(peer: Endpoint): CoapMessage = server.start(peer, initiator(peers))
 
@@ -271,13 +273,68 @@ class EdhocServerSessionsTest {
             ),
             events.map { it.toString() },
         )
-        assertEquals(3, server.pendingSessions(), "no session was dropped for a new one")
+        assertEquals(3, server.pendingSessions(), "within the grace period, no session is evicted for a new one")
 
         // A completed session gives its place back.
         aliceFirst.processMessage2(accepted.payload)
         val (message3, session) = aliceFirst.createMessage3()
         assertEquals(CoapCode.CHANGED, server.continueWith(alice, session.responderConnectionIdentifier, message3).code)
         assertEquals(CoapCode.CHANGED, start(carol).code)
+    }
+
+    /**
+     * A full server refuses only while every waiting session is within its grace period. Past it, the
+     * oldest makes room for a new client and is wiped, so a few message_1 per lifetime cannot keep new
+     * clients out (RFC 9528 §9.7). The per-peer bound never evicts.
+     */
+    @Test
+    fun aFullServerEvictsTheOldestSessionPastTheGracePeriod() = runTest {
+        val peers = Peers.staticDiffieHellman(crypto)
+        val clock = TestTimeSource()
+        val ephemeralKeys = mutableListOf<SoftwarePrivateKey>()
+        val events = mutableListOf<EdhocServerEvent>()
+        val server = EdhocServer(
+            peers.responderConfig(ephemeralKeys = recording(ephemeralKeys)), crypto, InMemoryContextRepository(),
+            maxPendingSessions = 3, maxPendingSessionsPerPeer = 2, pendingSessionLifetime = 60.seconds,
+            pendingSessionGracePeriod = 5.seconds, timeSource = clock, eventListener = { events += it },
+        )
+        val oldest = initiator(peers)
+        oldest.processMessage2(server.start(alice, oldest).payload)
+        val (oldestMessage3, oldestSession) = oldest.createMessage3()
+        clock += 1.seconds
+        val younger = initiator(peers)
+        younger.processMessage2(server.start(alice, younger).payload)
+        assertEquals(CoapCode.CHANGED, server.start(bob, initiator(peers)).code)
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, server.start(carol, initiator(peers)).code, "all within grace")
+
+        clock += 4500.milliseconds
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, server.start(alice, initiator(peers)).code, "Alice has 2")
+        assertEquals(3, server.pendingSessions())
+        val newcomer = initiator(peers)
+        val message2 = server.start(carol, newcomer)
+        assertEquals(CoapCode.CHANGED, message2.code, "the oldest session waited 5.5 s and made room")
+        assertEquals(3, server.pendingSessions())
+        assertFailsWith<IllegalStateException>("Y is wiped") { ephemeralKeys[0].encoded() }
+        ephemeralKeys[1].encoded() // the younger session keeps its Y
+        val evictedId = oldestSession.responderConnectionIdentifier
+        assertEquals(
+            listOf(
+                "LimitReached(peer=$carol, limit=PENDING_SESSIONS)",
+                "LimitReached(peer=$alice, limit=PENDING_SESSIONS_PER_PEER)",
+                "SessionEvicted(peer=$alice, C_R=$evictedId)",
+            ),
+            events.map { it.toString() },
+        )
+        assertEquals(unknownSession, EdhocError.decode(server.continueWith(alice, evictedId, oldestMessage3).payload))
+
+        // The new client and the younger session complete.
+        newcomer.processMessage2(message2.payload)
+        val (newcomerMessage3, newcomerSession) = newcomer.createMessage3()
+        val completed = server.continueWith(carol, newcomerSession.responderConnectionIdentifier, newcomerMessage3)
+        assertEquals(CoapCode.CHANGED, completed.code)
+        val (youngerMessage3, youngerSession) = younger.createMessage3()
+        val youngerId = youngerSession.responderConnectionIdentifier
+        assertEquals(CoapCode.CHANGED, server.continueWith(alice, youngerId, youngerMessage3).code)
     }
 
     @Test
@@ -373,6 +430,9 @@ class EdhocServerSessionsTest {
         assertFailsWith<IllegalArgumentException> {
             EdhocServer(peers.responderConfig(), crypto, contexts, pendingSessionLifetime = 0.seconds)
         }
+        assertFailsWith<IllegalArgumentException> {
+            EdhocServer(peers.responderConfig(), crypto, contexts, pendingSessionGracePeriod = (-1).seconds)
+        }
     }
 
     // --- sequence numbers --------------------------------------------------------------------------------
@@ -413,7 +473,13 @@ class EdhocServerSessionsTest {
             server.handle(it, peer)
         }
 
-    private fun initiator(peers: Peers) = EdhocInitiator(peers.initiatorConfig(), crypto)
+    private fun initiator(peers: Peers) =
+        EdhocInitiator(peers.initiatorConfig(connectionIdentifiers = clientIds), crypto)
+
+    /** Records every ephemeral key the server generates; they are software keys. */
+    private fun recording(keys: MutableList<SoftwarePrivateKey>) = EphemeralKeySource { backend, type ->
+        backend.generateKeyPair(type).also { keys += it.privateKey as SoftwarePrivateKey }
+    }
 
     private suspend fun EdhocServer.start(peer: Endpoint, initiator: EdhocInitiator): CoapMessage =
         handle(EdhocOverCoap.message1Request(initiator.createMessage1()), peer)

@@ -22,6 +22,7 @@ import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** Called when an EDHOC session completes and its OSCORE context is in place. */
@@ -49,19 +50,30 @@ public fun interface EdhocSessionListener {
  *   cryptography and leaves the session waiting. Only this unauthenticated state is bound to the peer's
  *   address; OSCORE contexts are not.
  * - At most [maxPendingSessions] sessions are in progress, at most [maxPendingSessionsPerPeer] of them for
- *   one peer. A message_1 beyond either bound is refused before any processing, with an EDHOC error in a
- *   5.00 response, and reported as [EdhocServerEvent.LimitReached]; sessions in progress are never
- *   dropped for a new one.
- * - A session that has not received message_3 within [pendingSessionLifetime] (EXCHANGE_LIFETIME by
- *   default) expires; its secrets are wiped and [EdhocServerEvent.SessionExpired] reported.
+ *   one peer. A peer is its address and port (for DTLS, its session), so a host sending from many ports
+ *   counts as many peers. A message_1 beyond the per-peer bound is refused before any processing, with an
+ *   EDHOC error in a 5.00 response, and reported as [EdhocServerEvent.LimitReached].
+ * - When all [maxPendingSessions] places are taken, the session that has waited longest for message_3 is
+ *   dropped for the new one if it has waited longer than [pendingSessionGracePeriod], its secrets wiped
+ *   and [EdhocServerEvent.SessionEvicted] reported. Only when no session has waited that long is the new
+ *   one refused as above. A client whose message_3 arrives within the grace period is never evicted.
+ * - A session that has not received message_3 within [pendingSessionLifetime] expires; its secrets are
+ *   wiped and [EdhocServerEvent.SessionExpired] reported.
  *
- * Flooding with message_1 from spoofed addresses is not stopped by these bounds: that takes an Echo
+ * These bounds do not stop a flood of message_1 from spoofed addresses: each costs a key generation, a
+ * Diffie-Hellman and a signature, and [maxPendingSessions] of them per [pendingSessionGracePeriod]
+ * (6.4 per second by default) keep new clients out while the flood lasts. That takes an Echo
  * reachability check before message_2 (RFC 9528 Appendix A.2, RFC 9175), which belongs to the CoAP server.
  *
+ * @param pendingSessionLifetime how long a session waits for message_3: by default MAX_TRANSMIT_WAIT
+ *   (93 s, RFC 7252 §4.8.2), about as long as a client retransmits message_3 and waits for its answer.
+ * @param pendingSessionGracePeriod how long a session waiting for message_3 is safe from eviction: by
+ *   default 10 s, a round trip and the client's processing of message_2 with time to spare. Give it at least
+ *   [pendingSessionLifetime] to never evict, so a full server only refuses.
  * @param sequenceStore holds the Sender Sequence Numbers of every context this server derives, each under
  *   its own name. The ephemeral default fits EDHOC, whose keys are new with every session; pass a durable
  *   store to resume contexts after a restart, as [oscoreParameters] describes.
- * @param timeSource the clock of [pendingSessionLifetime].
+ * @param timeSource the clock of [pendingSessionLifetime] and [pendingSessionGracePeriod].
  * @param eventListener receives the [EdhocServerEvent]s.
  */
 public class EdhocServer(
@@ -71,7 +83,8 @@ public class EdhocServer(
     private val sendMessage4: Boolean = false,
     private val maxPendingSessions: Int = 64,
     private val maxPendingSessionsPerPeer: Int = 8,
-    private val pendingSessionLifetime: Duration = TransmissionParameters.Default.exchangeLifetime,
+    private val pendingSessionLifetime: Duration = TransmissionParameters.Default.maxTransmitWait,
+    private val pendingSessionGracePeriod: Duration = 10.seconds,
     private val sequenceStore: SequenceNumberStore = EphemeralSequenceNumberStore(),
     timeSource: TimeSource = TimeSource.Monotonic,
     private val listener: EdhocSessionListener = EdhocSessionListener { _, _ -> },
@@ -82,11 +95,18 @@ public class EdhocServer(
         require(maxPendingSessions > 0) { "maxPendingSessions must be positive" }
         require(maxPendingSessionsPerPeer > 0) { "maxPendingSessionsPerPeer must be positive" }
         require(pendingSessionLifetime.isPositive()) { "pendingSessionLifetime must be positive" }
+        require(!pendingSessionGracePeriod.isNegative()) { "pendingSessionGracePeriod must not be negative" }
     }
 
     private val log = loggers.logger(LogTags.EDHOC).child("server")
     private val pending = PendingSessions(
-        maxPendingSessions, maxPendingSessionsPerPeer, pendingSessionLifetime, timeSource, eventListener, log,
+        maxPendingSessions,
+        maxPendingSessionsPerPeer,
+        pendingSessionLifetime,
+        pendingSessionGracePeriod,
+        timeSource,
+        eventListener,
+        log,
     )
 
     /** Sessions waiting for message_3, after dropping the expired ones. */

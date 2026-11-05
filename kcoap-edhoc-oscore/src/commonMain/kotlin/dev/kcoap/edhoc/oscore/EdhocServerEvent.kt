@@ -14,8 +14,9 @@ public sealed interface EdhocServerEvent {
 
     /**
      * A message_1 from [peer] was refused before any processing, because [limit] sessions were already
-     * pending. It was answered with an EDHOC error in a 5.00 response (RFC 9528 Appendix A.2.3), and no
-     * pending session was dropped for it.
+     * pending. It was answered with an EDHOC error in a 5.00 response (RFC 9528 Appendix A.2.3). For
+     * [Limit.PENDING_SESSIONS], no pending session had waited for message_3 longer than
+     * `EdhocServer(pendingSessionGracePeriod)`, so none was evicted for it ([SessionEvicted]).
      */
     public class LimitReached(override val peer: Endpoint, public val limit: Limit) : EdhocServerEvent {
         /** The bounds an [EdhocServer] keeps on pending sessions. */
@@ -37,6 +38,18 @@ public sealed interface EdhocServerEvent {
     public class SessionExpired(override val peer: Endpoint, public val responderId: ConnectionIdentifier) :
         EdhocServerEvent {
         override fun toString(): String = "SessionExpired(peer=$peer, C_R=$responderId)"
+    }
+
+    /**
+     * All `EdhocServer(maxPendingSessions)` places were taken when a new message_1 came, and the session
+     * [responderId] of [peer] was the oldest waiting for message_3, for longer than
+     * `EdhocServer(pendingSessionGracePeriod)`. It was dropped for the new session and its secrets wiped; a
+     * message_3 for it now gets the answer for an unknown C_R. Many of these events mean the server is
+     * flooded with message_1 (RFC 9528 §9.7) or the bound is too low.
+     */
+    public class SessionEvicted(override val peer: Endpoint, public val responderId: ConnectionIdentifier) :
+        EdhocServerEvent {
+        override fun toString(): String = "SessionEvicted(peer=$peer, C_R=$responderId)"
     }
 
     /**

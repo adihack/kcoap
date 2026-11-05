@@ -17,9 +17,10 @@ import kotlin.time.TimeSource
  * chose. A session goes through three stages, all under one [Mutex] that no suspension happens under:
  *
  * 1. **Admitted** ([admit]): it counts against the bounds from before message_1 is processed, so a peer
- *    beyond them costs no cryptography. Its C_R is reserved ([reserve]) the moment it is chosen, while
- *    message_2 is still being composed, so two concurrent sessions never get the same one (RFC 9668
- *    §4.1.2).
+ *    beyond them costs no cryptography. When all [maxSessions] places are taken, the oldest session that
+ *    has waited for message_3 longer than [gracePeriod] makes room; only when there is none is the new
+ *    session refused. Its C_R is reserved ([reserve]) the moment it is chosen, while message_2 is still
+ *    being composed, so two concurrent sessions never get the same one (RFC 9668 §4.1.2).
  * 2. **Waiting** ([await]): message_2 is out and the session waits up to [lifetime] for message_3. Only now
  *    can a continuation find it, and only one from the peer that sent message_1 ([take]): anything else
  *    is answered as for an unknown C_R and leaves the session alone (RFC 9528 §9.7).
@@ -27,14 +28,16 @@ import kotlin.time.TimeSource
  *    once the OSCORE context is in the repository or the session failed, so a concurrent allocation can
  *    never hand out a Recipient ID whose context is being added.
  *
- * Waiting sessions past their lifetime are dropped on the next access, and their secrets wiped
- * ([EdhocResponder.abort]). The binding to a peer applies only to this unauthenticated state, never to the
- * OSCORE context that results.
+ * Waiting sessions past their lifetime are dropped on the next access, and evicted ones when they make
+ * room; either way their secrets are wiped ([EdhocResponder.abort]). Admitted and completing sessions are
+ * never dropped: the coroutine that runs them releases them, also when it is cancelled. The binding to a
+ * peer applies only to this unauthenticated state, never to the OSCORE context that results.
  */
 internal class PendingSessions(
     private val maxSessions: Int,
     private val maxSessionsPerPeer: Int,
     private val lifetime: Duration,
+    private val gracePeriod: Duration,
     private val timeSource: TimeSource,
     private val events: EdhocServerEventListener,
     private val log: Logger,
@@ -44,7 +47,7 @@ internal class PendingSessions(
     /** Every admitted session, by the C_R reserved for it. */
     private val reserved = HashMap<ConnectionIdentifier, Session>()
 
-    /** Waiting sessions, oldest first; with one lifetime for all, their deadlines are in the same order. */
+    /** Waiting sessions, oldest first; with one lifetime and grace period for all, so are their time marks. */
     private val waiting = LinkedHashSet<Session>()
 
     /** Admitted sessions per peer ([origin]). */
@@ -57,6 +60,7 @@ internal class PendingSessions(
         var responderId: ConnectionIdentifier? = null
         var responder: EdhocResponder? = null
         var deadline: TimeMark? = null
+        var evictableAt: TimeMark? = null
     }
 
     internal enum class Stage { ADMITTED, WAITING, COMPLETING, RELEASED }
@@ -69,13 +73,16 @@ internal class PendingSessions(
 
     /**
      * Admits a new session for [peer], or returns null and reports [EdhocServerEvent.LimitReached] when
-     * [maxSessions] are in progress, or [maxSessionsPerPeer] for this peer.
+     * [maxSessionsPerPeer] are in progress for this peer, or [maxSessions] in total and none of them has
+     * waited for message_3 longer than [gracePeriod]. Otherwise, when all places are taken, the oldest
+     * waiting session is wiped and dropped for the new one, and reported as [EdhocServerEvent.SessionEvicted].
      */
     suspend fun admit(peer: Endpoint): Session? = locked { report ->
         val limit = when {
-            admitted >= maxSessions -> Limit.PENDING_SESSIONS
             (perPeer[peer.origin()] ?: 0) >= maxSessionsPerPeer -> Limit.PENDING_SESSIONS_PER_PEER
-            else -> null
+            admitted < maxSessions -> null
+            evictOldest(report) -> null
+            else -> Limit.PENDING_SESSIONS
         }
         if (limit != null) {
             log.warn { "Refused message_1 from $peer: $limit reached" }
@@ -110,7 +117,9 @@ internal class PendingSessions(
         check(session.stage == Stage.ADMITTED && session.responderId != null) { "No C_R reserved" }
         session.stage = Stage.WAITING
         session.responder = responder
-        session.deadline = timeSource.markNow() + lifetime
+        val now = timeSource.markNow()
+        session.deadline = now + lifetime
+        session.evictableAt = now + gracePeriod
         waiting += session
     }
 
@@ -159,13 +168,33 @@ internal class PendingSessions(
         while (true) {
             val oldest = waiting.firstOrNull() ?: return
             if (!oldest.deadline!!.hasPassedNow()) return
-            val responderId = oldest.responderId!!
-            remove(oldest)
-            // Wipes Y and PRK_3e2m; a waiting responder belongs to this table alone, so nothing else uses it.
-            oldest.responder!!.abort("EDHOC session expired")
+            val responderId = drop(oldest, "EDHOC session expired")
             log.info { "Session ${responderId.hex()} of ${oldest.peer} expired before message_3" }
             reported += EdhocServerEvent.SessionExpired(oldest.peer, responderId)
         }
+    }
+
+    /**
+     * Drops the oldest waiting session if it has waited longer than [gracePeriod], so the bound makes room
+     * for a new one, and returns whether it did. A refusal-only bound would let a few message_1 per
+     * lifetime, from spoofed addresses, keep every new client out; with eviction, keeping them out takes
+     * [maxSessions] message_1 per [gracePeriod], each costing the server its cryptography only.
+     */
+    private fun evictOldest(report: (EdhocServerEvent) -> Unit): Boolean {
+        val oldest = waiting.firstOrNull()?.takeIf { it.evictableAt!!.hasPassedNow() } ?: return false
+        val responderId = drop(oldest, "EDHOC session evicted")
+        log.warn { "Evicted session ${responderId.hex()} of ${oldest.peer}: $maxSessions sessions pending" }
+        report(EdhocServerEvent.SessionEvicted(oldest.peer, responderId))
+        return true
+    }
+
+    /** Drops a waiting session and wipes its secrets; returns its C_R. */
+    private fun drop(session: Session, diagnostic: String): ConnectionIdentifier {
+        val responderId = session.responderId!!
+        remove(session)
+        // Wipes Y and PRK_3e2m; a waiting responder belongs to this table alone, so nothing else uses it.
+        session.responder!!.abort(diagnostic)
+        return responderId
     }
 
     private fun remove(session: Session) {
@@ -182,7 +211,9 @@ internal class PendingSessions(
     private companion object {
         /**
          * What identifies the peer that sent message_1: the DTLS session, not its epoch, which a renegotiation
-         * changes; otherwise the endpoint itself.
+         * changes; otherwise the endpoint itself, address and port. A host that sends from many ports is many
+         * peers to [maxSessionsPerPeer], which keeps clients behind one NAT apart; the global bound and its
+         * eviction cover such a host.
          */
         fun Endpoint.origin(): Any = if (this is Endpoint.Secure) session else this
 
