@@ -140,7 +140,7 @@ serving what it has, and reports `EndpointEvent.LimitReached`:
 | `CoapEndpointConfig.maxDeduplicationEntries` | 50 000 | a new message is dropped without state or answer; duplicates are still answered (§4.5) |
 | `CoapEndpointConfig.maxConcurrentRequests` | 256 | a CON gets a piggybacked 5.03 with Max-Age, a NON is dropped, a connection gets 5.03 |
 | `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response or notification queued behind NSTART is not sent |
-| `CoapServerConfig.maxObservers`, `maxObserversPerResource` | 10 000, 1 000 | the registration is served without Observe (RFC 7641 §4.1) |
+| `CoapServerConfig.maxObservers`, `maxObserversPerPeer`, `maxObserversPerResource` | 10 000, 32, 1 000 | the registration is served without Observe (RFC 7641 §4.1); re-registrations do not count again |
 | `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
 
 An observer that neither message nor channel security authenticated gets at most eight Non-confirmable

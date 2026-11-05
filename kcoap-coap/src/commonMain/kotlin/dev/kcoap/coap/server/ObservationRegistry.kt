@@ -28,7 +28,8 @@ import kotlinx.coroutines.sync.withLock
  * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
  * replaced on every change of that resource, so notifying the observers of a resource touches only them.
  * Once [close]d, after the server stopped, it takes no new observers. It keeps at most
- * [CoapServerConfig.maxObservers], and [CoapServerConfig.maxObserversPerResource] per resource.
+ * [CoapServerConfig.maxObservers], [CoapServerConfig.maxObserversPerPeer] per client endpoint and
+ * [CoapServerConfig.maxObserversPerResource] per resource.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class ObservationRegistry(private val server: CoapServer) {
@@ -44,10 +45,16 @@ internal class ObservationRegistry(private val server: CoapServer) {
 
         /** [CoapServerConfig.maxObserversPerResource] reached. */
         TOO_MANY_FOR_RESOURCE,
+
+        /** [CoapServerConfig.maxObserversPerPeer] reached. */
+        TOO_MANY_FOR_PEER,
     }
 
     private val lock = Mutex()
     private val byKey = HashMap<ExchangeKey, ServerObservation>()
+
+    /** How many of [byKey] each client endpoint has; under [lock]. */
+    private val perPeer = HashMap<Endpoint, Int>()
     private var isClosed = false
 
     /** Each resource's observers; replaced, never changed, under [lock]. */
@@ -63,10 +70,13 @@ internal class ObservationRegistry(private val server: CoapServer) {
             if (isClosed) return Registration.CLOSED
             val previous = byKey[observation.key]
             if (previous == null && byKey.size >= config.maxObservers) return Registration.TOO_MANY_OBSERVERS
+            // The key includes the peer, so a replacement is the same client's and leaves its count as it is.
+            if (previous == null && (perPeer[observation.peer] ?: 0) >= config.maxObserversPerPeer) return Registration.TOO_MANY_FOR_PEER
             if (previous?.resource !== observation.resource && observersOf(observation.resource).size >= config.maxObserversPerResource) {
                 return Registration.TOO_MANY_FOR_RESOURCE
             }
             byKey[observation.key] = observation
+            if (previous == null) perPeer[observation.peer] = (perPeer[observation.peer] ?: 0) + 1
             previous?.let(::unindex)
             index(observation)
             previous
@@ -87,6 +97,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
             val registered = byKey[observation.key] === observation
             if (registered) {
                 byKey.remove(observation.key)
+                val remaining = (perPeer[observation.peer] ?: 1) - 1
+                if (remaining > 0) perPeer[observation.peer] = remaining else perPeer.remove(observation.peer)
                 unindex(observation)
             }
             registered
@@ -100,6 +112,9 @@ internal class ObservationRegistry(private val server: CoapServer) {
     }
 
     fun count(resource: ObservableResource): Int = observersOf(resource).size
+
+    /** How many observers [peer] has, for tests. */
+    internal suspend fun count(peer: Endpoint): Int = lock.withLock { perPeer[peer] ?: 0 }
 
     /** RFC 7641 §3.2: a removed resource sends 4.04 to its observers and forgets them. */
     fun removed(resource: ObservableResource) {
@@ -116,6 +131,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
         val dropped = lock.withLock {
             isClosed = true
             byResource.store(emptyMap())
+            perPeer.clear()
             byKey.values.toList().also { byKey.clear() }
         }
         dropped.forEach { it.deactivate() }

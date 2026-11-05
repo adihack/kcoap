@@ -223,6 +223,42 @@ class ResourceBoundsTest {
     }
 
     @Test
+    fun rfc7641Section4_1OneClientEndpointCannotTakeEveryObserverPlace() = runTest {
+        val fixture = StackFixture(this)
+        val (a, b) = listOf(Gauge("a"), Gauge("b"))
+        val server = fixture.server(CoapServerConfig(maxObserversPerPeer = 2)) {
+            add(a)
+            add(b)
+        }
+        val flooder = fixture.transport()
+        val other = fixture.transport()
+        val address = fixture.address(server.endpoint)
+
+        // One source registering with ever new tokens, across resources: the third is served without Observe.
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 1, 1, "a", observe = 0))?.options?.observe != null)
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 2, 2, "b", observe = 0))?.options?.observe != null)
+        val refused = answerTo(flooder, address, request(CoapMessageType.CON, 3, 3, "a", observe = 0))
+        assertEquals(CoapCode.CONTENT, refused?.code)
+        assertNull(refused?.options?.observe)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS_PER_PEER))
+        assertEquals(2, server.observations.count(flooder.localEndpoint))
+
+        // A re-registration replaces its observer without counting again; another client is not affected.
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 4, 1, "a", observe = 0))?.options?.observe != null)
+        assertTrue(answerTo(other, address, request(CoapMessageType.CON, 1, 1, "a", observe = 0))?.options?.observe != null)
+        assertEquals(2, a.observerCount)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS_PER_PEER))
+
+        // A deregistration (RFC 7641 §3.6) gives the place back.
+        assertNull(answerTo(flooder, address, request(CoapMessageType.CON, 5, 2, "b", observe = 1))?.options?.observe)
+        assertEquals(1, server.observations.count(flooder.localEndpoint))
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 6, 3, "b", observe = 0))?.options?.observe != null)
+        assertEquals(2, server.observations.count(flooder.localEndpoint))
+        server.close()
+        assertEquals(0, server.observations.count(flooder.localEndpoint), "closing forgets the counts")
+    }
+
+    @Test
     fun rfc8323AcceptedConnectionsThatNeverSendACsmAreBounded() = runTest {
         val fixture = ReliableFixture(this)
         val reliable = ReliableTransportConfig(maxPendingConnections = 1)
@@ -250,6 +286,7 @@ class ResourceBoundsTest {
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxExchangesPerPeer = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObservers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerResource = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerPeer = 0) }
         assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxPendingConnections = 0) }
         val defaults = CoapEndpointConfig()
         assertEquals(50_000, defaults.maxDeduplicationEntries)
@@ -257,6 +294,7 @@ class ResourceBoundsTest {
         assertEquals(256, defaults.maxExchangesPerPeer)
         assertEquals(10_000, CoapServerConfig().maxObservers)
         assertEquals(1_000, CoapServerConfig().maxObserversPerResource)
+        assertEquals(32, CoapServerConfig().maxObserversPerPeer)
         assertEquals(128, ReliableTransportConfig().maxPendingConnections)
     }
 }

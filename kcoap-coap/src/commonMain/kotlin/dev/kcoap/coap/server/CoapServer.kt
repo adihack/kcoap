@@ -325,6 +325,7 @@ public class CoapServer private constructor(
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
         ObservationRegistry.Registration.TOO_MANY_OBSERVERS -> EndpointEvent.LimitReached.Limit.OBSERVERS
         ObservationRegistry.Registration.TOO_MANY_FOR_RESOURCE -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE
+        ObservationRegistry.Registration.TOO_MANY_FOR_PEER -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_PEER
         ObservationRegistry.Registration.ADDED, ObservationRegistry.Registration.CLOSED -> null
     }
 

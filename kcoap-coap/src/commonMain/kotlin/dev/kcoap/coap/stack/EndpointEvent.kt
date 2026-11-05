@@ -131,6 +131,9 @@ public sealed interface EndpointEvent {
             /** `CoapServerConfig.maxObserversPerResource`: a registration was served without Observe. */
             OBSERVERS_PER_RESOURCE,
 
+            /** `CoapServerConfig.maxObserversPerPeer`: a registration was served without Observe. */
+            OBSERVERS_PER_PEER,
+
             /** [ReliableTransportConfig.maxPendingConnections]: an accepted connection was closed. */
             PENDING_CONNECTIONS,
         }

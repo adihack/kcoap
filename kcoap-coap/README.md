@@ -71,8 +71,9 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Resource bounds, RFC 7252 §11.3**: everything a peer can make the endpoint keep is bounded, and a
   bound reports `EndpointEvent.LimitReached`. `CoapEndpointConfig.maxDeduplicationEntries` (50 000; new
   messages dropped silently), `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age),
-  `maxExchangesPerPeer` (256; `IDENTIFIERS_EXHAUSTED`), `CoapServerConfig.maxObservers` and
-  `maxObserversPerResource` (10 000 and 1 000; served without Observe, RFC 7641 §4.1),
+  `maxExchangesPerPeer` (256; `IDENTIFIERS_EXHAUSTED`), `CoapServerConfig.maxObservers`,
+  `maxObserversPerPeer` and `maxObserversPerResource` (10 000, 32 and 1 000; served without Observe,
+  RFC 7641 §4.1),
   `ReliableTransportConfig.maxPendingConnections` (128; accepted connections awaiting their CSM). Non-confirmable
   notifications to unauthenticated observers are interspersed with Confirmable ones (RFC 7641 §7).
 - **Threads**: every public type is safe to use from any number of coroutines on any dispatcher; the
