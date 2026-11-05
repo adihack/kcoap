@@ -96,7 +96,7 @@ class ResponseAcknowledgementTest {
             response
         }
 
-        val exchange = endpoint.openExchange(peer.address, get(), true, security, isObservation = false)
+        val exchange = endpoint.openExchange(peer.address, get(), true, security)
         val request = peer.receive()
         peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
         val response = peer.response(request, CoapMessageType.CON, "verified")
@@ -117,7 +117,7 @@ class ResponseAcknowledgementTest {
             response
         }
 
-        val exchange = endpoint.openExchange(peer.address, get(), false, security, isObservation = false)
+        val exchange = endpoint.openExchange(peer.address, get(), false, security)
         val request = peer.receive()
         val forged = peer.response(request, CoapMessageType.CON, "forged")
         val genuine = peer.response(request, CoapMessageType.CON, "genuine")

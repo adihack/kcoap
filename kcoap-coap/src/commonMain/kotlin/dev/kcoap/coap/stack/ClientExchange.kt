@@ -17,8 +17,10 @@ import kotlinx.coroutines.channels.ChannelResult
 
 /**
  * One request on the wire and the responses it gets, matched by peer [Endpoint] and token
- * (RFC 7252 §5.3.2, §9.1.2). An observation keeps its exchange open for every notification
- * (RFC 7641 §3.2); any other exchange ends with its first response.
+ * (RFC 7252 §5.3.2, §9.1.2). Its [mode] says how responses are handed on: [ResponseMode.Single] ends the
+ * exchange with the first one, [ResponseMode.Stream] keeps it open for every notification of an
+ * observation (RFC 7641 §3.2), and [ResponseMode.Inbox] reports responses and outcomes to the inbox of a
+ * Q-Block body, which may get several responses on one token (RFC 9177 §4.3, §4.4).
  *
  * Every response is [inspect]ed before the endpoint answers it at the messaging layer: verified by the
  * [ProtectedRequest] of the request, here between the messaging layer and the layers above, where RFC 8613
@@ -31,7 +33,7 @@ internal class ClientExchange(
     private val endpoint: CoapEndpoint,
     val peer: Endpoint,
     val token: ByteArray,
-    val isObservation: Boolean,
+    val mode: ResponseMode,
     /** The critical options the caller processes in a response; any other one rejects it (RFC 7252 §5.4.1). */
     private val recognizedOptions: Set<Int>,
     private val log: Logger,
@@ -56,18 +58,23 @@ internal class ClientExchange(
     var isOpen: Boolean = true
         private set
 
-    private val responses = if (isObservation) {
-        Channel<CoapMessage>(OBSERVATION_BUFFER, BufferOverflow.DROP_OLDEST)
-    } else {
-        Channel(Channel.CONFLATED)
+    /** Where [ResponseMode.Single] and [ResponseMode.Stream] hand on responses; an inbox exchange has none. */
+    private val responses: Channel<CoapMessage>? = when (mode) {
+        ResponseMode.Single -> Channel(Channel.CONFLATED)
+        ResponseMode.Stream -> Channel(OBSERVATION_BUFFER, BufferOverflow.DROP_OLDEST)
+        is ResponseMode.Inbox -> null
     }
 
     override suspend fun onOutcome(transmission: Transmission, outcome: TransmissionOutcome) {
         when (outcome) {
             is TransmissionOutcome.Acknowledged -> outcome.piggybackedResponse?.let { onResponse(it) }
-            TransmissionOutcome.Reset -> fail(CoapException("Request rejected with RST by $peer", CoapException.Reason.RESET))
-            TransmissionOutcome.TimedOut -> fail(
+            TransmissionOutcome.Reset -> end(
+                CoapException("Request rejected with RST by $peer", CoapException.Reason.RESET),
+                ExchangeEvent.Reset(this),
+            )
+            TransmissionOutcome.TimedOut -> end(
                 CoapException("No ACK from $peer after MAX_RETRANSMIT retransmissions", CoapException.Reason.TRANSMISSION_TIMEOUT),
+                ExchangeEvent.TimedOut(this),
             )
             TransmissionOutcome.SlotReleased -> Unit
             is TransmissionOutcome.Failed -> fail(outcome.cause)
@@ -138,12 +145,14 @@ internal class ClientExchange(
         settleRequest()
         if (!isOpen) return
         log.debug { "Response ${response.code}" }
-        if (isObservation) {
-            responses.trySend(response)
-        } else {
-            close()
-            responses.trySend(response)
-            responses.close()
+        when (mode) {
+            ResponseMode.Single -> {
+                close()
+                responses?.trySend(response)
+                responses?.close()
+            }
+            ResponseMode.Stream -> responses?.trySend(response)
+            is ResponseMode.Inbox -> report(mode.inbox, ExchangeEvent.Response(this, response))
         }
     }
 
@@ -157,23 +166,39 @@ internal class ClientExchange(
         transmission?.takeIf { it.state != Transmission.State.DONE }?.let { endpoint.settle(it) }
     }
 
-    /** The next response; throws [CoapException] when the exchange failed. */
-    suspend fun awaitResponse(): CoapMessage = responses.receive()
+    /** The next response; throws [CoapException] when the exchange failed. Not for an inbox exchange. */
+    suspend fun awaitResponse(): CoapMessage = channel().receive()
 
-    suspend fun receiveCatching(): ChannelResult<CoapMessage> = responses.receiveCatching()
+    /** The next response, or the failure that closed the exchange. Not for an inbox exchange. */
+    suspend fun receiveCatching(): ChannelResult<CoapMessage> = channel().receiveCatching()
 
+    private fun channel(): Channel<CoapMessage> =
+        checkNotNull(responses) { "An exchange in inbox mode reports to its inbox: $this" }
+
+    /** Ends the exchange with [cause]; an inbox exchange reports [ExchangeEvent.Failed]. */
     suspend fun fail(cause: CoapException) {
-        if (!isOpen) return
-        log.debug { "Exchange failed: ${cause.message}" }
-        close()
-        responses.close(cause)
+        end(cause, ExchangeEvent.Failed(this, cause))
     }
 
-    /** Stops the exchange: forgets the token and stops retransmitting the request. */
+    private suspend fun end(cause: CoapException, event: ExchangeEvent) {
+        if (!isOpen) return
+        log.debug { "Exchange ended: ${cause.message}" }
+        close()
+        when (mode) {
+            is ResponseMode.Inbox -> report(mode.inbox, event)
+            else -> responses?.close(cause)
+        }
+    }
+
+    private fun report(inbox: ExchangeInbox, event: ExchangeEvent) {
+        if (!inbox.offer(event)) log.debug { "The body's inbox is full; $event counts as lost" }
+    }
+
+    /** Stops the exchange: forgets the token and stops retransmitting the request. Reports nothing. */
     suspend fun cancel() {
         if (!isOpen) return
         close()
-        responses.close()
+        responses?.close()
         transmission?.let { endpoint.settle(it) }
     }
 
@@ -182,7 +207,7 @@ internal class ClientExchange(
         endpoint.forget(this)
     }
 
-    override fun toString(): String = "ClientExchange($peer, token=${key.token}, observation=$isObservation)"
+    override fun toString(): String = "ClientExchange($peer, token=${key.token}, mode=$mode)"
 
     companion object {
         /** Notifications waiting for a slow collector; the oldest are dropped (RFC 7641 §3.3.1 allows skipping states). */

@@ -14,6 +14,7 @@ import dev.kcoap.coap.stack.ClientExchange
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.OperationKey
+import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
@@ -329,7 +330,7 @@ public class CoapClient private constructor(
         var echoed = false
         while (true) {
             val exchange = endpoint.openExchange(
-                peer, current, confirmable, config.security, isObservation = false, recognizedOptions = recognizedOptions,
+                peer, current, confirmable, config.security, ResponseMode.Single, recognizedOptions = recognizedOptions,
             )
             val response = endpoint.awaitResponse(exchange, requestTimeout)
             val echo = response.options.echo

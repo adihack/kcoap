@@ -5,6 +5,7 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.ClientExchange
 import dev.kcoap.coap.stack.OperationKey
+import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.Logger
 import dev.kcoap.transport.Endpoint
 import kotlin.concurrent.Volatile
@@ -124,7 +125,7 @@ internal class ClientObservation(
         var echoed = false
         while (true) {
             val current = client.endpoint.openExchange(
-                peer, request, confirmable, client.config.security, isObservation = true, recognizedOptions = client.recognizedOptions,
+                peer, request, confirmable, client.config.security, ResponseMode.Stream, recognizedOptions = client.recognizedOptions,
             )
             exchange = current
             val first = client.endpoint.awaitResponse(current, client.requestTimeout)
@@ -163,7 +164,7 @@ internal class ClientObservation(
                 val deregistration = registration.toBuilder().options { observe(1) }.build()
                 try {
                     val exchange = client.endpoint.openExchange(
-                        peer, deregistration, confirmable, client.config.security, isObservation = false,
+                        peer, deregistration, confirmable, client.config.security, ResponseMode.Single,
                         token = current.token, recognizedOptions = client.recognizedOptions,
                     )
                     client.endpoint.awaitResponse(exchange, client.requestTimeout)
