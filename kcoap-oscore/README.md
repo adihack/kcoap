@@ -54,7 +54,8 @@ Sender Sequence Number. A context that restarts at 0 with the same key reuses no
   earlier run may have accepted requests without persisting a number, because a response that reuses
   the request nonce takes none. `REQUIRE_PROOF` and `ASSUME_FRESH` override the choice. The challenge
   reaches the stack as `UnprotectedRequest.challenge`, and its own Partial IV comes from the durable
-  counter.
+  counter. Every challenge repeats the same Echo value until a request returns it, so a replayed
+  request cannot revoke the value the client is about to send back.
 
 ### Writing a durable store
 
@@ -147,7 +148,9 @@ Not yet: Appendix B.2
     restarted context reuse a number;
   - a restored server challenges, also for a request it accepted before the restart, and its
     challenge's Partial IV is above every one it used before;
-  - each `FreshnessPolicy` is tested for new, restored, re-derived and durable contexts.
+  - each `FreshnessPolicy` is tested for new, restored, re-derived and durable contexts;
+  - a request replayed between a challenge and its answer gets the same Echo value, and the answer
+    still proves freshness.
 - `EphemeralSequenceNumberStore` shared by parallel contexts on `Dispatchers.Default`: every number once,
   and none used before it was stored.
 - Interop with libcoap v4.3.5b in both directions, raw and through the CoAP stack, including B.1.2

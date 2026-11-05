@@ -76,7 +76,13 @@ public class SecurityContext private constructor(
         number
     }
 
-    /** The Echo value of an outstanding freshness challenge (Appendix B.1.2). */
+    /**
+     * The Echo value of the outstanding freshness challenge (Appendix B.1.2, RFC 9175 §2.3), kept until a
+     * request returns it. Drawing a new value for every challenge would let an attacker who replays one
+     * recorded request revoke the value the legitimate client is about to send back, so the proof would
+     * never complete. Repeating the value reveals nothing: it travels only inside OSCORE-protected 4.01
+     * responses.
+     */
     private var pendingEcho: ByteArray? = null
 
     /** Whether [sequence] from the peer was already accepted (or is too old for the window). */
@@ -104,7 +110,10 @@ public class SecurityContext private constructor(
                 pendingEcho = null
                 Admission.Accepted
             }
-            else -> Admission.Challenge(crypto.randomBytes(ECHO_LENGTH).also { pendingEcho = it })
+            else -> {
+                val outstanding = pendingEcho ?: crypto.randomBytes(ECHO_LENGTH).also { pendingEcho = it }
+                Admission.Challenge(outstanding.copyOf())
+            }
         }
     }
 
