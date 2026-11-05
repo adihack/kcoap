@@ -1,7 +1,8 @@
 package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapResponse
+import dev.kcoap.coap.CoapUri
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
@@ -59,6 +60,8 @@ class EdhocServerSessionsTest {
     private val mallory = Endpoint.Udp("198.51.100.66", 5683)
     private val unknownSession = EdhocError.unspecified("No EDHOC session for C_R")
     private val bye = EdhocError.unspecified("bye").encode()
+    private val serverUri = CoapUri.parse("coap://192.0.2.100")
+    private val resource = CoapUri.parse("coap://192.0.2.100/.well-known/edhoc")
 
     // --- C_R allocation (RFC 9668 §4.1.2) ---------------------------------------------------------------
 
@@ -158,8 +161,8 @@ class EdhocServerSessionsTest {
 
         val sameAsCi = ConnectionIdentifierProvider.fixed(ConnectionIdentifier(byteArrayOf(0x2b)))
         val server2 = EdhocServer(peers.responderConfig(), FixedShortIds(crypto, 0x2b), InMemoryContextRepository())
-        val session2 = EdhocClientHandshake(peers.initiatorConfig(connectionIdentifiers = sameAsCi), crypto) {
-            server2.handle(it, alice)
+        val session2 = EdhocClientHandshake(peers.initiatorConfig(connectionIdentifiers = sameAsCi), crypto, serverUri) {
+            server2.handle(it.payload, alice)
         }.run()
         assertEquals(2, session2.edhoc.responderConnectionIdentifier.size, "C_R never equals C_I")
     }
@@ -323,7 +326,7 @@ class EdhocServerSessionsTest {
             maxPendingSessions = 3, maxPendingSessionsPerPeer = 2, timeSource = TestTimeSource(),
             eventListener = { events += it },
         )
-        suspend fun start(peer: Endpoint): CoapMessage = server.start(peer, initiator(peers))
+        suspend fun start(peer: Endpoint): CoapResponse = server.start(peer, initiator(peers))
 
         val aliceFirst = EdhocInitiator(peers.initiatorConfig(), crypto)
         val accepted = server.start(alice, aliceFirst)
@@ -424,7 +427,7 @@ class EdhocServerSessionsTest {
         }
         assertEquals(CoapCode.CHANGED, server.start(alice, initiator(peers)).code)
         // A malformed message_1 gives its place back too.
-        val malformed = EdhocOverCoap.message1Request(byteArrayOf(0))
+        val malformed = EdhocOverCoap.message1Request(resource, byteArrayOf(0)).payload
         repeat(2) { assertEquals(CoapCode.BAD_REQUEST, server.handle(malformed, bob).code) }
     }
 
@@ -583,8 +586,8 @@ class EdhocServerSessionsTest {
         val clientStore = RecordingStore()
         val contexts = InMemoryContextRepository()
         val server = EdhocServer(peers.responderConfig(), crypto, contexts, sequenceStore = serverStore)
-        val client = EdhocClientHandshake(peers.initiatorConfig(), crypto, sequenceStore = clientStore) {
-            server.handle(it, alice)
+        val client = EdhocClientHandshake(peers.initiatorConfig(), crypto, serverUri, sequenceStore = clientStore) {
+            server.handle(it.payload, alice)
         }
 
         val sequential = client.run()
@@ -608,8 +611,8 @@ class EdhocServerSessionsTest {
     }
 
     private fun handshake(peers: Peers, server: EdhocServer, peer: Endpoint) =
-        EdhocClientHandshake(peers.initiatorConfig(connectionIdentifiers = clientIds), crypto) {
-            server.handle(it, peer)
+        EdhocClientHandshake(peers.initiatorConfig(connectionIdentifiers = clientIds), crypto, serverUri) {
+            server.handle(it.payload, peer)
         }
 
     private fun initiator(peers: Peers) =
@@ -642,14 +645,14 @@ class EdhocServerSessionsTest {
         }
     }
 
-    private suspend fun EdhocServer.start(peer: Endpoint, initiator: EdhocInitiator): CoapMessage =
-        handle(EdhocOverCoap.message1Request(initiator.createMessage1()), peer)
+    private suspend fun EdhocServer.start(peer: Endpoint, initiator: EdhocInitiator): CoapResponse =
+        handle(EdhocOverCoap.message1Request(resource, initiator.createMessage1()).payload, peer)
 
     private suspend fun EdhocServer.continueWith(
         peer: Endpoint,
         responderId: ConnectionIdentifier,
         message: ByteArray,
-    ): CoapMessage = handle(EdhocOverCoap.continuationRequest(responderId, message), peer)
+    ): CoapResponse = handle(EdhocOverCoap.continuationRequest(resource, responderId, message).payload, peer)
 
     /** The server's context for [session] is in [contexts], with the client's IDs swapped (RFC 9528 Table 14). */
     private suspend fun assertServerContextMatches(contexts: InMemoryContextRepository, session: EdhocOscoreSession) {

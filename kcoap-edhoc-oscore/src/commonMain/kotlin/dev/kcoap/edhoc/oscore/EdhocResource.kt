@@ -28,6 +28,6 @@ public class EdhocResource(private val edhoc: EdhocServer, name: String = "edhoc
 
     override val access: AccessPolicy get() = AccessPolicy.Public
 
-    override suspend fun handlePost(context: RequestContext): CoapResponse =
-        CoapResponse.of(edhoc.handle(context.request, context.peer))
+    /** The body of the POST and the peer it came from are all [EdhocServer.handle] needs. */
+    override suspend fun handlePost(context: RequestContext): CoapResponse = edhoc.handle(context.payload, context.peer)
 }

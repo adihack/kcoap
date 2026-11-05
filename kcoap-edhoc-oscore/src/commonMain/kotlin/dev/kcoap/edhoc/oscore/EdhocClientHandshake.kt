@@ -1,12 +1,11 @@
 package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapMessage
-import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapRequest
+import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.CoapUri
-import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.ContentFormat
+import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocInitiator
@@ -20,20 +19,15 @@ import dev.kcoap.oscore.OscoreClient
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SequenceNumberStore
 
-/** A transfer step failed outside EDHOC itself: the server answered with something that is not EDHOC. */
-public class EdhocTransferException(message: String, public val response: CoapMessage? = null) : Exception(message)
-
-/** An established EDHOC session and the OSCORE context derived from it. */
-public class EdhocOscoreSession(public val edhoc: EdhocSession, public val oscore: SecurityContext)
-
 /**
  * The client (EDHOC Initiator) side of EDHOC over CoAP, forward message flow (RFC 9528 Appendix A.2.1).
  *
- * It is independent of the CoAP endpoint: [exchange] sends one request to the server and returns its
- * response, so any CoAP client (or a test double) can carry the handshake.
+ * It speaks the application model of kcoap-coap and is independent of the endpoint: [exchange] sends one
+ * [CoapRequest] to the EDHOC resource [path] of [server] and returns its [CoapResponse], so a
+ * [CoapClient] (`client::request`, which [over] wires), another carrier or a test double can carry it.
  *
  * ```
- * val handshake = EdhocClientHandshake(config, crypto) { request -> coapClient.send(request) }
+ * val handshake = EdhocClientHandshake.over(client, CoapUri.parse("coap://192.0.2.1"), config, crypto)
  *
  * // Three messages, then OSCORE:
  * val session = handshake.run()
@@ -44,8 +38,19 @@ public class EdhocOscoreSession(public val edhoc: EdhocSession, public val oscor
  * ```
  *
  * Cipher suite negotiation (RFC 9528 §6.3) is handled: when the server answers message_1 with error
- * code 2 naming a suite the Initiator supports, message_1 is sent again with that suite.
+ * code 2 naming a suite the Initiator supports, message_1 is sent again with that suite. The suites of
+ * [config] are narrowed to those [crypto] runs on the first run, and [config] keeps the answer for every
+ * later one (docs/adr/0001-crypto-capabilities.md).
  *
+ * Every run fails with an [dev.kcoap.edhoc.EdhocException]: an [EdhocPeerErrorException] when the server
+ * answered with an EDHOC error, an [EdhocTransferException] when it answered with something that is not
+ * EDHOC, and the exception itself when a step of this side failed. Whatever [exchange] throws, such as
+ * kcoap-coap's `CoapException` for a request that got no response, passes through as it is.
+ *
+ * @param server the scheme, host and port of the server; its path and query are not used.
+ * @param path the EDHOC resource on [server], `.well-known/edhoc` (RFC 9528 §10.7) unless the server
+ *   mounts it elsewhere, as discovery with resource type `core.edhoc` tells.
+ * @param loggerFactory where the handshake's logger comes from, under [LogTags.EDHOC].
  * @param sequenceStore holds the Sender Sequence Numbers of the contexts this handshake derives. By default
  *   (null) each context gets its own [EphemeralSequenceNumberStore], which fits EDHOC, whose keys are new
  *   with every session, and goes away with the context. Pass a durable store to resume a context after a
@@ -55,55 +60,70 @@ public class EdhocOscoreSession(public val edhoc: EdhocSession, public val oscor
  *   with one name in one store break its contract and can lead to AEAD nonce reuse after a restore
  *   (RFC 8613 Appendix B.1.1), so give every server its own durable store, or a store that puts a name
  *   of the server in front of the context names (and restore with the same one).
+ * @param exchange sends one request and returns its response.
  */
 public class EdhocClientHandshake(
     private val config: EdhocInitiatorConfig,
     private val crypto: CryptoBackend,
-    private val path: String = EdhocOverCoap.WELL_KNOWN_PATH,
-    private val loggers: LoggerFactory = LoggerFactory.Global,
+    server: CoapUri,
+    path: String = EdhocOverCoap.WELL_KNOWN_PATH,
+    private val loggerFactory: LoggerFactory = LoggerFactory.Global,
     private val sequenceStore: SequenceNumberStore? = null,
-    private val exchange: suspend (CoapMessage) -> CoapMessage,
+    private val exchange: suspend (CoapRequest) -> CoapResponse,
 ) {
-    private val log = loggers.logger(LogTags.EDHOC).child("client")
+    private val log = loggerFactory.logger(LogTags.EDHOC).child("client")
+
+    /** The EDHOC resource: [server] with [path] for its own. */
+    private val resource = CoapUri(server.scheme, server.host, server.port, path.split('/').filter { it.isNotEmpty() })
 
     /** The sequential flow: message_1 to message_3 (and message_4 when [expectMessage4]). */
     public suspend fun run(expectMessage4: Boolean = false): EdhocOscoreSession {
-        val initiator = EdhocInitiator(config, crypto, loggers)
+        val initiator = EdhocInitiator(config, crypto, loggerFactory)
         exchangeMessages1And2(initiator)
-        val message3 = initiator.createMessage3().bytes
-        val responderId = initiator.session!!.peerConnectionIdentifier
-        val response = exchange(EdhocOverCoap.continuationRequest(responderId, message3, path))
-        checkResponse(response, "message_3")
-        if (expectMessage4) {
-            initiator.processMessage4(response.payload)
-        } else if (response.code != CoapCode.CHANGED) {
-            // The server rejected message_3 with an EDHOC error message (RFC 9528 Appendix A.2.3).
-            throw EdhocPeerErrorException(EdhocError.decode(response.payload))
+        val (message3, session) = initiator.createMessage3()
+        return completeOrDestroy(session) {
+            val response = exchange(EdhocOverCoap.continuationRequest(resource, session.peerConnectionIdentifier, message3))
+            checkResponse(response, "message_3")
+            if (expectMessage4) {
+                initiator.processMessage4(response.payload)
+            } else if (response.code != CoapCode.CHANGED) {
+                // The server rejected message_3 with an EDHOC error message (RFC 9528 Appendix A.2.3).
+                throw EdhocPeerErrorException(EdhocError.decode(response.payload))
+            }
+            EdhocOscoreSession(session, deriveContext(session))
         }
-        val session = initiator.session!!
-        return EdhocOscoreSession(session, deriveContext(session))
     }
 
     /**
      * The RFC 9668 flow: message_1 and message_2 are exchanged here; message_3 is held back and sent
-     * with the first request protected by the returned [ClientMessageSecurity].
+     * with the first request protected by the returned [CombinedHandshake.security].
      */
-    public suspend fun runCombined(): Pair<EdhocOscoreSession, CombinedRequestSecurity> {
-        val initiator = EdhocInitiator(config, crypto, loggers)
+    public suspend fun runCombined(): CombinedHandshake {
+        val initiator = EdhocInitiator(config, crypto, loggerFactory)
         exchangeMessages1And2(initiator)
-        val message3 = initiator.createMessage3().bytes
-        val session = initiator.session!!
-        val context = deriveContext(session)
-        val security = CombinedRequestSecurity(OscoreClient(context, loggers), message3)
-        return EdhocOscoreSession(session, context) to security
+        val (message3, session) = initiator.createMessage3()
+        return completeOrDestroy(session) {
+            val context = deriveContext(session)
+            val security = CombinedRequestSecurity(OscoreClient(context, loggerFactory), message3)
+            CombinedHandshake(EdhocOscoreSession(session, context), security)
+        }
     }
+
+    /** Runs [block], which completes [session]; a session that does not complete is wiped (RFC 9528 §9.8). */
+    private inline fun <T> completeOrDestroy(session: EdhocSession, block: () -> T): T =
+        try {
+            block()
+        } catch (e: Throwable) {
+            session.destroy()
+            throw e
+        }
 
     private suspend fun deriveContext(session: EdhocSession): SecurityContext =
         session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
 
     private suspend fun exchangeMessages1And2(initiator: EdhocInitiator) {
         repeat(MAX_NEGOTIATION_ROUNDS) {
-            val response = exchange(EdhocOverCoap.message1Request(initiator.createMessage1(), path))
+            val response = exchange(EdhocOverCoap.message1Request(resource, initiator.createMessage1()))
             checkResponse(response, "message_1")
             try {
                 initiator.processMessage2(response.payload)
@@ -118,9 +138,9 @@ public class EdhocClientHandshake(
     }
 
     /** A 2.04 or an EDHOC error response; the latter is handed to EDHOC, which raises the error. */
-    private fun checkResponse(response: CoapMessage, after: String) {
+    private fun checkResponse(response: CoapResponse, after: String) {
         val isEdhocError = response.code.isClientError || response.code.isServerError
-        if (isEdhocError && response.options.contentFormat == ContentFormat.EDHOC_CBOR_SEQ) return
+        if (isEdhocError && response.contentFormat == ContentFormat.EDHOC_CBOR_SEQ) return
         if (response.code != CoapCode.CHANGED) {
             throw EdhocTransferException("Unexpected ${response.code} after $after", response)
         }
@@ -131,8 +151,10 @@ public class EdhocClientHandshake(
         private const val MAX_NEGOTIATION_ROUNDS = 4
 
         /**
-         * A handshake carried by [client] to the server at [server] (scheme, host and port; the path of
-         * [server] is ignored in favour of [path]).
+         * A handshake that [client] carries to the EDHOC resource [path] of [server] (scheme, host and port;
+         * the path and query of [server] are not used), with [CoapClient.request]. The requests go through the
+         * client's message security: with [PeerSecurity] they go unprotected, as its `unprotectedPaths` hold
+         * the EDHOC resource.
          *
          * @param sequenceStore as for the constructor: null gives each context its own ephemeral store, and
          *   a durable store must hold the contexts of this one server only.
@@ -143,16 +165,9 @@ public class EdhocClientHandshake(
             config: EdhocInitiatorConfig,
             crypto: CryptoBackend,
             path: String = EdhocOverCoap.WELL_KNOWN_PATH,
-            loggers: LoggerFactory = LoggerFactory.Global,
+            loggerFactory: LoggerFactory = LoggerFactory.Global,
             sequenceStore: SequenceNumberStore? = null,
-        ): EdhocClientHandshake = EdhocClientHandshake(config, crypto, path, loggers, sequenceStore) { message ->
-            val request = CoapRequest(
-                method = message.code,
-                uri = CoapUri(server.scheme, server.host, server.port, pathSegments = message.options.uriPath),
-                options = message.options.toBuilder().remove(CoapOptions.URI_PATH.number).build(),
-                payload = message.payload,
-            )
-            client.request(request).toMessage(ByteArray(0))
-        }
+        ): EdhocClientHandshake =
+            EdhocClientHandshake(config, crypto, server, path, loggerFactory, sequenceStore, client::request)
     }
 }
