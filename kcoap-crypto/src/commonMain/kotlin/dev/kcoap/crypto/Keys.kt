@@ -16,6 +16,11 @@ public abstract class PrivateKey protected constructor(public val type: KeyType)
      * as EDHOC's ephemeral keys (RFC 9528 §9.8), whatever backend made them. The default does nothing; a
      * subclass overwrites its key material, or frees a session or handle on a device. Calling it again
      * does nothing, and a destroyed key must not be used.
+     *
+     * Release is best effort and must not throw: protocol code calls this while it cleans up after a
+     * failure, too. A subclass whose platform call can fail, such as deleting a key-store entry, catches
+     * and reports that failure itself. EDHOC also contains and logs one that escapes, so that its other
+     * secrets are still wiped.
      */
     public open fun destroy() {}
 

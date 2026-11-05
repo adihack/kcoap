@@ -116,7 +116,10 @@ both in the configuration and when a Responder receives such a message_1.
   sees it, which checks that x is on the curve in common code: the same share fails the same way on every
   platform, and before an ephemeral key is generated for it.
 - Intermediate secrets (G_XY, G_RX, G_IY, PRKs, K_3/IV_3, K_4/IV_4) are wiped after use and the
-  ephemeral keys destroyed with `PrivateKey.destroy()`, whatever backend holds them (§9.8). A destroyed `EdhocSession` or `SoftwarePrivateKey` throws
+  ephemeral keys destroyed with `PrivateKey.destroy()`, whatever backend holds them (§9.8), also a key pair
+  the `EphemeralKeySource` returned in a shape EDHOC cannot use. A key-store handle whose `destroy()`
+  throws, which it must not, is logged at WARN; the secrets are wiped all the same, and the handshake
+  completes or aborts with an `EdhocException` as it would have. A destroyed `EdhocSession` or `SoftwarePrivateKey` throws
   `IllegalStateException` instead of handing out the wiped bytes. Logging: DEBUG for protocol steps,
   TRACE for message bytes through `Logger.payload`; keys, PRKs and plaintexts are never logged.
 

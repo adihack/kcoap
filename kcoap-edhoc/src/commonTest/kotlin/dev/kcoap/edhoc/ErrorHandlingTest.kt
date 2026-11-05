@@ -8,6 +8,7 @@ import dev.kcoap.common.toHex
 import dev.kcoap.cose.CwtClaimsSet
 import dev.kcoap.crypto.CertificateValidationException
 import dev.kcoap.crypto.CertificateValidator
+import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
@@ -597,6 +598,33 @@ class ErrorHandlingTest {
         }
     }
 
+    /**
+     * RFC 9528 §9.8: an ephemeral key pair EDHOC cannot use, here a P-256 key pair whose public key the
+     * application's EphemeralKeySource cut to 10 bytes, is destroyed before the failure surfaces, as X in
+     * message_1 and as Y in message_2.
+     */
+    @Test
+    fun anUnusableEphemeralKeyPairIsDestroyed() = runTest {
+        val keys = mutableListOf<SoftwarePrivateKey>()
+        val shortPublicKeys = EphemeralKeySource { crypto, type ->
+            val pair = crypto.generateKeyPair(type)
+            keys += pair.privateKey as SoftwarePrivateKey
+            KeyPair(pair.publicKey.copyOf(10), pair.privateKey)
+        }
+        val (initiatorConfig, responderConfig) = Fixtures.configs(backend, method0, CipherSuite.SUITE_2)
+        val initiator = EdhocInitiator(initiatorConfig.withEphemeralKeys(shortPublicKeys), backend)
+        val noMessage = assertFailsWith<EdhocException> { initiator.createMessage1() }
+        assertNull(noMessage.errorMessage, "nothing to answer before message_1 is sent")
+        assertEquals(EdhocPhase.ABORTED, initiator.phase)
+
+        val responder = EdhocResponder(responderConfig.withEphemeralKeys(shortPublicKeys), backend)
+        responder.processMessage1(EdhocInitiator(initiatorConfig, backend).createMessage1())
+        assertEquals("Processing message_2 failed", diagnosticOf { responder.createMessage2() })
+        assertEquals(EdhocPhase.ABORTED, responder.phase)
+        assertEquals(2, keys.size, "X and Y")
+        for (key in keys) assertFailsWith<IllegalStateException> { key.encoded() }
+    }
+
     @Test
     fun initiatorWithoutCredentialForTheNegotiatedSuiteFailsAtMessage3() = runTest {
         val ed = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 1)
@@ -656,6 +684,14 @@ class ErrorHandlingTest {
 
     private fun EdhocResponderConfig.withResolver(resolver: CredentialResolver) =
         EdhocResponderConfig(methods, cipherSuites, credentials, resolver)
+
+    private fun EdhocInitiatorConfig.withEphemeralKeys(keys: EphemeralKeySource) = EdhocInitiatorConfig(
+        method, cipherSuites, credentials, credentialResolver, connectionIdentifiers, eadHandler, keys,
+    )
+
+    private fun EdhocResponderConfig.withEphemeralKeys(keys: EphemeralKeySource) = EdhocResponderConfig(
+        methods, cipherSuites, credentials, credentialResolver, connectionIdentifiers, eadHandler, keys,
+    )
 
     private suspend fun diagnosticOf(block: suspend () -> Unit): String {
         val failure = try {

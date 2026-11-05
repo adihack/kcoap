@@ -285,9 +285,13 @@ kcoap-crypto as the home of shared crypto blocks (WP-A4):
   of your own no longer needs to decode compressed points; code that passed compressed points to a backend
   expands them with `Sec1.decompress` first.
 - **EDHOC destroys every ephemeral private key it is done with by calling `PrivateKey.destroy()`**, where it
-  destroyed only `SoftwarePrivateKey`s; `SoftwarePrivateKey.destroy()` now overrides it. *Migration:* a
+  destroyed only `SoftwarePrivateKey`s; `SoftwarePrivateKey.destroy()` now overrides it. It also destroys a
+  key pair from an `EphemeralKeySource` that it cannot use, such as one with a public key of the wrong size.
+  `destroy()` releases on a best-effort basis and must not throw; EDHOC logs one that throws anyway at WARN,
+  still wipes its secrets, and completes the handshake or aborts it with an `EdhocException`. *Migration:* a
   `PrivateKey` subclass of your own that an `EphemeralKeySource` or a backend hands to EDHOC gets `destroy()`
-  called: override it to release the key, or keep the default, which does nothing.
+  called: override it to release the key, catching what the platform throws (Android's
+  `KeyStore.deleteEntry` can), or keep the default, which does nothing.
 - **`DtlsSigner` is removed, and `DtlsCredentials.signer` is `localCredential: DtlsLocalCredential?`**
   (kcoap-dtls, which is not published yet). `DtlsLocalCredential(privateKey, subjectPublicKeyInfo,
   certificateChain)` takes a P-256 `PrivateKey` handle, the same kind EDHOC's `LocalCredential` takes, and

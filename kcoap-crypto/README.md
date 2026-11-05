@@ -42,8 +42,16 @@ private-key operations, and the same decorator then serves EDHOC (`LocalCredenti
 (`DtlsLocalCredential`):
 
 ```kotlin
-class KeyStoreKey(type: KeyType, val alias: String) : PrivateKey(type) {
-    override fun destroy() { /* release the handle; delete the entry if the key was ephemeral */ }
+class KeyStoreKey(type: KeyType, val alias: String, private val store: PlatformKeyStore) : PrivateKey(type) {
+    // Release the handle and delete the entry if the key was ephemeral. destroy() must not throw:
+    // Android's KeyStore.deleteEntry can, so the failure is caught and reported here.
+    override fun destroy() {
+        try {
+            store.delete(alias)
+        } catch (e: Exception) {
+            log.warn(e) { "Key-store entry $alias was not deleted" }   // a kcoap or application logger
+        }
+    }
 }
 
 class KeyStoreBackend(
@@ -61,6 +69,8 @@ class KeyStoreBackend(
 
 Protocol code calls `PrivateKey.destroy()` on the keys it owns, such as EDHOC's ephemeral keys (RFC 9528
 §9.8), whatever kind of handle they are; a software key overwrites its bytes and fails closed afterwards.
+`destroy()` releases on a best-effort basis and must not throw, since it also runs while a failed handshake
+cleans up. EDHOC logs one that throws anyway at WARN and carries on, so its other secrets are still wiped.
 
 ## Certificates
 

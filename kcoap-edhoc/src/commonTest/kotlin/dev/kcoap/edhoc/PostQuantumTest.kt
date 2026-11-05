@@ -12,6 +12,7 @@ import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
+import dev.kcoap.log.LoggerFactory
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -148,7 +149,8 @@ class PostQuantumTest {
         assertEquals(listOf(2), redirected.error.cipherSuites)
 
         // The strategy itself refuses static DH.
-        val kem = EphemeralKeyExchange.forSuite(suite, backend, EphemeralKeySource.Random)
+        val log = LoggerFactory.Global.logger("test")
+        val kem = EphemeralKeyExchange.forSuite(suite, backend, EphemeralKeySource.Random, log)
         val key = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(32))
         assertFailsWith<EdhocException> { kem.staticAgreement(key, ByteArray(32)) }
         assertFailsWith<EdhocException> { kem.staticAgreementWithShare(key, ByteArray(800)) }
@@ -191,10 +193,9 @@ class PostQuantumTest {
             assertFailsWith<EdhocException> { pqInitiator.processMessage2(honest.createMessage2()) }.error.diagnostic,
         )
 
-        // Encapsulation keys of the wrong size never leave the Initiator.
-        val badKeys = EphemeralKeySource { _, _ ->
-            KeyPair(ByteArray(10), SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(32)))
-        }
+        // Encapsulation keys of the wrong size never leave the Initiator, which destroys the key (RFC 9528 §9.8).
+        val decapsulationKey = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(32))
+        val badKeys = EphemeralKeySource { _, _ -> KeyPair(ByteArray(10), decapsulationKey) }
         val initiator = EdhocInitiator(
             EdhocInitiatorConfig(
                 EdhocMethod.SIGNATURE_SIGNATURE, listOf(suite), listOf(signer), nobody, ephemeralKeys = badKeys,
@@ -203,6 +204,7 @@ class PostQuantumTest {
         )
         val noMessage = assertFailsWith<EdhocException> { initiator.createMessage1() }
         assertEquals(null, noMessage.errorMessage, "nothing to answer before message_1")
+        assertFailsWith<IllegalStateException> { decapsulationKey.encoded() }
     }
 
     @Test
