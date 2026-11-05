@@ -183,7 +183,8 @@ class LibedhocInteropTest {
             peer.send(initiator.createMessage1())
             val message2 = peer.receiveMessage().flipLastBit()
             val failure = assertFailsWith<EdhocException> { initiator.processMessage2(message2) }
-            assertEquals("Verification of Signature_or_MAC_2 failed", failure.error.diagnostic)
+            assertEquals("Verification of Signature_or_MAC_2 failed", failure.message)
+            assertEquals("Authentication failed", failure.error.diagnostic, "the wire error does not say why")
             // libedhoc decodes kcoap's error message (code 1 with a diagnostic) and stops.
             peer.send(failure.errorMessage!!)
             assertEquals(listOf("1"), peer.expect("peer_error").tokens)

@@ -102,8 +102,12 @@ public class EdhocError(
  * An EDHOC session failed. [error] is what RFC 9528 §6 says to tell the peer, and [errorMessage] is that
  * error message encoded, ready to send, or null when nothing may be sent.
  *
- * Messages and diagnostics never contain key material or secret-dependent detail: a failed MAC and a
- * wrong key look the same.
+ * Messages and diagnostics never contain key material or secret-dependent detail. When the peer fails to
+ * authenticate (its credential is not trusted or does not fit the cipher suite, a certificate chain is
+ * rejected, or Signature_or_MAC_2 or _3 does not verify), [error] is the same error code 1 with the
+ * diagnostic "Authentication failed" whatever the reason, so a probing peer cannot learn which credentials
+ * are trusted; [message] keeps the precise reason for this side's logs. Error code 3 for an unknown 'kid'
+ * or 'x5t' is the exception ([CredentialResolver] explains it).
  */
 public open class EdhocException(
     /** The error to report: what the peer is told, and why this side failed. */
@@ -129,6 +133,17 @@ public open class EdhocException(
 
         fun malformed(what: String, cause: Throwable? = null): EdhocException =
             unspecified("Malformed $what", cause)
+
+        /**
+         * The peer did not authenticate. Every such failure sends the same error, error code 1 with
+         * [AUTHENTICATION_FAILED] (RFC 9528 §6.2), so the answer does not tell a probing Initiator which
+         * credentials this side trusts; [detail] says why, as the exception message, for local logs only.
+         */
+        fun authenticationFailed(detail: String, cause: Throwable? = null): EdhocException =
+            EdhocException(EdhocError.unspecified(AUTHENTICATION_FAILED), detail, cause)
+
+        /** The diagnostic of every peer-authentication failure on the wire. */
+        const val AUTHENTICATION_FAILED: String = "Authentication failed"
 
         /**
          * This side's crypto backend lacks [algorithm]: a local failure, not the peer's, which the

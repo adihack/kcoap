@@ -269,7 +269,7 @@ public class EdhocResponder(
             },
         )
         wipeAll(salt4e3m)
-        return verified ?: throw EdhocException.unspecified("Verification of Signature_or_MAC_3 failed")
+        return verified ?: throw EdhocException.authenticationFailed("Verification of Signature_or_MAC_3 failed")
     }
 
     /**

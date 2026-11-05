@@ -181,7 +181,8 @@ class CredentialTest {
         val rejected = assertFailsWith<EdhocException> {
             validating.resolve(CredentialIdentifier.X509Chain(listOf(Rfc9529Trace1.CRED_I.hex(), "3001".hex())))
         }
-        assertEquals("Certificate chain not trusted", rejected.error.diagnostic)
+        assertEquals("Certificate chain not trusted", rejected.message)
+        assertEquals("Authentication failed", rejected.error.diagnostic, "the peer is not told why")
         assertTrue(rejected.cause is CertificateValidationException)
     }
 }

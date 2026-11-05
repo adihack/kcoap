@@ -57,7 +57,9 @@ internal object Handshake {
 
     /**
      * The peer's candidate credentials for [identifier] that fit [kind] and [suite]. No candidate at all is
-     * error code 3 for a reference (RFC 9528 §6.4) and code 1 otherwise.
+     * error code 3 for a reference (RFC 9528 §6.4) and code 1 otherwise. An untrusted credential sent by
+     * value and a trusted one that does not fit are authentication failures, which the peer cannot tell
+     * apart from a signature or MAC that does not verify ([EdhocException.authenticationFailed]).
      */
     suspend fun resolvePeer(
         resolver: CredentialResolver,
@@ -71,11 +73,12 @@ internal object Handshake {
                 is CredentialIdentifier.KeyId, is CredentialIdentifier.X509Thumbprint ->
                     EdhocException(EdhocError.unknownCredentialReferenced(), "Unknown credential $identifier")
                 is CredentialIdentifier.Other -> EdhocException.unspecified("Unsupported credential identifier")
-                else -> EdhocException.unspecified("Credential not trusted")
+                else -> EdhocException.authenticationFailed("Credential not trusted")
             }
         }
-        return candidates.filter { isUsable(it, kind, suite) }
-            .ifEmpty { throw EdhocException.unspecified("Peer credential does not fit cipher suite ${suite.value}") }
+        return candidates.filter { isUsable(it, kind, suite) }.ifEmpty {
+            throw EdhocException.authenticationFailed("Peer credential does not fit cipher suite ${suite.value}")
+        }
     }
 
     /** Decodes an error message received instead of message_2, message_3 or message_4. */

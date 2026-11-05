@@ -217,7 +217,7 @@ public class EdhocInitiator(
             },
         )
         wipeAll(salt3e2m)
-        return verified ?: throw EdhocException.unspecified("Verification of Signature_or_MAC_2 failed")
+        return verified ?: throw EdhocException.authenticationFailed("Verification of Signature_or_MAC_2 failed")
     }
 
     /**

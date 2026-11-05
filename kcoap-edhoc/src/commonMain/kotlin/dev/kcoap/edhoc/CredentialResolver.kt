@@ -14,6 +14,17 @@ import dev.kcoap.crypto.CryptoBackend
  * credential: EDHOC answers with error code 3 for a reference it cannot resolve ('kid', 'x5t') and with
  * error code 1 otherwise, since code 3 must not be used for unsupported identifier types (RFC 9528 §6.4).
  * Throw an [EdhocException] to answer with a specific error.
+ *
+ * What the peer learns from the answer:
+ * - Error code 3 tells it whether a 'kid' or 'x5t' reference is known here. That is the interoperable
+ *   behaviour of RFC 9528 §6.4, so it stays on. A resolver that considers it sensitive throws
+ *   `EdhocException(EdhocError.unspecified("Authentication failed"), reason)` instead of returning an
+ *   empty list: the answer to every other authentication failure.
+ * - An untrusted credential sent by value, a trusted one that does not fit the cipher suite, a rejected
+ *   certificate chain and a signature or MAC that does not verify all get that same error code 1
+ *   "Authentication failed"; [EdhocException.message] keeps the reason for this side's logs.
+ * - Response timing can still tell a trusted credential from an untrusted one, because only a trusted
+ *   one gets its signature or MAC checked.
  */
 public fun interface CredentialResolver {
     /** The trusted credentials [identifier] may refer to, most likely first. */
@@ -60,7 +71,7 @@ public class TrustedCredentials(
         try {
             certificateValidator.validate(chain.certificates)
         } catch (e: CertificateValidationException) {
-            throw EdhocException.unspecified("Certificate chain not trusted", e)
+            throw EdhocException.authenticationFailed("Certificate chain not trusted", e)
         }
         return listOf(endEntity)
     }

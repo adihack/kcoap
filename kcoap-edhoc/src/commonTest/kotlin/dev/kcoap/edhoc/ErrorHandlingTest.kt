@@ -6,10 +6,13 @@ import dev.kcoap.cbor.CborText
 import dev.kcoap.cbor.toCbor
 import dev.kcoap.common.toHex
 import dev.kcoap.cose.CwtClaimsSet
+import dev.kcoap.crypto.CertificateValidationException
+import dev.kcoap.crypto.CertificateValidator
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.edhoc.vectors.Rfc9529Trace1
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
@@ -25,6 +28,7 @@ class ErrorHandlingTest {
     private val backend = DefaultCryptoBackend()
     private val nobody = TrustedCredentials(backend, emptyList())
     private val method0 = EdhocMethod.SIGNATURE_SIGNATURE
+    private val authenticationFailed = EdhocError.unspecified("Authentication failed")
 
     // --- §6.3 cipher suite negotiation -------------------------------------------------------------------
 
@@ -110,11 +114,65 @@ class ErrorHandlingTest {
             val message2 = responder.createMessage2()
             message2.flip(message2.size - 1)
             val failure = assertFailsWith<EdhocException> { initiator.processMessage2(message2) }
-            val diagnostic = "Verification of Signature_or_MAC_2 failed"
-            assertEquals(diagnostic, failure.error.diagnostic, method.name)
+            assertEquals("Verification of Signature_or_MAC_2 failed", failure.message, method.name)
             assertEquals(EdhocPhase.ABORTED, initiator.phase)
-            assertEquals(EdhocError.unspecified(diagnostic).encode().toHex(), failure.errorMessage!!.toHex())
+            assertEquals(authenticationFailed.encode().toHex(), failure.errorMessage!!.toHex())
         }
+    }
+
+    /**
+     * RFC 9528 §9.7 identity protection: the peer is told "Authentication failed" whatever failed, so it
+     * cannot probe which credentials are trusted; the exception keeps the reason.
+     */
+    @Test
+    fun everyPeerAuthenticationFailureSendsTheSameError() = runTest {
+        val signer = backend.generateKeyPair(KeyType.ED25519)
+        val ccs = AuthenticationCredential.ccs(CwtClaimsSet("x", Fixtures.coseKey(KeyType.ED25519, signer.publicKey)))
+        val byValue = LocalCredential.signature(ccs, CredentialIdentifier.Kccs(ccs.claimsSet!!), signer.privateKey)
+        val responderCredential = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 9)
+        val impostor = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 9).credential
+        val wrongType = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 0x32).credential
+        val rejectingValidator = TrustedCredentials(
+            backend, emptyList(), CertificateValidator { throw CertificateValidationException("no anchor") },
+        )
+        val failures = mutableMapOf<String, EdhocException>()
+
+        // Responder: an untrusted credential by value, then a trusted kid whose key does not verify.
+        for ((credential, resolver) in listOf(byValue to nobody, byValue to CredentialResolver { listOf(impostor) })) {
+            val (initiatorConfig, responderConfig) =
+                Fixtures.configs(method0, CipherSuite.SUITE_0, credential, responderCredential)
+            val initiator = EdhocInitiator(initiatorConfig, backend)
+            val responder = EdhocResponder(responderConfig.withResolver(resolver), backend)
+            responder.processMessage1(initiator.createMessage1())
+            initiator.processMessage2(responder.createMessage2())
+            val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3().bytes) }
+            failures[failure.message!!] = failure
+        }
+        // Initiator: a credential that does not fit suite 2, and a rejected certificate chain.
+        val (initiatorConfig, responderConfig) = Fixtures.configs(backend, method0, CipherSuite.SUITE_2)
+        val initiator = EdhocInitiator(initiatorConfig.withResolver { listOf(wrongType) }, backend)
+        val responder = EdhocResponder(responderConfig, backend)
+        responder.processMessage1(initiator.createMessage1())
+        val misfit = assertFailsWith<EdhocException> { initiator.processMessage2(responder.createMessage2()) }
+        failures[misfit.message!!] = misfit
+        val chain = CredentialIdentifier.X509Chain(listOf(Rfc9529Trace1.CRED_I.hex()))
+        val rejected = assertFailsWith<EdhocException> { rejectingValidator.resolve(chain) }
+        failures[rejected.message!!] = rejected
+
+        assertEquals(
+            setOf(
+                "Credential not trusted",
+                "Verification of Signature_or_MAC_3 failed",
+                "Peer credential does not fit cipher suite 2",
+                "Certificate chain not trusted",
+            ),
+            failures.keys,
+        )
+        for ((reason, failure) in failures) {
+            assertEquals(authenticationFailed, failure.error, reason)
+            assertEquals(authenticationFailed.encode().toHex(), failure.errorMessage!!.toHex(), reason)
+        }
+        assertTrue(failures.getValue("Certificate chain not trusted").cause is CertificateValidationException)
     }
 
     @Test
@@ -179,15 +237,22 @@ class ErrorHandlingTest {
         val header = CborMap(CborInt(4) to byteArrayOf(1).toCbor(), CborInt(99) to CborText("x"))
         val other = LocalCredential.signature(ccs, CredentialIdentifier.Other(header), signer.privateKey)
         val responderCredential = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 9)
-        val cases = listOf(byValue to "Credential not trusted", other to "Unsupported credential identifier")
-        for ((credential, diagnostic) in cases) {
+        // The untrusted credential is an authentication failure; the unsupported type is the peer's input.
+        val cases = listOf(
+            Triple(byValue, "Authentication failed", "Credential not trusted"),
+            Triple(other, "Unsupported credential identifier", "Unsupported credential identifier"),
+        )
+        for ((credential, diagnostic, reason) in cases) {
             val (initiatorConfig, responderConfig) =
                 Fixtures.configs(method0, CipherSuite.SUITE_0, credential, responderCredential)
             val initiator = EdhocInitiator(initiatorConfig, backend)
             val responder = EdhocResponder(responderConfig.withResolver(nobody), backend)
             responder.processMessage1(initiator.createMessage1())
             initiator.processMessage2(responder.createMessage2())
-            assertEquals(diagnostic, diagnosticOf { responder.processMessage3(initiator.createMessage3().bytes) })
+            val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3().bytes) }
+            assertEquals(EdhocError.UNSPECIFIED_ERROR, failure.errorCode, reason)
+            assertEquals(diagnostic, failure.error.diagnostic, reason)
+            assertEquals(reason, failure.message)
         }
     }
 
@@ -198,10 +263,9 @@ class ErrorHandlingTest {
         val initiator = EdhocInitiator(initiatorConfig.withResolver { listOf(wrongType) }, backend)
         val responder = EdhocResponder(responderConfig, backend)
         responder.processMessage1(initiator.createMessage1())
-        assertEquals(
-            "Peer credential does not fit cipher suite 2",
-            diagnosticOf { initiator.processMessage2(responder.createMessage2()) },
-        )
+        val failure = assertFailsWith<EdhocException> { initiator.processMessage2(responder.createMessage2()) }
+        assertEquals("Peer credential does not fit cipher suite 2", failure.message)
+        assertEquals(authenticationFailed, failure.error, "the peer is not told why")
     }
 
     @Test
