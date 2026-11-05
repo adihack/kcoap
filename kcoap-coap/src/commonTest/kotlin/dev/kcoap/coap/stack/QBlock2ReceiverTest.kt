@@ -138,6 +138,10 @@ class QBlock2ReceiverTest {
         assertEquals(listOf("A block of a superseded body"), receiver.feed(3, etag = 1).drops())
         val actions = receiver.feed(*((0L..25L) - 5L).toLongArray(), etag = 2)
         assertContentEquals(bytes(size2), assertIs<QBlockAction.Deliver<Nothing>>(actions.last()).message.payload)
+        val noSize2 = receiver()
+        noSize2.feed(0, 1)
+        val changed = download(4, size2, etag = 3).toBuilder().options { remove(CoapOptions.SIZE2.number) }.build()
+        assertEquals(listOf("0/1/64"), noSize2.onBlock(Duration.ZERO, changed).requested(), "it cannot start a body without Size2")
     }
 
     @Test
