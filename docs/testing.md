@@ -65,7 +65,12 @@ only those, and `all` (the default) runs both.
 ./gradlew jsNodeTest wasmJsNodeTest    # the common tests as JavaScript and WebAssembly on Node.js, WebCrypto underneath
 ./gradlew koverHtmlReport              # coverage report: build/reports/kover/html/index.html
 ./gradlew koverVerify                  # fails below the coverage floor
+./gradlew checkAndroidApi              # every jvm jar against Android API level 26, without the Android SDK
 ```
+
+The Android sample is a build of its own and needs the Android SDK:
+`./gradlew publishToMavenLocal`, then `./gradlew -p samples/android-consumer assembleRelease lint`
+([samples/android-consumer](../samples/android-consumer/README.md)).
 
 ## Nightly soak
 
@@ -101,14 +106,16 @@ runs the second command above), to be added by the next owner of the CI files (t
 
 ## Build checks
 
-Four checks guard the build itself. `scripts/test unit` runs all four after the tests, in the same
-Gradle invocation, and `./gradlew check` includes the first three in each module that has them:
+Five checks guard the build itself. `scripts/test unit` runs all five after the tests, in the same
+Gradle invocation, and `./gradlew check` includes all but the build-logic tests in each module that has
+them:
 
 | Check | Fails when | Fix |
 |---|---|---|
 | `checkKotlinAbi` | the public API of a published module differs from its dumps in `<module>/api` (`<module>.api` for the JVM, `<module>.klib.api` for every other target) | if the change is intended, `./gradlew updateKotlinAbi` and commit the dump diff with the change ([releasing.md](releasing.md#abi-dumps)) |
 | `verifyCommonOnly` | a core module (`kcoap.core`) has files in a main source set other than `commonMain` | move the code to `commonMain`, or into an adapter module |
 | `verifyNoServerEngine` | a ktor server engine (CIO, Netty, Jetty, Tomcat) appears in a Gradle module file or POM that `kcoap-transport-ktor-websocket-server` would publish, or on its JVM runtime classpath; the application chooses the engine (WP-W1) | keep the engine in the test source sets; `KtorWebSocketListener.start` takes it as a parameter |
+| `checkAndroidApi` | a module's jvm jar, which Android apps use, calls a Java class, method or field that Android API level 26 (kcoap's minSdk, `android-minSdk` in the version catalog) lacks; animal-sniffer checks the jar against that level's API signature, and the jar's runtime classpath ships with it, so uses of it pass (PL-1) | use an API the level has, or move the code behind a capability check in an adapter module; raising minSdk is the owner's decision ([plan](plan-qblock-and-platforms.md) §4, question 8) |
 | `:build-logic:test` | a convention plugin no longer behaves as its Gradle TestKit fixtures expect | fix the plugin in `build-logic` |
 
 The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit
@@ -117,9 +124,17 @@ Gradle home under `build-logic/build/testkit`: a core fixture with a `jvmMain` f
 verification, a published fixture's Maven publications must carry `kcoap.group` and `kcoap.version`
 (and the version given with `-Pkcoap.version`, as the release workflow passes it), and
 `kcoap.unpublished` must remove the publication and the ABI tasks (and fail when it is applied after the
-tier plugin). The fixtures compile no Kotlin and take seconds, but the Kotlin plugin resolves the Kotlin
-standard libraries for them from Maven Central into the TestKit Gradle home, so the first run on a
-machine, or after `build-logic/build` is deleted, needs the network.
+tier plugin), and `checkAndroidApi` must fail a jar that calls an API above level 26 (`java.util.HexFormat`)
+and pass one that uses only level 26, its own classpath, lambdas and string concatenation. The fixtures
+compile no Kotlin (the Android ones compile a little Java) and take seconds, but the Kotlin plugin
+resolves the Kotlin standard libraries for them, and the Android ones animal-sniffer and the API
+signature, from Maven Central into the TestKit Gradle home, so the first run on a machine, or after
+`build-logic/build` is deleted, needs the network.
+
+`./gradlew androidApiDependencyReport` runs the same check over each module's external jvm runtime
+dependencies and writes `<module>/build/reports/android-api/dependencies.txt` without failing; the
+findings for ktor, cryptography-kotlin and Bouncy Castle are triaged in
+[samples/android-consumer](../samples/android-consumer/README.md#api-level-findings).
 
 ## Continuous integration
 
@@ -132,9 +147,17 @@ machine, or after `build-logic/build` is deleted, needs the network.
 | Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
 | WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
 | API reference | Linux | `dokkaGenerate` |
+| Android consumer | Linux, with the runner's Android SDK | `publishToMavenLocal`, then [samples/android-consumer](../samples/android-consumer/README.md), a build of its own: `assembleRelease lint` with AGP 9.4.1 at minSdk 26, R8 on the release variants of both flavors (classical, post-quantum) with no app rules, and lint on the default variant (PL-1) |
 
-Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release
-runs the same workflow first ([releasing](releasing.md)).
+Test reports are uploaded as artifacts, and the interop logs when an interop test fails; the Android job
+uploads its lint reports, APKs and R8 mappings. A release runs the same workflow first
+([releasing](releasing.md)).
+
+PL-1 added the Android job, written where no Android SDK is installed. What was checked here: the sample
+configures and resolves kcoap from `~/.m2`, its tour compiles for the JVM against the published artifacts
+and runs, and standalone R8 shrinks it, in both flavors, and the shrunk code runs. What only the job
+checks: the compilation against `android.jar`, D8, AGP's R8 and packaging, and lint. Its merge gate is
+that job green on the pull request. Running the app on an emulator is PL-2.
 
 WP-W1 added the browser job and moved the WebSocket client to the Darwin engine on Apple; both were
 written on Linux, where the Apple test binaries only compile and the browser tests ran in Firefox. Its
