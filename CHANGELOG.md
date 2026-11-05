@@ -105,9 +105,8 @@ adds its entry and migration note below.
   that, so a long body stays well below `maxExchangesPerPeer`. Requests with No-Response, Observe or block
   options of their own, observations, requests under message security and requests over TCP or WebSockets
   (unless `onReliableTransports`) keep RFC 7959; so does a request a server rejects with 4.02 or a Reset
-  before answering anything else, which is sent again with RFC 7959. `withMessageSecurity` is not
-  functional yet: OSCORE accepts one response per request (RFC 8613 §7.4) until QB-5, so a client with
-  message security uses RFC 7959 whatever it says, and logs a warning when it is set.
+  before answering anything else, which is sent again with RFC 7959. Requests under message security keep
+  it unless `withMessageSecurity` (QB-5, below).
   `missingBlockMBit` asks for the missing tail of a set with one option. The client reports the Q-Block
   events of the server's entry above: `EndpointEvent.QBlockFallback` once per finding that a server does
   not take Q-Block, `EndpointEvent.QBlockRecovery` and `EndpointEvent.PartialBodyDropped` for its bodies.
@@ -117,6 +116,19 @@ adds its entry and migration note below.
   10 % and 30 % loss.
 - `kcoap-testkit`: `RebindingTransport`, a client whose source address changes at a chosen datagram, as
   behind a NAT that rebinds (QB-4).
+- Q-Block under OSCORE (RFC 9177 with RFC 8613; QB-5), opt-in on both sides: with
+  `QBlockClientConfig.withMessageSecurity` (it had no effect before) and `QBlockServerConfig.withMessageSecurity`
+  on, protected bodies go in Q-Block1 and Q-Block2 with the options inside OSCORE (RFC 9177 Table 2), and the
+  probe and the capability it finds are kept apart from unprotected requests. Off, the default on both sides,
+  protected bodies keep Inner Block1 and Block2, and a client that opts in against a server that does not gets
+  an inner 4.02 (or a Reset to a Non-confirmable request) and falls back to RFC 7959. `OscoreClient` takes the
+  several responses of a body to a request that carries an Inner Q-Block1 or Q-Block2 option: at most one
+  with the request's nonce, every other with a Partial IV new in a replay window of that request, of the
+  context's `replayWindowSize` (32 by default); a replayed block is dropped and asked for again. This falls
+  outside RFC 8613's single-response model (§7.4), which is why it is opt-in; it is tested kcoap against kcoap,
+  at 10 % loss too. libcoap 4.3.5b protects, or verifies, only the first response to a request, so with
+  `withMessageSecurity` its Q-Block2 bodies break in both roles (pinned as `upstream…` tests); Q-Block1 uploads
+  to its server work. No API change.
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
@@ -320,6 +332,10 @@ Build governance (WP-C1):
   Appendix B.1.1).
 - OSCORE: a freshness challenge repeats its Echo value until a request returns it, so a replayed
   request can no longer revoke the value the client is about to send back (Appendix B.1.2).
+- OSCORE client (QB-5): a request takes one response (RFC 8613 §7.4). A second response, also a replay of
+  the first, was accepted whenever the first carried a Partial IV, and the non-notification responses to an
+  Observe registration were not checked for replay at all; now the second is rejected, and those of a
+  registration go through a replay window like the responses of a Q-Block body.
 - OSCORE and EDHOC: derivation copies of the Master Secret, Salt, PRK and exporter outputs are wiped,
   also when derivation fails.
 - EDHOC server (WP-SEC1): two concurrent handshakes could get the same C_R (it was checked under the lock

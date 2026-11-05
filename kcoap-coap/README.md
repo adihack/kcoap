@@ -48,8 +48,9 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   `/.well-known/core` per server, kept by the endpoint for all its clients, or `ASSUME_SUPPORTED`;
   Q-Block1 uploads and Q-Block2 downloads in NON bursts of MAX_PAYLOADS with 2.31, Continue, 4.08 lists
   and requests for missing blocks, Confirmable bodies in lock-step, back to back on TCP and WebSockets
-  (`onReliableTransports`); RFC 7959 for observations, No-Response, protected requests (until OSCORE
-  takes several responses to one request) and servers that reject Q-Block.
+  (`onReliableTransports`); RFC 7959 for observations, No-Response, protected requests (unless
+  `withMessageSecurity`, which needs a security layer that takes several responses to one request, as
+  kcoap-oscore's does) and servers that reject Q-Block.
 - **Q-Block server, RFC 9177** (off by default, `CoapServerConfig.qBlock`): Q-Block1 uploads assembled
   from NON bursts with a 2.31 per set and 4.08 lists of missing blocks, Confirmable ones block by block;
   responses to requests carrying Q-Block1 or Q-Block2 sent as Q-Block2 bodies in sets of MAX_PAYLOADS,

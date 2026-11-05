@@ -86,7 +86,10 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
 - **OSCORE.** Q-Block under OSCORE is opt-in (`withMessageSecurity`): several responses to one request
   fall outside RFC 8613's model, so they are accepted only for requests that carried inner Q-Block, each
   with a new Partial IV checked against a per-request replay window. Protected requests otherwise use inner
-  Block1 and Block2.
+  Block1 and Block2. The window has the size of the context's own (32 by default), and at most one response
+  of a body may reuse the request's nonce; every other request takes exactly one response. libcoap 4.3.5b
+  protects and verifies only the first response to a request, so these bodies are tested kcoap against
+  kcoap, and its failure is pinned (QB-5).
 - **Amplification.** A server bursting to an unauthenticated, unverified peer first verifies its address
   with Echo (RFC 9175 §2.4), for Q-Block bursts only.
 - **Strict towards libcoap's client.** A Q-Block2 follow-up that carries `Q-Block1 0/M` without payload

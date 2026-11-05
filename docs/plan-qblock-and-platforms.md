@@ -641,6 +641,31 @@ public class QBlockServerConfig(
   - A second response to a request without Q-Block is still rejected.
   - Q-Block1 PUT and Q-Block2 GET with 10 % loss pass under OSCORE between two kcoap peers.
   - The libcoap limits are pinned as `upstream…` tests; the defaults pass against libcoap.
+- **Status: done.** `RequestBinding.allowsSeveralResponses` is set for a request whose Inner options carry
+  Q-Block1 or Q-Block2. `OscoreClient` takes several responses to such a request: at most one with the
+  request's nonce, every other with a Partial IV new in a `ReplayWindow` of that request, sized as the
+  context's `replayWindowSize` (32 by default, RFC 8613 §3.2.2) rather than a constant, so it follows the
+  context. Every other request now takes exactly one response: before, a second one (a replay of the first
+  too) was accepted when the first had a Partial IV. The non-notification responses to an Observe
+  registration go through the window as well; notifications keep the strict high-water mark until QB-6's
+  OSCORE cases. The server needed nothing: every response after the first already took a new Partial IV,
+  and the Q-Block server keeps each request's `UnprotectedRequest`. In kcoap-coap, the seam QB-5 needs:
+  `QBlockClient.rfc7959Reason` lets `withMessageSecurity` take effect (the warning that it did not is gone),
+  and the KDoc of `QBlockClientConfig.withMessageSecurity`, `QBlockServerConfig.withMessageSecurity` and the
+  security SPI (`ProtectedRequest.unprotectResponse`, `UnprotectedRequest.protectResponse`) says what it
+  means; `QBlockSupportTest` turns around with it. Deviation from the plan: the kcoap-to-kcoap bodies run in
+  jvmTest (`OscoreQBlockEndToEndTest`, 9, which replaces `OscoreQBlockClientTest`), since the crypto backend
+  suspends on the platform on JS and Wasm, where virtual time would run ahead of it; the rules run on every
+  target in `OscoreQBlockTest` (commonTest, 10). The end-to-end cases: both sides opting in (NON GET, PUT
+  and a POST answered in Q-Block2, the probe protected too, no Q-Block or Block option outside OSCORE),
+  Confirmable bodies, the client or the server not opting in, a block response recorded and sent again with
+  a fresh Message ID, a restarted server's B.1.2 challenge within the bodies, and 10 seeds at 10 % loss per
+  direction with no genuine response refused. Against libcoap (`StackOscoreInteropTest`): K11 and L11 pass
+  with the defaults; with `withMessageSecurity`, libcoap 4.3.5b protects or verifies only the first
+  response to a request, pinned as `upstreamLibcoapCannotProtectQBlock2Bursts` (its server: one block per
+  request, "OSCORE: PDU could not be encrypted"; Q-Block1 uploads complete) and
+  `upstreamLibcoapClientCannotVerifyQBlock2Bursts` (its client: "Security Context association not found" at
+  block 1). libcoap's own 5 s wait while it tests for Q-Block is recorded in L11.
 
 **QB-6: Observe with Q-Block**
 - **Scope:**

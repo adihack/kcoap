@@ -34,7 +34,9 @@ in missing-block requests; 16 and 32 (client) and 64 and 128 (server) change oth
 The Q-Block runs use `-L 7` (and `-L 15` for the M bit) on both `coap-client` and `coap-server`.
 
 kcoap implements Q-Block in its server (QB-3) and its client (QB-4; see
-[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), off by default on both sides.
+[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), off by default on both sides,
+and under OSCORE only where both sides opt in (QB-5; its libcoap runs are listed with
+`StackOscoreInteropTest` below).
 While the server's is off, the fallback of RFC 9177 §4.1 is pinned: `coap-client -L 7` first sends a
 Confirmable `GET /.well-known/core` with `Q-Block2: 0/_/16`, kcoap answers 4.02 "Unrecognized critical
 option 31", libcoap logs "Q-Block support not available" and sends its real request at once with RFC 7959
@@ -202,6 +204,16 @@ server over real UDP (ktor-network):
   with Echo after the B.1.2 challenge), PUT and GET of a dynamic resource, Observe of `/time`.
 - `coap-client -E` → `CoapServer` with `OscoreServer` (requiring freshness): GET, Block2 download in
   64-byte blocks, Block1 upload, Observe with `-s 3`; every block and notification is protected on its own.
+- Q-Block under OSCORE (QB-5, cases K11 and L11 of the plan), both sides with Q-Block on (`-L 7`): with the
+  defaults, kcoap's client keeps protected bodies on Inner Block1 and Block2 against `coap-server -L 7 -E`
+  and never probes, and kcoap's server answers `coap-client -L 7 -N -b 64 -E`'s protected probe with an inner
+  4.02, after which libcoap falls back to Block2 and gets the body (after about 5 s, libcoap's own wait while
+  it tests for Q-Block). With `withMessageSecurity` on, libcoap 4.3.5b protects, or verifies, only the first
+  response to a request, pinned as `upstream…` tests: its server logs "OSCORE: PDU could not be encrypted"
+  for every block of a Q-Block2 set after the first, so a download gets one block per request (Q-Block1
+  uploads complete, since each block's request gets one response), and its client drops a request's OSCORE
+  association with the first response ("Security Context association not found") and gives up at block 1.
+  kcoap against kcoap takes these bodies (`OscoreQBlockEndToEndTest`).
 
 ```bash
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap

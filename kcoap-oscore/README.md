@@ -126,6 +126,7 @@ B.2 once it is implemented.
 |---|---|
 | §3.2 | Context derivation (HKDF, any COSE AEAD from `kcoap-crypto`) with Master Salt and ID Context; the copies of the Master Secret and Salt and the PRK are wiped afterwards |
 | §3.2.2, §7.4 | Replay window (RFC 6347 sliding window, 32 by default), atomic check and update |
+| §7.4 | One response per request, also when it carries a Partial IV. A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177) takes the several responses of its body: at most one with the request's nonce, every other with a Partial IV new in a replay window of that request, of the context's size. Outside RFC 8613's single-response model, so the CoAP stack uses it only where both sides opt in (`withMessageSecurity`) |
 | §4 | Inner/Outer option split from the option registry; unknown options are Class E |
 | §4.1.3.3 | Proxy-Uri decomposition |
 | §4.1.3.5 | Observe: Inner and Outer, FETCH / 2.05 outer codes, notification Partial IVs, freshness and replay of notifications |
@@ -145,6 +146,11 @@ Not yet: Appendix B.2
 - RFC 8613 Appendix C.1 to C.8: every key, IV, nonce, `info`, AAD and protected message, byte for byte,
   on both the client and the server side.
 - End-to-end exchanges through the SPI, Observe ordering and replay, every error path.
+- Q-Block bodies (RFC 9177) under OSCORE: the blocks of a set in any order, a replayed block, a second
+  response to a request without Q-Block, a block beyond the window, forged blocks (`OscoreQBlockTest`, every
+  target); kcoap's Q-Block client and server through the stack on the in-memory network, both ways, with a
+  replayed block on the wire, a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
+  (`OscoreQBlockEndToEndTest`).
 - Appendix B.1.1 and B.1.2 under simulated restarts:
   - a recording store and AEAD show that every Partial IV is durable before its nonce is used;
   - stores that throw, before or after the write, are cancelled mid-write, or always fail never let a
@@ -159,4 +165,6 @@ Not yet: Appendix B.2
 - `EphemeralSequenceNumberStore` shared by parallel contexts on `Dispatchers.Default`: every number once,
   and none used before it was stored.
 - Interop with libcoap v4.3.5b in both directions, raw and through the CoAP stack, including B.1.2
-  challenges both ways (`interop/README.md`).
+  challenges both ways, and Q-Block under OSCORE: Inner Block1 and Block2 with the defaults; libcoap's single
+  protected response per request, which breaks Q-Block2 bodies once `withMessageSecurity` is on, is pinned
+  (`interop/README.md`).
