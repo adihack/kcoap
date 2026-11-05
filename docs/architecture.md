@@ -53,7 +53,7 @@ Messaging          UdpMessaging:      CON/NON/ACK/RST, MID dedup, retransmission
 Framing            UDP header | TCP/TLS length framing | WebSocket (Len = 0)
 Channel security   DTLS 1.2 over datagrams | TLS over byte streams          (hop by hop)
 ──────────────── transport interface ────────────────
-Adapters           one per platform, thin
+Adapters           one per runtime capability or library, thin
 ```
 
 Block-wise appears twice on purpose: RFC 8613 allows it before OSCORE (inner, end to end) and after
