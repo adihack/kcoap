@@ -11,8 +11,9 @@ package dev.kcoap.coap.server
  * authenticated, and only on datagram transports: a connection's handshake has already shown that the
  * client receives at its address. A client proves its address by repeating its request with the Echo
  * value, which is bound to that address; it then stays verified for
- * [CoapServerConfig.verifiedAddressLifetime]. Responses up to [CoapServerConfig.amplificationFactor] times
- * the size of their request are always sent.
+ * [CoapServerConfig.verifiedAddressLifetime]. A response up to [CoapServerConfig.amplificationFactor] times
+ * the size of its request goes out at once; only an Observe registration under [ALL_RESPONSES] is
+ * challenged whatever its size.
  */
 public enum class AmplificationPolicy {
     /**
