@@ -45,8 +45,10 @@ sends, the probe's answer first. Cases K1–K5, K7–K10 and K12 of the plan: th
 NON GET of `/example_data` in 64-byte blocks, under 1.5 s; missing blocks asked for at once (`-l 4,9`),
 block 0 asked for as `0/M` (`-l 2`) and a missing tail as `3/M` (`-l 5-25`, M bit); a NON PUT of 3000 bytes
 with 2.31 at 9, 19, 29 and 39; blocks 2 and 7 lost on the kcoap side and asked for by libcoap's 4.08 `02 07`
-about 4 s after the last block; `coap-server` without `-L`; Confirmable bodies; a FETCH answered in
-Q-Block2 on the last Q-Block1 token; TCP and WebSockets (`-X 1152`) back to back; and a lost probe answer.
+about 4 s after block 39, where the client waits with four sets unconfirmed, and a 300-block upload with
+block 2 lost that never holds more than about four sets of tokens; `coap-server` without `-L`; Confirmable
+bodies; a FETCH answered in Q-Block2 on the last Q-Block1 token; 20 KiB (320 blocks) over TCP and
+WebSockets (`-X 1152`) back to back; and a lost probe answer.
 libcoap deviations pinned as `upstreamLibcoap…` tests:
 
 - three separate gaps in an upload get a plain 4.08 ("Too many missing blocks"), and the body is given up;

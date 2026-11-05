@@ -33,10 +33,13 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   rejects a response carrying Q-Block. Tests pin this. A body follows the request's message type; an
   application asks for bursts with a Non-confirmable request.
 - **Separate probe, no stickiness.** A client in PROBE mode asks a peer once with a Confirmable
-  `GET /.well-known/core` carrying Q-Block2 0/0/16, the probe libcoap sends, and caches the answer per peer
-  and protection. Only a 2.xx answer with Q-Block counts as support: libcoap without Q-Block answers 4.02
-  and repeats the Q-Block2 option it rejects. A 4.02 or a Reset before any other answer to a body sends the
-  request again with RFC 7959, since the server did not process it. The server answers with Q-Block2 only
+  `GET /.well-known/core` carrying Q-Block2 0/0/16, the probe libcoap sends, and the endpoint keeps the
+  answer per peer and protection for all its clients, so a client registers nothing with it. Only a 2.xx
+  answer with Q-Block counts as support: libcoap without Q-Block answers 4.02 and repeats the Q-Block2
+  option it rejects. A 4.02 or a Reset before any other answer to a body sends the request again with RFC
+  7959, since the server did not process it. An Empty ACK, a 2.31, a 4.08 or a block counts as an answer:
+  a 4.02 after one rejected another option (RFC 7252 §5.4.1), is returned, and leaves the capability as
+  it is. A 4.01 with Echo does not count. The server answers with Q-Block2 only
   when the request carries Q-Block1 or Q-Block2, never because the peer used Q-Block before (libcoap's
   per-session stickiness is not copied).
 - **ETag counter.** Every Q-Block2 body gets its own 4-byte ETag from a counter with a random start, which
@@ -51,6 +54,11 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   blocks up to its request that it does not list, and, for a Confirmable body, the token of a block
   acknowledged while later blocks are unsent: neither can carry the final response. Without that a long
   body over a lossy path held a token per block and ran into `maxExchangesPerPeer` (found by the soak).
+  A server that sends no 2.31 while set 0 has a gap (libcoap) releases nothing until its first 4.08, so a
+  NON upload also holds at most four sets of tokens (40 by default) and lets the next set wait for that
+  4.08 beyond them. On a connection only block 0 (an early error) and the last block (the final response)
+  keep their tokens (Appendix B), and the body's inbox has room for every block of the largest body, since
+  nothing is asked for again there.
 - **2.31 always carries Q-Block1** with the last NUM of the set, M set, because libcoap's client truncates
   the upload without it.
 - **Block 0 is asked for again as `0/M=1`** by GET and FETCH: libcoap runs the handler again for NUM 0.
