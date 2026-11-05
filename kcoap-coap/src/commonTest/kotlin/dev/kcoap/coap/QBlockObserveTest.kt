@@ -485,6 +485,45 @@ class QBlockObserveTest {
         assertEquals(serverIds.size, serverIds.toSet().size)
     }
 
+    /**
+     * RFC 9177 §4.3: the 2.05 of a FETCH registration uploaded in Q-Block1 is lost, one block of it or the whole of
+     * its one set. The client sends the last block again on a new token after NON_RECEIVE_TIMEOUT; the server sends
+     * the 2.05 again on the token of the block that completed the upload, which its notifications use ("the same
+     * token as used for the 2.05"), and nothing on the copy's token. The client keeps that token, and the
+     * observation goes on.
+     */
+    @Test
+    fun rfc9177Section4_3ALostRegistrationResponseComesAgainOnTheTokenOfTheNotifications() = runTest {
+        for (blocks in listOf(1, 3)) {
+            val name = "a 2.05 of $blocks blocks"
+            val query = body(2 * 1024 + 100, 1)
+            val bodies = listOf(body(blocks * 1024 - 10, 2), body(3 * 1024 + 300, 3))
+            val setup = setup({ bodies[it] })
+            setup.drop { message, copy -> !message.isRequest && setup.etagIndex(message) == 0 && copy == 1 }
+            setup.observe(this, fetch(setup, query))
+            delay(10.seconds)
+            setup.resource.change()
+            delay(10.seconds)
+
+            assertEquals(bodies.map { it.toList() }, setup.received.map { it.payload.toList() }, name)
+            assertEquals(1, setup.resource.observerCount, name)
+            val sent = setup.fixture.sentBy(setup.client.endpoint)
+            assertTrue(sent.none { it.type == CoapMessageType.RST }, "$name: no Reset")
+            val uploads = sent.filter { it.options.qBlock1 != null }
+            assertEquals(listOf(0L, 1L, 2L, 2L), uploads.map { it.options.qBlock1!!.number }, "$name: block 2 again")
+            val (completing, copy) = uploads[2] to uploads[3]
+            val answers = setup.fixture.sentBy(setup.server.endpoint)
+            assertTrue(answers.none { it.hasToken(copy.token) }, "$name: nothing on the copy's token")
+            val observed = answers.filter { it.options.observe != null }
+            assertTrue(
+                observed.isNotEmpty() && observed.all { it.hasToken(completing.token) },
+                "$name: §4.3, one token for the 2.05 and the notifications",
+            )
+            assertEquals(2, setup.resource.queries.size, "$name: the handler ran once for the registration")
+            assertEquals(1, setup.client.endpoint.exchangeCount(), "$name: only the observation's token is kept")
+        }
+    }
+
     // ---------------------------------------------------------------- acceptance of QB-6
 
     /**
