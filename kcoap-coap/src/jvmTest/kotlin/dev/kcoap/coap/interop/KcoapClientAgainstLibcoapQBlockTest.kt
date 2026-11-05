@@ -16,7 +16,6 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.QBlockCapabilities
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
@@ -253,7 +252,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertEquals(listOf(listOf("2/_/64", "7/_/64")), asked.map { it.message.qBlock2 })
             val block10 = blocks().first { it.message.options.qBlock2!!.number == 10L }
             assertTrue(asked.single().at - block10.at < 500.milliseconds, "asked when block 10 arrived")
-            assertTrue(events.filterIsInstance<QBlockClientEvent.Recovery>().any { it.sent && it.blocks == listOf(2L, 7L) })
+            assertTrue(events.filterIsInstance<EndpointEvent.QBlockRecovery>().any { !it.isRequestedByPeer && it.blocks == listOf(2L, 7L) })
             assertNoMessageMixesBlockAndQBlock()
         }
     }

@@ -411,43 +411,6 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
     }
 }
 
-sealed interface dev.kcoap.coap.stack/QBlockClientEvent : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/QBlockClientEvent|null[0]
-    final class Fallback : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.Fallback|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
-
-        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.peer|{}peer[0]
-            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.peer.<get-peer>|<get-peer>(){}[0]
-        final val reason // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.reason.<get-reason>|<get-reason>(){}[0]
-
-        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.toString|toString(){}[0]
-    }
-
-    final class PartialBodyDropped : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
-
-        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.peer|{}peer[0]
-            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.peer.<get-peer>|<get-peer>(){}[0]
-        final val reason // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.reason.<get-reason>|<get-reason>(){}[0]
-
-        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.toString|toString(){}[0]
-    }
-
-    final class Recovery : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.Recovery|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Boolean, kotlin.collections/List<kotlin/Long>) // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Boolean;kotlin.collections.List<kotlin.Long>){}[0]
-
-        final val blocks // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.blocks|{}blocks[0]
-            final fun <get-blocks>(): kotlin.collections/List<kotlin/Long> // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.blocks.<get-blocks>|<get-blocks>(){}[0]
-        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.peer|{}peer[0]
-            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.peer.<get-peer>|<get-peer>(){}[0]
-        final val sent // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.sent|{}sent[0]
-            final fun <get-sent>(): kotlin/Boolean // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.sent.<get-sent>|<get-sent>(){}[0]
-
-        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.toString|toString(){}[0]
-    }
-}
-
 abstract class dev.kcoap.coap.server/CoapResource { // dev.kcoap.coap.server/CoapResource|null[0]
     constructor <init>(kotlin/String) // dev.kcoap.coap.server/CoapResource.<init>|<init>(kotlin.String){}[0]
 

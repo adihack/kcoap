@@ -5,9 +5,9 @@ import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MissingBlocks
 import dev.kcoap.coap.stack.QBlockCapabilities
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.common.toHex
 import dev.kcoap.testkit.DatagramFate
@@ -151,10 +151,10 @@ class QBlockClientTest {
         assertContentEquals(upload, setup.server.resources["/store"])
         val missing = setup.responses().filter { it.code == CoapCode.REQUEST_ENTITY_INCOMPLETE }
         assertEquals(listOf(listOf(2L, 7L)), missing.map { MissingBlocks.decode(it.payload) })
-        val recovery = setup.fixture.events.filterIsInstance<QBlockClientEvent.Recovery>().single()
+        val recovery = setup.fixture.events.filterIsInstance<EndpointEvent.QBlockRecovery>().single()
         assertEquals(listOf(2L, 7L), recovery.blocks)
-        assertTrue(!recovery.sent)
-        assertEquals("QBlockClientEvent.Recovery(peer=${setup.server.address}, sent=false, blocks=[2, 7])", recovery.toString())
+        assertTrue(recovery.isRequestedByPeer)
+        assertEquals("QBlockRecovery(peer=${setup.server.address}, requestedByPeer=true, blocks=[2, 7])", recovery.toString())
         setup.assertNothingLeft()
     }
 
@@ -194,9 +194,9 @@ class QBlockClientTest {
         assertContentEquals(body(1500), response.payload)
         val asked = setup.requests().filter { it.options.path == "/big" && it.options.qBlock2List.size > 1 }
         assertEquals(listOf(listOf("2/0/64", "7/0/64")), asked.map { it.qBlock2 })
-        val recovery = setup.fixture.events.filterIsInstance<QBlockClientEvent.Recovery>().single()
+        val recovery = setup.fixture.events.filterIsInstance<EndpointEvent.QBlockRecovery>().single()
         assertEquals(listOf(2L, 7L), recovery.blocks)
-        assertTrue(recovery.sent)
+        assertTrue(!recovery.isRequestedByPeer)
         setup.assertNothingLeft()
     }
 
@@ -482,7 +482,7 @@ class QBlockClientTest {
         val failure = assertFailsWith<CoapException> { setup.client.get(setup.server.uri("/big")) { nonConfirmable() } }
 
         assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
-        val dropped = setup.fixture.events.filterIsInstance<QBlockClientEvent.PartialBodyDropped>().single()
+        val dropped = setup.fixture.events.filterIsInstance<EndpointEvent.PartialBodyDropped>().single()
         assertEquals(setup.server.address, dropped.peer)
         assertTrue(dropped.toString().contains("PartialBodyDropped"))
         val asked = setup.requests().filter { it.options.qBlock2List.singleOrNull()?.number == 5L }
@@ -744,7 +744,7 @@ class QBlockClientTest {
         assertEquals(CoapCode.BAD_OPTION, response.code, "after a 2.31 the 4.02 rejected some other option")
         assertEquals(QBlockCapabilities.Capability.SUPPORTED, setup.client.qBlock!!.support.known(setup.server.address, false))
         assertTrue(setup.requests().none { it.options.block1 != null }, "nothing sent again with RFC 7959")
-        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Fallback })
+        assertTrue(setup.fixture.events.none { it is EndpointEvent.QBlockFallback })
         setup.assertNothingLeft()
     }
 
@@ -819,7 +819,7 @@ class QBlockClientTest {
 
         assertContentEquals(body(300), got.payload)
         assertEquals(CoapCode.CHANGED, put.code)
-        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Recovery }, "a list of blocks outside the body asks for nothing")
+        assertTrue(setup.fixture.events.none { it is EndpointEvent.QBlockRecovery }, "a list of blocks outside the body asks for nothing")
         setup.assertNothingLeft()
     }
 }

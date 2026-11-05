@@ -13,6 +13,7 @@ import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.ClientExchange
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.ExchangeEvent
 import dev.kcoap.coap.stack.ExchangeInbox
 import dev.kcoap.coap.stack.MessageLimits
@@ -23,7 +24,6 @@ import dev.kcoap.coap.stack.QBlock2Receiver
 import dev.kcoap.coap.stack.QBlockAction
 import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockCheck
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.QBlockTiming
 import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.LogTags
@@ -464,13 +464,13 @@ internal class QBlockClient(private val client: CoapClient) {
                 when (action) {
                     is QBlockAction.SendContinue -> sendFollowUp(listOf(BlockOption(action.num, true, sizeExponent)))
                     is QBlockAction.RequestMissing -> {
-                        endpoint.report(QBlockClientEvent.Recovery(peer, sent = true, blocks = action.blocks.map { it.number }))
+                        endpoint.report(EndpointEvent.QBlockRecovery(peer, isRequestedByPeer = false, blocks = action.blocks.map { it.number }))
                         sendFollowUp(action.blocks)
                     }
                     is QBlockAction.Deliver -> done(action.message)
                     is QBlockAction.Fail -> fail(action.reason, action.diagnostic)
                     is QBlockAction.Discard -> {
-                        endpoint.report(QBlockClientEvent.PartialBodyDropped(peer, action.reason))
+                        endpoint.report(EndpointEvent.PartialBodyDropped(peer, action.reason))
                         fail(CoapException.Reason.BLOCKWISE_FAILED, "The response body was given up: ${action.reason}")
                     }
                     is QBlockAction.Drop -> logger.debug { "Dropped a block: ${action.reason}" }
@@ -553,7 +553,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 message.options.contentFormat == ContentFormat.MISSING_BLOCKS_CBOR_SEQ
             if (isMissingList && actions.any { it is QBlockAction.SendBlock<*> }) {
                 val listed = MissingBlocks.decode(message.payload).orEmpty().filter { it < sender.count }.take(timing.maxPayloads)
-                endpoint.report(QBlockClientEvent.Recovery(peer, sent = false, blocks = listed))
+                endpoint.report(EndpointEvent.QBlockRecovery(peer, isRequestedByPeer = true, blocks = listed))
             }
             uploadActions(actions)
         }

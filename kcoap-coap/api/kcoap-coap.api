@@ -1106,31 +1106,6 @@ public final class dev/kcoap/coap/stack/MessageInterceptor$DefaultImpls {
 	public static fun onSend (Ldev/kcoap/coap/stack/MessageInterceptor;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
 }
 
-public abstract interface class dev/kcoap/coap/stack/QBlockClientEvent : dev/kcoap/coap/stack/EndpointEvent {
-}
-
-public final class dev/kcoap/coap/stack/QBlockClientEvent$Fallback : dev/kcoap/coap/stack/QBlockClientEvent {
-	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
-	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
-	public final fun getReason ()Ljava/lang/String;
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class dev/kcoap/coap/stack/QBlockClientEvent$PartialBodyDropped : dev/kcoap/coap/stack/QBlockClientEvent {
-	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
-	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
-	public final fun getReason ()Ljava/lang/String;
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class dev/kcoap/coap/stack/QBlockClientEvent$Recovery : dev/kcoap/coap/stack/QBlockClientEvent {
-	public fun <init> (Ldev/kcoap/transport/Endpoint;ZLjava/util/List;)V
-	public final fun getBlocks ()Ljava/util/List;
-	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
-	public final fun getSent ()Z
-	public fun toString ()Ljava/lang/String;
-}
-
 public final class dev/kcoap/coap/stack/ReliableTransportConfig {
 	public static final field Companion Ldev/kcoap/coap/stack/ReliableTransportConfig$Companion;
 	public static final field DEFAULT_MAX_CONNECTIONS I

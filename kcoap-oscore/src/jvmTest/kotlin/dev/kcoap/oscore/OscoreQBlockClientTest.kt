@@ -16,7 +16,6 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.testkit.InMemoryNetwork
@@ -83,6 +82,6 @@ class OscoreQBlockClientTest {
         assertTrue(inner.none { message -> message.options.any { it.number in qBlockOptions } }, "no Q-Block option inside OSCORE")
         assertTrue(inner.any { it.options.block2 != null }, "RFC 7959 carried the response body")
         assertTrue(inner.any { it.options.block1 != null }, "RFC 7959 carried the request body")
-        assertTrue(events.none { it is QBlockClientEvent.Fallback }, "nothing was tried and rejected")
+        assertTrue(events.none { it is EndpointEvent.QBlockFallback }, "nothing was tried and rejected")
     }
 }

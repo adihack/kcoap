@@ -591,8 +591,10 @@ public class QBlockServerConfig(
 - **Status: done.** `KC/client/QBlockClientConfig.kt` (`QBlockMode`, `QBlockClientConfig`),
   `KC/client/QBlockSupport.kt` (probe, single-flight, cache per peer and protection),
   `KC/client/QBlockClient.kt` (the driver of `QBlock1Sender` and `QBlock2Receiver` over inbox exchanges and
-  the body lease) and `KC/stack/QBlockClientEvent.kt` (`Fallback`, `Recovery`, `PartialBodyDropped`, a
-  sealed `EndpointEvent` subtype in a file of its own, so it merges with QB-3's events). The endpoint
+  the body lease); built alongside QB-3, it reported its own `QBlockClientEvent` (`Fallback`, `Recovery`,
+  `PartialBodyDropped`), which the merge replaced with QB-3's `EndpointEvent.QBlockFallback`,
+  `QBlockRecovery` and `PartialBodyDropped`, as in the table of section 1, so one listener sees both
+  roles' events. The endpoint
   reports an Empty ACK to an inbox exchange (`ExchangeEvent.Acknowledged`), waits on an inbox without
   losing events to a timeout (`ExchangeInbox.receive(timeout)`) and tells clients when a peer's session
   ends (`addPeerEndedListener`). Changes to the cores, each with tests: `QBlock1Sender` releases the tokens

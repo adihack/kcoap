@@ -87,7 +87,7 @@ adds its entry and migration note below.
   observer until QB-6. libcoap's `coap-client -L 7` completes uploads and
   downloads against it over UDP, TCP and WebSockets. New public API besides the configuration:
   `EndpointEvent.QBlockRecovery` (missing blocks asked for, by either side), `EndpointEvent.QBlockFallback`
-  (for the client, QB-4), `EndpointEvent.PartialBodyDropped`, and the `EndpointEvent.LimitReached.Limit`
+  (reported by the client, below), `EndpointEvent.PartialBodyDropped`, and the `EndpointEvent.LimitReached.Limit`
   values `PARTIAL_BODIES` and `BODIES_PER_PEER` (an upload refused with 5.03 and Max-Age, or a peer's oldest
   body dropped) and `CACHED_BODIES`; an exhaustive `when` over `EndpointEvent` or `Limit` needs the new
   branches. `qBlock` is a new trailing constructor parameter with a default, so source stays compatible;
@@ -108,10 +108,11 @@ adds its entry and migration note below.
   before answering anything else, which is sent again with RFC 7959. `withMessageSecurity` is not
   functional yet: OSCORE accepts one response per request (RFC 8613 §7.4) until QB-5, so a client with
   message security uses RFC 7959 whatever it says, and logs a warning when it is set.
-  `missingBlockMBit` asks for the missing tail of a set with one option. New `QBlockClientEvent`s, an
-  `EndpointEvent` subtype, report `Fallback`, `Recovery` and `PartialBodyDropped`; an exhaustive `when`
-  over `EndpointEvent` needs a branch for it. `qBlock` is a new trailing constructor parameter with a
-  default, so source stays compatible; compiled callers of the constructor recompile. Tested against
+  `missingBlockMBit` asks for the missing tail of a set with one option. The client reports the Q-Block
+  events of the server's entry above: `EndpointEvent.QBlockFallback` once per finding that a server does
+  not take Q-Block, `EndpointEvent.QBlockRecovery` and `EndpointEvent.PartialBodyDropped` for its bodies.
+  `qBlock` is a new trailing constructor parameter with a default, so source stays compatible; compiled
+  callers of the constructor recompile. Tested against
   libcoap's `coap-server -L 7` (K1–K5, K7–K10, K12, with 300-block uploads over UDP and TCP) and soaked at
   10 % and 30 % loss.
 - `kcoap-testkit`: `RebindingTransport`, a client whose source address changes at a chosen datagram, as

@@ -7,8 +7,8 @@ import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
@@ -88,9 +88,9 @@ class QBlockSupportTest {
         val probeAnswer = fixture.traffic.mapNotNull { it.message }.first { it.isResponse }
         assertEquals(CoapCode.BAD_OPTION, probeAnswer.code)
         assertEquals(Capability.UNSUPPORTED, client.known(fixture.address(server.endpoint)))
-        val fallback = fixture.events.filterIsInstance<QBlockClientEvent.Fallback>().single()
+        val fallback = fixture.events.filterIsInstance<EndpointEvent.QBlockFallback>().single()
         assertTrue(fallback.reason.contains("4.02"), fallback.reason)
-        assertTrue(fallback.toString().startsWith("QBlockClientEvent.Fallback("))
+        assertTrue(fallback.toString().startsWith("QBlockFallback("))
     }
 
     @Test
@@ -108,7 +108,7 @@ class QBlockSupportTest {
         assertEquals(1, sent.count { it.hasQBlock() }, "rejected once, then RFC 7959 only")
         assertTrue(sent.none { it.options.path == "/.well-known/core" }, "no probe in this mode")
         assertEquals(Capability.UNSUPPORTED, client.known(fixture.address(server.endpoint)))
-        assertEquals(1, fixture.events.filterIsInstance<QBlockClientEvent.Fallback>().size)
+        assertEquals(1, fixture.events.filterIsInstance<EndpointEvent.QBlockFallback>().size)
     }
 
     @Test
@@ -166,7 +166,7 @@ class QBlockSupportTest {
         assertEquals(4, blocks.size)
         assertTrue(setup.requests().none { it.options.block1 != null }, "nothing sent again with RFC 7959")
         assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
-        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Fallback })
+        assertTrue(setup.fixture.events.none { it is EndpointEvent.QBlockFallback })
         setup.assertNothingLeft()
     }
 
@@ -205,7 +205,7 @@ class QBlockSupportTest {
         assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
         val gets = setup.requests().filter { it.options.path == "/small" }
         assertEquals(listOf(false, false, true), gets.map { it.hasQBlock() }, "RFC 7959 until the probe succeeds")
-        val fallback = setup.fixture.events.filterIsInstance<QBlockClientEvent.Fallback>().single()
+        val fallback = setup.fixture.events.filterIsInstance<EndpointEvent.QBlockFallback>().single()
         assertTrue(fallback.reason.contains("no answer"), fallback.reason)
     }
 
@@ -332,7 +332,7 @@ class QBlockSupportTest {
         assertContentEquals(body(40), setup.client.get(setup.server.uri("/small")).payload)
 
         assertEquals(Capability.UNSUPPORTED, setup.client.known(setup.server.address))
-        val reason = setup.fixture.events.filterIsInstance<QBlockClientEvent.Fallback>().single().reason
+        val reason = setup.fixture.events.filterIsInstance<EndpointEvent.QBlockFallback>().single().reason
         assertTrue(reason.contains("rejected"), reason)
     }
 

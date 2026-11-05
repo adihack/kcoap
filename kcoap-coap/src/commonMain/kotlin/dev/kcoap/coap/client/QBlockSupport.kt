@@ -4,10 +4,10 @@ import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability
 import dev.kcoap.coap.stack.QBlockCheck
-import dev.kcoap.coap.stack.QBlockClientEvent
 import dev.kcoap.log.Logger
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
@@ -115,7 +115,7 @@ internal class QBlockSupport(
             record(Key(peer, isProtected), Capability.UNSUPPORTED, reason)
         } else {
             invalidate(peer)
-            endpoint.report(QBlockClientEvent.Fallback(peer, reason))
+            endpoint.report(EndpointEvent.QBlockFallback(peer, reason))
         }
     }
 
@@ -124,7 +124,7 @@ internal class QBlockSupport(
         val now = endpoint.now()
         capabilities.put(key.peer, key.isProtected, capability, now + lifetime, now)
         log.debug { "${key.peer} ${if (key.isProtected) "(protected) " else ""}Q-Block support: $capability" }
-        if (reason != null) endpoint.report(QBlockClientEvent.Fallback(key.peer, reason))
+        if (reason != null) endpoint.report(EndpointEvent.QBlockFallback(key.peer, reason))
     }
 
     /** The probe and its verdict, with the reason for a fallback. */
