@@ -543,8 +543,16 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 - **Storage**: OSCORE contexts, persisted sequence numbers (RFC 8613 Appendix B.1.1), replay windows,
   EDHOC state between messages, DTLS session tickets.
 - **Credentials**: resolvers for EDHOC credentials, PSKs and raw public keys; one `CertificateValidator`
-  shared by EDHOC (`x5chain`) and DTLS/TLS, backed by the platform (JVM `CertPathValidator`, Apple
-  `SecTrust`).
+  shared by EDHOC (`x5chain`) and DTLS/TLS. No validator ships yet: a common-code validator for the
+  RFC 7925 profile and thin platform adapters (JVM `CertPathValidator`, Apple `SecTrust`) are on the
+  [roadmap](roadmap.md). What is trusted today:
+  - `TrustedCredentials` without a validator trusts only its pinned credentials; any other certificate
+    chain fails closed.
+  - With a validator, every chain the validator accepts authenticates, whoever its end entity is. A
+    validator authenticates, it does not authorize: the application decides who may connect afterwards,
+    on `EdhocSession.peerCredential` (its `certificate`) and `peerCredentialIdentifier`, or in a
+    `CredentialResolver` that wraps `TrustedCredentials` (kcoap-edhoc README). A stub validator that
+    accepts everything trusts every certificate.
 - **EAD handlers** for EDHOC.
 - **Logging and metrics** as hooks, no logging framework dependency.
 

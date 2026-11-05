@@ -41,7 +41,22 @@ public fun interface CredentialResolver {
  * - `x5chain` is accepted when its end-entity certificate is trusted, or else when [certificateValidator]
  *   accepts the chain.
  *
- * Identity checks beyond the pinned set (subject names, policies) belong in a custom resolver.
+ * What is trusted with and without a [certificateValidator]:
+ * - Without one, only the pinned credentials are trusted. A chain whose end-entity certificate is not
+ *   pinned fails closed.
+ * - With one, every chain the validator accepts authenticates, whoever its end entity is: the validator
+ *   says the chain leads to a trust anchor, not that this peer may connect. Authorize afterwards, on
+ *   [EdhocSession.peerCredential] (its [AuthenticationCredential.certificate]) and
+ *   [EdhocSession.peerCredentialIdentifier], or in a resolver that wraps this one:
+ *
+ * ```
+ * val resolver = CredentialResolver { id ->
+ *     trusted.resolve(id).filter { it.certificate?.subjectCommonName in allowedNames }
+ * }
+ * ```
+ *
+ * No [CertificateValidator] implementation ships with kcoap yet. A validator that accepts every chain,
+ * such as an empty test stub, makes any certificate authenticate, self-signed ones included.
  */
 public class TrustedCredentials(
     private val crypto: CryptoBackend,
