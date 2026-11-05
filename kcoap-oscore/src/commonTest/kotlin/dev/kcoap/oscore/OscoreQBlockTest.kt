@@ -280,6 +280,182 @@ class OscoreQBlockTest {
         assertNotNull(exchange.client.unprotectResponse(notification(7)).options.observe, "a notification is still accepted")
     }
 
+    // ---------------------------------------------------------------- notification bodies (RFC 9177 §4.5)
+
+    /** An Observe registration of `/obs` that asks for its notification bodies in Q-Block2 blocks of 64 bytes. */
+    private fun qBlockRegistration(): CoapMessage = CoapMessage.request(CoapCode.GET) {
+        token = "f1".hexToBytes()
+        options {
+            uriPath("obs")
+            observe(0)
+            qBlock2(BlockOption(0, true, 2))
+        }
+    }
+
+    /** A FETCH registration uploaded in Q-Block1 (RFC 9177 Figure 14): its block that completed the upload. */
+    private fun qBlock1FetchRegistration(): CoapMessage = CoapMessage.request(CoapCode.FETCH) {
+        token = "f2".hexToBytes()
+        options {
+            uriPath("obs")
+            observe(0)
+            qBlock1(BlockOption(1, false, 2))
+            size1(100)
+            requestTag("0a0b0c0d".hexToBytes())
+        }
+        payload = ByteArray(36)
+    }
+
+    /** Block [num] of the notification body with [etag], of [count] blocks; every block carries Observe (§4.5). */
+    private fun notificationBlock(registration: CoapMessage, etag: Int, num: Long, count: Long = 10): CoapMessage =
+        CoapMessage.response(registration, CoapCode.CONTENT) {
+            options {
+                observe(etag.toLong())
+                etag(byteArrayOf(etag.toByte()))
+                qBlock2(BlockOption(num, num < count - 1, 2))
+                size2(count * 64)
+            }
+            payload = ByteArray(64) { num.toByte() }
+        }
+
+    /** Every block of the notification body with [etag], protected by the server in the order it sends them. */
+    private suspend fun Exchange.body(etag: Int, count: Long = 10): List<CoapMessage> =
+        (0L until count).map { server.protectResponse(notificationBlock(server.message, etag, it, count)) }
+
+    private suspend fun Exchange.rejection(response: CoapMessage): String? =
+        assertFailsWith<MessageSecurityException> { client.unprotectResponse(response) }.message
+
+    @Test
+    fun rfc9177Section4_5TheBlocksOfANotificationBodyAreTakenInAnyOrder() = runTest {
+        for (registration in listOf(qBlockRegistration(), qBlock1FetchRegistration())) {
+            val (client, server) = clientFor()
+            val exchange = exchange(client, server, registration)
+            // The registration's own body: block 0 reuses the request's nonce, every later block has a Partial IV.
+            val first = exchange.body(etag = 1)
+            val second = exchange.body(etag = 2)
+            assertNull(partialIvOf(first[0]))
+            assertTrue((first.drop(1) + second).all { partialIvOf(it) != null }, "every other block is a notification of its own")
+
+            val order = listOf(3, 0, 1, 9, 2, 8, 4, 7, 5, 6)
+            for (num in order) {
+                val block = exchange.client.unprotectResponse(first[num])
+                assertEquals(num.toLong(), block.options.qBlock2!!.number, "${registration.code}: block $num of the first body")
+                assertEquals(if (num == 0) 0L else partialIvOf(first[num])!! + 1, block.options.observe, "Observe from the Partial IV")
+            }
+            for (num in order.reversed()) {
+                val block = exchange.client.unprotectResponse(second[num])
+                assertContentEquals(byteArrayOf(2), block.options.etags.single(), "${registration.code}: block $num of the second body")
+            }
+        }
+    }
+
+    @Test
+    fun rfc8613Section7_4_1AReplayedBlockOfANotificationBodyIsStillRejected() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val body = exchange.body(etag = 1)
+        for (num in listOf(0, 4, 2, 1)) exchange.client.unprotectResponse(body[num])
+
+        assertEquals("Replayed or stale notification", exchange.rejection(body[2]), "below the highest, received before")
+        assertEquals("Replayed or stale notification", exchange.rejection(body[4]), "the highest, received before")
+        assertEquals("Second notification without a Partial IV", exchange.rejection(body[0]))
+        // The replays changed nothing: the rest of the body is still taken, in any order.
+        for (num in listOf(9, 3, 5, 8, 6, 7)) assertEquals(num.toLong(), exchange.client.unprotectResponse(body[num]).options.qBlock2!!.number)
+    }
+
+    @Test
+    fun rfc8613Section4_1_3_5_2ABlockOfAnOlderBodyIsStaleOnceANewerBodyArrived() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val older = exchange.body(etag = 1)
+        val newer = exchange.body(etag = 2)
+        exchange.client.unprotectResponse(older[1])
+        exchange.client.unprotectResponse(older[3])
+        exchange.client.unprotectResponse(newer[5])
+
+        // §4.1.3.5.2: the highest Partial IV is the freshest; block 2 of the older body was never received.
+        assertEquals("Stale notification of an older body", exchange.rejection(older[2]))
+        assertEquals("Stale notification without a Partial IV", exchange.rejection(older[0]), "the oldest of all")
+        // Blocks of the newer body below its highest are still taken: they belong to the freshest notification.
+        for (num in listOf(0, 4, 1, 3, 2)) exchange.client.unprotectResponse(newer[num])
+        assertEquals("Stale notification of an older body", exchange.rejection(older[9]))
+    }
+
+    @Test
+    fun rfc7641Section3_4AStaleWholeBodyIsNeverTaken() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val first = exchange.body(etag = 1)
+        val stale = exchange.body(etag = 2)
+        val newest = exchange.body(etag = 3)
+        for (block in first + newest) exchange.client.unprotectResponse(block)
+
+        // Held back on the path and delivered after the newer body: each of its blocks is refused, those within
+        // the window as stale and the older ones as too old to tell from a replay.
+        val rejections = stale.map { exchange.rejection(it) }
+        assertTrue(rejections.all { it == "Stale notification of an older body" || it == "Replayed or stale notification" }, "$rejections")
+        assertTrue("Stale notification of an older body" in rejections, "within the window: $rejections")
+    }
+
+    @Test
+    fun rfc8613Section4_1_3_5_2ANotificationOfOneMessageBelowTheFreshestIsStale() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val inner = exchange.server.message
+        suspend fun single(value: Long) = exchange.server.protectResponse(
+            CoapMessage.response(inner, CoapCode.CONTENT) {
+                options { observe(value) }
+                payload("state $value")
+            },
+        )
+        val first = single(1)
+        val older = single(2)
+        val body = exchange.body(etag = 3)
+        val newer = single(4)
+        exchange.client.unprotectResponse(first)
+        exchange.client.unprotectResponse(body[2])
+
+        assertEquals("Stale notification of an older body", exchange.rejection(older), "older than the body in progress")
+        exchange.client.unprotectResponse(body[1])
+        assertEquals("state 4", exchange.client.unprotectResponse(newer).payloadAsText())
+        assertEquals("Stale notification of an older body", exchange.rejection(body[3]), "the body was superseded by a newer one")
+    }
+
+    @Test
+    fun rfc6347Section4_1_2_6ABlockOfTheFreshestBodyFurtherBehindThanTheWindowIsRejected() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val body = exchange.body(etag = 1, count = 40)
+        exchange.client.unprotectResponse(body[39])
+
+        assertEquals("Replayed or stale notification", exchange.rejection(body[7]), "32 behind the highest, outside the window")
+        assertEquals(8L, exchange.client.unprotectResponse(body[8]).options.qBlock2!!.number, "31 behind, inside it")
+    }
+
+    @Test
+    fun rfc8613Section7_4_1ARegistrationWithoutQBlockKeepsTheStrictOrder() = runTest {
+        val (client, server) = clientFor()
+        val registration = CoapMessage.request(CoapCode.GET) {
+            token = "e3".hexToBytes()
+            options {
+                uriPath("obs")
+                observe(0)
+            }
+        }
+        val exchange = exchange(client, server, registration)
+        val inner = exchange.server.message
+        val notifications = (1L..4L).map { value ->
+            exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.CONTENT) { options { observe(value) } })
+        }
+        exchange.client.unprotectResponse(notifications[2])
+
+        // §7.4.1 lets an application take only Partial IVs above the Notification Number: neither the one never
+        // received below it, nor the registration's answer without a Partial IV, which counts as the oldest.
+        assertEquals("Replayed or stale notification", exchange.rejection(notifications[1]))
+        assertEquals("Stale notification without a Partial IV", exchange.rejection(notifications[0]))
+        assertEquals("Replayed or stale notification", exchange.rejection(notifications[2]))
+        assertNotNull(exchange.client.unprotectResponse(notifications[3]).options.observe)
+    }
+
     /** An unprotected response to [request] as it went on the wire, sent by anyone who saw its token. */
     private fun unprotected(request: ProtectedRequest, code: CoapCode, block: CoapMessage.Builder.() -> Unit = {}): CoapMessage =
         CoapMessage.response(request.message, code) {
