@@ -30,6 +30,18 @@ Both plug into the CoAP stack through `dev.kcoap.coap.security` (`ClientMessageS
 `ServerMessageSecurity`), at the place RFC 8613 Figure 1 puts OSCORE: below Block-wise and Observe,
 above retransmission and deduplication.
 
+Both fail closed ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)):
+
+- `OscoreClient` fails a request its `ClientContextResolver` finds no context for with
+  `MessageSecurityException`; `OscoreClient(resolver, allowUnprotected = true)` sends such requests in
+  plain CoAP instead. Unprotected 4.xx and 5.xx responses (RFC 8613 §8.2) are handed to the stack as
+  `ResponseVerification.Unverified`, which acts on nothing in them: the request fails with
+  `CoapException.Reason.UNVERIFIED_RESPONSE`. Any other unprotected response is dropped.
+- A server with `security = OscoreServer(...)` refuses requests without OSCORE on every resource that is not
+  `AccessPolicy.Public` (`CoapServerConfig.defaultAccess`). Each verified request carries its context's
+  `SecurityContext.identity`: the `OscoreIdentity` (Recipient ID, ID Context) unless the context was derived
+  with an `identity` of its own, or by EDHOC (an `EdhocIdentity` with the peer credential).
+
 `SecurityContext` never exposes its keys, its Common IV or the Master Secret. `toString()` shows only
 the identifiers. `SecurityContextParameters.masterSecret()` returns a copy for provisioning code.
 
@@ -147,10 +159,11 @@ Not yet: Appendix B.2
   on both the client and the server side.
 - End-to-end exchanges through the SPI, Observe ordering and replay, every error path.
 - Q-Block bodies (RFC 9177) under OSCORE: the blocks of a set in any order, a replayed block, a second
-  response to a request without Q-Block, a block beyond the window, forged blocks, unprotected responses
-  that would steer a body (`OscoreQBlockTest`, every target); kcoap's Q-Block client and server through the
-  stack on the in-memory network, both ways, with a replayed block on the wire, an unprotected 4.02 and 4.08
-  injected on a body's tokens, a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
+  response to a request without Q-Block, a block beyond the window, forged blocks, unprotected errors handed
+  on as unverified and other unprotected responses dropped (`OscoreQBlockTest`, every target); kcoap's Q-Block
+  client and server through the stack on the in-memory network, both ways, with a replayed block on the wire,
+  an unprotected 4.02 and 4.08 injected on a body's tokens, which end the body as unverified and steer
+  nothing (ADR 0008), a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
   (`OscoreQBlockEndToEndTest`).
 - Q-Block2 notification bodies (RFC 9177 §4.5) under OSCORE: the blocks of a body in any order for Q-Block2 and
   Q-Block1 FETCH registrations, replayed blocks, a block of an older body, a stale whole body, an older

@@ -17,6 +17,16 @@ internal sealed interface ExchangeEvent {
     }
 
     /**
+     * A response that message security handed on unverified, an error without message security (RFC 8613 §8.2;
+     * [dev.kcoap.coap.security.ResponseVerification.Unverified]). Nothing may act on it as on a response: the
+     * body either ends with [CoapException.Reason.UNVERIFIED_RESPONSE] or, for an established observation,
+     * ignores it (ADR 0008). The exchange stays open.
+     */
+    class Unverified(override val exchange: ClientExchange, val message: CoapMessage) : ExchangeEvent {
+        override fun toString(): String = "Unverified(${exchange.key.token}, ${message.code})"
+    }
+
+    /**
      * A Confirmable request was acknowledged with an Empty ACK (RFC 7252 §5.2.2): it arrived, and a response
      * may follow separately. The exchange stays open. A Confirmable block of a Q-Block1 body is answered this
      * way, and the next block may go (RFC 9177 §7.1).

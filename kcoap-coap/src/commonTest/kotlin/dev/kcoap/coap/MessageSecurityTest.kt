@@ -5,9 +5,11 @@ import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
@@ -79,14 +81,20 @@ class MessageSecurityTest {
             return object : ProtectedRequest {
                 override val message: CoapMessage = sealed
 
-                override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
+                override suspend fun unprotectResponse(response: CoapMessage): ResponseVerification {
                     unprotects++
                     if (failNextResponse) {
                         failNextResponse = false
                         throw MessageSecurityException("Replayed")
                     }
-                    if (CoapOptions.OSCORE.number !in response.options) throw MessageSecurityException("Unprotected response")
-                    return Toy.open(response)
+                    if (CoapOptions.OSCORE.number !in response.options) {
+                        // As OSCORE does (RFC 8613 §8.2): an unprotected error is handed on unverified.
+                        if (response.code.isClientError || response.code.isServerError) {
+                            return ResponseVerification.Unverified(response, "unprotected ${response.code}")
+                        }
+                        throw MessageSecurityException("Unprotected response")
+                    }
+                    return ResponseVerification.Verified(Toy.open(response))
                 }
             }
         }
@@ -153,14 +161,27 @@ class MessageSecurityTest {
     }
 
     @Test
-    fun unprotectedRequestsStillReachAServerWithSecurity() = runTest {
+    fun unprotectedRequestsReachOnlyPublicResourcesOfAServerWithSecurity() = runTest {
         val fixture = StackFixture(this)
+        var reached = 0
         val server = fixture.server(CoapServerConfig(security = ServerSide())) {
-            resource("public") { get { CoapResponse.content("identity ${securityIdentity == null}") } }
+            resource("public") {
+                access = AccessPolicy.Public
+                get { CoapResponse.content("identity ${securityIdentity == null}") }
+            }
+            resource("secret") {
+                get {
+                    reached++
+                    CoapResponse.content("classified")
+                }
+            }
         }
         val client = fixture.client()
 
         assertEquals("identity true", client.get(fixture.uri(server, "/public")).payloadAsText())
+        // ADR 0008: with message security configured, the default policy refuses what it did not verify.
+        assertEquals(CoapCode.UNAUTHORIZED, client.get(fixture.uri(server, "/secret")).code)
+        assertEquals(0, reached, "the refused request never reached the handler")
     }
 
     @Test
@@ -171,9 +192,13 @@ class MessageSecurityTest {
         }
         val client = fixture.client(CoapClientConfig(security = ClientSide(kid = 9), requestTimeout = 20.seconds))
 
-        // The client's security layer rejects the unprotected error, so the stack keeps waiting (§8.4 step 8).
+        // The unprotected error is unverified: the request ends with it as a distinct failure, not a timeout,
+        // and nothing in it is acted on (ADR 0008).
         val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/secret")) }
-        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
+        assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, error.reason)
+        assertEquals(CoapCode.UNAUTHORIZED, error.response?.code)
+        assertEquals("Security context not found", error.response?.payloadAsText())
+        assertTrue(fixture.now < 20.seconds, "at once, not at the timeout")
 
         val answer = fixture.traffic.mapNotNull { it.message }.first { it.isResponse }
         assertEquals(CoapCode.UNAUTHORIZED, answer.code)

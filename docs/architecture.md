@@ -68,7 +68,27 @@ OSCORE (outer, for proxies), so the layers compose instead of forming a fixed st
 | Works in browsers | yes (through a proxy) | only TLS, terminated at the proxy |
 | Peer identity | OSCORE context / EDHOC credential | PSK identity, raw public key, certificate |
 
-The application sees the identities of both layers and authorizes on either.
+The application sees the identities of both layers and authorizes on either. Message security fails
+closed in both roles ([ADR 0008](adr/0008-fail-closed-message-security.md)):
+
+- **Authorization sits between the layers.** The server asks the resource's `AccessPolicy` right after the
+  resource lookup, with the method, path, peer, `securityIdentity` (end to end) and `peerIdentity` (hop),
+  before anything of the Request/Response layer runs for the request: no Block1 or Q-Block1 buffering, no
+  Observe registration or deregistration, no Q-Block2 burst or address check, no handler. With message
+  security configured the default policy is `MessageSecurityRequired`; `Authenticated` takes either layer's
+  identity; `Public` (the EDHOC resource, `/.well-known/core`) takes anyone. An Observe registration is
+  one entry per endpoint and token, which only its own identity replaces or cancels; another identity's
+  registration on them is answered as a plain GET.
+- **The identity belongs to the security context.** `SecurityContext.identity` is what OSCORE reports for
+  every request it verifies: the `OscoreIdentity` by default, the `EdhocIdentity` with the authenticated
+  peer credential for a context EDHOC established, or a name a provisioned context was given. A Recipient
+  ID that EDHOC hands to a later session does not carry an earlier peer's rights.
+- **The client acts only on what it verified.** `ProtectedRequest.unprotectResponse` reports each response
+  as `Verified` or `Unverified`. Unprotected OSCORE errors (RFC 8613 §8.2) are unverified: the
+  Request/Response layer takes no decision on them (no Echo retry, no block-wise or Q-Block step, no
+  capability, no end of an observation) and fails a request that has no verified answer with
+  `CoapException(UNVERIFIED_RESPONSE)`. A security layer that cannot protect a request it should throws
+  instead of sending plaintext; plaintext is an explicit choice (`allowUnprotected`, the EDHOC path).
 
 ## The CoAP endpoint as built
 

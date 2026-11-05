@@ -10,6 +10,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.edhoc.ConnectionIdentifier
@@ -54,7 +55,7 @@ public class CombinedRequestSecurity(
             options { edhoc() }
         }.build()
 
-        override suspend fun unprotectResponse(response: CoapMessage): CoapMessage = protected.unprotectResponse(response)
+        override suspend fun unprotectResponse(response: CoapMessage): ResponseVerification = protected.unprotectResponse(response)
     }
 }
 

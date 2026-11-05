@@ -25,7 +25,16 @@ import dev.kcoap.transport.Endpoint
  * is unchanged.
  */
 public interface ClientMessageSecurity {
-    /** Protects [request] for [peer], or returns null to send it unprotected. */
+    /**
+     * Protects [request] for [peer], or returns null to send it unprotected.
+     *
+     * Null is plaintext on the wire, so an implementation returns it only where its configuration says so
+     * explicitly, such as the EDHOC resource or an opt-in like kcoap-oscore's `allowUnprotected`. One that is
+     * meant to protect [peer] and cannot, because no context or protection is installed for it, throws
+     * [MessageSecurityException] instead, which fails the request before anything is sent (ADR 0008).
+     *
+     * @throws MessageSecurityException when the request must be protected and cannot be.
+     */
     public suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest?
 }
 
@@ -35,29 +44,36 @@ public interface ProtectedRequest {
     public val message: CoapMessage
 
     /**
-     * Verifies and decrypts a response to this request. Called once per response, so also for every
-     * Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
+     * Verifies and decrypts a response to this request, and says whether it verified. Called once per response,
+     * so also for every Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
      * `QBlockClientConfig.withMessageSecurity` lets protected requests use Q-Block, possibly from different
-     * coroutines (see [ClientMessageSecurity]). The stack trusts what this returns: a response returned
-     * without verification, such as an unprotected error, is acted on like a verified one, and in a Q-Block
-     * body for the whole body (a 4.08 has blocks sent again, a 4.02 turns Q-Block off for the peer).
+     * coroutines (see [ClientMessageSecurity]).
+     *
+     * The stack acts only on [ResponseVerification.Verified]: an Echo retry, a block-wise or Q-Block step, a
+     * Q-Block capability, an Observe registration or its end. A [ResponseVerification.Unverified] response, an
+     * error that came without message security (RFC 8613 §8.2), ends a request that has no verified response
+     * yet with `CoapException.Reason.UNVERIFIED_RESPONSE` and is dropped by an established observation, so a
+     * party on the path cannot make the client send a request again, which would run a non-idempotent request
+     * twice under a fresh Partial IV.
      *
      * Ordering and replay protection of the notifications of a protected observation are this layer's job
-     * (RFC 8613 §4.1.3.5.2, §7.4.1): the stack does not order them again, so what this returns must be fresher
-     * than every notification before it or, for a registration carrying Q-Block, a block of the freshest
-     * notification body, whose blocks may arrive in any order (RFC 9177 §4.5). kcoap-oscore's `OscoreClient`
-     * does both.
+     * (RFC 8613 §4.1.3.5.2, §7.4.1): the stack does not order them again, so what this returns as verified must
+     * be fresher than every notification before it or, for a registration carrying Q-Block, a block of the
+     * freshest notification body, whose blocks may arrive in any order (RFC 9177 §4.5). kcoap-oscore's
+     * `OscoreClient` does both.
      *
-     * @throws MessageSecurityException when the response does not verify; the stack drops it.
+     * @throws MessageSecurityException when the response is to be dropped: a protected response that does not
+     *   verify, a replay, or an unprotected response that is not an error (RFC 8613 §8.4).
      */
-    public suspend fun unprotectResponse(response: CoapMessage): CoapMessage
+    public suspend fun unprotectResponse(response: CoapMessage): ResponseVerification
 }
 
 public interface ServerMessageSecurity {
     /**
      * Verifies and decrypts [request] from [peer]. Returns null when the request does not use this kind
-     * of protection, so the stack processes it as a plain request (and resources decide whether that is
-     * acceptable).
+     * of protection, so the stack processes it as a plain request, which only resources whose
+     * [dev.kcoap.coap.server.AccessPolicy] permits it reach (with message security configured, the default
+     * policy refuses it, ADR 0008).
      *
      * @throws MessageSecurityException when the request is protected but invalid; the stack answers with
      *   [MessageSecurityException.responseCode], unprotected, as RFC 8613 §8.2 requires.
@@ -70,7 +86,10 @@ public interface UnprotectedRequest {
     /** The inner request, as the resource sees it. */
     public val message: CoapMessage
 
-    /** Who sent it, for authorization. */
+    /**
+     * Who sent it, for authorization ([dev.kcoap.coap.server.AccessPolicy]). Requests of one security context
+     * should give equal identities: the server keys block-wise state and Observe registrations by it.
+     */
     public val identity: SecurityIdentity
 
     /**
@@ -90,7 +109,10 @@ public interface UnprotectedRequest {
     public suspend fun protectResponse(response: CoapMessage): CoapMessage
 }
 
-/** The authenticated identity behind a protected request, such as an OSCORE recipient. */
+/**
+ * The authenticated identity behind a protected request, such as an OSCORE recipient or the peer credential
+ * of the EDHOC session that established the context. Compared with `equals`.
+ */
 public interface SecurityIdentity {
     /** A short human-readable form for logs, never containing keys. */
     public val description: String

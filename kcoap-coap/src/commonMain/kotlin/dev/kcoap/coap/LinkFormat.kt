@@ -61,6 +61,8 @@ public object LinkFormat {
     public const val TITLE: String = "title"
     /** `obs`, RFC 7641 §6. */
     public const val OBSERVABLE: String = "obs"
+    /** `osc`, RFC 8613 §9: a hint that the target is reachable with OSCORE only. */
+    public const val OSCORE: String = "osc"
 
     /** RFC 6690 §4.1: the query name that matches the link target. */
     public const val HREF: String = "href"

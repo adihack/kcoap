@@ -35,10 +35,15 @@ import kotlinx.coroutines.SupervisorJob
  * For each request, in the order of RFC 8613 Figure 1:
  * 1. message security verifies and decrypts it ([CoapServerConfig.security]); a failure is answered
  *    unprotected with Max-Age 0 (RFC 8613 §8.2), a freshness challenge replaces the response;
- * 2. Proxy-Uri and Proxy-Scheme get 5.05 (RFC 7252 §5.10.2), unknown paths 4.04, and unrecognized
- *    critical options 4.02 with a diagnostic, or a silent rejection for Non-confirmable requests
+ * 2. the [AccessPolicy] of the resource decides whether the request may be served, before any work for it
+ *    (ADR 0008): a refusal is a 4.01, or a 4.03 to a request message security authenticated, and a path
+ *    that does not exist is answered as its nearest existing ancestor would refuse it, so protected names do
+ *    not leak; then Proxy-Uri and Proxy-Scheme get 5.05 (RFC 7252 §5.10.2), unknown paths 4.04, and
+ *    unrecognized critical options 4.02 with a diagnostic, or a silent rejection for Non-confirmable requests
  *    (RFC 7252 §5.4.1);
- * 3. Block1 bodies are assembled (RFC 7959 §2.5) and Observe registrations recorded (RFC 7641 §4.1); with
+ * 3. Block1 bodies are assembled (RFC 7959 §2.5) and Observe registrations recorded (RFC 7641 §4.1), keyed
+ *    by client endpoint, token and message-security identity, so one identity cannot replace or cancel
+ *    another's registration; with
  *    [CoapServerConfig.qBlock] on, requests carrying Q-Block1 or Q-Block2 go to the Q-Block layer instead
  *    (RFC 9177), which assembles uploads from bursts and sends response bodies in them;
  * 4. the resource's handler runs; large responses go out in Block2 blocks (RFC 7959 §2.4), or in Q-Block2
@@ -126,7 +131,7 @@ public class CoapServer private constructor(
         if (config.wellKnownCore) {
             val container = rootResource.child(WellKnownCore.CONTAINER) ?: rootResource.add(DslResource(WellKnownCore.CONTAINER))
             // A /.well-known/core the application defined itself takes precedence.
-            if (container.child(WellKnownCore.NAME) == null) container.add(WellKnownCore(rootResource))
+            if (container.child(WellKnownCore.NAME) == null) container.add(WellKnownCore(this))
         }
         check(endpoint.requestHandler == null) { "$endpoint already has a server" }
         endpoint.requestHandler = object : RequestHandler {
@@ -262,7 +267,11 @@ public class CoapServer private constructor(
     private suspend fun answer(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?): Reply? {
         val options = request.options
         val peer = inbound.peer
-        val resource = rootResource.find(options.uriPath)
+        val target = lookUp(options.uriPath)
+        val resource = target.resource
+        // ADR 0008: the policy decides before any work for the request, so a refused one buffers no Block1 or
+        // Q-Block1 body, touches no observation, gets no held-back response and no burst, and runs no handler.
+        refusal(inbound, request, unprotected, target)?.let { return Reply.Single(it) }
         // RFC 9177 §4.1: Q-Block1 and Q-Block2 count as recognized only where the Q-Block layer takes them.
         val qBlockAccepted = qBlock.accepts(inbound, unprotected)
         val recognized = OptionCheck.SERVER_RECOGNIZED + (if (qBlockAccepted) OptionCheck.Q_BLOCK_RECOGNIZED else emptySet()) +
@@ -340,7 +349,7 @@ public class CoapServer private constructor(
         val observe = options.observe
         val isObserveMethod = request.code == CoapCode.GET || request.code == CoapCode.FETCH
         if (observe == OBSERVE_DEREGISTER && isObserveMethod) {
-            observations.remove(peer, request.token, "deregistered")
+            observations.remove(peer, request.token, unprotected?.identity, "deregistered")
         }
         val registering = observe == OBSERVE_REGISTER && isObserveMethod && observable != null &&
             observable.isObservable && (block2 == null || block2.number == 0L)
@@ -364,7 +373,8 @@ public class CoapServer private constructor(
                 response = response.withOptions { observe(observable.nextSequence()) }
             } else {
                 // RFC 7641 §4.1: a server unwilling or unable to add an observer answers as to a plain GET;
-                // here because it stopped meanwhile, or because the observer bounds are reached (§7).
+                // here because it stopped meanwhile, the observer bounds are reached (§7), or another identity
+                // has the endpoint and token (ADR 0008).
                 observation = null
                 response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
                 limitOf(registration)?.let { endpoint.report(EndpointEvent.LimitReached(peer, it)) }
@@ -404,7 +414,7 @@ public class CoapServer private constructor(
         val options = request.options
         val isObserveMethod = request.code == CoapCode.GET || request.code == CoapCode.FETCH
         if (options.observe == OBSERVE_DEREGISTER && isObserveMethod) {
-            observations.remove(inbound.peer, request.token, "deregistered")
+            observations.remove(inbound.peer, request.token, unprotected?.identity, "deregistered")
         }
         val observable = (resource as? ObservableResource)?.takeIf { it.isObservable }
         val context = RequestContext(request, inbound.peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
@@ -425,11 +435,76 @@ public class CoapServer private constructor(
         return Reply.Single(plain)
     }
 
+    // ---------------------------------------------------------------- access (ADR 0008)
+
+    /**
+     * The answer that refuses [request] for its [target], or null when the policy permits it. A path that does
+     * not exist is governed by its nearest existing ancestor, so it is refused wherever an existing resource
+     * would be, and gets 4.04 only from a policy that permits it.
+     */
+    private suspend fun refusal(
+        inbound: InboundRequest,
+        request: CoapMessage,
+        unprotected: UnprotectedRequest?,
+        target: Target,
+    ): CoapResponse? {
+        val path = request.options.uriPath
+        val identity = unprotected?.identity
+        val access = AccessRequest(request.code, path, target.resource, inbound.peer, identity, inbound.peerIdentity)
+        val policy = target.access
+        if (policy.permits(access)) return null
+        log.warn { "Refused ${request.code} ${request.options.path} from ${inbound.peer} (${identity?.description ?: "no message security"}): $policy" }
+        // RFC 7252 §5.9.2.2: 4.01 asks the client to authenticate first; one that message security authenticated
+        // and is still refused gets 4.03 (§5.9.2.4).
+        return CoapResponse(if (identity == null) CoapCode.UNAUTHORIZED else CoapCode.FORBIDDEN)
+    }
+
+    /** The resource a request names, null if none, and the policy that governs it. */
+    private class Target(val resource: CoapResource?, val access: AccessPolicy)
+
+    /**
+     * The resource at [segments] and its policy, found in one walk down the tree from the root: the deepest policy
+     * set on the way, the resource's own or its nearest ancestor's, else [CoapServerConfig.defaultAccess]. A path
+     * that does not exist gets the policy of its nearest existing ancestor. Taken from the walk rather than from
+     * the resource's parent links, a resource removed meanwhile, which has none, keeps the policy it inherited.
+     */
+    private fun lookUp(segments: List<String>): Target {
+        var current: CoapResource = rootResource
+        var access = current.access
+        for (segment in segments) {
+            current = current.child(segment) ?: return Target(null, access ?: config.defaultAccess)
+            current.access?.let { access = it }
+        }
+        return Target(current, access ?: config.defaultAccess)
+    }
+
+    /**
+     * Whether `/.well-known/core` shows [resource], governed by [policy], to the caller of [context]: a GET by it.
+     * A policy that throws hides that one link (fail closed) and is logged, so the rest of the document, the
+     * Public EDHOC resource among it, is still served.
+     */
+    internal suspend fun permitsDiscovery(policy: AccessPolicy, resource: CoapResource, context: RequestContext): Boolean {
+        val request = AccessRequest(
+            CoapCode.GET, resource.segments, resource, context.peer, context.securityIdentity, context.peerIdentity,
+        )
+        return try {
+            policy.permits(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "The access policy of ${resource.path} failed; /.well-known/core leaves it out" }
+            false
+        }
+    }
+
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
         ObservationRegistry.Registration.TOO_MANY_OBSERVERS -> EndpointEvent.LimitReached.Limit.OBSERVERS
         ObservationRegistry.Registration.TOO_MANY_FOR_RESOURCE -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE
         ObservationRegistry.Registration.TOO_MANY_FOR_PEER -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_PEER
-        ObservationRegistry.Registration.ADDED, ObservationRegistry.Registration.CLOSED -> null
+        ObservationRegistry.Registration.ADDED,
+        ObservationRegistry.Registration.CLOSED,
+        ObservationRegistry.Registration.IDENTITY_CONFLICT,
+        -> null
     }
 
     /**

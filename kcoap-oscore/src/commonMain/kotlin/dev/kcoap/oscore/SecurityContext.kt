@@ -1,6 +1,7 @@
 package dev.kcoap.oscore
 
 import dev.kcoap.cbor.CborWriter
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.common.constantTimeEquals
 import dev.kcoap.common.wipe
 import dev.kcoap.crypto.Aead
@@ -35,6 +36,7 @@ public class SecurityContext private constructor(
     private val crypto: CryptoBackend,
     /** False until a request proved its freshness with Echo, when Appendix B.1.2 applies. */
     private var isFresh: Boolean,
+    identity: SecurityIdentity?,
 ) {
     private val senderLock = Mutex()
     private val recipientLock = Mutex()
@@ -57,6 +59,17 @@ public class SecurityContext private constructor(
 
     /** The ID Context, or null when none is used (§3.1), a copy. */
     public val idContext: ByteArray? get() = parameters.idContext
+
+    /**
+     * Who the peer of this context is, for authorization: the identity of every request this context verifies
+     * (`UnprotectedRequest.identity`, which access policies and handlers see; ADR 0008). By default the
+     * [OscoreIdentity] of the Recipient ID and ID Context. A context that EDHOC established carries
+     * kcoap-edhoc-oscore's `EdhocIdentity`, with the peer's authenticated credential, and a provisioned one may
+     * carry a name of the application's ([derive]'s `identity`). It belongs to this object, not to the Recipient
+     * ID: a context that later takes the same Recipient ID, such as one of an EDHOC session that reuses a
+     * released C_R, has its own.
+     */
+    public val identity: SecurityIdentity = identity ?: OscoreIdentity(parameters.recipientId, parameters.idContext)
 
     /** The next Sender Sequence Number this context will use. */
     public suspend fun peekSequenceNumber(): Long = senderLock.withLock { nextSequenceNumber }
@@ -184,6 +197,8 @@ public class SecurityContext private constructor(
          * @param freshness whether the replay window is trusted from the start or only after a request
          *   proved its freshness with Echo (Appendix B.1.2). [FreshnessPolicy.AUTO] requires the proof
          *   for a context restored from [sequenceStore] and for any store but the ephemeral one.
+         * @param identity who the peer of the context is, for authorization ([SecurityContext.identity]); null
+         *   for its [OscoreIdentity].
          * @throws IllegalArgumentException when [persistInterval] is out of range, or [sequenceStore]
          *   returns a value outside 0 to 2^40. Exceptions of [sequenceStore] and of [crypto] reach the
          *   caller unchanged. When the first write for a new context throws after it became durable, the
@@ -195,6 +210,7 @@ public class SecurityContext private constructor(
             sequenceStore: SequenceNumberStore,
             persistInterval: Long = 64,
             freshness: FreshnessPolicy = FreshnessPolicy.AUTO,
+            identity: SecurityIdentity? = null,
         ): SecurityContext {
             require(persistInterval in 1..MAX_SEQUENCE_NUMBER + 1) { "persistInterval must be in 1..2^40" }
             val name = parameters.name
@@ -233,6 +249,7 @@ public class SecurityContext private constructor(
                 persistInterval = persistInterval,
                 crypto = crypto,
                 isFresh = isFresh,
+                identity = identity,
             )
         }
 

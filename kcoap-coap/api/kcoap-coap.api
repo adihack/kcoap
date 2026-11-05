@@ -89,9 +89,10 @@ public final class dev/kcoap/coap/CoapCode$Companion {
 }
 
 public final class dev/kcoap/coap/CoapException : java/lang/Exception {
-	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;)V
-	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;)V
+	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getReason ()Ldev/kcoap/coap/CoapException$Reason;
+	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
 }
 
 public final class dev/kcoap/coap/CoapException$Reason : java/lang/Enum {
@@ -106,6 +107,7 @@ public final class dev/kcoap/coap/CoapException$Reason : java/lang/Enum {
 	public static final field SESSION_ENDED Ldev/kcoap/coap/CoapException$Reason;
 	public static final field TRANSMISSION_TIMEOUT Ldev/kcoap/coap/CoapException$Reason;
 	public static final field TRANSPORT_FAILED Ldev/kcoap/coap/CoapException$Reason;
+	public static final field UNVERIFIED_RESPONSE Ldev/kcoap/coap/CoapException$Reason;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/CoapException$Reason;
 	public static fun values ()[Ldev/kcoap/coap/CoapException$Reason;
@@ -336,6 +338,7 @@ public final class dev/kcoap/coap/LinkFormat {
 	public static final field INSTANCE Ldev/kcoap/coap/LinkFormat;
 	public static final field INTERFACE Ljava/lang/String;
 	public static final field OBSERVABLE Ljava/lang/String;
+	public static final field OSCORE Ljava/lang/String;
 	public static final field RESOURCE_TYPE Ljava/lang/String;
 	public static final field SIZE Ljava/lang/String;
 	public static final field TITLE Ljava/lang/String;
@@ -686,6 +689,23 @@ public abstract interface class dev/kcoap/coap/security/ProtectedRequest {
 	public abstract fun unprotectResponse (Ldev/kcoap/coap/CoapMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public abstract class dev/kcoap/coap/security/ResponseVerification {
+	public abstract fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+}
+
+public final class dev/kcoap/coap/security/ResponseVerification$Unverified : dev/kcoap/coap/security/ResponseVerification {
+	public fun <init> (Ldev/kcoap/coap/CoapMessage;Ljava/lang/String;)V
+	public fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/security/ResponseVerification$Verified : dev/kcoap/coap/security/ResponseVerification {
+	public fun <init> (Ldev/kcoap/coap/CoapMessage;)V
+	public fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class dev/kcoap/coap/security/SecurityIdentity {
 	public abstract fun getDescription ()Ljava/lang/String;
 }
@@ -705,6 +725,45 @@ public final class dev/kcoap/coap/security/UnprotectedRequest$DefaultImpls {
 	public static fun getChallenge (Ldev/kcoap/coap/security/UnprotectedRequest;)Ldev/kcoap/coap/CoapMessage;
 }
 
+public abstract interface class dev/kcoap/coap/server/AccessPolicy {
+	public abstract fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$Authenticated : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$Authenticated;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$MessageSecurityRequired : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$MessageSecurityRequired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$Public : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$Public;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessRequest {
+	public synthetic fun <init> (ILjava/util/List;Ldev/kcoap/coap/server/CoapResource;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/security/SecurityIdentity;Ldev/kcoap/transport/PeerIdentity;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMethod-xRAr_a8 ()I
+	public final fun getPath ()Ljava/util/List;
+	public final fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public final fun getResource ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun getSecurityIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class dev/kcoap/coap/server/AmplificationPolicy : java/lang/Enum {
 	public static final field ALL_RESPONSES Ldev/kcoap/coap/server/AmplificationPolicy;
 	public static final field OFF Ldev/kcoap/coap/server/AmplificationPolicy;
@@ -719,6 +778,7 @@ public abstract class dev/kcoap/coap/server/CoapResource {
 	public final fun add (Ldev/kcoap/coap/server/CoapResource;)Ldev/kcoap/coap/server/CoapResource;
 	public final fun child (Ljava/lang/String;)Ldev/kcoap/coap/server/CoapResource;
 	public final fun find (Ljava/util/List;)Ldev/kcoap/coap/server/CoapResource;
+	public fun getAccess ()Ldev/kcoap/coap/server/AccessPolicy;
 	public fun getAttributes ()Ldev/kcoap/coap/server/ResourceAttributes;
 	public final fun getChildren ()Ljava/util/Collection;
 	public final fun getName ()Ljava/lang/String;
@@ -763,11 +823,12 @@ public final class dev/kcoap/coap/server/CoapServerConfig {
 	public static final field DEFAULT_MAX_OBSERVERS_PER_RESOURCE I
 	public static final field DEFAULT_MAX_VERIFIED_ADDRESSES I
 	public fun <init> ()V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Ldev/kcoap/coap/server/AccessPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Ldev/kcoap/coap/server/AccessPolicy;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getAmplification ()Ldev/kcoap/coap/server/AmplificationPolicy;
 	public final fun getAmplificationFactor ()I
 	public final fun getConfirmableNotificationInterval-UwyO8pc ()J
+	public final fun getDefaultAccess ()Ldev/kcoap/coap/server/AccessPolicy;
 	public final fun getMaxBlockSize ()I
 	public final fun getMaxBodySize ()I
 	public final fun getMaxConcurrentTransfers ()I
@@ -861,6 +922,7 @@ public final class dev/kcoap/coap/server/ResourceBuilder {
 	public final fun delete (Lkotlin/jvm/functions/Function2;)V
 	public final fun fetch (Lkotlin/jvm/functions/Function2;)V
 	public final fun get (Lkotlin/jvm/functions/Function2;)V
+	public final fun getAccess ()Ldev/kcoap/coap/server/AccessPolicy;
 	public final fun getAttributes ()Ldev/kcoap/coap/server/ResourceAttributes;
 	public final fun getDiscoverable ()Z
 	public final fun ipatch (Lkotlin/jvm/functions/Function2;)V
@@ -873,6 +935,7 @@ public final class dev/kcoap/coap/server/ResourceBuilder {
 	public final fun recognize ([I)V
 	public final fun resource (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/server/ObservableResource;
 	public static synthetic fun resource$default (Ldev/kcoap/coap/server/ResourceBuilder;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ldev/kcoap/coap/server/ObservableResource;
+	public final fun setAccess (Ldev/kcoap/coap/server/AccessPolicy;)V
 	public final fun setAttributes (Ldev/kcoap/coap/server/ResourceAttributes;)V
 	public final fun setDiscoverable (Z)V
 }

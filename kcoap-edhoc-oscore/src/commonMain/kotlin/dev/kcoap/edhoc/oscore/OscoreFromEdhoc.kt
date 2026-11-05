@@ -5,6 +5,7 @@ import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.EdhocSession
 import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.FreshnessPolicy
+import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SecurityContextParameters
 import dev.kcoap.oscore.SequenceNumberStore
@@ -85,7 +86,11 @@ internal suspend fun EdhocSession.oscoreParametersFrom(
  *
  * Sequence numbers live in memory ([EphemeralSequenceNumberStore]) unless [sequenceStore] says
  * otherwise, and such a context ends with the process. To resume one after a restart, pass a durable
- * store here, persist [oscoreParameters], and derive again from both as [oscoreParameters] describes.
+ * store here, persist [oscoreParameters], and derive again from both as [oscoreParameters] describes, with the
+ * [SecurityContext.identity] of this one, which the parameters do not hold.
+ *
+ * The context's [SecurityContext.identity] is an [EdhocIdentity]: the peer's authenticated credential and the
+ * context's Recipient ID, which the requests it verifies carry to access policies and handlers (ADR 0008).
  */
 public suspend fun EdhocSession.oscoreContext(
     crypto: CryptoBackend,
@@ -97,6 +102,7 @@ public suspend fun EdhocSession.oscoreContext(
     crypto,
     sequenceStore = sequenceStore,
     freshness = FreshnessPolicy.ASSUME_FRESH,
+    identity = EdhocIdentity(OscoreIdentity(ownConnectionIdentifier.bytes, null), peerCredential, peerCredentialIdentifier),
 )
 
 /** RFC 9528 Appendix A.1: the default oscore_salt_length. */

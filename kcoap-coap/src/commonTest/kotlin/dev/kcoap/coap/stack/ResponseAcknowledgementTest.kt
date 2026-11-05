@@ -9,6 +9,7 @@ import dev.kcoap.coap.StackFixture
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -42,7 +43,7 @@ class ResponseAcknowledgementTest {
         override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
             override val message: CoapMessage = request
 
-            override suspend fun unprotectResponse(response: CoapMessage): CoapMessage = verify(response)
+            override suspend fun unprotectResponse(response: CoapMessage) = ResponseVerification.Verified(verify(response))
         }
     }
 

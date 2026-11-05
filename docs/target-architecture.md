@@ -759,6 +759,15 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
   - An unprotected 4.01 with Echo does not make the client resend under OSCORE unless it was verified.
   - libcoap OSCORE interop stays green.
 
+> **Amendment (SEC2).** Done as [ADR 0008](adr/0008-fail-closed-message-security.md) records. Beyond the scope
+> above: Observe registrations are keyed by identity; a missing path is refused like its nearest ancestor;
+> `/.well-known/core` is filtered per caller and marks `osc`; `SecurityContext.identity` and kcoap-edhoc-oscore's
+> `EdhocIdentity` carry the peer credential (SEC-3 item 5); `OscoreClient` and `PeerSecurity` fail without a
+> context or protection unless `allowUnprotected`. An unverified response surfaces as
+> `CoapException.Reason.UNVERIFIED_RESPONSE` with the new `CoapException.response`. The client still lets a
+> `MessageSecurityException` from `protectRequest` escape as it is; wrapping it in `CoapException(SECURITY)`
+> stays with B3. SEC-3 item 6 (a Block1 budget per identity class) is not done.
+
 ### 4.4 Roadmap features (not refactors)
 
 | Feature | Notes |

@@ -8,6 +8,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -17,9 +18,13 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocPeerErrorException
 import dev.kcoap.edhoc.EdhocRole
+import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.oscore.OscoreClient
+import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.OscoreServer
+import dev.kcoap.oscore.SecurityContext
+import dev.kcoap.oscore.SecurityContextParameters
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -66,7 +71,56 @@ class EdhocOscoreTest {
         val verified = OscoreServer(contexts).unprotectRequest(protected.message, peer)!!
         assertEquals(listOf("temp"), verified.message.options.uriPath)
         val response = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("21") })
-        assertEquals("21", protected.unprotectResponse(response).payloadAsText())
+        assertEquals("21", protected.verified(response).payloadAsText())
+
+        // ADR 0008: the verified request carries who EDHOC authenticated, with the context's Recipient ID (C_R).
+        val identity = assertIs<EdhocIdentity>(verified.identity)
+        assertEquals(peers.client.credential, identity.peerCredential)
+        assertEquals(peers.client.identifier, identity.peerCredentialIdentifier)
+        assertContentEquals(clientContext.senderId, identity.oscore.recipientId)
+        assertEquals(peers.server.credential, assertIs<EdhocIdentity>(clientContext.identity).peerCredential, "the client's names the server")
+    }
+
+    @Test
+    fun edhocIdentitiesAreEqualByOscoreIdentityAndCredential() = runTest {
+        val peers = Peers.create(crypto)
+        val rid = OscoreIdentity(byteArrayOf(0x05), null)
+        val one = EdhocIdentity(rid, peers.client.credential, peers.client.identifier)
+
+        assertEquals(one, EdhocIdentity(OscoreIdentity(byteArrayOf(0x05), null), peers.client.credential, peers.server.identifier), "however identified")
+        assertEquals(one.hashCode(), EdhocIdentity(rid, peers.client.credential, peers.client.identifier).hashCode())
+        assertFalse(one == EdhocIdentity(rid, peers.server.credential, peers.server.identifier), "another credential")
+        assertFalse(one == EdhocIdentity(OscoreIdentity(byteArrayOf(0x06), null), peers.client.credential, peers.client.identifier))
+        assertFalse(one.equals(rid), "not an OSCORE identity alone")
+        assertTrue(one.description.startsWith("EDHOC AuthenticationCredential(CCS"), one.description)
+        assertTrue(one.description.endsWith("OSCORE rid=05"), one.description)
+        assertEquals(one.description, one.toString())
+    }
+
+    @Test
+    fun adr0008PeerSecurityFailsClosedForAServerWithoutAProtection() = runTest {
+        val (clientContext, _) = contextPair()
+        val security = PeerSecurity()
+
+        val failure = assertFailsWith<MessageSecurityException> { security.protectRequest(request("lights"), peer) }
+        assertEquals("No message security installed for $peer", failure.message)
+        assertNull(security.protectRequest(request(".well-known/edhoc"), peer), "the EDHOC resource goes unprotected")
+
+        security.install(peer, OscoreClient(clientContext))
+        assertNotNull(security.protectRequest(request("lights"), peer)!!.message.options.oscore)
+        security.remove(peer)
+        assertFailsWith<MessageSecurityException>("removed, so closed again") { security.protectRequest(request("lights"), peer) }
+
+        val opportunistic = PeerSecurity(allowUnprotected = true)
+        assertNull(opportunistic.protectRequest(request("lights"), peer), "plaintext only when allowed explicitly")
+    }
+
+    /** A matching client and server context, without EDHOC. */
+    private suspend fun contextPair(): Pair<SecurityContext, SecurityContext> {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto, EphemeralSequenceNumberStore())
+        val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)), crypto, EphemeralSequenceNumberStore())
+        return client to server
     }
 
     @Test
@@ -115,7 +169,7 @@ class EdhocOscoreTest {
         assertEquals(listOf("lights"), verified.message.options.uriPath)
         assertFalse(verified.message.options.edhoc, "the EDHOC option is consumed")
         val response = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("on") })
-        assertEquals("on", first.unprotectResponse(response).payloadAsText())
+        assertEquals("on", first.verified(response).payloadAsText())
 
         // From now on plain OSCORE.
         assertFalse(security.isMessage3Pending())
@@ -136,7 +190,7 @@ class EdhocOscoreTest {
         val fixed = object : dev.kcoap.coap.security.ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
                 override val message = oscoreRequest
-                override suspend fun unprotectResponse(response: CoapMessage) = response
+                override suspend fun unprotectResponse(response: CoapMessage) = ResponseVerification.Verified(response)
             }
         }
         val combined = CombinedRequestSecurity(fixed, "52d5535f3147e85f1cfacd9e78abf9e0a81bbf".hexToBytes())

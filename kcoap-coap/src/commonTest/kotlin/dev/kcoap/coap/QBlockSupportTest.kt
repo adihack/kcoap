@@ -6,6 +6,7 @@ import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability
@@ -505,6 +506,35 @@ class QBlockSupportTest {
         on.server.resources["/big"] = body(300)
         assertContentEquals(body(300), on.client.get(on.server.uri("/big")) { nonConfirmable() }.payload)
         assertTrue(on.requests().all { it.hasQBlock() }, "withMessageSecurity lets protected requests use Q-Block")
+    }
+
+    @Test
+    fun adr0008AProbeTheSecurityLayerWillNotSendLeavesTheRequestToItsOwnProtectionAndKeepsNothing() = runTest {
+        var installed = false
+        // As kcoap-edhoc-oscore's PeerSecurity before a protection is installed: the EDHOC resource goes in the
+        // clear, anything else fails closed.
+        val gated = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+                if (installed || request.options.path == "/edhoc") return null
+                throw MessageSecurityException("No message security installed for $peer")
+            }
+        }
+        val setup = scripted(QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true), security = gated)
+        setup.server.resources["/edhoc"] = body(300)
+        setup.server.resources["/big"] = body(300)
+        val peer = setup.server.address
+
+        assertContentEquals(body(300), setup.client.get(setup.server.uri("/edhoc")).payload)
+        assertTrue(setup.requests().none { it.hasQBlock() }, "no probe went out, and the request used RFC 7959")
+        assertNull(setup.client.known(peer, isProtected = true), "nothing was learnt, so nothing is kept")
+        assertFailsWith<MessageSecurityException> { setup.client.get(setup.server.uri("/big")) }
+        assertEquals(listOf("/edhoc"), setup.requests().map { it.options.path }.distinct(), "nothing else went out")
+
+        installed = true
+        assertContentEquals(body(300), setup.client.get(setup.server.uri("/big")).payload)
+        assertEquals(1, probes(setup).size, "the first request after the protection is installed probes")
+        assertEquals(Capability.SUPPORTED, setup.client.known(peer, isProtected = true))
+        assertTrue(setup.requests().last().hasQBlock(), "and goes with Q-Block")
     }
 
     @Test

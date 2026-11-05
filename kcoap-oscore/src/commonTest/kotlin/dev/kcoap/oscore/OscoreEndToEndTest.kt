@@ -6,6 +6,8 @@ import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ResponseVerification
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -20,6 +22,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -91,7 +94,7 @@ class OscoreEndToEndTest {
         assertTrue(protectedResponse.options.oscore!!.isEmpty(), "first response reuses the request nonce")
         assertEquals(60, protectedResponse.options.maxAge, "Max-Age is Inner, so outside it is absent")
 
-        assertEquals(response, protected.unprotectResponse(protectedResponse))
+        assertEquals(response, protected.verified(protectedResponse))
         assertTrue(logs.snapshot().any { it.tag == "oscore.client" })
     }
 
@@ -118,13 +121,13 @@ class OscoreEndToEndTest {
         assertEquals(CoapCode.CONTENT, first.code)
         assertEquals(5, first.options.observe, "Outer Observe of a notification")
 
-        val a = registration.unprotectResponse(first)
+        val a = registration.verified(first)
         assertEquals("a", a.payloadAsText())
         assertEquals(0, a.options.observe, "the notification without Partial IV is the oldest")
-        val c = registration.unprotectResponse(third)
+        val c = registration.verified(third)
         assertEquals("c", c.payloadAsText())
-        assertFailsWith<MessageSecurityException>("older than the freshest") { registration.unprotectResponse(second) }
-        assertFailsWith<MessageSecurityException>("replayed") { registration.unprotectResponse(third) }
+        assertFailsWith<MessageSecurityException>("older than the freshest") { registration.verified(second) }
+        assertFailsWith<MessageSecurityException>("replayed") { registration.verified(third) }
         assertNotEquals(a.options.observe, c.options.observe)
     }
 
@@ -137,22 +140,59 @@ class OscoreEndToEndTest {
         val plain = client.protectRequest(request(), peer)!!
         val verified = server.unprotectRequest(plain.message, peer)!!
         val ok = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CHANGED))
-        plain.unprotectResponse(ok)
-        assertFailsWith<MessageSecurityException>("only one response without Observe") { plain.unprotectResponse(ok) }
+        plain.verified(ok)
+        assertFailsWith<MessageSecurityException>("only one response without Observe") { plain.verified(ok) }
 
         val notification = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { options { observe(1) } })
         val other = client.protectRequest(request(), peer)!!
         assertFailsWith<MessageSecurityException>("notification for a non-Observe request") {
-            OscoreClient(clientContext).protectRequest(request(), peer)!!.unprotectResponse(notification)
+            OscoreClient(clientContext).protectRequest(request(), peer)!!.verified(notification)
         }
 
         val tampered = ok.toBuilder().apply { payload = payload.also { it[0] = (it[0].toInt() xor 1).toByte() } }.build()
-        assertFailsWith<MessageSecurityException> { other.unprotectResponse(tampered) }
+        assertFailsWith<MessageSecurityException> { other.verified(tampered) }
         assertFailsWith<MessageSecurityException>("unprotected success") {
-            other.unprotectResponse(CoapMessage.response(plain.message, CoapCode.CONTENT))
+            other.verified(CoapMessage.response(plain.message, CoapCode.CONTENT))
         }
         val error = CoapMessage.response(plain.message, CoapCode.UNAUTHORIZED) { payload("Security context not found") }
-        assertSame(error, other.unprotectResponse(error), "OSCORE errors are unprotected and passed on")
+        val unverified = assertIs<ResponseVerification.Unverified>(other.unprotectResponse(error), "OSCORE errors are unprotected")
+        assertSame(error, unverified.message, "handed on as they came, for the application")
+    }
+
+    @Test
+    fun adr0008AClientWithoutAContextForTheRequestFailsClosedUnlessToldOtherwise() = runTest {
+        val (clientContext, _) = pair()
+        val other = Endpoint.Udp("192.0.2.9", 5683)
+        val resolver = ClientContextResolver { target, _ -> clientContext.takeIf { target == peer } }
+
+        val failure = assertFailsWith<MessageSecurityException> { OscoreClient(resolver, loggers).protectRequest(request(), other) }
+        assertEquals("No OSCORE context for $other", failure.message)
+        assertNotNull(OscoreClient(resolver, loggers).protectRequest(request(), peer), "a request with a context is protected")
+
+        val opportunistic = OscoreClient(resolver, loggers, allowUnprotected = true)
+        assertNull(opportunistic.protectRequest(request(), other), "plaintext only when allowed explicitly")
+        assertNotNull(opportunistic.protectRequest(request(), peer))
+    }
+
+    @Test
+    fun adr0008AVerifiedRequestCarriesItsContextsIdentity() = runTest {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val named = object : SecurityIdentity {
+            override val description: String get() = "lamp 42"
+        }
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverContext = SecurityContext.derive(
+            SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)),
+            crypto,
+            EphemeralSequenceNumberStore(),
+            identity = named,
+        )
+        assertEquals(OscoreIdentity(byteArrayOf(0x0b), null), clientContext.identity, "by default the Recipient ID")
+        assertSame(named, serverContext.identity)
+
+        val verified = serverFor(serverContext).unprotectRequest(OscoreClient(clientContext).protectRequest(request(), peer)!!.message, peer)!!
+
+        assertSame(named, verified.identity, "the identity of the context, not one built from the Recipient ID")
     }
 
     @Test
@@ -246,8 +286,8 @@ class OscoreEndToEndTest {
     }
 
     @Test
-    fun resolverMayDeclineToProtect() = runTest {
-        val client = OscoreClient(ClientContextResolver { _, _ -> null })
+    fun resolverMayDeclineToProtectWhereUnprotectedRequestsAreAllowed() = runTest {
+        val client = OscoreClient(ClientContextResolver { _, _ -> null }, allowUnprotected = true)
         assertNull(client.protectRequest(request(), peer))
     }
 
@@ -284,14 +324,14 @@ class OscoreEndToEndTest {
         val challengePiv = assertNotNull(OscoreOptionValue.decode(protectedChallenge.options.oscore!!).partialIv, "the challenge carries the server's Partial IV")
         assertTrue(challengePiv.readUnsigned() > usedBefore, "above every Partial IV the server used before the restart")
 
-        val seenByClient = first.unprotectResponse(protectedChallenge)
+        val seenByClient = first.verified(protectedChallenge)
         assertEquals(CoapCode.UNAUTHORIZED, seenByClient.code)
         val echo = seenByClient.options.echo!!
         assertEquals(0, seenByClient.payloadSize, "no diagnostic payload")
 
         val wrongEcho = client.protectRequest(request().toBuilder().options { echo(byteArrayOf(1, 2, 3)) }.build(), peer)!!
         val challengedAgain = server.unprotectRequest(wrongEcho.message, peer)!!
-        val repeated = wrongEcho.unprotectResponse(challengedAgain.protectResponse(challengedAgain.challenge!!))
+        val repeated = wrongEcho.verified(challengedAgain.protectResponse(challengedAgain.challenge!!))
             .options.echo!!
         assertContentEquals(echo, repeated, "a wrong Echo is challenged again, with the outstanding value")
 

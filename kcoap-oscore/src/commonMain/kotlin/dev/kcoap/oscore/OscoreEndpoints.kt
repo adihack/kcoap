@@ -6,6 +6,7 @@ import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
@@ -17,7 +18,11 @@ import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Chooses the security context for an outgoing request, or null to send it unprotected. */
+/**
+ * Chooses the security context for an outgoing request. Null means no context: [OscoreClient] then fails the
+ * request with [MessageSecurityException] unless it was built with `allowUnprotected`, when null sends the
+ * request in plaintext (ADR 0008).
+ */
 public fun interface ClientContextResolver {
     public suspend fun contextFor(peer: Endpoint, request: CoapMessage): SecurityContext?
 }
@@ -69,7 +74,11 @@ public class InMemoryContextRepository : SecurityContextRepository {
     private fun key(recipientId: ByteArray, idContext: ByteArray?): String = "${recipientId.toHex()}/${idContext?.toHex() ?: "-"}"
 }
 
-/** The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. */
+/**
+ * The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. The default
+ * [SecurityContext.identity]; a context EDHOC established carries kcoap-edhoc-oscore's `EdhocIdentity`, which
+ * holds this one and the peer's credential.
+ */
 public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : SecurityIdentity {
     private val rid = recipientId.copyOf()
     private val idc = idContext?.copyOf()
@@ -126,15 +135,23 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * `QBlockServerConfig.withMessageSecurity` of kcoap-coap); otherwise protected bodies use Inner Block1 and
  * Block2 (RFC 7959; RFC 8613 §4.1.3.4.1), one response per block.
  *
- * **Unprotected responses** are not authenticated. The unprotected 4.xx and 5.xx errors of OSCORE and of
- * intermediaries (§8.2) are passed on to a request that takes one response. To a request carrying an Inner
- * Q-Block option only 4.00, 4.01 and 5.xx are, without Echo or a block option: those end the body, whereas an
- * unprotected 4.08, 4.13, 4.02, Echo challenge or block would steer it from outside OSCORE (RFC 9177 §11), so
- * they are dropped like a response that fails verification ([UnprotectedResponses]).
+ * **Unprotected responses** are not authenticated ([UnprotectedResponses]). The unprotected 4.xx and 5.xx
+ * errors of OSCORE and of intermediaries (§8.2) are handed on as [ResponseVerification.Unverified], to every
+ * request alike, and the stack acts on nothing in them: it ends a request that has no verified response yet,
+ * and an established observation ignores them (ADR 0008). Any other unprotected response is dropped like one
+ * that fails verification.
+ *
+ * **No context.** A request for which [contexts] returns null fails with [MessageSecurityException] before
+ * anything is sent, so a missing context never sends plaintext silently. With [allowUnprotected], null sends
+ * the request unprotected instead, for a client that talks OSCORE to some servers and plain CoAP to others.
+ *
+ * @param allowUnprotected whether a request [contexts] finds no context for goes out unprotected; false by
+ *   default, which fails it.
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
     loggerFactory: LoggerFactory = LoggerFactory.Global,
+    private val allowUnprotected: Boolean = false,
 ) : ClientMessageSecurity {
     private val log = loggerFactory.logger(LogTags.OSCORE).child("client")
 
@@ -143,7 +160,7 @@ public class OscoreClient(
         this(ClientContextResolver { _, _ -> context }, loggerFactory)
 
     override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
-        val context = contexts.contextFor(peer, request) ?: return null
+        val context = contexts.contextFor(peer, request) ?: return noContext(request, peer)
         val (protected, binding) = try {
             OscoreProtection.protectRequest(context, request)
         } catch (e: OscoreException) {
@@ -151,6 +168,16 @@ public class OscoreClient(
         }
         log.debug { "Protected ${request.code} for $peer with $context, piv=${binding.requestPiv.toHex()}" }
         return ClientExchange(protected, binding)
+    }
+
+    /** No context for [request]: plaintext when [allowUnprotected] says so, otherwise a failure (fail closed). */
+    private fun noContext(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+        if (allowUnprotected) {
+            log.debug { "No OSCORE context for ${request.code} ${request.options.path} to $peer; sent unprotected" }
+            return null
+        }
+        log.warn { "No OSCORE context for ${request.code} ${request.options.path} to $peer; not sent" }
+        throw MessageSecurityException("No OSCORE context for $peer")
     }
 
     private inner class ClientExchange(
@@ -180,14 +207,17 @@ public class OscoreClient(
          */
         private var freshestBody: ByteArray? = null
 
-        override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
+        override suspend fun unprotectResponse(response: CoapMessage): ResponseVerification {
             if (response.options.oscore == null) {
-                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: only those that
-                // can do no more than end the request are passed on (UnprotectedResponses).
-                val rejection = UnprotectedResponses.rejection(response, takesSeveral = binding.allowsSeveralResponses)
-                    ?: return response
-                log.warn { "Dropped a response: $rejection" }
-                throw MessageSecurityException(rejection)
+                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: the stack is told so
+                // and acts on nothing in them (UnprotectedResponses).
+                val unverified = UnprotectedResponses.classify(response)
+                if (unverified == null) {
+                    log.warn { "Dropped an unprotected ${response.code} to an OSCORE request" }
+                    throw MessageSecurityException("Unprotected ${response.code} to an OSCORE request")
+                }
+                log.debug { "Unverified ${response.code}: ${unverified.reason}" }
+                return unverified
             }
             val (decrypted, piv) = try {
                 OscoreProtection.unprotectResponse(binding, response)
@@ -195,7 +225,7 @@ public class OscoreClient(
                 log.warn { "Dropped a response: ${e.message}" }
                 throw e.toMessageSecurityException()
             }
-            return lock.withLock { checkFreshness(decrypted, piv) }
+            return ResponseVerification.Verified(lock.withLock { checkFreshness(decrypted, piv) })
         }
 
         /**
@@ -304,8 +334,10 @@ public class OscoreClient(
 
 /**
  * The OSCORE server side for the CoAP stack: verifies requests carrying the OSCORE option against the
- * contexts in [contexts] and protects the responses. Requests without the option are left to the
- * stack (null), so a server can host public and protected resources side by side.
+ * contexts in [contexts] and protects the responses. Each verified request carries its context's
+ * [SecurityContext.identity]. Requests without the option are left to the stack (null). On a server with
+ * message security its default access policy refuses them, so only the resources the application makes
+ * [dev.kcoap.coap.server.AccessPolicy.Public] serve them (ADR 0008).
  */
 public class OscoreServer(
     private val contexts: SecurityContextRepository,
@@ -339,7 +371,7 @@ public class OscoreServer(
         private val lock = Mutex()
         private var responses = 0
 
-        override val identity: SecurityIdentity = OscoreIdentity(binding.context.recipientId, binding.context.idContext)
+        override val identity: SecurityIdentity = binding.context.identity
 
         /**
          * The first response reuses the request nonce (RFC 8613 §8.3); every later one takes a new Partial IV

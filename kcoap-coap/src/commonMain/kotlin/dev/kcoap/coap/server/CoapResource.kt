@@ -45,6 +45,13 @@ public abstract class CoapResource(public val name: String) {
     /** Whether `/.well-known/core` lists this resource (RFC 6690 §4: which links to include is up to the server). */
     public open val isDiscoverable: Boolean get() = true
 
+    /**
+     * Who may use this resource and, unless a child has a policy of its own, everything below it (ADR 0008).
+     * Null inherits the parent's, and the root's falls back to [CoapServerConfig.defaultAccess]; see
+     * [AccessPolicy] for when the server asks it.
+     */
+    public open val access: AccessPolicy? get() = null
+
     /** Whether GET or FETCH with Observe registers observers (RFC 7641 §4.1); see [ObservableResource]. */
     public open val isObservable: Boolean get() = false
 
@@ -63,7 +70,10 @@ public abstract class CoapResource(public val name: String) {
     public val children: Collection<CoapResource> get() = childMap.load().values
 
     /** "/a/b", or "/" for the root. */
-    public val path: String
+    public val path: String get() = segments.joinToString("/", prefix = "/")
+
+    /** The Uri-Path segments from the root to this resource; empty for the root. */
+    internal val segments: List<String>
         get() {
             val segments = ArrayDeque<String>()
             var current: CoapResource? = this
@@ -71,7 +81,7 @@ public abstract class CoapResource(public val name: String) {
                 segments.addFirst(current.name)
                 current = current.parent
             }
-            return segments.joinToString("/", prefix = "/")
+            return segments
         }
 
     /** The child called [name], or null. */

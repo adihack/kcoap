@@ -18,8 +18,19 @@ val edhoc = EdhocServer(responderConfig, crypto, contexts, eventListener = { met
 val security = CombinedRequestServer(edhoc, OscoreServer(contexts))
 CoapServer(transport, scope, CoapServerConfig(security = security)) {
     resource(".well-known") { add(EdhocResource(edhoc)) }  // calls edhoc.handle(request, peer)
+    resource("lights") {
+        // Only OSCORE reaches it (the default with message security); the policy narrows it to operators.
+        access = AccessPolicy { (it.securityIdentity as? EdhocIdentity)?.peerCredential in operators }
+        get { CoapResponse.content("on") }
+    }
 }
 ```
+
+`EdhocResource` is `AccessPolicy.Public` of its own, so clients run EDHOC before they have OSCORE; every
+other resource of a server with message security refuses requests without it (ADR 0008). A request
+verified with a context this server established carries an `EdhocIdentity` (`EdhocSession.oscoreContext`
+attaches it): the peer credential EDHOC authenticated, its identifier, and the context's `OscoreIdentity`.
+Authorize on the credential; the Recipient ID is a C_R the server may give a later session.
 
 Until message_3 verifies, nothing about a client is authenticated, so the server bounds what clients can
 make it keep (RFC 9528 §9.7):
@@ -75,6 +86,14 @@ val (session, security) = handshake.runCombined()  // two round trips in total (
 
 `EdhocClientHandshake` takes a plain "send this request, return the response" function, so it is
 independent of the CoAP endpoint and easy to test.
+
+`PeerSecurity` holds one protection per server. A request to a server without one fails with
+`MessageSecurityException` instead of going out in plaintext, except for `unprotectedPaths` (the EDHOC
+resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP on purpose. Discovery before the
+handshake (`client.discover(server)` for `rt=core.edhoc`) asks `/.well-known/core`, so it takes a plain client or
+`PeerSecurity(unprotectedPaths = setOf("/.well-known/edhoc", "/.well-known/core"))`, and an EDHOC resource at
+another path needs that path in `unprotectedPaths`. A client with `QBlockMode.PROBE` and `withMessageSecurity`
+runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the first request after it probes.
 
 ## Verified by
 

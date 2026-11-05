@@ -20,11 +20,13 @@ The details, section by section, are in [docs/rfc-compliance.md](docs/rfc-compli
 ## Quick start
 
 ```kotlin
-// A server with a protected resource.
+// A server with message security: its resources take OSCORE requests only, unless they say otherwise.
 val contexts = InMemoryContextRepository().apply { add(serverContext) }
 val server = CoapServer(KtorUdpTransport.bind("0.0.0.0", 5683), scope, CoapServerConfig(security = OscoreServer(contexts))) {
-    resource("lights") {
-        get { if (securityIdentity is OscoreIdentity) CoapResponse.content("on") else CoapResponse.error(CoapCode.UNAUTHORIZED) }
+    resource("lights") { get { CoapResponse.content("on for ${securityIdentity?.description}") } }
+    resource("status") {
+        access = AccessPolicy.Public // for anyone, with or without OSCORE
+        get { CoapResponse.content("up") }
     }
 }
 
@@ -32,6 +34,17 @@ val server = CoapServer(KtorUdpTransport.bind("0.0.0.0", 5683), scope, CoapServe
 val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = OscoreClient(clientContext)))
 println(client.get("coap://192.0.2.1/lights").payloadAsText())
 ```
+
+Message security fails closed ([ADR 0008](docs/adr/0008-fail-closed-message-security.md)):
+
+- **Server.** Each resource has an `AccessPolicy` (`Public`, `MessageSecurityRequired`, `Authenticated`, or
+  your own on the request's identities), inherited down the tree; with `security` set, the default is
+  `MessageSecurityRequired`. A refused request gets 4.01 before any handler, block-wise buffer, observation
+  or burst, and `/.well-known/core` lists only what the caller may use.
+- **Client.** It acts only on responses it verified. An unprotected error, which anyone on the path can
+  send, is never repeated with its Echo or continued: the request fails with
+  `CoapException(UNVERIFIED_RESPONSE)`, which carries it. A request without a context or installed
+  protection fails instead of going out in plaintext, unless `allowUnprotected` says otherwise.
 
 With EDHOC instead of pre-shared OSCORE keys, the client runs the handshake first and its first
 OSCORE request carries EDHOC message_3 (RFC 9668), two round trips in all:
@@ -44,7 +57,9 @@ security.install(serverEndpoint, protection)
 client.get("coap://192.0.2.1/lights")
 ```
 
-The server side mounts `EdhocResource` under `/.well-known` and uses `CombinedRequestServer`; see
+The server side mounts `EdhocResource` (public of its own) under `/.well-known` and uses
+`CombinedRequestServer`; its handlers and policies see an `EdhocIdentity` with the client's authenticated
+credential. See
 [kcoap-edhoc-oscore](kcoap-edhoc-oscore/README.md). More in the
 [client and server guide](docs/guide-client-server.md).
 

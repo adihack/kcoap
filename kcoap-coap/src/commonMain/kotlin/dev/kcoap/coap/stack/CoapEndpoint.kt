@@ -917,7 +917,11 @@ public class CoapEndpoint private constructor(
                 withMessaging { reject(from, message.messageId, reason) }
                 exchange.refuse(inspection.cause)
             }
-            ClientExchange.Inspection.Unverified -> withMessaging { acknowledge(from, message.messageId) }
+            is ClientExchange.Inspection.Unverified -> {
+                withMessaging { acknowledge(from, message.messageId) }
+                exchange.acceptUnverified(inspection.response, inspection.reason)
+            }
+            ClientExchange.Inspection.Dropped -> withMessaging { acknowledge(from, message.messageId) }
         }
     }
 

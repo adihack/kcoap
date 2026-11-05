@@ -24,6 +24,10 @@ public typealias RequestHandlerFunction = suspend RequestContext.() -> CoapRespo
  *         }
  *     }
  *     resource("echo") { post { CoapResponse(CoapCode.CHANGED, payload = payload) } }
+ *     resource("api") {
+ *         access = AccessPolicy.Authenticated // for /api and everything below it
+ *         resource("config") { put { CoapResponse.changed() } }
+ *     }
  *     add(FirmwareResource())
  * }
  * ```
@@ -45,6 +49,17 @@ public class ResourceBuilder internal constructor(private val resource: DslResou
         get() = resource.dslDiscoverable
         set(value) {
             resource.dslDiscoverable = value
+        }
+
+    /**
+     * Who may use the resource and the resources below it without a policy of their own (ADR 0008); null, the
+     * default, inherits the parent's. At the top level of the server's routes it is the root's, which governs
+     * every resource that sets none. See [AccessPolicy].
+     */
+    public var access: AccessPolicy?
+        get() = resource.dslAccess
+        set(value) {
+            resource.dslAccess = value
         }
 
     /** Makes the resource observable (RFC 7641) with notifications of [type]. */
@@ -100,8 +115,10 @@ internal class DslResource(name: String) : ObservableResource(name) {
     var dslObservable = false
     var dslNotificationType = CoapMessageType.CON
     var dslRecognized: Set<Int> = emptySet()
+    var dslAccess: AccessPolicy? = null
 
     override val attributes: ResourceAttributes get() = dslAttributes
+    override val access: AccessPolicy? get() = dslAccess
     override val isDiscoverable: Boolean get() = dslDiscoverable && handlers.isNotEmpty()
     override val isObservable: Boolean get() = dslObservable
     override val notificationType: CoapMessageType get() = dslNotificationType

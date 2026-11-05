@@ -9,7 +9,9 @@ import kotlin.time.Duration.Companion.seconds
  * How a [CoapServer] processes requests.
  *
  * @property security message security (OSCORE) for incoming requests, called between the messaging
- *   layer and block-wise/Observe processing (RFC 8613 Figure 1); null serves unprotected requests only.
+ *   layer and block-wise/Observe processing (RFC 8613 Figure 1); null serves unprotected requests only. With
+ *   it set, [defaultAccess] refuses requests it did not verify, so configuring it protects every resource
+ *   that does not say otherwise (ADR 0008).
  * @property maxBlockSize the largest block the server sends or asks for (RFC 7959), 16..1024. The
  *   transport's datagram size may force smaller blocks.
  * @property maxBodySize the largest request body the server assembles from Block1 transfers; larger
@@ -62,6 +64,11 @@ import kotlin.time.Duration.Companion.seconds
  *   verified by sending in its name. RFC 9175 sets no lifetime; it needs the check once per endpoint.
  * @property qBlock whether and how the server serves Q-Block (RFC 9177); off by default, see
  *   [QBlockServerConfig].
+ * @property defaultAccess the [AccessPolicy] of every resource that has none and whose ancestors have none
+ *   (ADR 0008). By default [AccessPolicy.MessageSecurityRequired] when [security] is set, so a server with
+ *   message security fails closed, and [AccessPolicy.Public] otherwise. `/.well-known/core` and
+ *   kcoap-edhoc-oscore's `EdhocResource` are [AccessPolicy.Public] of their own. A server that also takes
+ *   DTLS-authenticated requests without OSCORE sets [AccessPolicy.Authenticated].
  */
 public class CoapServerConfig(
     public val security: ServerMessageSecurity? = null,
@@ -80,6 +87,7 @@ public class CoapServerConfig(
     public val maxVerifiedAddresses: Int = DEFAULT_MAX_VERIFIED_ADDRESSES,
     public val verifiedAddressLifetime: Duration = DEFAULT_VERIFIED_ADDRESS_LIFETIME,
     public val qBlock: QBlockServerConfig = QBlockServerConfig(),
+    public val defaultAccess: AccessPolicy = if (security == null) AccessPolicy.Public else AccessPolicy.MessageSecurityRequired,
 ) {
     init {
         require(maxBlockSize in 16..1024 && maxBlockSize and (maxBlockSize - 1) == 0) {
@@ -119,6 +127,6 @@ public class CoapServerConfig(
     }
 
     override fun toString(): String =
-        "CoapServerConfig(security=${security != null}, maxBlockSize=$maxBlockSize, maxBodySize=$maxBodySize, " +
-            "amplification=$amplification, qBlock=${qBlock.isEnabled})"
+        "CoapServerConfig(security=${security != null}, defaultAccess=$defaultAccess, maxBlockSize=$maxBlockSize, " +
+            "maxBodySize=$maxBodySize, amplification=$amplification, qBlock=${qBlock.isEnabled})"
 }

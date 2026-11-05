@@ -22,7 +22,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The lists of observers of a server's resources (RFC 7641 §4.1), keyed by client endpoint and token.
+ * The lists of observers of a server's resources (RFC 7641 §4.1): one entry per client endpoint and token, which
+ * only requests of the message-security identity that registered it replace or cancel (ADR 0008).
  *
  * Changes take one [Mutex], never held across a suspension; events are reported after it is released.
  * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
@@ -48,9 +49,17 @@ internal class ObservationRegistry(private val server: CoapServer) {
 
         /** [CoapServerConfig.maxObserversPerPeer] reached. */
         TOO_MANY_FOR_PEER,
+
+        /**
+         * Another message-security identity, or none, has an entry for the endpoint and token: RFC 7641 §4.1 allows
+         * one per pair, and only its own identity may replace it (ADR 0008).
+         */
+        IDENTITY_CONFLICT,
     }
 
     private val lock = Mutex()
+
+    /** The one entry per client endpoint and token (RFC 7641 §4.1), of whichever identity registered it. */
     private val byKey = HashMap<ExchangeKey, ServerObservation>()
 
     /** How many of [byKey] each client endpoint has; under [lock]. */
@@ -61,15 +70,20 @@ internal class ObservationRegistry(private val server: CoapServer) {
     private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
 
     /**
-     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST), unless the
-     * registry is closed or full; a replacement does not count against the bounds again. The replaced one
-     * ends: nothing of its Q-Block2 body goes out any more on the token the new one now uses.
+     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST) and the same
+     * message-security identity, unless the registry is closed or full; a replacement does not count against
+     * the bounds again. The replaced one ends: nothing of its Q-Block2 body goes out any more on the token the
+     * new one now uses. A registration of another identity on that endpoint and token neither replaces the entry
+     * nor adds one ([Registration.IDENTITY_CONFLICT]), so a client that message security did not authenticate
+     * cannot take over an authenticated one's observation, nor have notifications sent to it on its token
+     * (ADR 0008).
      */
     suspend fun register(observation: ServerObservation): Registration {
         val config = server.config
         val previous = lock.withLock {
             if (isClosed) return Registration.CLOSED
             val previous = byKey[observation.key]
+            if (previous != null && previous.identity != observation.identity) return Registration.IDENTITY_CONFLICT
             if (previous == null && byKey.size >= config.maxObservers) return Registration.TOO_MANY_OBSERVERS
             // The key includes the peer, so a replacement is the same client's and leaves its count as it is.
             if (previous == null && (perPeer[observation.peer] ?: 0) >= config.maxObserversPerPeer) return Registration.TOO_MANY_FOR_PEER
@@ -90,9 +104,14 @@ internal class ObservationRegistry(private val server: CoapServer) {
         return Registration.ADDED
     }
 
-    /** RFC 7641 §3.6 deregistration, or §3.5 cancellation by Reset. */
-    suspend fun remove(peer: Endpoint, token: ByteArray, reason: String) {
-        val observation = lock.withLock { byKey[ExchangeKey(peer, token.toHex())] } ?: return
+    /**
+     * RFC 7641 §3.6 deregistration, by a request of the registration's [identity] only: a GET with Observe 1
+     * from another identity, or none, cancels nothing (ADR 0008).
+     */
+    suspend fun remove(peer: Endpoint, token: ByteArray, identity: SecurityIdentity?, reason: String) {
+        val observation = lock.withLock {
+            byKey[ExchangeKey(peer, token.toHex())]?.takeIf { it.identity == identity }
+        } ?: return
         remove(observation, reason)
     }
 
@@ -205,6 +224,7 @@ internal class ServerObservation(
      */
     val qBlockSize: Int? = null,
 ) : TransmissionOwner {
+    /** The client endpoint and token (RFC 7641 §4.1); only requests of [identity] replace or cancel it. */
     val key: ExchangeKey = ExchangeKey(peer, token.toHex())
     private val mutex = Mutex()
 

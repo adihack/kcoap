@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.transport.Endpoint
@@ -21,6 +22,7 @@ import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -190,7 +192,8 @@ class LibcoapOscoreInteropTest {
                 socket.send(DatagramPacket(ack, ack.size, localhost, port))
             }
             if (message.isEmpty || !message.hasToken(protected.message.token)) continue
-            return protected.unprotectResponse(message)
+            // ADR 0008: the stack acts only on verified responses, so libcoap's answers, the B.1.2 challenge included, must verify.
+            return assertIs<ResponseVerification.Verified>(protected.unprotectResponse(message), "verified").message
         }
     }
 
