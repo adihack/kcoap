@@ -354,7 +354,8 @@ internal class UdpMessaging(
             if (candidate != null && (next == null || candidate < next!!)) next = candidate
         }
         timed.forEach { consider(it.deadline) }
-        received.pending.forEach { consider(it.ackDeadline) }
+        // Pending entries are in arrival order, and so in deadline order: the first is the earliest.
+        consider(received.pending.firstOrNull()?.ackDeadline)
         consider(received.nextExpiry())
         consider(messageIds.nextExpiry())
         consider(nonConfirmableExpiries.firstOrNull()?.second)
@@ -372,7 +373,11 @@ internal class UdpMessaging(
                 effects += MessagingEffect.Completed(transmission, TransmissionOutcome.SlotReleased)
             }
         }
-        for (entry in received.pending.filter { deadline -> deadline.ackDeadline?.let { it <= now } == true }) {
+        while (true) {
+            // In deadline order, so the scan stops at the first entry not due yet.
+            val entry = received.pending.firstOrNull() ?: break
+            val deadline = entry.ackDeadline
+            if (deadline == null || deadline > now) break
             debug(entry.key.peer, entry.key.messageId) { "No response yet; sending an Empty ACK" }
             sendEmptyAck(entry)
         }

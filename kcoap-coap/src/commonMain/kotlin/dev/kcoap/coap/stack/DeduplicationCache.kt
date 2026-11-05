@@ -21,7 +21,11 @@ internal class DeduplicationCache(
     private val confirmableExpiries = ArrayDeque<InboundEntry>()
     private val nonConfirmableExpiries = ArrayDeque<InboundEntry>()
 
-    /** Confirmable messages delivered upwards and not answered yet; they get an Empty ACK at [InboundEntry.ackDeadline]. */
+    /**
+     * Confirmable messages delivered upwards and not answered yet; they get an Empty ACK at
+     * [InboundEntry.ackDeadline]. In arrival order, which is deadline order, since every deadline is the
+     * arrival plus the same delay.
+     */
     val pending: MutableSet<InboundEntry> = LinkedHashSet()
 
     operator fun get(key: MessageKey): InboundEntry? = entries[key]

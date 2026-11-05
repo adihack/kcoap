@@ -686,6 +686,23 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun rfc7252Section5_2_2EmptyAcksGoOutAtEachRequestsOwnDeadlineInArrivalOrder() {
+        val messaging = messaging(separateResponseDelay = 1.seconds)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 1))
+        messaging.receive(500.milliseconds, request(CoapMessageType.CON, 2))
+        messaging.receive(600.milliseconds, request(CoapMessageType.CON, 3))
+        messaging.respond(700.milliseconds, peer, 2, CoapMessageType.CON, response(CoapMessageType.ACK, 2))
+        messaging.takeEffects()
+        assertEquals(1.seconds, messaging.nextDeadline())
+
+        messaging.onTimer(1.seconds)
+        assertEquals(listOf(1), messaging.takeEffects().transmitted().map { it.messageId })
+        assertEquals(1600.milliseconds, messaging.nextDeadline(), "the answered request no longer counts")
+        messaging.onTimer(1600.milliseconds)
+        assertEquals(listOf(3), messaging.takeEffects().transmitted().map { it.messageId })
+    }
+
+    @Test
     fun aTransmissionTheTransportRefusedFailsAtOnceAndFreesItsSlot() {
         val messaging = messaging()
         val refused = messaging.sendConfirmable(Duration.ZERO)
