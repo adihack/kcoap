@@ -61,13 +61,16 @@ adds its entry and migration note below.
   so sessions do not probe it again, also when the backend keeps the probing defaults; the copies that
   `supportedBy` and the new `EdhocResponderConfig.withConnectionIdentifiers(provider)` make keep them.
 - EDHOC server session bounds and events (WP-SEC1): `EdhocServer` takes `maxPendingSessionsPerPeer` (8),
-  `pendingSessionLifetime` (EXCHANGE_LIFETIME, 247 s), `timeSource` (`TimeSource.Monotonic`) and
-  `eventListener`, which receives the new `EdhocServerEvent`s: `LimitReached` (with `Limit.PENDING_SESSIONS`
-  or `PENDING_SESSIONS_PER_PEER`), `SessionExpired` and `ContinuationFromAnotherPeer`, through the new
-  `EdhocServerEventListener`.
-- `EdhocServer`, `EdhocClientHandshake` and `EdhocClientHandshake.over` take a `sequenceStore`
-  (`EphemeralSequenceNumberStore()` by default) and derive their OSCORE contexts with it, so a durable store
-  can make those contexts resumable (WP-SEC1, a WP-A1 follow-up).
+  `pendingSessionLifetime` (MAX_TRANSMIT_WAIT, 93 s), `pendingSessionGracePeriod` (10 s), `timeSource`
+  (`TimeSource.Monotonic`) and `eventListener`, which receives the new `EdhocServerEvent`s: `LimitReached`
+  (with `Limit.PENDING_SESSIONS` or `PENDING_SESSIONS_PER_PEER`), `SessionEvicted`, `SessionExpired` and
+  `ContinuationFromAnotherPeer`, through the new `EdhocServerEventListener`.
+- `EdhocServer`, `EdhocClientHandshake` and `EdhocClientHandshake.over` take a `sequenceStore` and derive
+  their OSCORE contexts with it, so a durable store can make those contexts resumable (WP-SEC1, a WP-A1
+  follow-up). It is null by default, which gives each context its own `EphemeralSequenceNumberStore` as
+  before. Context names repeat across servers: give each server its own durable store.
+- `InMemoryContextRepository.addIfAbsent(context)` adds a context only when no context has its Recipient ID
+  and ID Context, and says whether it did (WP-SEC1).
 
 ### Changed (breaking)
 
@@ -79,15 +82,21 @@ EDHOC server session safety (WP-SEC1):
   unknown C_R and leaves the session waiting. `EdhocResource` and `CombinedRequestServer` pass the peer
   themselves. *Migration:* pass `RequestContext.peer`, or the `peer` of `unprotectRequest`, where you call
   these directly. A client whose address changes between message_1 and message_3 has to start again.
-- **Beyond `maxPendingSessions`, a new message_1 is refused instead of evicting the oldest session**, and so
-  is one beyond the new per-peer bound: an EDHOC error ("Too many pending EDHOC sessions") in a 5.00
-  response, before any cryptography, reported as `EdhocServerEvent.LimitReached`. Pending sessions now also
-  expire after `pendingSessionLifetime`. *Migration:* raise the bounds for gateways that start many
-  handshakes from one address, and count `LimitReached` in production.
+- **Beyond `maxPendingSessions`, the oldest session is evicted only once it has waited for message_3
+  longer than `pendingSessionGracePeriod`** (10 s), and wiped (`EdhocServerEvent.SessionEvicted`). While
+  every session is within its grace period, a new message_1 is refused, and so is one beyond the new
+  per-peer bound: an EDHOC error ("Too many pending EDHOC sessions") in a 5.00 response, before any
+  cryptography, reported as `EdhocServerEvent.LimitReached`. Pending sessions now also expire after
+  `pendingSessionLifetime`. With the defaults, a flood of 64 message_1 per 10 s from spoofed addresses
+  still keeps new clients out while it lasts, until an Echo check before message_2 lands.
+  *Migration:* raise the bounds for gateways that start many handshakes from one address, give clients
+  that answer message_2 slowly a longer grace period, and count `LimitReached` and `SessionEvicted` in
+  production.
 - **The `EdhocServer` constructor has new parameters between `maxPendingSessions` and `loggers`**
-  (`maxPendingSessionsPerPeer`, `pendingSessionLifetime`, `sequenceStore`, `timeSource`, before `listener`;
-  `eventListener` after it). *Migration:* pass `listener` and `loggers` by name. `EdhocClientHandshake` has
-  `sequenceStore` after `loggers`, so its trailing `exchange` lambda is unchanged.
+  (`maxPendingSessionsPerPeer`, `pendingSessionLifetime`, `pendingSessionGracePeriod`, `sequenceStore`,
+  `timeSource`, before `listener`; `eventListener` after it). *Migration:* pass `listener` and `loggers` by
+  name. `EdhocClientHandshake` has `sequenceStore` after `loggers`, so its trailing `exchange` lambda is
+  unchanged.
 - **A destroyed `EdhocSession` or `SoftwarePrivateKey` throws `IllegalStateException`** from `prkOut`,
   `prkExporter`, `exporter`, `oscoreMasterSecret`, `oscoreMasterSalt`, `keyUpdate` and `encoded` instead of
   returning, or deriving from, zeroed bytes, which are valid, publicly known keys. *Migration:* do not use a
@@ -247,4 +256,12 @@ Build governance (WP-C1):
 - EDHOC (WP-SEC1): the error sent for a failed peer authentication no longer tells a probing Initiator
   whether a credential it presents by value is trusted.
 - EDHOC and kcoap-crypto (WP-SEC1): a destroyed `EdhocSession` handed out OSCORE secrets derived from
-  zeros, and a destroyed `SoftwarePrivateKey` its zeroed bytes; both now fail closed.
+  zeros, and a destroyed `SoftwarePrivateKey` its zeroed bytes; both now fail closed, the key also when it
+  is destroyed on another thread while `encoded()` copies it.
+- EDHOC server (WP-SEC1): a context could replace another client's context in the repository when two
+  servers shared it (two application profiles, RFC 9668 §5) or the application added one concurrently,
+  because each server reserves C_R only among its own sessions. The context is now added only if its
+  Recipient ID is free; otherwise the handshake fails with "Connection identifier in use".
+- EDHOC (WP-SEC1): when composing message_2 failed or was cancelled (C_R equal to C_I, an EAD handler
+  failing, a server handler cancelled), the Responder's ephemeral key Y and PRK_3e2m were left for the
+  garbage collector; they are wiped now (RFC 9528 §9.8).
