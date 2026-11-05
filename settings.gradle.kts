@@ -63,9 +63,13 @@ include(
     // Core, unpublished. DTLS 1.2 for coaps (RFC 6347, RFC 7925, RFC 9146): interfaces and registries only,
     // so it is not published until the engine exists.
     ":kcoap-dtls",
-    // Core. CoAP message model, codec and exchange layer (RFC 7252, 7641, 7959, 8132, 9175, 8323).
+    // Core. CoAP wire vocabulary: message model, options, URIs, link format, the UDP and RFC 8323 codecs and
+    // the message-security SPI. No coroutines, so OSCORE builds on it without the endpoint stack.
+    ":kcoap-coap-message",
+    // Core. CoAP endpoint stack on kcoap-coap-message: exchanges, client and server, Block-wise, Observe,
+    // Q-Block (RFC 7252, 7641, 7959, 8132, 9175, 8323, 9177).
     ":kcoap-coap",
-    // Core. OSCORE (RFC 8613).
+    // Core. OSCORE (RFC 8613), on kcoap-coap-message.
     ":kcoap-oscore",
     // Core. EDHOC (RFC 9528).
     ":kcoap-edhoc",
