@@ -32,8 +32,8 @@ goes to GitHub Packages, unsigned.
 | `SIGNING_KEY_ID` | the last 8 characters of the key id |
 | `SIGNING_PASSWORD` | the key's passphrase |
 
-GitHub Pages must be enabled with "GitHub Actions" as the source (Settings → Pages); the workflow tries
-to enable it on its first run.
+GitHub Pages must be enabled once, with "GitHub Actions" as the source (Settings → Pages); the
+workflow's own token cannot turn it on.
 
 ## Before the first Maven Central release
 
