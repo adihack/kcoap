@@ -112,6 +112,12 @@ public final class dev/kcoap/crypto/EcdhCurve$Companion {
 	public final fun fromCoseId (I)Ldev/kcoap/crypto/EcdhCurve;
 }
 
+public final class dev/kcoap/crypto/EcdsaSignatureCodec {
+	public static final field INSTANCE Ldev/kcoap/crypto/EcdsaSignatureCodec;
+	public final fun fromDer (Ldev/kcoap/crypto/SignatureAlgorithm;[B)[B
+	public final fun toDer (Ldev/kcoap/crypto/SignatureAlgorithm;[B)[B
+}
+
 public final class dev/kcoap/crypto/HashAlgorithm : java/lang/Enum {
 	public static final field Companion Ldev/kcoap/crypto/HashAlgorithm$Companion;
 	public static final field SHAKE256 Ldev/kcoap/crypto/HashAlgorithm;
@@ -151,8 +157,9 @@ public final class dev/kcoap/crypto/KemAlgorithm : java/lang/Enum {
 
 public final class dev/kcoap/crypto/KemEncapsulation {
 	public fun <init> ([B[B)V
+	public final fun destroy ()V
 	public final fun getCiphertext ()[B
-	public final fun getSharedSecret ()[B
+	public final fun sharedSecret ()[B
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -190,8 +197,15 @@ public final class dev/kcoap/crypto/Kmac256 {
 
 public abstract class dev/kcoap/crypto/PrivateKey {
 	protected fun <init> (Ldev/kcoap/crypto/KeyType;)V
+	public fun destroy ()V
 	public final fun getType ()Ldev/kcoap/crypto/KeyType;
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/Sec1 {
+	public static final field INSTANCE Ldev/kcoap/crypto/Sec1;
+	public final fun decompress (Ldev/kcoap/crypto/KeyType;[B)[B
+	public final fun isCompressed ([B)Z
 }
 
 public final class dev/kcoap/crypto/Shake256 {
@@ -221,12 +235,46 @@ public final class dev/kcoap/crypto/SignatureAlgorithm$Companion {
 
 public final class dev/kcoap/crypto/SoftwarePrivateKey : dev/kcoap/crypto/PrivateKey {
 	public fun <init> (Ldev/kcoap/crypto/KeyType;[B)V
-	public final fun destroy ()V
+	public fun destroy ()V
 	public final fun encoded ()[B
 }
 
 public final class dev/kcoap/crypto/UnsupportedAlgorithmException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun getAlgorithm ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/CertificateFormatException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class dev/kcoap/crypto/x509/SubjectPublicKeyInfo {
+	public static final field Companion Ldev/kcoap/crypto/x509/SubjectPublicKeyInfo$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getPublicKey ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/SubjectPublicKeyInfo$Companion {
+	public final fun decode ([B)Ldev/kcoap/crypto/x509/SubjectPublicKeyInfo;
+}
+
+public final class dev/kcoap/crypto/x509/X509Certificate {
+	public static final field Companion Ldev/kcoap/crypto/x509/X509Certificate$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getPublicKey ()[B
+	public final fun getSubjectCommonName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/X509Certificate$Companion {
+	public final fun parse ([B)Ldev/kcoap/crypto/x509/X509Certificate;
 }
 

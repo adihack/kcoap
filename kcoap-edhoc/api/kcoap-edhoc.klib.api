@@ -121,7 +121,7 @@ abstract interface dev.kcoap.edhoc/EadHandler { // dev.kcoap.edhoc/EadHandler|nu
 
 final class dev.kcoap.edhoc/AuthenticationCredential { // dev.kcoap.edhoc/AuthenticationCredential|null[0]
     final val certificate // dev.kcoap.edhoc/AuthenticationCredential.certificate|{}certificate[0]
-        final fun <get-certificate>(): dev.kcoap.edhoc/X509Certificate? // dev.kcoap.edhoc/AuthenticationCredential.certificate.<get-certificate>|<get-certificate>(){}[0]
+        final fun <get-certificate>(): dev.kcoap.crypto.x509/X509Certificate? // dev.kcoap.edhoc/AuthenticationCredential.certificate.<get-certificate>|<get-certificate>(){}[0]
     final val claimsSet // dev.kcoap.edhoc/AuthenticationCredential.claimsSet|{}claimsSet[0]
         final fun <get-claimsSet>(): dev.kcoap.cose/CwtClaimsSet? // dev.kcoap.edhoc/AuthenticationCredential.claimsSet.<get-claimsSet>|<get-claimsSet>(){}[0]
     final val encoded // dev.kcoap.edhoc/AuthenticationCredential.encoded|{}encoded[0]
@@ -449,25 +449,6 @@ final class dev.kcoap.edhoc/TrustedCredentials : dev.kcoap.edhoc/CredentialResol
     constructor <init>(dev.kcoap.crypto/CryptoBackend, kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential>, dev.kcoap.crypto/CertificateValidator? = ...) // dev.kcoap.edhoc/TrustedCredentials.<init>|<init>(dev.kcoap.crypto.CryptoBackend;kotlin.collections.List<dev.kcoap.edhoc.AuthenticationCredential>;dev.kcoap.crypto.CertificateValidator?){}[0]
 
     final suspend fun resolve(dev.kcoap.edhoc/CredentialIdentifier): kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential> // dev.kcoap.edhoc/TrustedCredentials.resolve|resolve(dev.kcoap.edhoc.CredentialIdentifier){}[0]
-}
-
-final class dev.kcoap.edhoc/X509Certificate { // dev.kcoap.edhoc/X509Certificate|null[0]
-    final val encoded // dev.kcoap.edhoc/X509Certificate.encoded|{}encoded[0]
-        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.edhoc/X509Certificate.encoded.<get-encoded>|<get-encoded>(){}[0]
-    final val keyType // dev.kcoap.edhoc/X509Certificate.keyType|{}keyType[0]
-        final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.edhoc/X509Certificate.keyType.<get-keyType>|<get-keyType>(){}[0]
-    final val publicKey // dev.kcoap.edhoc/X509Certificate.publicKey|{}publicKey[0]
-        final fun <get-publicKey>(): kotlin/ByteArray // dev.kcoap.edhoc/X509Certificate.publicKey.<get-publicKey>|<get-publicKey>(){}[0]
-    final val subjectCommonName // dev.kcoap.edhoc/X509Certificate.subjectCommonName|{}subjectCommonName[0]
-        final fun <get-subjectCommonName>(): kotlin/String? // dev.kcoap.edhoc/X509Certificate.subjectCommonName.<get-subjectCommonName>|<get-subjectCommonName>(){}[0]
-
-    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/X509Certificate.equals|equals(kotlin.Any?){}[0]
-    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/X509Certificate.hashCode|hashCode(){}[0]
-    final fun toString(): kotlin/String // dev.kcoap.edhoc/X509Certificate.toString|toString(){}[0]
-
-    final object Companion { // dev.kcoap.edhoc/X509Certificate.Companion|null[0]
-        final fun parse(kotlin/ByteArray): dev.kcoap.edhoc/X509Certificate // dev.kcoap.edhoc/X509Certificate.Companion.parse|parse(kotlin.ByteArray){}[0]
-    }
 }
 
 open class dev.kcoap.edhoc/EdhocException : kotlin/Exception { // dev.kcoap.edhoc/EdhocException|null[0]

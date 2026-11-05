@@ -1,7 +1,7 @@
 public final class dev/kcoap/edhoc/AuthenticationCredential {
 	public static final field Companion Ldev/kcoap/edhoc/AuthenticationCredential$Companion;
 	public fun equals (Ljava/lang/Object;)Z
-	public final fun getCertificate ()Ldev/kcoap/edhoc/X509Certificate;
+	public final fun getCertificate ()Ldev/kcoap/crypto/x509/X509Certificate;
 	public final fun getClaimsSet ()Ldev/kcoap/cose/CwtClaimsSet;
 	public final fun getEncoded ()[B
 	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
@@ -434,20 +434,5 @@ public final class dev/kcoap/edhoc/TrustedCredentials : dev/kcoap/edhoc/Credenti
 	public fun <init> (Ldev/kcoap/crypto/CryptoBackend;Ljava/util/List;Ldev/kcoap/crypto/CertificateValidator;)V
 	public synthetic fun <init> (Ldev/kcoap/crypto/CryptoBackend;Ljava/util/List;Ldev/kcoap/crypto/CertificateValidator;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun resolve (Ldev/kcoap/edhoc/CredentialIdentifier;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-}
-
-public final class dev/kcoap/edhoc/X509Certificate {
-	public static final field Companion Ldev/kcoap/edhoc/X509Certificate$Companion;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getEncoded ()[B
-	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
-	public final fun getPublicKey ()[B
-	public final fun getSubjectCommonName ()Ljava/lang/String;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class dev/kcoap/edhoc/X509Certificate$Companion {
-	public final fun parse ([B)Ldev/kcoap/edhoc/X509Certificate;
 }
 
