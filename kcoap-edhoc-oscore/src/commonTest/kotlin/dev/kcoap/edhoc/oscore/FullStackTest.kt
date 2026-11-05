@@ -114,7 +114,9 @@ class FullStackTest {
         assertEquals(address, security.install(client, serverUri, protection))
         assertTrue(security.isProtected(address))
         val unresolvable = CoapUri.parse("coap://edhoc.example")
-        assertFailsWith<IllegalArgumentException>("IpLiterals knows no DNS") { security.install(client, unresolvable, protection) }
+        assertFailsWith<IllegalArgumentException>("the default resolver knows no DNS") {
+            security.install(client, unresolvable, protection)
+        }
 
         val lights = client.get("$base/lights")
         assertEquals("on", lights.payloadAsText())
@@ -157,7 +159,7 @@ class FullStackTest {
         val network = InMemoryNetwork(backgroundScope, Random(3))
         val address = Endpoint.Udp("192.0.2.80", 5683)
         val resolver = EndpointResolver { uri ->
-            if (uri.host == "edhoc.example") address else EndpointResolver.IpLiterals.resolve(uri)
+            if (uri.host == "edhoc.example") address else EndpointResolver.Default.resolve(uri)
         }
         val security = PeerSecurity()
         val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig(security = security, resolver = resolver))
