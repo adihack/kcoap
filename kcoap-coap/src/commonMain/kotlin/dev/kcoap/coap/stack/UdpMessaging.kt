@@ -419,9 +419,9 @@ internal class UdpMessaging(
         effects += MessagingEffect.Event(EndpointEvent.SessionEnded(peer))
     }
 
-    /** Fails every transmission; the endpoint is closing. */
-    fun close() {
-        failAll(CoapException("Endpoint closed", CoapException.Reason.CLOSED)) { true }
+    /** Fails every transmission with [cause]; the endpoint is closing. */
+    fun close(cause: CoapException = CoapException("Endpoint closed", CoapException.Reason.CLOSED)) {
+        failAll(cause) { true }
     }
 
     private fun failAll(cause: CoapException, predicate: (Transmission) -> Boolean) {

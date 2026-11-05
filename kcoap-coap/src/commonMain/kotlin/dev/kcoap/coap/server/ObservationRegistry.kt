@@ -24,60 +24,96 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * The lists of observers of a server's resources (RFC 7641 §4.1), keyed by client endpoint and token.
- * Lock free for readers; changes replace the whole map.
+ *
+ * Changes take one [Mutex], never held across a suspension; events are reported after it is released.
+ * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
+ * replaced on every change of that resource, so notifying the observers of a resource touches only them.
+ * Once [close]d, after the server stopped, it takes no new observers.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class ObservationRegistry(private val server: CoapServer) {
-    private val entries = AtomicReference<Map<ExchangeKey, ServerObservation>>(emptyMap())
+    private val lock = Mutex()
+    private val byKey = HashMap<ExchangeKey, ServerObservation>()
+    private var isClosed = false
 
-    /** Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST). */
-    fun register(observation: ServerObservation) {
-        val previous = update { it + (observation.key to observation) }[observation.key]
+    /** Each resource's observers; replaced, never changed, under [lock]. */
+    private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
+
+    /**
+     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST). Returns false,
+     * and adds nothing, once the registry is closed.
+     */
+    suspend fun register(observation: ServerObservation): Boolean {
+        val previous = lock.withLock {
+            if (isClosed) return false
+            val previous = byKey.put(observation.key, observation)
+            previous?.let(::unindex)
+            index(observation)
+            previous
+        }
         previous?.deactivate()
         server.endpoint.report(EndpointEvent.ObserverAdded(observation.peer, observation.resource.path))
+        return true
     }
 
     /** RFC 7641 §3.6 deregistration, or §3.5 cancellation by Reset. */
-    fun remove(peer: Endpoint, token: ByteArray, reason: String) {
-        entries.load()[ExchangeKey(peer, token.toHex())]?.let { remove(it, reason) }
+    suspend fun remove(peer: Endpoint, token: ByteArray, reason: String) {
+        val observation = lock.withLock { byKey[ExchangeKey(peer, token.toHex())] } ?: return
+        remove(observation, reason)
     }
 
-    fun remove(observation: ServerObservation, reason: String) {
-        var removed = false
-        update { current ->
-            removed = current[observation.key] === observation
-            if (removed) current - observation.key else current
+    suspend fun remove(observation: ServerObservation, reason: String) {
+        val removed = lock.withLock {
+            val registered = byKey[observation.key] === observation
+            if (registered) {
+                byKey.remove(observation.key)
+                unindex(observation)
+            }
+            registered
         }
         observation.deactivate()
         if (removed) server.endpoint.report(EndpointEvent.ObserverRemoved(observation.peer, observation.resource.path, reason))
     }
 
     fun changed(resource: ObservableResource) {
-        entries.load().values.filter { it.resource === resource }.forEach { it.schedule() }
+        observersOf(resource).forEach { it.schedule() }
     }
 
-    fun count(resource: ObservableResource): Int = entries.load().values.count { it.resource === resource }
+    fun count(resource: ObservableResource): Int = observersOf(resource).size
 
     /** RFC 7641 §3.2: a removed resource sends 4.04 to its observers and forgets them. */
     fun removed(resource: ObservableResource) {
-        entries.load().values.filter { it.resource === resource }.forEach { it.end() }
+        observersOf(resource).forEach { it.end() }
     }
 
     /** RFC 7252 §9.1.1, RFC 8323 §7.4: observations bound to an ended DTLS session or closed connection end with it. */
-    fun sessionEnded(peer: Endpoint) {
-        entries.load().values.filter { it.peer == peer }.forEach { remove(it, "session ended") }
+    suspend fun sessionEnded(peer: Endpoint) {
+        lock.withLock { byKey.values.filter { it.peer == peer } }.forEach { remove(it, "session ended") }
     }
 
-    fun clear() {
-        update { emptyMap() }.values.forEach { it.deactivate() }
-    }
-
-    /** Applies [change] atomically and returns the map before it. */
-    private inline fun update(change: (Map<ExchangeKey, ServerObservation>) -> Map<ExchangeKey, ServerObservation>): Map<ExchangeKey, ServerObservation> {
-        while (true) {
-            val current = entries.load()
-            if (entries.compareAndSet(current, change(current))) return current
+    /** The server stopped: every observer is dropped silently, and no new one is taken. */
+    suspend fun close() {
+        val dropped = lock.withLock {
+            isClosed = true
+            byResource.store(emptyMap())
+            byKey.values.toList().also { byKey.clear() }
         }
+        dropped.forEach { it.deactivate() }
+    }
+
+    private fun observersOf(resource: ObservableResource): List<ServerObservation> = byResource.load()[resource].orEmpty()
+
+    /** Called under [lock]. */
+    private fun index(observation: ServerObservation) {
+        val current = byResource.load()
+        byResource.store(current + (observation.resource to (current[observation.resource].orEmpty() + observation)))
+    }
+
+    /** Called under [lock]. */
+    private fun unindex(observation: ServerObservation) {
+        val current = byResource.load()
+        val remaining = current[observation.resource].orEmpty().filter { it !== observation }
+        byResource.store(if (remaining.isEmpty()) current - observation.resource else current + (observation.resource to remaining))
     }
 }
 

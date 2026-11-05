@@ -1,8 +1,9 @@
 package dev.kcoap.coap
 
 /**
- * A CoAP exchange that could not complete because of the peer or the network: no acknowledgement, a
- * Reset, a DTLS session that ended, or a response that violates the protocol. [reason] says which.
+ * A CoAP exchange that could not complete because of the peer, the network or the endpoint itself: no
+ * acknowledgement, a Reset, a DTLS session that ended, a response that violates the protocol, or an
+ * endpoint that is closed or whose transport failed. [reason] says which.
  *
  * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses.
  */
@@ -26,8 +27,18 @@ public class CoapException(
         /** The DTLS session to the peer ended; RFC 7252 §9.1.1 forbids retransmitting across epochs. */
         SESSION_ENDED,
 
-        /** The endpoint was closed while the exchange was open. */
+        /**
+         * The endpoint was closed: by its `close()`, or because the scope it runs in was cancelled. Requests
+         * open at that moment fail with it, and so does every request after it.
+         */
         CLOSED,
+
+        /**
+         * The endpoint's own transport failed, not the peer: its datagram transport stopped receiving, which
+         * closes the endpoint for good, or refused to carry a message to the peer at all, which no
+         * retransmission can fix. The cause is the transport's exception.
+         */
+        TRANSPORT_FAILED,
 
         /** A response violated the protocol, for example an unrecognized critical option (RFC 7252 §5.4.1). */
         BAD_RESPONSE,

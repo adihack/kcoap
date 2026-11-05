@@ -87,14 +87,18 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun aTransportThatStopsReceivingStopsTheEndpointQuietly() = runTest {
+    fun aTransportThatCannotReceiveClosesTheEndpointWithItsError() = runTest {
         val fixture = StackFixture(this)
         val transport = FaultyTransport(fixture.transport())
         transport.receiveFailure = IllegalStateException("socket gone")
         val endpoint = CoapEndpoint(transport, backgroundScope, fixture.endpointConfig())
+        endpoint.attach()
         delay(1.seconds)
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, endpoint.closeCause?.reason)
+        assertEquals("socket gone", endpoint.closeCause?.cause?.message)
         assertTrue(endpoint.toString().contains("CoapEndpoint"))
         endpoint.close()
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, endpoint.awaitClosed().reason, "the first transition stays")
     }
 
     @Test

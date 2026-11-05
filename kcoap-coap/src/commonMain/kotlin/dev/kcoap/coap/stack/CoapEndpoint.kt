@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -43,9 +44,21 @@ import kotlinx.coroutines.withTimeoutOrNull
  * [ConnectionListener]s. Every connection has a messaging layer of its own, so tokens are scoped to it,
  * and its responses, notifications and failures stay with it (RFC 8323 §3.3, §7.4).
  *
- * Creating the endpoint starts its receive, accept and timer coroutines in [scope]; [close] stops them
- * and closes the transports. Cancelling [scope] stops them too. All state is guarded by locks that are
- * never held across a suspension, so the endpoint is safe to use from any number of coroutines.
+ * The endpoint runs its coroutines in [scope] and inherits its dispatcher. It starts receiving and
+ * accepting once a [dev.kcoap.coap.server.CoapServer] or [dev.kcoap.coap.client.CoapClient] is attached
+ * (or the first request or ping goes out), so a server's resources are in place before the first request
+ * arrives. On Android or iOS pass a scope such as `lifecycleScope + Dispatchers.Default` to keep the
+ * receive loop, timers and handlers off the main thread.
+ *
+ * **Lifecycle.** An endpoint ends exactly once, in one terminal transition, whichever way it ends: [close],
+ * cancelling [scope], or a datagram transport whose receive fails. Then open exchanges fail, observations
+ * end with a failure for their collectors, connections are released (RFC 8323 §5.5), the transports are
+ * closed, and every later request, ping or observation fails at once with a [CoapException] like
+ * [closeCause]. [awaitClosed] waits for all of that, coroutines included.
+ *
+ * **Thread safety.** All state is guarded by locks that are never held across a suspension, and effects
+ * such as sending and delivering run after the lock is released, so the endpoint is safe to use from any
+ * number of coroutines on any dispatcher.
  *
  * ```
  * val endpoint = CoapEndpoint(KtorUdpTransport.bind(port = 5683), scope)
@@ -110,18 +123,53 @@ public class CoapEndpoint private constructor(
     @Volatile
     internal var requestHandler: RequestHandler? = null
 
+    /**
+     * Why the endpoint closed, or null while it is open: [CoapException.Reason.CLOSED] after [close] or when
+     * its scope was cancelled; [CoapException.Reason.TRANSPORT_FAILED], with the transport's exception as
+     * cause, when the datagram transport failed. Set once, in the terminal transition.
+     */
     @Volatile
-    /** True once [close] was called. */
-    public var isClosed: Boolean = false
+    public var closeCause: CoapException? = null
         private set
 
+    /** True once the endpoint is closed, however that happened; see [closeCause]. */
+    public val isClosed: Boolean get() = closeCause != null
+
+    /** Completes once the terminal transition is done. */
+    private val closed = CompletableDeferred<CoapException>()
+
+    /** Completes when a server or client attaches; only then does the endpoint receive and accept. */
+    private val attached = CompletableDeferred<Unit>()
+
     init {
-        if (hasDatagramTransport) {
-            this.scope.launch { receiveLoop() }
-            this.scope.launch { timerLoop() }
-        }
-        reliable.start()
         log.info { "Endpoint started on ${describeTransports(connectors, listeners)}" }
+        // Keep this last: it starts undispatched and reads every field above. Undispatched, the try below
+        // is entered before the constructor returns, so even a scope that is already cancelled ends in the
+        // terminal transition, never in an endpoint that looks open with its transport still open.
+        this.scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var failure: CoapException? = null
+            try {
+                attached.await()
+                reliable.start()
+                if (hasDatagramTransport) {
+                    val timers = launch(CoroutineName("coap-timers")) { timerLoop() }
+                    failure = receiveLoop()
+                    timers.cancel()
+                } else {
+                    awaitCancellation()
+                }
+            } finally {
+                shutdown(failure ?: CoapException("Endpoint closed: its scope was cancelled", CoapException.Reason.CLOSED))
+            }
+        }
+    }
+
+    /**
+     * Starts receiving and accepting, once: called when a server or client attaches, and before the first
+     * request or ping. Until then datagrams and connections wait in the transports.
+     */
+    internal fun attach() {
+        attached.complete(Unit)
     }
 
     /** The largest message the datagram transport carries; block sizes towards datagram peers follow it. */
@@ -176,11 +224,14 @@ public class CoapEndpoint private constructor(
         isObservation: Boolean,
         token: ByteArray? = null,
     ): ClientExchange {
-        check(!isClosed) { "Endpoint is closed" }
+        attach()
         if (isReliable(peer)) return openReliableExchange(peer, request, security, isObservation, token)
         requireDatagramTransport(peer)
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         val (exchange, messageId) = lock.withLock {
+            // Checked under the lock that the terminal transition takes, so no exchange is added after they
+            // were all failed: it fails at once instead of waiting for a response that never comes.
+            ensureOpen()
             val exchange = register(peer, token, isObservation)
             exchange to messaging.allocateMessageId(peer, now())
         }
@@ -199,7 +250,10 @@ public class CoapEndpoint private constructor(
             }?.build() ?: plain
             exchange.request = wire
             val slotHold = if (confirmable) null else nonConfirmableSlotHold(wire)
-            exchange.transmission = withMessaging { now -> send(now, peer, wire, exchange, slotHold) }
+            exchange.transmission = withMessaging { now ->
+                ensureOpen()
+                send(now, peer, wire, exchange, slotHold)
+            }
             log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path} as $type" }
         } catch (e: Throwable) {
             forget(exchange)
@@ -219,8 +273,12 @@ public class CoapEndpoint private constructor(
         isObservation: Boolean,
         token: ByteArray?,
     ): ClientExchange {
+        lock.withLock { ensureOpen() }
         val connection = reliable.connectionFor(peer)
-        val exchange = lock.withLock { register(peer, token, isObservation).also { it.connection = connection } }
+        val exchange = lock.withLock {
+            ensureOpen()
+            register(peer, token, isObservation).also { it.connection = connection }
+        }
         connection.exchangeOpened()
         val plain = request.toBuilder().apply { this.token = exchange.token }.build()
         try {
@@ -279,8 +337,9 @@ public class CoapEndpoint private constructor(
      * request it received before the Ping (RFC 8323 §5.4.1); datagram pings ignore it.
      */
     public suspend fun ping(peer: Endpoint, custody: Boolean): Boolean {
-        check(!isClosed) { "Endpoint is closed" }
+        attach()
         if (isReliable(peer)) {
+            lock.withLock { ensureOpen() }
             return try {
                 reliable.connectionFor(peer).ping(custody, config.reliable.pingTimeout)
             } catch (e: CoapException) {
@@ -300,6 +359,7 @@ public class CoapEndpoint private constructor(
             }
         }
         val transmission = withMessaging { now ->
+            ensureOpen()
             send(now, peer, CoapMessage.empty(CoapMessageType.CON, allocateMessageId(peer, now)), owner)
         }
         try {
@@ -402,6 +462,7 @@ public class CoapEndpoint private constructor(
     ): Transmission {
         if (isReliable(peer)) {
             val transmission = Transmission(peer, message, null, owner, null).apply { state = Transmission.State.DONE }
+            lock.withLock { ensureOpen() }
             try {
                 val target = connection ?: reliable.existing(peer)
                     ?: throw CoapException("No connection to $peer", CoapException.Reason.CONNECTION_CLOSED)
@@ -412,6 +473,7 @@ public class CoapEndpoint private constructor(
             return transmission
         }
         return withMessaging { now ->
+            ensureOpen()
             send(now, peer, message.withHeader(type, allocateMessageId(peer, now)), owner, slotHold)
         }
     }
@@ -423,24 +485,69 @@ public class CoapEndpoint private constructor(
     // ---------------------------------------------------------------- lifecycle
 
     /**
-     * Stops the endpoint: fails open exchanges with [CoapException.Reason.CLOSED], releases its
-     * connections (RFC 8323 §5.5), stops its coroutines and closes the transports. Idempotent.
+     * Closes the endpoint: the terminal transition, with [CoapException.Reason.CLOSED]. Open exchanges fail
+     * with it, observations end, connections are released (RFC 8323 §5.5), the endpoint's coroutines are
+     * cancelled and the transports closed. Returns once that is done; it does not wait for the cancelled
+     * coroutines, so a request handler may call it. Idempotent: after any terminal transition it only
+     * waits for that one to finish.
      */
     public suspend fun close() {
-        if (isClosed) return
-        isClosed = true
-        withContext(NonCancellable) {
-            withMessaging { close() }
-            val open = lock.withLock { exchanges.values.toList().also { exchanges.clear() } }
-            val cause = CoapException("Endpoint closed", CoapException.Reason.CLOSED)
-            open.forEach { it.fail(cause) }
-            reliable.close()
-            // Not joined: close() may run on one of the endpoint's own coroutines, such as a handler.
-            job.cancel()
-            runCatching { transport.close() }
-        }
-        log.info { "Endpoint closed" }
+        shutdown(CoapException("Endpoint closed", CoapException.Reason.CLOSED))
+        closed.await()
     }
+
+    /**
+     * Waits until the endpoint is closed, by any path, and every coroutine it ran has finished, request
+     * handlers included; returns [closeCause]. For graceful shutdown and tests. Called from one of the
+     * endpoint's own coroutines, such as a request handler, it never returns.
+     */
+    public suspend fun awaitClosed(): CoapException {
+        val cause = closed.await()
+        job.join()
+        return cause
+    }
+
+    /**
+     * The terminal transition; only the first call does anything. Under the lock the state becomes closed,
+     * so nothing new is registered or sent after it, and the messaging layer fails its transmissions; then,
+     * outside the lock, exchanges fail, the server drops its observers, connections are released, the
+     * transport is closed and the coroutines are cancelled. Runs to the end even in a cancelled coroutine.
+     */
+    private suspend fun shutdown(cause: CoapException): Unit = withContext(NonCancellable) {
+        var effects: List<MessagingEffect> = emptyList()
+        val open = lock.withLock {
+            if (closeCause != null) return@withContext
+            closeCause = cause
+            messaging.close(cause)
+            effects = messaging.takeEffects()
+            exchanges.values.toList().also { exchanges.clear() }
+        }
+        execute(effects)
+        open.forEach { it.fail(cause) }
+        requestHandler?.onEndpointClosed()
+        reliable.close()
+        try {
+            transport.close()
+        } catch (e: Exception) {
+            log.debug { "Closing the transport failed: ${e.message}" }
+        }
+        // Not joined: this may run on one of the endpoint's own coroutines, such as a handler.
+        job.cancel()
+        closed.complete(cause)
+        log.info { "Endpoint closed: ${cause.message}" }
+    }
+
+    /** Called under [lock]: throws an exception like [closeCause] once the endpoint is closed. */
+    private fun ensureOpen() {
+        closeCause?.let { throw closedError(it) }
+    }
+
+    /** What a call fails with once the endpoint is closed: like [closeCause], or CLOSED while it is open. */
+    internal fun closedError(): CoapException =
+        closedError(closeCause ?: CoapException("Endpoint closed", CoapException.Reason.CLOSED))
+
+    private fun closedError(cause: CoapException): CoapException =
+        CoapException(cause.message ?: "Endpoint closed", cause.reason, cause.cause)
 
     // ---------------------------------------------------------------- driving the state machine
 
@@ -506,7 +613,7 @@ public class CoapEndpoint private constructor(
     }
 
     private fun launchHandler(handler: RequestHandler, request: InboundRequest) {
-        scope.launch(CoroutineName("coap-request")) {
+        scope.launch(handler.context + CoroutineName("coap-request")) {
             try {
                 handler.handle(request)
             } catch (e: CancellationException) {
@@ -598,15 +705,22 @@ public class CoapEndpoint private constructor(
         emit(event)
     }
 
-    private suspend fun receiveLoop() {
+    /**
+     * Receives until the endpoint closes. Returns null when it closed, or the failure when the transport's
+     * receive failed: a transport that cannot receive is gone for good (a socket the system closed, a
+     * network that went away), so the endpoint closes with [CoapException.Reason.TRANSPORT_FAILED] instead
+     * of looking alive while every request runs into a timeout.
+     */
+    private suspend fun receiveLoop(): CoapException? {
         while (true) {
             val event = try {
                 transport.receive()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!isClosed) log.error(e) { "Transport receive failed; the endpoint stops receiving" }
-                return
+                if (isClosed) return null
+                log.error(e) { "The datagram transport failed; the endpoint closes" }
+                return CoapException("The datagram transport failed: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
             }
             try {
                 when (event) {

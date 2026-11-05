@@ -19,8 +19,11 @@ import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * A CoAP server: routes requests on a [CoapEndpoint] to a tree of [CoapResource]s.
@@ -87,6 +90,9 @@ public class CoapServer private constructor(
     private val blockwise = BlockwiseServer(config, endpoint.parameters.exchangeLifetime)
     private val reserve = if (config.security != null) config.securityReserve else 0
 
+    /** The parent of this server's request coroutines, so [close] stops them on a shared endpoint too. */
+    private val handlers = SupervisorJob(endpoint.scope.coroutineContext[Job])
+
     /** The root of the resource tree; requests to "/" go to its handlers. */
     public val root: CoapResource get() = rootResource
 
@@ -100,25 +106,43 @@ public class CoapServer private constructor(
         }
         check(endpoint.requestHandler == null) { "$endpoint already has a server" }
         endpoint.requestHandler = object : RequestHandler {
+            override val context: CoroutineContext get() = handlers
+
             override suspend fun handle(request: InboundRequest) = process(request)
 
             override suspend fun onSessionEnded(peer: Endpoint) {
                 observations.sessionEnded(peer)
                 blockwise.forget(peer)
             }
+
+            override suspend fun onEndpointClosed() {
+                stop()
+            }
         }
+        // Only now, with the resources and the handler in place, does the endpoint start receiving.
+        endpoint.attach()
         log.info { "Server started on $endpoint" }
     }
 
     /** Adds [resource] below the root. */
     public fun add(resource: CoapResource): CoapResource = rootResource.add(resource)
 
-    /** Stops serving; closes the endpoint too if the server created it. Observers are dropped silently. */
+    /**
+     * Stops serving: requests from now on are rejected as if there were no server, the handlers still
+     * running are cancelled, and observers are dropped silently. Closes the endpoint too if the server
+     * created it. A server also stops when its endpoint closes.
+     */
     public suspend fun close() {
         endpoint.requestHandler = null
-        observations.clear()
+        stop()
         if (ownsEndpoint) endpoint.close()
         log.info { "Server stopped" }
+    }
+
+    /** Cancels the handlers, not joined (one of them may be the caller), and takes no observers any more. */
+    private suspend fun stop() {
+        handlers.cancel()
+        observations.close()
     }
 
     // ---------------------------------------------------------------- the request pipeline
@@ -241,8 +265,13 @@ public class CoapServer private constructor(
                 this, observable, peer, request.token, effective, unprotected, unprotected?.identity,
                 block2?.size, key, now, inbound.connection, inbound.peerIdentity,
             )
-            observations.register(observation)
-            response = response.withOptions { observe(observable.nextSequence()) }
+            if (observations.register(observation)) {
+                response = response.withOptions { observe(observable.nextSequence()) }
+            } else {
+                // The server stopped meanwhile; RFC 7641 §4.1 lets it answer as to a plain GET.
+                observation = null
+                response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
+            }
         } else if (CoapOptions.OBSERVE.number in response.options) {
             // RFC 7641 §4.1: only a registered observer gets a response with Observe.
             response = response.withOptions { remove(CoapOptions.OBSERVE.number) }

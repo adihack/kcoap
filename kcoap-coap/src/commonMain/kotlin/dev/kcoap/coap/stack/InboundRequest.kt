@@ -4,6 +4,8 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * A request as the messaging layer delivered it, deduplicated but not yet verified by message security,
@@ -61,6 +63,12 @@ internal class InboundRequest(
 
 /** What the server side of an endpoint implements. */
 internal interface RequestHandler {
+    /**
+     * Added to the context of every request coroutine: a server puts its own [kotlinx.coroutines.Job] here,
+     * a child of the endpoint's, so that stopping the server cancels its handlers on a shared endpoint.
+     */
+    val context: CoroutineContext get() = EmptyCoroutineContext
+
     /** Processes one request; runs in its own coroutine. */
     suspend fun handle(request: InboundRequest)
 
@@ -69,4 +77,7 @@ internal interface RequestHandler {
      * or its connection closed (RFC 8323 §7.4).
      */
     suspend fun onSessionEnded(peer: Endpoint) {}
+
+    /** The endpoint closed: nothing arrives or goes out any more, so everything bound to it can go. */
+    suspend fun onEndpointClosed() {}
 }
