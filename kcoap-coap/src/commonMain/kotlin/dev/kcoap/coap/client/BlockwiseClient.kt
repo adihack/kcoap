@@ -85,7 +85,7 @@ internal class BlockwiseClient(private val client: CoapClient) {
             var offset = 0
             var restarted = false
             while (true) {
-                val end = minOf(body.size, offset + sizing.chunk)
+                val end = minOf(body.size, offset + sizing.length(offset.toLong(), body.size))
                 val more = end < body.size
                 val option = sizing.option(offset.toLong(), more)
                 val block = base.toBuilder().apply {

@@ -58,6 +58,19 @@ internal class BlockSizing private constructor(val chunk: Int, val sizeExponent:
     /** The Block option for the block at [offset]. */
     fun option(offset: Long, more: Boolean): BlockOption = BlockOption(offset / unit, more, sizeExponent)
 
+    /**
+     * How many bytes the block at [offset] of a [total]-byte body carries. RFC 8323 §6 lets a final BERT
+     * block hold several 1024-byte blocks plus a partial one; libcoap 4.3.5 rejects such a block with 4.08,
+     * so when the rest of the body fits one BERT block but exceeds 1024 bytes, this block stops at the last
+     * 1024-byte boundary before the end and the final block carries at most 1024 bytes. Both are valid BERT
+     * blocks; it costs one message at most.
+     */
+    fun length(offset: Long, total: Int): Int {
+        val remaining = total - offset
+        if (!isBert || remaining <= unit || remaining > chunk) return chunk
+        return ((remaining - 1) / unit * unit).toInt()
+    }
+
     override fun toString(): String = if (isBert) "BERT($chunk)" else "$chunk"
 
     companion object {

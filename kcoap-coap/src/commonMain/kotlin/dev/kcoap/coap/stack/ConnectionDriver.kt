@@ -102,12 +102,15 @@ internal class ConnectionDriver(
     /** The message framing, for sizing blocks. */
     val codec: MessageCodec get() = framing.codec
 
-    /** Starts reading, writing and the timers, and sends the CSM. */
+    /**
+     * Queues the CSM, then starts writing, reading and the timers. The state machine starts first, since
+     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it.
+     */
     suspend fun start() {
+        withMessaging { now -> start(now) }
         writer = scope.launch(CoroutineName("coap-connection-writer")) { writeLoop() }
         scope.launch(CoroutineName("coap-connection-reader")) { readLoop() }
         scope.launch(CoroutineName("coap-connection-timers")) { timerLoop() }
-        withMessaging { now -> start(now) }
     }
 
     /** Waits until the connection is established, or else gone. */

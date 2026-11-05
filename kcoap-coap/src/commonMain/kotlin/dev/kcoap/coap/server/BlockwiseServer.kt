@@ -159,7 +159,7 @@ internal class BlockwiseServer(
         val full = if (needsETag && body.size > sizing.chunk) response.withOptions { etag(Blockwise.etagOf(body)) } else response
         // A request for a larger block than fits is answered from the same offset in smaller blocks.
         val offset = if (requested == null) 0 else requested.offset / sizing.unit * sizing.unit
-        val (slice, more) = Blockwise.slice(body, offset, sizing.chunk)
+        val (slice, more) = Blockwise.slice(body, offset, sizing.length(offset, body.size))
             ?: return CoapResponse.error(CoapCode.BAD_OPTION, "Block ${requested?.number} is beyond the end of the body")
         if (body.size > sizing.chunk) {
             // Later blocks are plain responses: a notification's Observe stays with its first block.

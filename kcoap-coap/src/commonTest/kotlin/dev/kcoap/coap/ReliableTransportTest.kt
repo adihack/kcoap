@@ -209,8 +209,9 @@ class ReliableTransportTest {
         fixture.wire.clear()
         assertContentEquals(payload, client.get(fixture.uri("/status")).payload)
         val downloads = fixture.sent(CoapCode.CONTENT).map { it.options.block2!! to it.payloadSize }
-        assertEquals(listOf(0L, 5L, 10L), downloads.map { it.first.number }, "the client takes 5 KiB per message")
-        assertEquals(listOf(5120, 5120, 2663), downloads.map { it.second })
+        assertEquals(listOf(0L, 5L, 10L, 12L), downloads.map { it.first.number }, "the client takes 5 KiB per message")
+        // The final BERT block stays within 1024 bytes, which libcoap 4.3.5 needs.
+        assertEquals(listOf(5120, 5120, 2048, 615), downloads.map { it.second })
         val followUps = fixture.sent(CoapCode.GET).mapNotNull { it.options.block2 }
         assertTrue(followUps.all { it.isBert && !it.more }, "follow-ups ask for BERT: $followUps")
     }
