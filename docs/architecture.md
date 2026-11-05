@@ -133,8 +133,8 @@ observers.
 **Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
 answering spoofed traffic turns a server into an amplifier against the address it names. Everything a
 peer can make the endpoint keep or do is therefore bounded, with defaults sized for servers. At a bound
-the endpoint refuses only the extra work, never with an answer larger than what it received, keeps
-serving what it has, and reports `EndpointEvent.LimitReached`:
+the endpoint refuses only the extra work, with an answer at most a few bytes larger than what it
+received (a refusal's Max-Age), keeps serving what it has, and reports `EndpointEvent.LimitReached`:
 
 | Bound | Default | Beyond it |
 |---|---|---|
@@ -175,7 +175,9 @@ endpoint unless the configuration names one.
    configurable reserve when message security is on.
 4. `RequestContext` carries the `PeerIdentity` of an `Endpoint.Secure` peer next to the OSCORE
    `SecurityIdentity`.
-5. One `TimeSource` per endpoint drives every timer.
+5. One `TimeSource` per endpoint drives every timer, and it advances with the clock of the dispatcher the
+   timers wait on (see "Time and randomness"). A DTLS engine schedules its retransmissions through the
+   endpoint's clock and timer loop, not through a time abstraction of its own.
 6. There is no multicast yet, so nothing is sent to a group through any transport.
 
 **Observability.** A `MessageInterceptor` chain sees every message at the wire, once per message;

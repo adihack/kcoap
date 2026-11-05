@@ -317,6 +317,14 @@ DatagramTransport [+DTLS]    Connector / ConnectionListener (TCP, TLS, WebSocket
 
 All rows except URI extend `open class KcoapException` in kcoap-common, the single `@Throws` target for Swift.
 
+> **Amendment (S1).** S1 added `CoapException.Reason.TRANSPORT_FAILED` (EO-2 item 2): the endpoint's own
+> transport failed, either its datagram `receive` (which ends the endpoint, `closeCause`) or a `send` it
+> refused with `IllegalArgumentException`. It stays next to the planned `TRANSPORT_UNAVAILABLE`, which
+> names a different failure, a peer whose transport is not configured at all, so B1 adds that reason
+> without renaming this one. S1 also did EO-1, EO-2 items 2 and 3 with the first two tests of item 5,
+> and the B3 item "calls after close throw `CoapException(CLOSED)`, re-checked under the lock". EO-2
+> item 4 (refusing `coaps` on a transport without DTLS) and the rest of B3 stay with B3.
+
 SPI signals stay outside the root and are translated at the boundary:
 
 | SPI signal | Translated to |

@@ -786,8 +786,9 @@ public class CoapEndpoint private constructor(
 
     /**
      * RFC 7252 §5.9.3.4: 5.03 Service Unavailable, with Max-Age saying when to try again. Piggybacked on the
-     * ACK, it is no larger than the request, so it amplifies nothing (§11.3), and a duplicate of the request
-     * gets the same answer from the deduplication cache. A Non-confirmable request is dropped.
+     * ACK, it is at most 3 bytes larger than the request (the Max-Age option), an amplification factor below
+     * 2 even for the smallest request (§11.3), and a duplicate of the request gets the same answer from the
+     * deduplication cache. A Non-confirmable request is dropped.
      */
     private suspend fun refuseOverloaded(request: InboundRequest) {
         emit(EndpointEvent.LimitReached(request.peer, EndpointEvent.LimitReached.Limit.CONCURRENT_REQUESTS))

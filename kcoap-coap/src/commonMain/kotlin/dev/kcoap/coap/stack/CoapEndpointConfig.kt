@@ -13,8 +13,9 @@ import kotlin.time.TimeSource
  * for a server. Over UDP the source address of a datagram proves nothing (RFC 7252 §11.4), so a flood of
  * spoofed messages must cost bounded memory and CPU, and RFC 7252 §11.3 warns that answering it can turn
  * the endpoint into an amplifier against the address it names. At a bound the endpoint therefore drops or
- * refuses only the extra work, never answers with more than it received, keeps serving what it already
- * has, and reports [EndpointEvent.LimitReached] so the condition can be counted. The server's observer
+ * refuses only the extra work, answers with at most a few bytes more than it received (a refusal's
+ * Max-Age), keeps serving what it already has, and reports [EndpointEvent.LimitReached] so the condition
+ * can be counted. The server's observer
  * bounds are in `CoapServerConfig`, the bounds on connections in [ReliableTransportConfig].
  *
  * @property parameters RFC 7252 §4.8 transmission parameters, for datagram transports.
@@ -45,9 +46,10 @@ import kotlin.time.TimeSource
  *   remembered messages are still answered. The default takes about 200 new messages a second.
  * @property maxConcurrentRequests the most request handlers running at once, over every transport.
  *   Beyond it a Confirmable request is answered with a piggybacked 5.03 Service Unavailable with a Max-Age
- *   of 2 seconds, when to try again (RFC 7252 §5.9.3.4), no larger than the request, so it amplifies nothing (§11.3), and duplicates of it
- *   get the same answer from the deduplication cache; a Non-confirmable request is dropped; a request on a
- *   connection gets the 5.03. Requests never queue, and the receive loop never waits for a free handler.
+ *   of 2 seconds, when to try again (RFC 7252 §5.9.3.4). That answer is at most 3 bytes larger than the
+ *   request, an amplification factor below 2 (§11.3), and duplicates of the request get the same answer
+ *   from the deduplication cache; a Non-confirmable request is dropped; a request on a connection gets
+ *   the 5.03. Requests never queue, and the receive loop never waits for a free handler.
  * @property maxExchangesPerPeer the most exchanges in progress with one peer: requests of this endpoint
  *   awaiting their response and its observations, and over datagrams also every Confirmable message
  *   awaiting its ACK or queued behind NSTART (RFC 7252 §4.7), separate responses and notifications

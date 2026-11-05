@@ -30,7 +30,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Every bound on what a peer can make the endpoint keep or do (RFC 7252 §11.3): reached, it refuses only
- * the extra work, answers with no more than it received, and reports [EndpointEvent.LimitReached].
+ * the extra work, answers with at most a few bytes more than it received, and reports
+ * [EndpointEvent.LimitReached].
  */
 class ResourceBoundsTest {
     private fun StackFixture.limits(limit: Limit): Int = events.count { it is EndpointEvent.LimitReached && it.limit == limit }
@@ -89,7 +90,9 @@ class ResourceBoundsTest {
         assertEquals(CoapCode.SERVICE_UNAVAILABLE, refused.code)
         assertEquals(2L, refused.options.maxAge)
         val piggybacked = fixture.sentBy(server.endpoint).single { it.code == CoapCode.SERVICE_UNAVAILABLE }
-        assertEquals(CoapMessageType.ACK, piggybacked.type, "piggybacked: no larger than the request")
+        assertEquals(CoapMessageType.ACK, piggybacked.type, "piggybacked, not a separate Confirmable response")
+        val request = fixture.sentBy(client.endpoint).last { it.code == CoapCode.GET }
+        assertTrue(UdpMessageCodec.encode(piggybacked).size <= UdpMessageCodec.encode(request).size + 3, "at most the Max-Age option larger")
 
         // A Non-confirmable request beyond the bound is dropped.
         val peer = fixture.transport()
