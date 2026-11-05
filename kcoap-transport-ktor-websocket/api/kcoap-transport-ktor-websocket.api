@@ -1,0 +1,22 @@
+public final class dev/kcoap/transport/ktor/websocket/KtorWebSocketConnection : dev/kcoap/transport/MessageConnection {
+	public fun <init> (Lio/ktor/websocket/WebSocketSession;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Lio/ktor/websocket/WebSocketSession;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/websocket/KtorWebSocketConnector : dev/kcoap/transport/Connector {
+	public fun <init> (Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lio/ktor/client/HttpClient;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun connect (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getSchemes ()Ljava/util/Set;
+	public fun toString ()Ljava/lang/String;
+}
+

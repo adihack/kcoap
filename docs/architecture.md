@@ -53,7 +53,7 @@ Messaging          UdpMessaging:      CON/NON/ACK/RST, MID dedup, retransmission
 Framing            UDP header | TCP/TLS length framing | WebSocket (Len = 0)
 Channel security   DTLS 1.2 over datagrams | TLS over byte streams          (hop by hop)
 ──────────────── transport interface ────────────────
-Adapters           one per platform, thin
+Adapters           one per runtime capability or library, thin
 ```
 
 Block-wise appears twice on purpose: RFC 8613 allows it before OSCORE (inner, end to end) and after
@@ -309,7 +309,7 @@ adding it later changes no other module:
 | `Endpoint.Secure`: equality by DTLS session and epoch, address excluded (CID rebinding) | `kcoap-transport` |
 | `DatagramEvent.SessionEnded` and `SessionEndedException` | `kcoap-transport` |
 | `PeerIdentity` (None, PreSharedKey, RawPublicKey, Certificate) and `SecurityMode` | `kcoap-transport` |
-| `DatagramSecurity` (coaps) and `StreamSecurity` (PSK/RPK over TCP) interfaces with their contracts | `kcoap-transport` |
+| `DatagramSecurity` (coaps): the interface and its contract, `@ExperimentalKcoapApi` until the engine implements it | `kcoap-transport` |
 | `CoapScheme`: the six schemes, default ports, transport kind, channel security, ALPN `coap` | `kcoap-transport` |
 | `DtlsEngine` and `DtlsEffect`: the sans-IO engine interface | `kcoap-dtls` |
 | `DtlsCipherSuite`: the two mandatory suites, CCM-8 parameters, record overhead incl. CID | `kcoap-dtls` |
@@ -330,8 +330,9 @@ The rules every layer above must follow so that DTLS drops in without changes:
 6. **Never send multicast through a secured transport.**
 
 What the DTLS feature itself adds later: the `DtlsEngine` implementation, a `DatagramSecurity` that
-drives it, the stream-mode TLS variant, the RFC 6920 identifier and RFC 7252 §9.1.3.3 name check, the
-TLS 1.2 PRF, and the DER↔raw ECDSA conversion. ECDH and ECDSA on P-256 arrive earlier with EDHOC.
+drives it, the RFC 6920 identifier and RFC 7252 §9.1.3.3 name check, the TLS 1.2 PRF, and the DER↔raw
+ECDSA conversion. ECDH and ECDSA on P-256 arrive earlier with EDHOC. kcoap-dtls is built and tested but
+not published until then.
 
 ### What has to be supported
 
@@ -416,8 +417,9 @@ the device, and RFC 7525 recommendations for less constrained deployments.
 
 - **Certificate mode** uses the platform TLS: JSSE or Conscrypt (through Ktor or Netty),
   Network.framework, and the browser for `wss://`. This is the only option in browsers.
-- **PSK and RawPublicKey over TCP** need kcoap's own engine in stream mode. The TLS 1.2 handshake is the
-  same as DTLS 1.2 minus cookies, fragmentation and retransmission, so this is a small addition.
+- **PSK and RawPublicKey over TCP** need kcoap's own engine in stream mode, inside a `coaps+tcp`
+  connector and listener like any other TLS (docs/adr/0003-tls-in-connectors.md). The TLS 1.2 handshake
+  is the same as DTLS 1.2 minus cookies, fragmentation and retransmission, so this is a small addition.
 
 ### Later: DTLS 1.3
 
@@ -559,10 +561,10 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
 | `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
 | `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |
-| `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders; engine last |
+| `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders, not published; engine last |
 | `kcoap-transport-ktor` | UDP and TCP on ktor-network; JVM, Apple and Linux (no web targets: ktor-network) | UDP and TCP done; TLS for `coaps+tcp` planned |
-| `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine (browsers included) | done |
-| `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone CIO or mounted in an application | done |
+| `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine; every target, browsers included (UNIVERSAL tier) | done |
+| `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone CIO or mounted in an application; JVM, Apple and Linux (SOCKETS tier, no web targets: a browser cannot accept connections) | done |
 | `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
 | `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
 | `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |

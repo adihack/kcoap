@@ -1,0 +1,269 @@
+public abstract interface class dev/kcoap/transport/ByteStreamConnection : dev/kcoap/transport/Connection {
+	public abstract fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public abstract fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public abstract fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun write ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/transport/ChannelSecurityKind : java/lang/Enum {
+	public static final field DTLS Ldev/kcoap/transport/ChannelSecurityKind;
+	public static final field NONE Ldev/kcoap/transport/ChannelSecurityKind;
+	public static final field TLS Ldev/kcoap/transport/ChannelSecurityKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/transport/ChannelSecurityKind;
+	public static fun values ()[Ldev/kcoap/transport/ChannelSecurityKind;
+}
+
+public final class dev/kcoap/transport/CoapScheme : java/lang/Enum {
+	public static final field ALPN Ljava/lang/String;
+	public static final field COAP Ldev/kcoap/transport/CoapScheme;
+	public static final field COAPS Ldev/kcoap/transport/CoapScheme;
+	public static final field COAPS_TCP Ldev/kcoap/transport/CoapScheme;
+	public static final field COAPS_WS Ldev/kcoap/transport/CoapScheme;
+	public static final field COAP_TCP Ldev/kcoap/transport/CoapScheme;
+	public static final field COAP_WS Ldev/kcoap/transport/CoapScheme;
+	public static final field Companion Ldev/kcoap/transport/CoapScheme$Companion;
+	public static final field WEBSOCKET_PATH Ljava/lang/String;
+	public static final field WEBSOCKET_SUBPROTOCOL Ljava/lang/String;
+	public final fun getDefaultPort ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKind ()Ldev/kcoap/transport/TransportKind;
+	public final fun getReference ()Ljava/lang/String;
+	public final fun getScheme ()Ljava/lang/String;
+	public final fun getSecurity ()Ldev/kcoap/transport/ChannelSecurityKind;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/transport/CoapScheme;
+	public static fun values ()[Ldev/kcoap/transport/CoapScheme;
+}
+
+public final class dev/kcoap/transport/CoapScheme$Companion {
+	public final fun fromScheme (Ljava/lang/String;)Ldev/kcoap/transport/CoapScheme;
+}
+
+public abstract interface class dev/kcoap/transport/Connection {
+	public abstract fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public abstract fun getRemote ()Ldev/kcoap/transport/Endpoint;
+}
+
+public abstract interface class dev/kcoap/transport/ConnectionListener {
+	public abstract fun accept (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+}
+
+public abstract interface class dev/kcoap/transport/Connector {
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun connect (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getSchemes ()Ljava/util/Set;
+}
+
+public final class dev/kcoap/transport/Connector$DefaultImpls {
+	public static fun close (Ldev/kcoap/transport/Connector;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/transport/DatagramEvent {
+}
+
+public final class dev/kcoap/transport/DatagramEvent$Received : dev/kcoap/transport/DatagramEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;[B)V
+	public final fun getDatagram ()[B
+	public final fun getFrom ()Ldev/kcoap/transport/Endpoint;
+}
+
+public final class dev/kcoap/transport/DatagramEvent$SessionEnded : dev/kcoap/transport/DatagramEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint$Secure;Ldev/kcoap/transport/SessionEndReason;)V
+	public final fun getEndpoint ()Ldev/kcoap/transport/Endpoint$Secure;
+	public final fun getReason ()Ldev/kcoap/transport/SessionEndReason;
+}
+
+public abstract interface class dev/kcoap/transport/DatagramSecurity {
+	public abstract fun getModes ()Ljava/util/Set;
+	public abstract fun secure (Ldev/kcoap/transport/DatagramTransport;)Ldev/kcoap/transport/DatagramTransport;
+}
+
+public abstract interface class dev/kcoap/transport/DatagramTransport {
+	public abstract fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getMaxDatagramSize ()I
+	public abstract fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/transport/Endpoint {
+}
+
+public final class dev/kcoap/transport/Endpoint$Opaque : dev/kcoap/transport/Endpoint {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Ldev/kcoap/transport/Endpoint$Opaque;
+	public static synthetic fun copy$default (Ldev/kcoap/transport/Endpoint$Opaque;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/kcoap/transport/Endpoint$Opaque;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAddress ()Ljava/lang/String;
+	public final fun getLink ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/Endpoint$Secure : dev/kcoap/transport/Endpoint {
+	public fun <init> (Ldev/kcoap/transport/SessionId;ILdev/kcoap/transport/Endpoint;Ldev/kcoap/transport/PeerIdentity;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEpoch ()I
+	public final fun getIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public final fun getSession ()Ldev/kcoap/transport/SessionId;
+	public final fun getVia ()Ldev/kcoap/transport/Endpoint;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/Endpoint$Tcp : dev/kcoap/transport/Endpoint {
+	public fun <init> (Ljava/lang/String;IZ)V
+	public synthetic fun <init> (Ljava/lang/String;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Z
+	public final fun copy (Ljava/lang/String;IZ)Ldev/kcoap/transport/Endpoint$Tcp;
+	public static synthetic fun copy$default (Ldev/kcoap/transport/Endpoint$Tcp;Ljava/lang/String;IZILjava/lang/Object;)Ldev/kcoap/transport/Endpoint$Tcp;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHost ()Ljava/lang/String;
+	public final fun getPort ()I
+	public final fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public final fun getUsesTls ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/Endpoint$Udp : dev/kcoap/transport/Endpoint {
+	public fun <init> (Ljava/lang/String;I)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun copy (Ljava/lang/String;I)Ldev/kcoap/transport/Endpoint$Udp;
+	public static synthetic fun copy$default (Ldev/kcoap/transport/Endpoint$Udp;Ljava/lang/String;IILjava/lang/Object;)Ldev/kcoap/transport/Endpoint$Udp;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHost ()Ljava/lang/String;
+	public final fun getPort ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/Endpoint$WebSocket : dev/kcoap/transport/Endpoint {
+	public static final field Companion Ldev/kcoap/transport/Endpoint$WebSocket$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Ldev/kcoap/transport/Endpoint$WebSocket;
+	public static synthetic fun copy$default (Ldev/kcoap/transport/Endpoint$WebSocket;Ljava/lang/String;ILjava/lang/Object;)Ldev/kcoap/transport/Endpoint$WebSocket;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public final fun getUri ()Ljava/lang/String;
+	public final fun getUsesTls ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/Endpoint$WebSocket$Companion {
+	public final fun of (Ljava/lang/String;IZ)Ldev/kcoap/transport/Endpoint$WebSocket;
+	public static synthetic fun of$default (Ldev/kcoap/transport/Endpoint$WebSocket$Companion;Ljava/lang/String;IZILjava/lang/Object;)Ldev/kcoap/transport/Endpoint$WebSocket;
+}
+
+public final class dev/kcoap/transport/IpLiteral {
+	public static final field INSTANCE Ldev/kcoap/transport/IpLiteral;
+	public final fun canonical (Ljava/lang/String;)Ljava/lang/String;
+	public final fun format ([B)Ljava/lang/String;
+	public final fun parse (Ljava/lang/String;)[B
+}
+
+public abstract interface class dev/kcoap/transport/MessageConnection : dev/kcoap/transport/Connection {
+	public abstract fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public abstract fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public abstract fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun send ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/transport/PeerIdentity {
+	public abstract fun getMode ()Ldev/kcoap/transport/SecurityMode;
+}
+
+public final class dev/kcoap/transport/PeerIdentity$Certificate : dev/kcoap/transport/PeerIdentity {
+	public fun <init> (Ljava/util/List;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChain ()Ljava/util/List;
+	public fun getMode ()Ldev/kcoap/transport/SecurityMode;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/PeerIdentity$None : dev/kcoap/transport/PeerIdentity {
+	public static final field INSTANCE Ldev/kcoap/transport/PeerIdentity$None;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMode ()Ldev/kcoap/transport/SecurityMode;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/PeerIdentity$PreSharedKey : dev/kcoap/transport/PeerIdentity {
+	public fun <init> ([B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIdentity ()[B
+	public fun getMode ()Ldev/kcoap/transport/SecurityMode;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/PeerIdentity$RawPublicKey : dev/kcoap/transport/PeerIdentity {
+	public fun <init> ([B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMode ()Ldev/kcoap/transport/SecurityMode;
+	public final fun getSubjectPublicKeyInfo ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/SecurityMode : java/lang/Enum {
+	public static final field CERTIFICATE Ldev/kcoap/transport/SecurityMode;
+	public static final field NO_SEC Ldev/kcoap/transport/SecurityMode;
+	public static final field PRE_SHARED_KEY Ldev/kcoap/transport/SecurityMode;
+	public static final field RAW_PUBLIC_KEY Ldev/kcoap/transport/SecurityMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun isMandatoryToImplement ()Z
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/transport/SecurityMode;
+	public static fun values ()[Ldev/kcoap/transport/SecurityMode;
+}
+
+public final class dev/kcoap/transport/SessionEndReason : java/lang/Enum {
+	public static final field ALERT Ldev/kcoap/transport/SessionEndReason;
+	public static final field CLOSED_BY_PEER Ldev/kcoap/transport/SessionEndReason;
+	public static final field CLOSED_LOCALLY Ldev/kcoap/transport/SessionEndReason;
+	public static final field REPLACED Ldev/kcoap/transport/SessionEndReason;
+	public static final field TIMEOUT Ldev/kcoap/transport/SessionEndReason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/transport/SessionEndReason;
+	public static fun values ()[Ldev/kcoap/transport/SessionEndReason;
+}
+
+public final class dev/kcoap/transport/SessionEndedException : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/transport/Endpoint$Secure;Ldev/kcoap/transport/SessionEndReason;)V
+	public final fun getEndpoint ()Ldev/kcoap/transport/Endpoint$Secure;
+	public final fun getReason ()Ldev/kcoap/transport/SessionEndReason;
+}
+
+public final class dev/kcoap/transport/SessionId {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Ldev/kcoap/transport/SessionId;
+	public static synthetic fun copy$default (Ldev/kcoap/transport/SessionId;JILjava/lang/Object;)Ldev/kcoap/transport/SessionId;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/TransportKind : java/lang/Enum {
+	public static final field BYTE_STREAM Ldev/kcoap/transport/TransportKind;
+	public static final field DATAGRAM Ldev/kcoap/transport/TransportKind;
+	public static final field MESSAGE_STREAM Ldev/kcoap/transport/TransportKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/transport/TransportKind;
+	public static fun values ()[Ldev/kcoap/transport/TransportKind;
+}
+

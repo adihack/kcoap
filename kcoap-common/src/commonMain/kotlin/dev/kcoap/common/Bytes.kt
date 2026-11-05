@@ -17,6 +17,7 @@ public fun ByteArray.wipe() {
 }
 
 /** Big-endian unsigned encoding of [value] in the fewest bytes; zero encodes as an empty array. */
+@InternalKcoapApi
 public fun minimalUnsignedBytes(value: Long): ByteArray {
     require(value >= 0) { "Negative value: $value" }
     var length = 0
@@ -29,6 +30,7 @@ public fun minimalUnsignedBytes(value: Long): ByteArray {
 }
 
 /** Reads [length] bytes at [offset] as a big-endian unsigned number. At most 7 bytes, so it fits a Long. */
+@InternalKcoapApi
 public fun ByteArray.readUnsigned(offset: Int = 0, length: Int = size - offset): Long {
     require(length in 0..7) { "Cannot read $length bytes into a Long" }
     require(offset >= 0 && offset + length <= size) { "Range $offset+$length outside $size bytes" }

@@ -1,0 +1,439 @@
+public final class dev/kcoap/edhoc/AuthenticationCredential {
+	public static final field Companion Ldev/kcoap/edhoc/AuthenticationCredential$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCertificate ()Ldev/kcoap/edhoc/X509Certificate;
+	public final fun getClaimsSet ()Ldev/kcoap/cose/CwtClaimsSet;
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getKid ()[B
+	public final fun getPublicKey ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/AuthenticationCredential$Companion {
+	public final fun ccs (Ldev/kcoap/cose/CwtClaimsSet;)Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun ccs ([B)Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun x509 ([B[B)Ldev/kcoap/edhoc/AuthenticationCredential;
+	public static synthetic fun x509$default (Ldev/kcoap/edhoc/AuthenticationCredential$Companion;[B[BILjava/lang/Object;)Ldev/kcoap/edhoc/AuthenticationCredential;
+}
+
+public final class dev/kcoap/edhoc/AuthenticationKind : java/lang/Enum {
+	public static final field SIGNATURE Ldev/kcoap/edhoc/AuthenticationKind;
+	public static final field STATIC_DH Ldev/kcoap/edhoc/AuthenticationKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/AuthenticationKind;
+	public static fun values ()[Ldev/kcoap/edhoc/AuthenticationKind;
+}
+
+public final class dev/kcoap/edhoc/CipherSuite {
+	public static final field Companion Ldev/kcoap/edhoc/CipherSuite$Companion;
+	public fun <init> (ILdev/kcoap/crypto/AeadAlgorithm;Ldev/kcoap/crypto/HashAlgorithm;ILdev/kcoap/edhoc/KeyExchangeAlgorithm;Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/AeadAlgorithm;Ldev/kcoap/crypto/HashAlgorithm;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAppAead ()Ldev/kcoap/crypto/AeadAlgorithm;
+	public final fun getAppHash ()Ldev/kcoap/crypto/HashAlgorithm;
+	public final fun getEdhocAead ()Ldev/kcoap/crypto/AeadAlgorithm;
+	public final fun getEdhocHash ()Ldev/kcoap/crypto/HashAlgorithm;
+	public final fun getKeyExchange ()Ldev/kcoap/edhoc/KeyExchangeAlgorithm;
+	public final fun getMacLength ()I
+	public final fun getSignature ()Ldev/kcoap/crypto/SignatureAlgorithm;
+	public final fun getValue ()I
+	public fun hashCode ()I
+	public final fun isImplemented ()Z
+	public final fun isMandatoryToImplement ()Z
+	public final fun isPrivateUse ()Z
+	public final fun isSupportedBy (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/CipherSuite$Companion {
+	public final fun fromValue (I)Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getRegistered ()Ljava/util/List;
+	public final fun getSUITE_0 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_1 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_2 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_24 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_25 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_3 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_4 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_5 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_6 ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getSUITE_PQC_1 ()Ldev/kcoap/edhoc/CipherSuite;
+}
+
+public final class dev/kcoap/edhoc/ConnectionIdentifier {
+	public static final field Companion Ldev/kcoap/edhoc/ConnectionIdentifier$Companion;
+	public fun <init> ([B)V
+	public final fun encode ()[B
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBytes ()[B
+	public final fun getSize ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/ConnectionIdentifier$Companion {
+	public final fun ofInt (I)Ldev/kcoap/edhoc/ConnectionIdentifier;
+}
+
+public abstract interface class dev/kcoap/edhoc/ConnectionIdentifierProvider {
+	public static final field Companion Ldev/kcoap/edhoc/ConnectionIdentifierProvider$Companion;
+	public abstract fun choose (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/edhoc/ConnectionIdentifier;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/ConnectionIdentifierProvider$Companion {
+	public final fun fixed (Ldev/kcoap/edhoc/ConnectionIdentifier;)Ldev/kcoap/edhoc/ConnectionIdentifierProvider;
+	public final fun getRandom ()Ldev/kcoap/edhoc/ConnectionIdentifierProvider;
+}
+
+public abstract class dev/kcoap/edhoc/CredentialIdentifier {
+	public static final field Companion Ldev/kcoap/edhoc/CredentialIdentifier$Companion;
+	public static final field SHA_256_64 I
+	public synthetic fun <init> ([BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun encodeForPlaintext ()[B
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getHeader ()Ldev/kcoap/cbor/CborMap;
+	public fun hashCode ()I
+	public abstract fun isByValue ()Z
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$Companion {
+	public final fun x509Thumbprint (Ldev/kcoap/crypto/CryptoBackend;[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun x509Thumbprint$default (Ldev/kcoap/edhoc/CredentialIdentifier$Companion;Ldev/kcoap/crypto/CryptoBackend;[BILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$Kccs : dev/kcoap/edhoc/CredentialIdentifier {
+	public fun <init> (Ldev/kcoap/cose/CwtClaimsSet;)V
+	public final fun credential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getClaimsSet ()Ldev/kcoap/cose/CwtClaimsSet;
+	public fun isByValue ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$KeyId : dev/kcoap/edhoc/CredentialIdentifier {
+	public fun <init> ([B)V
+	public fun encodeForPlaintext ()[B
+	public final fun getKid ()[B
+	public fun isByValue ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$Other : dev/kcoap/edhoc/CredentialIdentifier {
+	public fun <init> (Ldev/kcoap/cbor/CborMap;)V
+	public fun isByValue ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$X509Chain : dev/kcoap/edhoc/CredentialIdentifier {
+	public fun <init> (Ljava/util/List;)V
+	public final fun endEntityCredential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getCertificates ()Ljava/util/List;
+	public fun isByValue ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/CredentialIdentifier$X509Thumbprint : dev/kcoap/edhoc/CredentialIdentifier {
+	public fun <init> (I[B)V
+	public final fun getAlgorithm ()I
+	public final fun getHash ()[B
+	public fun isByValue ()Z
+	public final fun matches (Ldev/kcoap/crypto/CryptoBackend;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/edhoc/CredentialResolver {
+	public abstract fun resolve (Ldev/kcoap/edhoc/CredentialIdentifier;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/edhoc/EadHandler {
+	public static final field Companion Ldev/kcoap/edhoc/EadHandler$Companion;
+	public fun consume (Ldev/kcoap/edhoc/EdhocMessage;Ldev/kcoap/edhoc/EadItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun produce (Ldev/kcoap/edhoc/EdhocMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/EadHandler$Companion {
+	public final fun getNone ()Ldev/kcoap/edhoc/EadHandler;
+}
+
+public final class dev/kcoap/edhoc/EadHandler$DefaultImpls {
+	public static fun consume (Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EdhocMessage;Ldev/kcoap/edhoc/EadItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun produce (Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EdhocMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/EadItem {
+	public static final field Companion Ldev/kcoap/edhoc/EadItem$Companion;
+	public fun <init> (I[B)V
+	public synthetic fun <init> (I[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLabel ()I
+	public final fun getValue ()[B
+	public fun hashCode ()I
+	public final fun isCritical ()Z
+	public final fun isPadding ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/EadItem$Companion {
+	public final fun padding ([B)Ldev/kcoap/edhoc/EadItem;
+	public static synthetic fun padding$default (Ldev/kcoap/edhoc/EadItem$Companion;[BILjava/lang/Object;)Ldev/kcoap/edhoc/EadItem;
+}
+
+public final class dev/kcoap/edhoc/EdhocError {
+	public static final field Companion Ldev/kcoap/edhoc/EdhocError$Companion;
+	public static final field SUCCESS I
+	public static final field UNKNOWN_CREDENTIAL_REFERENCED I
+	public static final field UNSPECIFIED_ERROR I
+	public static final field WRONG_SELECTED_CIPHER_SUITE I
+	public fun <init> (ILdev/kcoap/cbor/CborValue;)V
+	public final fun encode ()[B
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCipherSuites ()Ljava/util/List;
+	public final fun getCode ()I
+	public final fun getDiagnostic ()Ljava/lang/String;
+	public final fun getInfo ()Ldev/kcoap/cbor/CborValue;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/EdhocError$Companion {
+	public final fun decode ([B)Ldev/kcoap/edhoc/EdhocError;
+	public final fun unknownCredentialReferenced ()Ldev/kcoap/edhoc/EdhocError;
+	public final fun unspecified (Ljava/lang/String;)Ldev/kcoap/edhoc/EdhocError;
+	public final fun wrongSelectedCipherSuite (Ljava/util/List;)Ldev/kcoap/edhoc/EdhocError;
+}
+
+public class dev/kcoap/edhoc/EdhocException : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocError;Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocError;Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getError ()Ldev/kcoap/edhoc/EdhocError;
+	public final fun getErrorCode ()I
+	public fun getErrorMessage ()[B
+}
+
+public final class dev/kcoap/edhoc/EdhocInitiator {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun abort (Ljava/lang/String;)[B
+	public final fun createMessage1 (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun createMessage3 (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getCipherSuite ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getFailure ()Ldev/kcoap/edhoc/EdhocException;
+	public final fun getPeerCredential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getPhase ()Ldev/kcoap/edhoc/EdhocPhase;
+	public final fun getSession ()Ldev/kcoap/edhoc/EdhocSession;
+	public final fun processMessage2 ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun processMessage4 ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/EdhocInitiatorConfig {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocMethod;Ljava/util/List;Ljava/util/List;Ldev/kcoap/edhoc/CredentialResolver;Ldev/kcoap/edhoc/ConnectionIdentifierProvider;Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EphemeralKeySource;Ldev/kcoap/edhoc/CipherSuite;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocMethod;Ljava/util/List;Ljava/util/List;Ldev/kcoap/edhoc/CredentialResolver;Ldev/kcoap/edhoc/ConnectionIdentifierProvider;Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EphemeralKeySource;Ldev/kcoap/edhoc/CipherSuite;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCipherSuites ()Ljava/util/List;
+	public final fun getConnectionIdentifiers ()Ldev/kcoap/edhoc/ConnectionIdentifierProvider;
+	public final fun getCredentialResolver ()Ldev/kcoap/edhoc/CredentialResolver;
+	public final fun getCredentials ()Ljava/util/List;
+	public final fun getEadHandler ()Ldev/kcoap/edhoc/EadHandler;
+	public final fun getEphemeralKeys ()Ldev/kcoap/edhoc/EphemeralKeySource;
+	public final fun getInitialCipherSuite ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getMethod ()Ldev/kcoap/edhoc/EdhocMethod;
+}
+
+public final class dev/kcoap/edhoc/EdhocMessage : java/lang/Enum {
+	public static final field MESSAGE_1 Ldev/kcoap/edhoc/EdhocMessage;
+	public static final field MESSAGE_2 Ldev/kcoap/edhoc/EdhocMessage;
+	public static final field MESSAGE_3 Ldev/kcoap/edhoc/EdhocMessage;
+	public static final field MESSAGE_4 Ldev/kcoap/edhoc/EdhocMessage;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/EdhocMessage;
+	public static fun values ()[Ldev/kcoap/edhoc/EdhocMessage;
+}
+
+public final class dev/kcoap/edhoc/EdhocMethod : java/lang/Enum {
+	public static final field Companion Ldev/kcoap/edhoc/EdhocMethod$Companion;
+	public static final field SIGNATURE_SIGNATURE Ldev/kcoap/edhoc/EdhocMethod;
+	public static final field SIGNATURE_STATIC_DH Ldev/kcoap/edhoc/EdhocMethod;
+	public static final field STATIC_DH_SIGNATURE Ldev/kcoap/edhoc/EdhocMethod;
+	public static final field STATIC_DH_STATIC_DH Ldev/kcoap/edhoc/EdhocMethod;
+	public final fun authenticationOf (Ldev/kcoap/edhoc/EdhocRole;)Ldev/kcoap/edhoc/AuthenticationKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getInitiatorAuthentication ()Ldev/kcoap/edhoc/AuthenticationKind;
+	public final fun getRequiresDiffieHellman ()Z
+	public final fun getResponderAuthentication ()Ldev/kcoap/edhoc/AuthenticationKind;
+	public final fun getValue ()I
+	public final fun isCompatibleWith (Ldev/kcoap/edhoc/CipherSuite;)Z
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/EdhocMethod;
+	public static fun values ()[Ldev/kcoap/edhoc/EdhocMethod;
+}
+
+public final class dev/kcoap/edhoc/EdhocMethod$Companion {
+	public final fun fromValue (I)Ldev/kcoap/edhoc/EdhocMethod;
+}
+
+public final class dev/kcoap/edhoc/EdhocPeerErrorException : dev/kcoap/edhoc/EdhocException {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocError;)V
+	public fun getErrorMessage ()[B
+}
+
+public final class dev/kcoap/edhoc/EdhocPhase : java/lang/Enum {
+	public static final field ABORTED Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field COMPLETED Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field PERSISTED Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field START Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field VERIFIED_M1 Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field VERIFIED_M2 Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field WAIT_M2 Ldev/kcoap/edhoc/EdhocPhase;
+	public static final field WAIT_M3 Ldev/kcoap/edhoc/EdhocPhase;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/EdhocPhase;
+	public static fun values ()[Ldev/kcoap/edhoc/EdhocPhase;
+}
+
+public final class dev/kcoap/edhoc/EdhocResponder {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun abort (Ljava/lang/String;)[B
+	public final fun createMessage2 (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun createMessage4 (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getCipherSuite ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getFailure ()Ldev/kcoap/edhoc/EdhocException;
+	public final fun getMethod ()Ldev/kcoap/edhoc/EdhocMethod;
+	public final fun getPeerConnectionIdentifier ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public final fun getPhase ()Ldev/kcoap/edhoc/EdhocPhase;
+	public final fun getSession ()Ldev/kcoap/edhoc/EdhocSession;
+	public final fun processMessage1 ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun processMessage3 ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/EdhocResponderConfig {
+	public fun <init> (Ljava/util/Set;Ljava/util/List;Ljava/util/List;Ldev/kcoap/edhoc/CredentialResolver;Ldev/kcoap/edhoc/ConnectionIdentifierProvider;Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EphemeralKeySource;)V
+	public synthetic fun <init> (Ljava/util/Set;Ljava/util/List;Ljava/util/List;Ldev/kcoap/edhoc/CredentialResolver;Ldev/kcoap/edhoc/ConnectionIdentifierProvider;Ldev/kcoap/edhoc/EadHandler;Ldev/kcoap/edhoc/EphemeralKeySource;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCipherSuites ()Ljava/util/List;
+	public final fun getConnectionIdentifiers ()Ldev/kcoap/edhoc/ConnectionIdentifierProvider;
+	public final fun getCredentialResolver ()Ldev/kcoap/edhoc/CredentialResolver;
+	public final fun getCredentials ()Ljava/util/List;
+	public final fun getEadHandler ()Ldev/kcoap/edhoc/EadHandler;
+	public final fun getEphemeralKeys ()Ldev/kcoap/edhoc/EphemeralKeySource;
+	public final fun getMethods ()Ljava/util/Set;
+}
+
+public final class dev/kcoap/edhoc/EdhocRole : java/lang/Enum {
+	public static final field INITIATOR Ldev/kcoap/edhoc/EdhocRole;
+	public static final field RESPONDER Ldev/kcoap/edhoc/EdhocRole;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/EdhocRole;
+	public static fun values ()[Ldev/kcoap/edhoc/EdhocRole;
+}
+
+public final class dev/kcoap/edhoc/EdhocSession {
+	public static final field Companion Ldev/kcoap/edhoc/EdhocSession$Companion;
+	public static final field DEFAULT_OSCORE_SALT_LENGTH I
+	public static final field EXPORTER_OSCORE_MASTER_SALT I
+	public static final field EXPORTER_OSCORE_MASTER_SECRET I
+	public final fun destroy ()V
+	public final fun exporter (I[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getCipherSuite ()Ldev/kcoap/edhoc/CipherSuite;
+	public final fun getInitiatorConnectionIdentifier ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public final fun getMethod ()Ldev/kcoap/edhoc/EdhocMethod;
+	public final fun getOwnConnectionIdentifier ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public final fun getPeerConnectionIdentifier ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public final fun getPeerCredential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getPeerCredentialIdentifier ()Ldev/kcoap/edhoc/CredentialIdentifier;
+	public final fun getResponderConnectionIdentifier ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public final fun getRole ()Ldev/kcoap/edhoc/EdhocRole;
+	public final fun keyUpdate ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun oscoreMasterSalt (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun oscoreMasterSalt$default (Ldev/kcoap/edhoc/EdhocSession;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun oscoreMasterSecret (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun oscoreMasterSecret$default (Ldev/kcoap/edhoc/EdhocSession;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun prkExporter ()[B
+	public final fun prkOut ()[B
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/EdhocSession$Companion {
+}
+
+public abstract interface class dev/kcoap/edhoc/EphemeralKeySource {
+	public static final field Companion Ldev/kcoap/edhoc/EphemeralKeySource$Companion;
+	public abstract fun keyPair (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/EphemeralKeySource$Companion {
+	public final fun getRandom ()Ldev/kcoap/edhoc/EphemeralKeySource;
+}
+
+public abstract class dev/kcoap/edhoc/KeyExchangeAlgorithm {
+	public abstract fun getEphemeralKeyType ()Ldev/kcoap/crypto/KeyType;
+	public abstract fun getInitiatorShareLength ()I
+	public abstract fun getResponderShareLength ()I
+	public abstract fun getSupportsStaticDiffieHellman ()Z
+}
+
+public final class dev/kcoap/edhoc/KeyExchangeAlgorithm$DiffieHellman : dev/kcoap/edhoc/KeyExchangeAlgorithm {
+	public fun <init> (Ldev/kcoap/crypto/EcdhCurve;)V
+	public final fun component1 ()Ldev/kcoap/crypto/EcdhCurve;
+	public final fun copy (Ldev/kcoap/crypto/EcdhCurve;)Ldev/kcoap/edhoc/KeyExchangeAlgorithm$DiffieHellman;
+	public static synthetic fun copy$default (Ldev/kcoap/edhoc/KeyExchangeAlgorithm$DiffieHellman;Ldev/kcoap/crypto/EcdhCurve;ILjava/lang/Object;)Ldev/kcoap/edhoc/KeyExchangeAlgorithm$DiffieHellman;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCurve ()Ldev/kcoap/crypto/EcdhCurve;
+	public fun getEphemeralKeyType ()Ldev/kcoap/crypto/KeyType;
+	public fun getInitiatorShareLength ()I
+	public fun getResponderShareLength ()I
+	public fun getSupportsStaticDiffieHellman ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/KeyExchangeAlgorithm$Kem : dev/kcoap/edhoc/KeyExchangeAlgorithm {
+	public fun <init> (Ldev/kcoap/crypto/KemAlgorithm;)V
+	public final fun component1 ()Ldev/kcoap/crypto/KemAlgorithm;
+	public final fun copy (Ldev/kcoap/crypto/KemAlgorithm;)Ldev/kcoap/edhoc/KeyExchangeAlgorithm$Kem;
+	public static synthetic fun copy$default (Ldev/kcoap/edhoc/KeyExchangeAlgorithm$Kem;Ldev/kcoap/crypto/KemAlgorithm;ILjava/lang/Object;)Ldev/kcoap/edhoc/KeyExchangeAlgorithm$Kem;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAlgorithm ()Ldev/kcoap/crypto/KemAlgorithm;
+	public fun getEphemeralKeyType ()Ldev/kcoap/crypto/KeyType;
+	public fun getInitiatorShareLength ()I
+	public fun getResponderShareLength ()I
+	public fun getSupportsStaticDiffieHellman ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/LocalCredential {
+	public static final field Companion Ldev/kcoap/edhoc/LocalCredential$Companion;
+	public fun <init> (Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;Ldev/kcoap/crypto/PrivateKey;Ldev/kcoap/edhoc/AuthenticationKind;)V
+	public final fun getAuthentication ()Ldev/kcoap/edhoc/AuthenticationKind;
+	public final fun getCredential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getIdentifier ()Ldev/kcoap/edhoc/CredentialIdentifier;
+	public final fun getPrivateKey ()Ldev/kcoap/crypto/PrivateKey;
+	public final fun isUsableFor (Ldev/kcoap/edhoc/AuthenticationKind;Ldev/kcoap/edhoc/CipherSuite;)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/LocalCredential$Companion {
+	public final fun signature (Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;Ldev/kcoap/crypto/PrivateKey;)Ldev/kcoap/edhoc/LocalCredential;
+	public final fun staticDiffieHellman (Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;Ldev/kcoap/crypto/PrivateKey;)Ldev/kcoap/edhoc/LocalCredential;
+}
+
+public final class dev/kcoap/edhoc/TrustedCredentials : dev/kcoap/edhoc/CredentialResolver {
+	public fun <init> (Ldev/kcoap/crypto/CryptoBackend;Ljava/util/List;Ldev/kcoap/crypto/CertificateValidator;)V
+	public synthetic fun <init> (Ldev/kcoap/crypto/CryptoBackend;Ljava/util/List;Ldev/kcoap/crypto/CertificateValidator;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun resolve (Ldev/kcoap/edhoc/CredentialIdentifier;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/edhoc/X509Certificate {
+	public static final field Companion Ldev/kcoap/edhoc/X509Certificate$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getPublicKey ()[B
+	public final fun getSubjectCommonName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/X509Certificate$Companion {
+	public final fun parse ([B)Ldev/kcoap/edhoc/X509Certificate;
+}
+

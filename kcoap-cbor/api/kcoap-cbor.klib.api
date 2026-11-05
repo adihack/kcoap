@@ -1,0 +1,233 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-cbor>
+final enum class dev.kcoap.cbor/CborType : kotlin/Enum<dev.kcoap.cbor/CborType> { // dev.kcoap.cbor/CborType|null[0]
+    enum entry ARRAY // dev.kcoap.cbor/CborType.ARRAY|null[0]
+    enum entry BYTES // dev.kcoap.cbor/CborType.BYTES|null[0]
+    enum entry MAP // dev.kcoap.cbor/CborType.MAP|null[0]
+    enum entry NEGATIVE // dev.kcoap.cbor/CborType.NEGATIVE|null[0]
+    enum entry SIMPLE // dev.kcoap.cbor/CborType.SIMPLE|null[0]
+    enum entry TAG // dev.kcoap.cbor/CborType.TAG|null[0]
+    enum entry TEXT // dev.kcoap.cbor/CborType.TEXT|null[0]
+    enum entry UNSIGNED // dev.kcoap.cbor/CborType.UNSIGNED|null[0]
+
+    final val entries // dev.kcoap.cbor/CborType.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.cbor/CborType> // dev.kcoap.cbor/CborType.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.cbor/CborType // dev.kcoap.cbor/CborType.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.cbor/CborType> // dev.kcoap.cbor/CborType.values|values#static(){}[0]
+}
+
+final class dev.kcoap.cbor/CborArray : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborArray|null[0]
+    constructor <init>(kotlin.collections/List<dev.kcoap.cbor/CborValue>) // dev.kcoap.cbor/CborArray.<init>|<init>(kotlin.collections.List<dev.kcoap.cbor.CborValue>){}[0]
+    constructor <init>(kotlin/Array<out dev.kcoap.cbor/CborValue>...) // dev.kcoap.cbor/CborArray.<init>|<init>(kotlin.Array<out|dev.kcoap.cbor.CborValue>...){}[0]
+
+    final val items // dev.kcoap.cbor/CborArray.items|{}items[0]
+        final fun <get-items>(): kotlin.collections/List<dev.kcoap.cbor/CborValue> // dev.kcoap.cbor/CborArray.items.<get-items>|<get-items>(){}[0]
+    final val size // dev.kcoap.cbor/CborArray.size|{}size[0]
+        final fun <get-size>(): kotlin/Int // dev.kcoap.cbor/CborArray.size.<get-size>|<get-size>(){}[0]
+
+    final fun component1(): kotlin.collections/List<dev.kcoap.cbor/CborValue> // dev.kcoap.cbor/CborArray.component1|component1(){}[0]
+    final fun copy(kotlin.collections/List<dev.kcoap.cbor/CborValue> = ...): dev.kcoap.cbor/CborArray // dev.kcoap.cbor/CborArray.copy|copy(kotlin.collections.List<dev.kcoap.cbor.CborValue>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborArray.equals|equals(kotlin.Any?){}[0]
+    final fun get(kotlin/Int): dev.kcoap.cbor/CborValue // dev.kcoap.cbor/CborArray.get|get(kotlin.Int){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborArray.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborArray.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborBool : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborBool|null[0]
+    constructor <init>(kotlin/Boolean) // dev.kcoap.cbor/CborBool.<init>|<init>(kotlin.Boolean){}[0]
+
+    final val value // dev.kcoap.cbor/CborBool.value|{}value[0]
+        final fun <get-value>(): kotlin/Boolean // dev.kcoap.cbor/CborBool.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Boolean // dev.kcoap.cbor/CborBool.component1|component1(){}[0]
+    final fun copy(kotlin/Boolean = ...): dev.kcoap.cbor/CborBool // dev.kcoap.cbor/CborBool.copy|copy(kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborBool.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborBool.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborBool.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborBytes : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborBytes|null[0]
+    constructor <init>(kotlin/ByteArray) // dev.kcoap.cbor/CborBytes.<init>|<init>(kotlin.ByteArray){}[0]
+
+    final val bytes // dev.kcoap.cbor/CborBytes.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // dev.kcoap.cbor/CborBytes.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val size // dev.kcoap.cbor/CborBytes.size|{}size[0]
+        final fun <get-size>(): kotlin/Int // dev.kcoap.cbor/CborBytes.size.<get-size>|<get-size>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborBytes.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborBytes.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborBytes.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborException : kotlin/Exception { // dev.kcoap.cbor/CborException|null[0]
+    constructor <init>(kotlin/String, kotlin/Int = ...) // dev.kcoap.cbor/CborException.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+    final val offset // dev.kcoap.cbor/CborException.offset|{}offset[0]
+        final fun <get-offset>(): kotlin/Int // dev.kcoap.cbor/CborException.offset.<get-offset>|<get-offset>(){}[0]
+}
+
+final class dev.kcoap.cbor/CborInt : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborInt|null[0]
+    constructor <init>(kotlin/Long) // dev.kcoap.cbor/CborInt.<init>|<init>(kotlin.Long){}[0]
+
+    final val value // dev.kcoap.cbor/CborInt.value|{}value[0]
+        final fun <get-value>(): kotlin/Long // dev.kcoap.cbor/CborInt.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Long // dev.kcoap.cbor/CborInt.component1|component1(){}[0]
+    final fun copy(kotlin/Long = ...): dev.kcoap.cbor/CborInt // dev.kcoap.cbor/CborInt.copy|copy(kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborInt.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborInt.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborInt.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborMap : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborMap|null[0]
+    constructor <init>(kotlin.collections/List<kotlin/Pair<dev.kcoap.cbor/CborValue, dev.kcoap.cbor/CborValue>>) // dev.kcoap.cbor/CborMap.<init>|<init>(kotlin.collections.List<kotlin.Pair<dev.kcoap.cbor.CborValue,dev.kcoap.cbor.CborValue>>){}[0]
+    constructor <init>(kotlin/Array<out kotlin/Pair<dev.kcoap.cbor/CborValue, dev.kcoap.cbor/CborValue>>...) // dev.kcoap.cbor/CborMap.<init>|<init>(kotlin.Array<out|kotlin.Pair<dev.kcoap.cbor.CborValue,dev.kcoap.cbor.CborValue>>...){}[0]
+
+    final val entries // dev.kcoap.cbor/CborMap.entries|{}entries[0]
+        final fun <get-entries>(): kotlin.collections/List<kotlin/Pair<dev.kcoap.cbor/CborValue, dev.kcoap.cbor/CborValue>> // dev.kcoap.cbor/CborMap.entries.<get-entries>|<get-entries>(){}[0]
+    final val size // dev.kcoap.cbor/CborMap.size|{}size[0]
+        final fun <get-size>(): kotlin/Int // dev.kcoap.cbor/CborMap.size.<get-size>|<get-size>(){}[0]
+
+    final fun component1(): kotlin.collections/List<kotlin/Pair<dev.kcoap.cbor/CborValue, dev.kcoap.cbor/CborValue>> // dev.kcoap.cbor/CborMap.component1|component1(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/Pair<dev.kcoap.cbor/CborValue, dev.kcoap.cbor/CborValue>> = ...): dev.kcoap.cbor/CborMap // dev.kcoap.cbor/CborMap.copy|copy(kotlin.collections.List<kotlin.Pair<dev.kcoap.cbor.CborValue,dev.kcoap.cbor.CborValue>>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborMap.equals|equals(kotlin.Any?){}[0]
+    final fun get(dev.kcoap.cbor/CborValue): dev.kcoap.cbor/CborValue? // dev.kcoap.cbor/CborMap.get|get(dev.kcoap.cbor.CborValue){}[0]
+    final fun get(kotlin/Int): dev.kcoap.cbor/CborValue? // dev.kcoap.cbor/CborMap.get|get(kotlin.Int){}[0]
+    final fun get(kotlin/Long): dev.kcoap.cbor/CborValue? // dev.kcoap.cbor/CborMap.get|get(kotlin.Long){}[0]
+    final fun get(kotlin/String): dev.kcoap.cbor/CborValue? // dev.kcoap.cbor/CborMap.get|get(kotlin.String){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborMap.hashCode|hashCode(){}[0]
+    final fun sortedDeterministically(): dev.kcoap.cbor/CborMap // dev.kcoap.cbor/CborMap.sortedDeterministically|sortedDeterministically(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborMap.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborReader { // dev.kcoap.cbor/CborReader|null[0]
+    constructor <init>(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // dev.kcoap.cbor/CborReader.<init>|<init>(kotlin.ByteArray;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+    final val isAtEnd // dev.kcoap.cbor/CborReader.isAtEnd|{}isAtEnd[0]
+        final fun <get-isAtEnd>(): kotlin/Boolean // dev.kcoap.cbor/CborReader.isAtEnd.<get-isAtEnd>|<get-isAtEnd>(){}[0]
+    final val remaining // dev.kcoap.cbor/CborReader.remaining|{}remaining[0]
+        final fun <get-remaining>(): kotlin/Int // dev.kcoap.cbor/CborReader.remaining.<get-remaining>|<get-remaining>(){}[0]
+
+    final var position // dev.kcoap.cbor/CborReader.position|{}position[0]
+        final fun <get-position>(): kotlin/Int // dev.kcoap.cbor/CborReader.position.<get-position>|<get-position>(){}[0]
+
+    final fun peekIsNull(): kotlin/Boolean // dev.kcoap.cbor/CborReader.peekIsNull|peekIsNull(){}[0]
+    final fun peekType(): dev.kcoap.cbor/CborType // dev.kcoap.cbor/CborReader.peekType|peekType(){}[0]
+    final fun readArrayHeader(): kotlin/Int // dev.kcoap.cbor/CborReader.readArrayHeader|readArrayHeader(){}[0]
+    final fun readBool(): kotlin/Boolean // dev.kcoap.cbor/CborReader.readBool|readBool(){}[0]
+    final fun readBytes(): kotlin/ByteArray // dev.kcoap.cbor/CborReader.readBytes|readBytes(){}[0]
+    final fun readEncodedItem(): kotlin/ByteArray // dev.kcoap.cbor/CborReader.readEncodedItem|readEncodedItem(){}[0]
+    final fun readInt(): kotlin/Long // dev.kcoap.cbor/CborReader.readInt|readInt(){}[0]
+    final fun readMapHeader(): kotlin/Int // dev.kcoap.cbor/CborReader.readMapHeader|readMapHeader(){}[0]
+    final fun readNull() // dev.kcoap.cbor/CborReader.readNull|readNull(){}[0]
+    final fun readTag(): kotlin/Long // dev.kcoap.cbor/CborReader.readTag|readTag(){}[0]
+    final fun readText(): kotlin/String // dev.kcoap.cbor/CborReader.readText|readText(){}[0]
+    final fun readValue(): dev.kcoap.cbor/CborValue // dev.kcoap.cbor/CborReader.readValue|readValue(){}[0]
+    final fun skip() // dev.kcoap.cbor/CborReader.skip|skip(){}[0]
+}
+
+final class dev.kcoap.cbor/CborSimple : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborSimple|null[0]
+    constructor <init>(kotlin/Int) // dev.kcoap.cbor/CborSimple.<init>|<init>(kotlin.Int){}[0]
+
+    final val value // dev.kcoap.cbor/CborSimple.value|{}value[0]
+        final fun <get-value>(): kotlin/Int // dev.kcoap.cbor/CborSimple.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Int // dev.kcoap.cbor/CborSimple.component1|component1(){}[0]
+    final fun copy(kotlin/Int = ...): dev.kcoap.cbor/CborSimple // dev.kcoap.cbor/CborSimple.copy|copy(kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborSimple.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborSimple.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborSimple.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborTag : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborTag|null[0]
+    constructor <init>(kotlin/Long, dev.kcoap.cbor/CborValue) // dev.kcoap.cbor/CborTag.<init>|<init>(kotlin.Long;dev.kcoap.cbor.CborValue){}[0]
+
+    final val tag // dev.kcoap.cbor/CborTag.tag|{}tag[0]
+        final fun <get-tag>(): kotlin/Long // dev.kcoap.cbor/CborTag.tag.<get-tag>|<get-tag>(){}[0]
+    final val value // dev.kcoap.cbor/CborTag.value|{}value[0]
+        final fun <get-value>(): dev.kcoap.cbor/CborValue // dev.kcoap.cbor/CborTag.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Long // dev.kcoap.cbor/CborTag.component1|component1(){}[0]
+    final fun component2(): dev.kcoap.cbor/CborValue // dev.kcoap.cbor/CborTag.component2|component2(){}[0]
+    final fun copy(kotlin/Long = ..., dev.kcoap.cbor/CborValue = ...): dev.kcoap.cbor/CborTag // dev.kcoap.cbor/CborTag.copy|copy(kotlin.Long;dev.kcoap.cbor.CborValue){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborTag.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborTag.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborTag.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborText : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborText|null[0]
+    constructor <init>(kotlin/String) // dev.kcoap.cbor/CborText.<init>|<init>(kotlin.String){}[0]
+
+    final val value // dev.kcoap.cbor/CborText.value|{}value[0]
+        final fun <get-value>(): kotlin/String // dev.kcoap.cbor/CborText.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/String // dev.kcoap.cbor/CborText.component1|component1(){}[0]
+    final fun copy(kotlin/String = ...): dev.kcoap.cbor/CborText // dev.kcoap.cbor/CborText.copy|copy(kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborText.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborText.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborText.toString|toString(){}[0]
+}
+
+final class dev.kcoap.cbor/CborWriter { // dev.kcoap.cbor/CborWriter|null[0]
+    constructor <init>() // dev.kcoap.cbor/CborWriter.<init>|<init>(){}[0]
+
+    final val size // dev.kcoap.cbor/CborWriter.size|{}size[0]
+        final fun <get-size>(): kotlin/Int // dev.kcoap.cbor/CborWriter.size.<get-size>|<get-size>(){}[0]
+
+    final fun toByteArray(): kotlin/ByteArray // dev.kcoap.cbor/CborWriter.toByteArray|toByteArray(){}[0]
+    final fun write(dev.kcoap.cbor/CborValue): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.write|write(dev.kcoap.cbor.CborValue){}[0]
+    final fun writeArrayHeader(kotlin/Int): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeArrayHeader|writeArrayHeader(kotlin.Int){}[0]
+    final fun writeBool(kotlin/Boolean): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeBool|writeBool(kotlin.Boolean){}[0]
+    final fun writeBytes(kotlin/ByteArray): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeBytes|writeBytes(kotlin.ByteArray){}[0]
+    final fun writeEncoded(kotlin/ByteArray): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeEncoded|writeEncoded(kotlin.ByteArray){}[0]
+    final fun writeInt(kotlin/Int): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeInt|writeInt(kotlin.Int){}[0]
+    final fun writeInt(kotlin/Long): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeInt|writeInt(kotlin.Long){}[0]
+    final fun writeMapHeader(kotlin/Int): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeMapHeader|writeMapHeader(kotlin.Int){}[0]
+    final fun writeNull(): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeNull|writeNull(){}[0]
+    final fun writeSimple(kotlin/Int): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeSimple|writeSimple(kotlin.Int){}[0]
+    final fun writeTag(kotlin/Long): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeTag|writeTag(kotlin.Long){}[0]
+    final fun writeText(kotlin/String): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeText|writeText(kotlin.String){}[0]
+    final fun writeUndefined(): dev.kcoap.cbor/CborWriter // dev.kcoap.cbor/CborWriter.writeUndefined|writeUndefined(){}[0]
+}
+
+sealed class dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborValue|null[0]
+    final fun encode(): kotlin/ByteArray // dev.kcoap.cbor/CborValue.encode|encode(){}[0]
+}
+
+final object dev.kcoap.cbor/Cbor { // dev.kcoap.cbor/Cbor|null[0]
+    final fun decode(kotlin/ByteArray): dev.kcoap.cbor/CborValue // dev.kcoap.cbor/Cbor.decode|decode(kotlin.ByteArray){}[0]
+    final fun decodeSequence(kotlin/ByteArray): kotlin.collections/List<dev.kcoap.cbor/CborValue> // dev.kcoap.cbor/Cbor.decodeSequence|decodeSequence(kotlin.ByteArray){}[0]
+    final fun encode(dev.kcoap.cbor/CborValue): kotlin/ByteArray // dev.kcoap.cbor/Cbor.encode|encode(dev.kcoap.cbor.CborValue){}[0]
+    final fun encodeSequence(kotlin.collections/List<dev.kcoap.cbor/CborValue>): kotlin/ByteArray // dev.kcoap.cbor/Cbor.encodeSequence|encodeSequence(kotlin.collections.List<dev.kcoap.cbor.CborValue>){}[0]
+}
+
+final object dev.kcoap.cbor/CborNull : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborNull|null[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborNull.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborNull.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborNull.toString|toString(){}[0]
+}
+
+final object dev.kcoap.cbor/CborUndefined : dev.kcoap.cbor/CborValue { // dev.kcoap.cbor/CborUndefined|null[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cbor/CborUndefined.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cbor/CborUndefined.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cbor/CborUndefined.toString|toString(){}[0]
+}
+
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asArray(): dev.kcoap.cbor/CborArray // dev.kcoap.cbor/asArray|asArray@dev.kcoap.cbor.CborValue(){}[0]
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asBytes(): kotlin/ByteArray // dev.kcoap.cbor/asBytes|asBytes@dev.kcoap.cbor.CborValue(){}[0]
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asInt(): kotlin/Int // dev.kcoap.cbor/asInt|asInt@dev.kcoap.cbor.CborValue(){}[0]
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asLong(): kotlin/Long // dev.kcoap.cbor/asLong|asLong@dev.kcoap.cbor.CborValue(){}[0]
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asMap(): dev.kcoap.cbor/CborMap // dev.kcoap.cbor/asMap|asMap@dev.kcoap.cbor.CborValue(){}[0]
+final fun (dev.kcoap.cbor/CborValue).dev.kcoap.cbor/asText(): kotlin/String // dev.kcoap.cbor/asText|asText@dev.kcoap.cbor.CborValue(){}[0]
+final fun (kotlin/Boolean).dev.kcoap.cbor/toCbor(): dev.kcoap.cbor/CborBool // dev.kcoap.cbor/toCbor|toCbor@kotlin.Boolean(){}[0]
+final fun (kotlin/ByteArray).dev.kcoap.cbor/toCbor(): dev.kcoap.cbor/CborBytes // dev.kcoap.cbor/toCbor|toCbor@kotlin.ByteArray(){}[0]
+final fun (kotlin/Int).dev.kcoap.cbor/toCbor(): dev.kcoap.cbor/CborInt // dev.kcoap.cbor/toCbor|toCbor@kotlin.Int(){}[0]
+final fun (kotlin/Long).dev.kcoap.cbor/toCbor(): dev.kcoap.cbor/CborInt // dev.kcoap.cbor/toCbor|toCbor@kotlin.Long(){}[0]
+final fun (kotlin/String).dev.kcoap.cbor/toCbor(): dev.kcoap.cbor/CborText // dev.kcoap.cbor/toCbor|toCbor@kotlin.String(){}[0]

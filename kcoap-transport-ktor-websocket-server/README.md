@@ -1,7 +1,8 @@
 # kcoap-transport-ktor-websocket-server
 
 The WebSocket server transport for `coap+ws` and `coaps+ws` (RFC 8323 §4) on the ktor server, in
-common code.
+common code. It runs on the JVM and the native targets (the SOCKETS tier): a browser cannot accept
+connections, and reaches a CoAP server as a client through `kcoap-transport-ktor-websocket`.
 
 - `KtorWebSocketListener`: a `ConnectionListener` for the CoAP server. It serves `/.well-known/coap`
   and answers only clients that ask for the subprotocol `coap` (§4.1, §8.3). Each peer is an

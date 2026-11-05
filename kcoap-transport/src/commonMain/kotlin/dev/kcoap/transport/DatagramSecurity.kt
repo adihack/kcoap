@@ -1,8 +1,14 @@
 package dev.kcoap.transport
 
+import dev.kcoap.common.ExperimentalKcoapApi
+
 /**
- * Adds DTLS to a datagram transport, which is what `coaps` needs. kcoap-dtls will implement it; until
- * then no implementation exists and `coaps` is unavailable.
+ * Adds DTLS to a datagram transport, which is what `coaps` needs (RFC 7252 §9.1). kcoap-dtls will
+ * implement it; until then no implementation exists, `coaps` is unavailable, and the interface is
+ * [ExperimentalKcoapApi] because its shape may change with that first implementation.
+ *
+ * TLS for `coaps+tcp` and `coaps+ws` is not a decorator like this one: each runtime's connector and
+ * listener does it with the TLS stack of its platform (docs/adr/0003-tls-in-connectors.md).
  *
  * The transport returned by [secure] must:
  * - deliver [DatagramEvent.Received] only from [Endpoint.Secure] endpoints, never plaintext;
@@ -14,23 +20,11 @@ package dev.kcoap.transport
  * - refuse multicast destinations, because DTLS is point to point;
  * - report a [DatagramTransport.maxDatagramSize] reduced by the record overhead.
  */
+@ExperimentalKcoapApi
 public interface DatagramSecurity {
     /** The modes this implementation is configured for. Never contains [SecurityMode.NO_SEC]. */
     public val modes: Set<SecurityMode>
 
+    /** Wraps [transport] so that everything it sends and receives goes through DTLS, as described above. */
     public fun secure(transport: DatagramTransport): DatagramTransport
-}
-
-/**
- * Adds TLS to a byte stream for `coaps+tcp`. Certificate mode normally uses the platform TLS inside the
- * transport adapter; this is for the modes platform TLS lacks (PSK, raw public keys), which kcoap-dtls
- * will provide in stream mode. TLS clients offer ALPN [CoapScheme.ALPN].
- */
-public interface StreamSecurity {
-    public val modes: Set<SecurityMode>
-
-    /** Runs the TLS client handshake. [serverName] goes into Server Name Indication when not null. */
-    public suspend fun client(connection: ByteStreamConnection, serverName: String?): ByteStreamConnection
-
-    public suspend fun server(connection: ByteStreamConnection): ByteStreamConnection
 }

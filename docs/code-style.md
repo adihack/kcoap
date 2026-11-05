@@ -7,9 +7,39 @@ who knows the RFC can follow the code without guessing.
 
 - One concept per file, named after its main type (`CborReader.kt`, `SecurityContext.kt`).
 - One module per protocol or seam; packages are `dev.kcoap.<module>` (`dev.kcoap.oscore`).
+- Core modules (protocol, wire and SPI code) are common code only: `commonMain`, no `expect`/`actual`,
+  no platform imports. They apply the `kcoap.core` plugin, whose `verifyCommonOnly` check fails on any
+  other main source set; test source sets such as `jvmTest` stay allowed. Runtime-specific code goes into
+  an adapter module (`kcoap-crypto-*`, `kcoap-transport-*`) of the smallest target tier its library
+  supports.
 - Public API is deliberate: the build runs Kotlin's explicit API mode, so every public declaration
-  states its visibility. Anything a user should not call is `internal` or `private`.
+  states its visibility. Anything a user should not call is `internal` or `private`, or
+  `@InternalKcoapApi` when another kcoap module needs it (below).
 - Kotlin official style, 4 spaces, lines up to 120 characters.
+
+## Dependencies and API
+
+- **Every module declares what it imports.** A module that uses a type of another module lists that
+  module itself, even when it already arrives through a third one.
+- **`api` exactly when a dependency's types appear in a public or protected signature** of the module:
+  parameters (defaulted ones included), return types, supertypes, type arguments and public inline
+  bodies. Otherwise `implementation`. A consumer must be able to call everything public without adding
+  a dependency of its own. kcoap-cbor and kcoap-crypto declare `api(kcoap-common)` ahead of their
+  exceptions extending `KcoapException`.
+- **The public ABI is committed.** Every published module has dumps of its public API under
+  `<module>/api` (JVM class files and klibs), and `checkKotlinAbi` fails when the code no longer matches
+  them. A change to the public API runs `./gradlew updateKotlinAbi` and commits the dump diff with it, so
+  every API change is reviewed as such ([releasing.md](releasing.md#abi-dumps)).
+- **Two opt-in markers in kcoap-common** say what is not stable API:
+  - `@InternalKcoapApi`: plumbing that kcoap's modules share (`ByteArrayBuilder`,
+    `minimalUnsignedBytes`, `readUnsigned`, `OptionCodec`). Public only because Kotlin has no visibility
+    between the modules of one library. kcoap's modules opt in through the build; the ABI dumps leave it
+    out; applications should not use it.
+  - `@ExperimentalKcoapApi`: a published SPI that nothing implements yet (`DatagramSecurity`). Its shape
+    may change with the first implementation, and the marker goes in the same change that adds that
+    implementation and its interop test. kcoap code that uses one opts in explicitly.
+- A module that is built and tested but not ready to ship (kcoap-dtls until its engine exists) applies
+  `kcoap.unpublished` instead of carrying a marker on every type.
 
 ## Naming
 

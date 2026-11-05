@@ -1,5 +1,6 @@
 plugins {
     id("kcoap.kmp-library")
+    id("kcoap.core")
 }
 
 kotlin {
@@ -8,6 +9,10 @@ kotlin {
             api(project(":kcoap-coap"))
             api(project(":kcoap-cose"))
             api(project(":kcoap-crypto"))
+            // Endpoint and LoggerFactory appear in the public API.
+            api(project(":kcoap-transport"))
+            api(project(":kcoap-common"))
+            implementation(project(":kcoap-cbor"))
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   unit:
-    name: Unit tests (JVM, Linux native, JS, Wasm) and coverage
+    name: Unit tests (JVM, Linux native, JS, Wasm), build checks and coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -22,8 +22,12 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
       # Every common test on the JVM, as Kotlin/Native (the runtime iOS also uses) and on Node.js as
-      # JavaScript and as Wasm, with WebCrypto underneath as in browsers.
-      - run: scripts/test unit
+      # JavaScript and as Wasm, with WebCrypto underneath as in browsers. Then the build checks:
+      # checkKotlinAbi compares the public API with the committed dumps (run ./gradlew updateKotlinAbi
+      # and commit the diff when an API change is intended), verifyCommonOnly keeps the core modules'
+      # main code in commonMain, and the build-logic TestKit tests check the convention plugins.
+      - name: Unit tests, checkKotlinAbi, verifyCommonOnly, build-logic tests
+        run: scripts/test unit
       - run: ./gradlew --console=plain koverXmlReport koverVerify -Pkcoap.tests=unit
       - name: Coverage summary
         if: always()
@@ -66,7 +70,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      # The same common tests against CryptoKit and CommonCrypto.
+      # The same common tests against CryptoKit and CommonCrypto, and checkKotlinAbi with the Apple
+      # klibs built by the macOS toolchain rather than cross-compiled on Linux.
       - run: scripts/test apple
       - uses: actions/upload-artifact@v7
         if: failure()

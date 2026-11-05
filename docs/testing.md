@@ -46,10 +46,10 @@ The tests skip themselves when Docker or an image is missing. See `interop/READM
 
 | Suite | Runs | Needs |
 |---|---|---|
-| `scripts/test unit` | levels 1–3 on every target the host builds (`allTests`): JVM, `linuxX64`, `js` and `wasmJs` on Node.js, and the Apple targets on macOS | a JDK |
+| `scripts/test unit` | levels 1–3 on every target the host builds (`allTests`): JVM, `linuxX64`, `js` and `wasmJs` on Node.js, and the Apple targets on macOS; then the [build checks](#build-checks) | a JDK |
 | `scripts/test interop` | level 4 | Docker |
 | `scripts/test coverage` | every JVM test, the Kover HTML and XML reports, and the coverage floor | Docker for the interop share |
-| `scripts/test apple` | the common tests on `macosArm64` and `iosSimulatorArm64` | macOS with Xcode |
+| `scripts/test apple` | the common tests on `macosArm64` and `iosSimulatorArm64`, and `checkKotlinAbi` with natively built Apple klibs | macOS with Xcode |
 | `scripts/test images` | only builds the libcoap and libedhoc images | Docker |
 | `scripts/test all` | unit, interop, coverage | Docker |
 
@@ -67,15 +67,36 @@ only those, and `all` (the default) runs both.
 ./gradlew koverVerify                  # fails below the coverage floor
 ```
 
+## Build checks
+
+Three checks guard the build itself. `scripts/test unit` runs all three after the tests, in the same
+Gradle invocation, and `./gradlew check` includes the first two for each module:
+
+| Check | Fails when | Fix |
+|---|---|---|
+| `checkKotlinAbi` | the public API of a published module differs from its dumps in `<module>/api` (`<module>.api` for the JVM, `<module>.klib.api` for every other target) | if the change is intended, `./gradlew updateKotlinAbi` and commit the dump diff with the change ([releasing.md](releasing.md#abi-dumps)) |
+| `verifyCommonOnly` | a core module (`kcoap.core`) has files in a main source set other than `commonMain` | move the code to `commonMain`, or into an adapter module |
+| `:build-logic:test` | a convention plugin no longer behaves as its Gradle TestKit fixtures expect | fix the plugin in `build-logic` |
+
+The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit
+Gradle home under `build-logic/build/testkit`: a core fixture with a `jvmMain` file must fail
+`verifyCommonOnly`, an adapter fixture with the same file must pass, `check` must depend on the
+verification, a published fixture's Maven publications must carry `kcoap.group` and `kcoap.version`
+(and the version given with `-Pkcoap.version`, as the release workflow passes it), and
+`kcoap.unpublished` must remove the publication and the ABI tasks (and fail when it is applied after the
+tier plugin). The fixtures compile no Kotlin and take seconds, but the Kotlin plugin resolves the Kotlin
+standard libraries for them from Maven Central into the TestKit Gradle home, so the first run on a
+machine, or after `build-logic/build` is deleted, needs the network.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request:
 
 | Job | Runner | Runs |
 |---|---|---|
-| Unit tests and coverage | Linux | `scripts/test unit`, then the coverage floor; the coverage table goes to the job summary |
+| Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
 | Interop | Linux | `scripts/test interop` with freshly built images |
-| Native tests | macOS | `scripts/test apple` |
+| Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
 | API reference | Linux | `dokkaGenerate` |
 
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release

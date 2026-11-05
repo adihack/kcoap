@@ -10,7 +10,8 @@ kotlin {
             // Applications may pass their own HttpClient, with the engine of their platform; the WebSockets
             // plugin is part of ktor-client-core.
             api(libs.ktor.client.core)
-            implementation(project(":kcoap-common"))
+            // LoggerFactory appears in the public constructors.
+            api(project(":kcoap-common"))
         }
         // The engine behind the default client; browsers bring their own (the JS engine).
         jvmMain.dependencies {

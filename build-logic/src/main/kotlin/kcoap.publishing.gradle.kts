@@ -1,4 +1,5 @@
-// Publishing and API documentation for every kcoap library module.
+// Publishing and API documentation for every kcoap library module, applied by the tier plugins unless
+// the module applies kcoap.unpublished first.
 //
 //   ./gradlew publishToMavenLocal                              -> ~/.m2, for trying a build locally
 //   ./gradlew publishAllPublicationsToGitHubPackagesRepository  -> GitHub Packages (CI, on release tags)
@@ -23,7 +24,10 @@ mavenPublishing {
     publishToMavenCentral()
     // CI passes an empty value when the secret is not configured, which means "do not sign".
     if (!providers.gradleProperty("signingInMemoryKey").orNull.isNullOrBlank()) signAllPublications()
-    coordinates(group.toString(), project.name, version.toString())
+    // From the properties rather than project.group and project.version: coordinates() copies its
+    // arguments when it is called, and when this plugin ran before the tier plugin had set the group and
+    // version, every module was published as kcoap:<module>:unspecified.
+    coordinates(providers.gradleProperty("kcoap.group").get(), project.name, providers.gradleProperty("kcoap.version").get())
 
     pom {
         name.set(project.name)

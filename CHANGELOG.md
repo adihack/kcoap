@@ -43,6 +43,10 @@ adds its entry and migration note below.
   - `ContentFormat.MISSING_BLOCKS_CBOR_SEQ` (272, RFC 9177 §5).
   - `OptionSet.qBlock1`, `qBlock2` and `qBlock2List`, and `OptionSet.Builder.qBlock1()`, `qBlock2()` and
     `addQBlock2()`.
+- Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
+  `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
+- ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
+  `checkKotlinAbi` in CI, so every API change shows up in review (WP-C1).
 
 ### Changed (breaking)
 
@@ -107,6 +111,33 @@ CoAP stack concurrency, resource bounds and crash safety (WP-S1):
 - **`CoapEndpointConfig.timeSource` must advance with the clock of the endpoint scope's dispatcher**, and
   the endpoint warns once when it does not. *Migration:* under `runTest`, pass
   `testScheduler.timeSource`.
+
+Build governance (WP-C1):
+
+- **`StreamSecurity` is removed** from kcoap-transport. It had no implementation and no users; TLS for
+  `coaps+tcp` and `coaps+ws` belongs to each runtime's connector and listener
+  (docs/adr/0003-tls-in-connectors.md). *Migration:* none.
+- **`DatagramSecurity` requires `@OptIn(ExperimentalKcoapApi::class)`**: it has no implementation yet and
+  may change when the DTLS engine implements it. *Migration:* opt in where you implement or use it.
+- **`ByteArrayBuilder`, `minimalUnsignedBytes` and `ByteArray.readUnsigned` (kcoap-common) and
+  `OptionCodec` (kcoap-coap) are `@InternalKcoapApi`**, plumbing between kcoap's modules that may change
+  in any release and is not in the ABI dumps. Code outside kcoap no longer compiles against them without
+  `@OptIn(InternalKcoapApi::class)`. *Migration:* keep a copy of the helper in your code; `constantTimeEquals`,
+  `wipe` and `toHex` stay public API.
+- **kcoap-dtls is no longer published** until its engine exists (it held interfaces only). *Migration:*
+  drop the dependency; nothing could use it without an implementation.
+- **kcoap-transport depends on kcoap-common (`api`)**, for the opt-in markers (`ExperimentalKcoapApi` on
+  `DatagramSecurity`); it still has no third-party dependencies. A custom transport that depends on
+  kcoap-transport alone now has kcoap-common on its compile classpath. *Migration:* none.
+
+### Fixed
+
+- Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
+  build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
+  `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).
+- kcoap-transport-ktor and the two WebSocket modules export the dependencies their public signatures use
+  (`api`): kcoap-common for `LoggerFactory`, and in kcoap-transport-ktor also ktor-network for
+  `SelectorManager`, so a caller can pass them without declaring those modules itself (WP-C1).
 
 ### Security
 

@@ -12,7 +12,10 @@ kotlin {
             api(libs.ktor.server.core)
             api(libs.ktor.server.websockets)
             implementation(libs.ktor.server.cio)
-            implementation(project(":kcoap-common"))
+            // ConnectionListener, Endpoint and LoggerFactory appear in the public API.
+            api(project(":kcoap-transport"))
+            api(project(":kcoap-common"))
+            implementation(libs.kotlinx.coroutines.core)
         }
     }
 }

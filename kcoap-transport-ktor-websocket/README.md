@@ -1,9 +1,10 @@
 # kcoap-transport-ktor-websocket
 
 The WebSocket client transport for `coap+ws` and `coaps+ws` (RFC 8323 §4) on the ktor client. It is
-common code only, and ktor picks the engine: CIO on the JVM and native targets (the default client),
-Darwin on Apple, and the browser's own WebSocket once the JS and Wasm targets exist. WebSockets are the
-one transport a browser allows, so this is how a browser reaches CoAP.
+common code only and builds for every kcoap target (the UNIVERSAL tier), browsers and Node.js included;
+ktor picks the engine: CIO on the JVM and native targets (the default client), and the JS engine,
+the runtime's own WebSocket, on `js` and `wasmJs`. WebSockets are the one transport a browser allows,
+so this is how a browser reaches CoAP.
 
 - `KtorWebSocketConnector`: a `Connector` for the CoAP client. The opening handshake asks for the
   subprotocol `coap` at `/.well-known/coap` of the URI's authority, and the connector fails unless the

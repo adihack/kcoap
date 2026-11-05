@@ -52,7 +52,7 @@ The server side mounts `EdhocResource` under `/.well-known` and uses `CombinedRe
 
 | Module | What it is |
 |---|---|
-| [`kcoap-common`](kcoap-common) | Logging API and sinks, hex, constant-time helpers |
+| [`kcoap-common`](kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers `@InternalKcoapApi` and `@ExperimentalKcoapApi` |
 | [`kcoap-crypto`](kcoap-crypto) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256 |
 | [`kcoap-crypto-default`](kcoap-crypto-default/README.md) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple, OpenSSL on Linux, WebCrypto in browsers and Node.js |
 | [`kcoap-crypto-bc`](kcoap-crypto-bc/README.md) | Post-quantum backend on Bouncy Castle: ML-KEM and ML-DSA (JVM, Android) |
@@ -67,7 +67,12 @@ The server side mounts `EdhocResource` under `/.well-known` and uses `CombinedRe
 | [`kcoap-oscore`](kcoap-oscore/README.md) | OSCORE |
 | [`kcoap-edhoc`](kcoap-edhoc/README.md) | EDHOC Initiator and Responder |
 | [`kcoap-edhoc-oscore`](kcoap-edhoc-oscore/README.md) | EDHOC over CoAP, EDHOC→OSCORE, the combined request |
-| [`kcoap-dtls`](kcoap-dtls/README.md) | DTLS interfaces and registries; the engine is implemented last |
+| [`kcoap-dtls`](kcoap-dtls/README.md) | DTLS interfaces and registries; the engine is implemented last, and the module is not published until then |
+
+Core modules (protocol, wire and SPI code) are common Kotlin only, which the build checks. Every
+published module has its public API committed as ABI dumps in `<module>/api`, so API changes are
+reviewed as such; declarations marked `@InternalKcoapApi` are plumbing between kcoap's modules, not API
+([code style](docs/code-style.md#dependencies-and-api)).
 
 ## Platforms
 
@@ -81,7 +86,7 @@ safe. Only adapters that wrap a runtime-bound library build for fewer targets.
 | `jvm` | JVM servers, Android | JCA | all |
 | `iosArm64`, `iosSimulatorArm64`, `macosArm64` | Apple | CryptoKit, CommonCrypto | all but `kcoap-crypto-bc` |
 | `linuxX64` | Linux gateways | OpenSSL 3 | all but `kcoap-crypto-bc` |
-| `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc` and `kcoap-transport-ktor` |
+| `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc`, `kcoap-transport-ktor` and `kcoap-transport-ktor-websocket-server` |
 
 **In a browser today**: CoAP messages and codecs (UDP and RFC 8323 framing), OSCORE, EDHOC (suites
 0–3, 6 and 24) and the EDHOC→OSCORE glue, and the client and server stack over a `DatagramTransport`
@@ -122,7 +127,8 @@ Needs a JDK 17 or newer; Gradle downloads everything else, Node.js for the web t
 test suite is one command:
 
 ```bash
-scripts/test unit       # every unit test on every target this machine builds: JVM, Linux native, JS, Wasm
+scripts/test unit       # every unit test on every target this machine builds: JVM, Linux native, JS, Wasm,
+                        # then the build checks (ABI dumps, common-only cores, build-logic tests)
 scripts/test interop    # cross-tests against libcoap and libedhoc in both roles (builds their Docker images)
 scripts/test coverage   # unit and interop tests with the coverage report and the 90% floor
 scripts/test apple      # the common tests against CryptoKit and CommonCrypto (macOS only)

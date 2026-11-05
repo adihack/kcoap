@@ -29,37 +29,46 @@ dependencyResolutionManagement {
 
 rootProject.name = "kcoap"
 
+// Each module applies the convention plugin of its target tier (build-logic, docs/target-architecture.md
+// §2.1): kcoap.kmp-library (UNIVERSAL: every target, browsers included), kcoap.kmp-jvm-native-library
+// (SOCKETS: JVM and native) or kcoap.kmp-jvm-library (JVM_LIBRARY). Core modules (protocol, wire and SPI
+// code) also apply kcoap.core, which keeps their main code in commonMain. Every module is published, with
+// ABI dumps under <module>/api, except those that apply kcoap.unpublished.
 include(
-    // Shared basics every module uses: logging, hex, constant-time comparison.
+    // Core. Shared basics every module uses: logging, hex, constant-time comparison, the opt-in markers.
     ":kcoap-common",
-    // Crypto seam: interfaces + pure-Kotlin AES-CCM and HKDF (no platform dependencies).
+    // Core. Crypto seam: interfaces + pure-Kotlin AES-CCM and HKDF (no platform dependencies).
     ":kcoap-crypto",
-    // Default backend on cryptography-kotlin (JDK on JVM/Android, CryptoKit + CommonCrypto on Apple).
+    // Adapter, UNIVERSAL. Default backend on cryptography-kotlin: JDK on JVM/Android, CryptoKit and
+    // CommonCrypto on Apple, OpenSSL 3 on Linux, WebCrypto in browsers and Node.js.
     ":kcoap-crypto-default",
-    // Post-quantum backend on Bouncy Castle (JVM/Android only): ML-KEM (FIPS 203) and ML-DSA (FIPS 204).
+    // Adapter, JVM_LIBRARY. Post-quantum backend on Bouncy Castle: ML-KEM (FIPS 203) and ML-DSA (FIPS 204).
     ":kcoap-crypto-bc",
-    // Deterministic CBOR (RFC 8949 §4.2) and CBOR sequences (RFC 8742).
+    // Core. Deterministic CBOR (RFC 8949 §4.2) and CBOR sequences (RFC 8742).
     ":kcoap-cbor",
-    // COSE structures used by OSCORE and EDHOC (RFC 9052/9053, RFC 9360).
+    // Core. COSE structures used by OSCORE and EDHOC (RFC 9052/9053, RFC 9360).
     ":kcoap-cose",
-    // Transport interfaces: datagram, byte stream, message stream; endpoints, peer identities, schemes.
+    // Core. Transport interfaces: datagram, byte stream, message stream; endpoints, peer identities, schemes.
     ":kcoap-transport",
-    // In-memory datagram network with loss, duplication and reordering, for tests of kcoap and its users.
+    // Support, UNIVERSAL. In-memory datagram network and connections with loss, duplication and
+    // reordering, for tests of kcoap and its users.
     ":kcoap-testkit",
-    // UDP and TCP transports on ktor-network (JVM, Apple, Linux).
+    // Adapter, SOCKETS. UDP and TCP transports on ktor-network (JVM, Apple, Linux; not the web).
     ":kcoap-transport-ktor",
-    // WebSocket client transport on the ktor client: any ktor engine, browsers included.
+    // Adapter, UNIVERSAL. WebSocket client transport on the ktor client: any ktor engine, browsers included.
     ":kcoap-transport-ktor-websocket",
-    // WebSocket server transport on the ktor server: standalone on CIO, or mounted in a ktor application.
+    // Adapter, SOCKETS. WebSocket server transport on the ktor server: standalone on CIO, or mounted in a
+    // ktor application.
     ":kcoap-transport-ktor-websocket-server",
-    // DTLS 1.2 for coaps (RFC 6347, RFC 7925, RFC 9146). Interfaces and registries only for now.
+    // Core, unpublished. DTLS 1.2 for coaps (RFC 6347, RFC 7925, RFC 9146): interfaces and registries only,
+    // so it is not published until the engine exists.
     ":kcoap-dtls",
-    // CoAP message model, codec and exchange layer (RFC 7252, 7641, 7959, 8132, 9175).
+    // Core. CoAP message model, codec and exchange layer (RFC 7252, 7641, 7959, 8132, 9175, 8323).
     ":kcoap-coap",
-    // OSCORE (RFC 8613).
+    // Core. OSCORE (RFC 8613).
     ":kcoap-oscore",
-    // EDHOC (RFC 9528).
+    // Core. EDHOC (RFC 9528).
     ":kcoap-edhoc",
-    // EDHOC + OSCORE glue (RFC 9668, RFC 9528 Appendix A).
+    // Core. EDHOC + OSCORE glue (RFC 9668, RFC 9528 Appendix A).
     ":kcoap-edhoc-oscore",
 )
