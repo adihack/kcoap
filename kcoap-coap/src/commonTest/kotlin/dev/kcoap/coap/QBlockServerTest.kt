@@ -246,6 +246,19 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7959Section2_9_3ARequestOfOneMessageBeyondMaxBodySizeGets413AlsoWithQBlock2() = runTest {
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxBodySize = 16, qBlock = qBlockOn))
+        f.peer.send(single(f.peer, CoapCode.POST, "x".repeat(64)))
+
+        val answer = f.peer.drain().single()
+        assertEquals(CoapCode.REQUEST_ENTITY_TOO_LARGE, answer.code)
+        assertEquals(16L, answer.options.size1)
+        assertTrue(f.stored.isEmpty(), "the handler did not run")
+        f.peer.send(single(f.peer, CoapCode.POST, "x".repeat(16)))
+        assertEquals(CoapCode.CHANGED, f.peer.drain().single().code, "up to the bound it does")
+    }
+
+    @Test
     fun rfc9177Section4_1AProtectedRequestGets402UnlessQBlockIsOnWithMessageSecurity() = runTest {
         val protected = CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.OFF, qBlock = qBlockOn)
         val f = fixture(protected)
