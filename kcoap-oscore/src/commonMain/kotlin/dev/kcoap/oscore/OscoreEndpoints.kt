@@ -28,53 +28,6 @@ public fun interface ClientContextResolver {
 }
 
 /**
- * Finds the Recipient Context for an incoming request by its 'kid' and optional 'kid context'
- * (RFC 8613 §8.2 step 2). Implementations may derive a context on demand, as Appendix B.2 and EDHOC do.
- */
-public fun interface SecurityContextRepository {
-    public suspend fun find(recipientId: ByteArray, idContext: ByteArray?): SecurityContext?
-}
-
-/** A repository holding contexts in memory, keyed by Recipient ID and ID Context. */
-public class InMemoryContextRepository : SecurityContextRepository {
-    private val lock = Mutex()
-    private val contexts = mutableMapOf<String, SecurityContext>()
-
-    /** Adds [context], replacing any context with the same Recipient ID and ID Context. */
-    public suspend fun add(context: SecurityContext) {
-        lock.withLock { contexts[key(context.recipientId, context.idContext)] = context }
-    }
-
-    /**
-     * Adds [context] unless a context with the same Recipient ID and ID Context is present, in one step, and
-     * returns whether it did. A writer that must never replace another's context, such as an EDHOC server
-     * sharing the repository with other writers, uses this instead of [add].
-     */
-    public suspend fun addIfAbsent(context: SecurityContext): Boolean = lock.withLock {
-        val key = key(context.recipientId, context.idContext)
-        if (key in contexts) return@withLock false
-        contexts[key] = context
-        true
-    }
-
-    public suspend fun remove(context: SecurityContext) {
-        lock.withLock { contexts.remove(key(context.recipientId, context.idContext)) }
-    }
-
-    /**
-     * Without a 'kid context' in the request, a context is found by Recipient ID alone when exactly one
-     * context has it (RFC 8613 §3.3 recommends unique Recipient IDs).
-     */
-    override suspend fun find(recipientId: ByteArray, idContext: ByteArray?): SecurityContext? = lock.withLock {
-        if (idContext != null) return@withLock contexts[key(recipientId, idContext)]
-        contexts[key(recipientId, null)]
-            ?: contexts.values.singleOrNull { it.recipientId.contentEquals(recipientId) }
-    }
-
-    private fun key(recipientId: ByteArray, idContext: ByteArray?): String = "${recipientId.toHex()}/${idContext?.toHex() ?: "-"}"
-}
-
-/**
  * The peer behind an OSCORE request: its Sender ID (our Recipient ID) and the ID Context. The default
  * [SecurityContext.identity]; a context EDHOC established carries kcoap-edhoc-oscore's `EdhocIdentity`, which
  * holds this one and the peer's credential.
