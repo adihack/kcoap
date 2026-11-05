@@ -4,6 +4,7 @@ import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.SelectClause1
 
 /**
  * A [DatagramTransport] attached to an [InMemoryNetwork] at [localEndpoint]. Obtain one from
@@ -38,6 +39,9 @@ public class InMemoryTransport internal constructor(
     }
 
     override suspend fun receive(): DatagramEvent = inbox.receive()
+
+    /** [receive] as a select clause, so that one coroutine can wait on several transports ([RebindingTransport]). */
+    internal val onReceive: SelectClause1<DatagramEvent> get() = inbox.onReceive
 
     override suspend fun close() {
         if (isClosed) return
