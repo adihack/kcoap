@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.IncrementalSyncTask
+
 plugins {
     id("kcoap.kmp-library")
 }
@@ -39,5 +41,34 @@ kotlin {
             // The Node.js tests run an npm ws server, whose handleProtocols sees the subprotocols offered.
             implementation(npm("ws", libs.versions.npm.ws.get()))
         }
+    }
+}
+
+// -Pkcoap.browser=<browser command> (google-chrome, chromium or firefox) runs this module's js tests in that
+// browser, headless, against a JVM listener: BrowserAgainstJvmListenerTest in jvmTest, which skips without
+// the property. `scripts/test browser` and CI's browser job (Chrome) set it.
+providers.gradleProperty("kcoap.browser").orNull?.let { browser ->
+    val jsTests = tasks.named<IncrementalSyncTask>("jsTestTestDevelopmentExecutableCompileSync")
+    val jsTestFiles = jsTests.flatMap { it.destinationDirectory }
+    // The test executable's own module; its dependencies sit next to it.
+    val jsTestModule = "${rootProject.name}-${project.name}-test.js"
+    val mocha = rootProject.layout.buildDirectory.file("js/node_modules/mocha/mocha.js")
+    val work = layout.buildDirectory.dir("browser")
+    tasks.named<Test>("jvmTest") {
+        dependsOn(jsTests, ":kotlinNpmInstall")
+        jvmArgumentProviders.add(
+            CommandLineArgumentProvider {
+                listOf(
+                    "-Dkcoap.browser=$browser",
+                    "-Dkcoap.browser.tests=${jsTestFiles.get().path}",
+                    "-Dkcoap.browser.module=$jsTestModule",
+                    "-Dkcoap.browser.mocha=${mocha.get().asFile.path}",
+                    "-Dkcoap.browser.work=${work.get().asFile.path}",
+                )
+            },
+        )
+        // The result depends on the browser installed, which Gradle cannot see.
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
     }
 }

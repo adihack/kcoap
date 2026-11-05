@@ -9,6 +9,10 @@
 #   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
 #   scripts/test apple      the common tests on macOS and the iOS simulator, and checkKotlinAbi with
 #                           the Apple klibs built natively (macOS only)
+#   scripts/test browser [command]
+#                           kcoap-transport-ktor-websocket's js tests in a headless browser against a
+#                           JVM WebSocket listener; command is google-chrome (the default), chromium or
+#                           firefox (on Ubuntu /snap/bin/firefox)
 #   scripts/test images     only build the pinned libcoap and libedhoc images
 #   scripts/test all        unit, interop and coverage
 #
@@ -67,6 +71,14 @@ apple() {
     gradle macosArm64Test iosSimulatorArm64Test checkKotlinAbi --continue "$@"
 }
 
+browser() {
+    local command="${1:-google-chrome}"
+    shift || true
+    say "WebSocket js tests in $command against a JVM listener"
+    gradle :kcoap-transport-ktor-websocket:jvmTest --tests '*BrowserAgainstJvmListenerTest' \
+        "-Pkcoap.browser=$command" "$@"
+}
+
 summary() {
     command -v python3 >/dev/null || return 0
     python3 - <<'PY'
@@ -99,7 +111,8 @@ case "$suite" in
     interop) interop "$@" ;;
     coverage) coverage "$@" ;;
     apple) apple "$@" ;;
+    browser) browser "$@" ;;
     images) trap - EXIT; build_images ;;
     all) unit "$@"; interop "$@"; coverage "$@" ;;
-    *) sed -n '2,15p' "$0"; trap - EXIT; exit 2 ;;
+    *) sed -n '2,19p' "$0"; trap - EXIT; exit 2 ;;
 esac

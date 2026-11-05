@@ -79,6 +79,30 @@ jobs:
           name: apple-reports
           path: '**/build/reports/tests/'
 
+  browser:
+    name: WebSocket client in headless Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # kcoap-transport-ktor-websocket's js tests in the runner's Chrome, against a KtorWebSocketListener
+      # on the JVM (BrowserAgainstJvmListenerTest): the browser's WebSocket requests the subprotocol coap,
+      # and the connector reads it back from the negotiated protocol (RFC 8323 §4.1).
+      - run: google-chrome --version
+      - run: scripts/test browser google-chrome
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-reports
+          path: |
+            kcoap-transport-ktor-websocket/build/reports/tests/
+            kcoap-transport-ktor-websocket/build/browser/*.txt
+            kcoap-transport-ktor-websocket/build/browser/*.log
+
   docs:
     name: API reference
     runs-on: ubuntu-latest
