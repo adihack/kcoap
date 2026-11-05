@@ -50,6 +50,12 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   and requests for missing blocks, Confirmable bodies in lock-step, back to back on TCP and WebSockets
   (`onReliableTransports`); RFC 7959 for observations, No-Response, protected requests (until OSCORE
   takes several responses to one request) and servers that reject Q-Block.
+- **Q-Block server, RFC 9177** (off by default, `CoapServerConfig.qBlock`): Q-Block1 uploads assembled
+  from NON bursts with a 2.31 per set and 4.08 lists of missing blocks, Confirmable ones block by block;
+  responses to requests carrying Q-Block1 or Q-Block2 sent as Q-Block2 bodies in sets of MAX_PAYLOADS,
+  Continues and requests for missing blocks served from a cache, an ETag per body and Size2; back to back
+  on TCP and WebSockets; partial and cached bodies bounded per peer and in all, and the client's address
+  checked before each burst (RFC 9175 §2.4).
 - **Server**: resource tree by Uri-Path with template methods (`handleGet` … `handleIPatch`, 4.05 by
   default) or a DSL; 4.04; 4.02 with a diagnostic for unrecognized critical options, wrong lengths and
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
@@ -72,8 +78,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   server verifies a client's address before a response larger than three times its request (§2.4 item
   3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a 4.01
   with an Echo value instead, piggybacked or Non-confirmable, and returning the value verifies the
-  address for an hour. `CoapServerConfig.amplification` checks Q-Block2 bursts by default (none are sent
-  yet), every response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
+  address for an hour. `CoapServerConfig.amplification` checks Q-Block2 bursts by default, every
+  response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
   Non-confirmable, and keeps each POST's or PATCH's response for its repeat), or nothing.
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
@@ -115,8 +121,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), the Q-Block server (RFC 9177), Q-Block with OSCORE
-and Observe.
+(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177) with OSCORE and Observe.
 
 ## Verified by
 
