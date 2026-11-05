@@ -36,25 +36,50 @@ never verify. These run on every platform, natively included.
 ## 4. Live interop with libcoap and libedhoc
 
 Containers built from `interop/` run the reference implementations, and JVM tests talk to them over
-real sockets. The tests skip themselves when Docker or an image is missing. See `interop/README.md`.
+real sockets, with kcoap in each role: CoAP client and server against libcoap, OSCORE client and
+server against libcoap, EDHOC Initiator and Responder against libedhoc, post-quantum suite included.
+The tests skip themselves when Docker or an image is missing. See `interop/README.md`.
+
+## Running the suites
+
+`scripts/test` runs each suite with one command and prints a table of tests per target at the end:
+
+| Suite | Runs | Needs |
+|---|---|---|
+| `scripts/test unit` | levels 1–3 on every target the host builds (`allTests`): JVM, `linuxX64`, `js` and `wasmJs` on Node.js, and the Apple targets on macOS | a JDK |
+| `scripts/test interop` | level 4 | Docker |
+| `scripts/test coverage` | every JVM test, the Kover HTML and XML reports, and the coverage floor | Docker for the interop share |
+| `scripts/test apple` | the common tests on `macosArm64` and `iosSimulatorArm64` | macOS with Xcode |
+| `scripts/test images` | only builds the libcoap and libedhoc images | Docker |
+| `scripts/test all` | unit, interop, coverage | Docker |
+
+Extra arguments go to Gradle: `scripts/test interop --tests '*Oscore*'`.
+
+The suites are selected with one Gradle property, so plain Gradle works too: `-Pkcoap.tests=unit`
+leaves out the interop tests (classes named `*Interop*` or in an `interop` package), `interop` runs
+only those, and `all` (the default) runs both.
 
 ```bash
-docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
-docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
+./gradlew jvmTest -Pkcoap.tests=unit   # the JVM unit tests only
+./gradlew linuxX64Test                 # the common tests as native code: Kotlin/Native runtime, OpenSSL crypto
+./gradlew jsNodeTest wasmJsNodeTest    # the common tests as JavaScript and WebAssembly on Node.js, WebCrypto underneath
+./gradlew koverHtmlReport              # coverage report: build/reports/kover/html/index.html
+./gradlew koverVerify                  # fails below the coverage floor
 ```
 
-## Running
+## Continuous integration
 
-```bash
-export JAVA_HOME=/path/to/jdk-17-or-newer
-./gradlew jvmTest                 # every test on the JVM
-./gradlew linuxX64Test            # the common tests as native code: Kotlin/Native runtime, OpenSSL crypto
-./gradlew jsNodeTest              # the common tests as JavaScript on Node.js, WebCrypto underneath
-./gradlew wasmJsNodeTest          # the common tests as WebAssembly on Node.js, WebCrypto underneath
-./gradlew macosArm64Test          # the common tests against Apple crypto (macOS only)
-./gradlew koverHtmlReport         # coverage report: build/reports/kover/html/index.html
-./gradlew koverVerify             # fails below the coverage floor
-```
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+
+| Job | Runner | Runs |
+|---|---|---|
+| Unit tests and coverage | Linux | `scripts/test unit`, then the coverage floor; the coverage table goes to the job summary |
+| Interop | Linux | `scripts/test interop` with freshly built images |
+| Native tests | macOS | `scripts/test apple` |
+| API reference | Linux | `dokkaGenerate` |
+
+Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release
+runs the same workflow first ([releasing](releasing.md)).
 
 ## The same tests on every target
 

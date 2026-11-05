@@ -4,10 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  jvm:
-    name: JVM tests and coverage (Linux)
+  unit:
+    name: Unit tests (JVM, Linux native, JS, Wasm) and coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,15 +21,17 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew jvmTest koverXmlReport koverVerify
-      # The common tests again as native code (Kotlin/Native, OpenSSL crypto): the runtime iOS also uses.
-      - run: ./gradlew linuxX64Test
-      # And on Node.js as JavaScript and as Wasm, with WebCrypto underneath, as in browsers.
-      - run: ./gradlew jsNodeTest wasmJsNodeTest
+      # Every common test on the JVM, as Kotlin/Native (the runtime iOS also uses) and on Node.js as
+      # JavaScript and as Wasm, with WebCrypto underneath as in browsers.
+      - run: scripts/test unit
+      - run: ./gradlew --console=plain koverXmlReport koverVerify -Pkcoap.tests=unit
+      - name: Coverage summary
+        if: always()
+        run: scripts/coverage-summary >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: jvm-reports
+          name: unit-reports
           path: |
             **/build/reports/tests/
             build/reports/kover/
@@ -39,18 +46,18 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      # The images pin libcoap and libedhoc versions; the interop tests skip themselves without them.
-      - run: docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
-      - run: docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
-      - run: ./gradlew jvmTest --tests '*Interop*'
+      # Builds the pinned libcoap and libedhoc images, then runs every cross-test in both roles.
+      - run: scripts/test interop
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: interop-logs
-          path: '**/build/interop-logs/'
+          path: |
+            **/build/interop-logs/
+            **/build/reports/tests/
 
   apple:
-    name: Native tests (macOS + iOS simulator)
+    name: Native tests (macOS and iOS simulator)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,5 +66,26 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      # Runs the same RFC vectors against CryptoKit + CommonCrypto.
-      - run: ./gradlew macosArm64Test iosSimulatorArm64Test
+      # The same common tests against CryptoKit and CommonCrypto.
+      - run: scripts/test apple
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: apple-reports
+          path: '**/build/reports/tests/'
+
+  docs:
+    name: API reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew --console=plain dokkaGenerate
+      - uses: actions/upload-artifact@v7
+        with:
+          name: api-reference
+          path: build/dokka/html/

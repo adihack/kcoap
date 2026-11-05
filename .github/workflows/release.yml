@@ -1,0 +1,98 @@
+name: Release
+
+# Push a tag such as v0.1.0 to release that version: every test runs first, then the artifacts are
+# published (GitHub Packages always, Maven Central when its secrets are configured), a GitHub Release
+# is created with generated notes, and the API reference is deployed to GitHub Pages.
+# See docs/releasing.md.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading v (e.g. 0.1.0-rc1)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish artifacts
+    needs: test
+    # Apple artifacts (iOS, macOS klibs) can only be built on macOS; the same host builds the rest.
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      # Secrets cannot appear in a step condition, so the job records whether Maven Central is set up.
+      HAS_MAVEN_CENTRAL: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Version
+        run: echo "KCOAP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      - name: GitHub Packages
+        env:
+          ORG_GRADLE_PROJECT_GitHubPackagesUsername: ${{ github.actor }}
+          ORG_GRADLE_PROJECT_GitHubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository -Pkcoap.version="$KCOAP_VERSION"
+      - name: Maven Central
+        if: env.HAS_MAVEN_CENTRAL == 'true'
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishToMavenCentral -Pkcoap.version="$KCOAP_VERSION"
+
+  release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: ${{ contains(inputs.version || github.ref_name, '-') }}
+
+  docs:
+    name: API reference on GitHub Pages
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew dokkaGenerate
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/dokka/html
+      - id: deploy
+        uses: actions/deploy-pages@v5

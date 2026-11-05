@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# kcoap test suites, one command each.
+#
+#   scripts/test unit       every unit test on every target this machine can build
+#                           (JVM, Linux native, JS and Wasm on Node.js; Apple targets on macOS)
+#   scripts/test interop    the cross-tests against libcoap and libedhoc (builds their Docker images)
+#   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
+#   scripts/test apple      the common tests on macOS and the iOS simulator (macOS only)
+#   scripts/test images     only build the pinned libcoap and libedhoc images
+#   scripts/test all        unit, interop and coverage
+#
+# Extra arguments go to Gradle, e.g.  scripts/test interop --tests '*Oscore*'
+# A summary of the JUnit results is printed at the end.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+suite="${1:-unit}"
+shift || true
+
+LIBCOAP_IMAGE="kcoap/libcoap:v4.3.5b"
+LIBEDHOC_IMAGE="kcoap/libedhoc:0363bd3"
+
+say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+
+gradle() { ./gradlew --console=plain "$@"; }
+
+build_images() {
+    if ! docker info >/dev/null 2>&1; then
+        echo "Docker is not available: interop tests will be skipped." >&2
+        return 1
+    fi
+    say "Building $LIBCOAP_IMAGE"
+    docker build -q -t "$LIBCOAP_IMAGE" interop/libcoap
+    say "Building $LIBEDHOC_IMAGE (first build takes a few minutes)"
+    docker build -q -t "$LIBEDHOC_IMAGE" interop/libedhoc
+}
+
+# Unit tests of every target the host can build; Kotlin's allTests skips what it cannot run here.
+unit() {
+    say "Unit tests"
+    gradle allTests -Pkcoap.tests=unit --continue "$@"
+}
+
+interop() {
+    build_images || true
+    say "Interop tests against libcoap and libedhoc"
+    gradle jvmTest -Pkcoap.tests=interop --continue "$@"
+}
+
+coverage() {
+    build_images || true
+    say "Unit and interop tests with coverage"
+    gradle jvmTest koverHtmlReport koverXmlReport koverVerify --continue "$@"
+    echo "Coverage report: build/reports/kover/html/index.html"
+}
+
+apple() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        echo "The Apple targets build only on macOS." >&2
+        exit 1
+    fi
+    say "Apple tests (macOS and the iOS simulator)"
+    gradle macosArm64Test iosSimulatorArm64Test --continue "$@"
+}
+
+summary() {
+    command -v python3 >/dev/null || return 0
+    python3 - <<'PY'
+import glob, os, xml.etree.ElementTree as E
+rows = {}
+failures = []
+for path in glob.glob("*/build/test-results/*/*.xml"):
+    target = path.split(os.sep)[-2]
+    root = E.parse(path).getroot()
+    t = rows.setdefault(target, [0, 0, 0])
+    t[0] += int(root.get("tests", 0))
+    t[1] += int(root.get("failures", 0)) + int(root.get("errors", 0))
+    t[2] += int(root.get("skipped", 0))
+    for case in root.findall("testcase"):
+        if case.find("failure") is not None or case.find("error") is not None:
+            failures.append(f"{case.get('classname')}.{case.get('name')}")
+print()
+print(f"{'target':<16}{'tests':>8}{'failed':>8}{'skipped':>9}")
+for target, (tests, failed, skipped) in sorted(rows.items()):
+    print(f"{target:<16}{tests:>8}{failed:>8}{skipped:>9}")
+for name in failures[:30]:
+    print("  FAILED", name)
+PY
+}
+
+trap summary EXIT
+
+case "$suite" in
+    unit) unit "$@" ;;
+    interop) interop "$@" ;;
+    coverage) coverage "$@" ;;
+    apple) apple "$@" ;;
+    images) trap - EXIT; build_images ;;
+    all) unit "$@"; interop "$@"; coverage "$@" ;;
+    *) sed -n '2,15p' "$0"; trap - EXIT; exit 2 ;;
+esac

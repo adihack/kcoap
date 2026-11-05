@@ -105,7 +105,7 @@ internal class BlockwiseServer(
     suspend fun representation(key: OperationKey, now: Duration): CoapResponse? = lock.withLock { representations.get(key, now) }
 
     /**
-     * Turns [response] to [request] into the block the request asks for (RFC 7959 §2.4): unchanged if it
+     * Turns [response] into the block the request asks for (RFC 7959 §2.4): unchanged if it
      * fits one message and no block was asked for, else block NUM of the requested or largest fitting
      * size, with an ETag (added if missing) and Size2. Multi-block representations are cached under [key]
      * so that the following blocks come from the same representation.

@@ -115,25 +115,21 @@ interface with a default: transports, crypto, credential resolution, EAD, loggin
 
 ## Build and test
 
-Needs a JDK 17 or newer.
+Needs a JDK 17 or newer; Gradle downloads everything else, Node.js for the web tests included. Each
+test suite is one command:
 
 ```bash
-./gradlew jvmTest                    # every test on the JVM
-./gradlew koverHtmlReport            # coverage report in build/reports/kover/html
-./gradlew linuxX64Test               # the common tests as native code (Kotlin/Native, OpenSSL)
-./gradlew jsNodeTest wasmJsNodeTest  # the common tests as JavaScript and Wasm on Node.js (WebCrypto)
-./gradlew macosArm64Test             # common tests against Apple crypto, on macOS
+scripts/test unit       # every unit test on every target this machine builds: JVM, Linux native, JS, Wasm
+scripts/test interop    # cross-tests against libcoap and libedhoc in both roles (builds their Docker images)
+scripts/test coverage   # unit and interop tests with the coverage report and the 90% floor
+scripts/test apple      # the common tests against CryptoKit and CommonCrypto (macOS only)
+scripts/test all        # unit, interop and coverage
 ```
 
-Gradle downloads Node.js for the web tests. The browser test tasks are off: Node.js has the same
-WebCrypto API, and a browser run would need a headless browser wherever `check` runs.
-
-The interop tests run when Docker and the pinned images are present and skip otherwise:
-
-```bash
-docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
-docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
-```
+Extra arguments go to Gradle (`scripts/test interop --tests '*Oscore*'`), and every run ends with a
+table of tests per target. CI runs the same suites on Linux and macOS for every push and pull request;
+a `v*` tag publishes a release ([releasing](docs/releasing.md)). Details, including what each suite
+covers, are in [testing](docs/testing.md).
 
 Test vectors are generated from the RFC texts and NIST files by `tools/regen-vectors.sh` and
 `tools/regen-pq-vectors.sh`.

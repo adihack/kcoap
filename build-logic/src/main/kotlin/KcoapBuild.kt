@@ -81,6 +81,10 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
             implementation(kotlin("test"))
             implementation(libs.findLibrary("kotlinx-coroutines-test").get())
         }
+        // Tests drive virtual time with advanceTimeBy and runCurrent, which coroutines marks experimental.
+        sourceSets.matching { it.name.endsWith("Test") }.configureEach {
+            languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
+        }
     }
 
     useSettingsRepositoriesForNodeJs()

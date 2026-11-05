@@ -98,7 +98,7 @@ public class EdhocServer(
             responder.processMessage1(message1)
             val message2 = responder.createMessage2()
             remember(chosen!!, responder)
-            log.debug { "Sent message_2 for C_R ${chosen!!.bytes.toHex()}" }
+            log.debug { "Sent message_2 for C_R ${chosen.bytes.toHex()}" }
             EdhocOverCoap.messageResponse(request, message2)
         } catch (e: EdhocException) {
             log.warn { "Rejected message_1: ${e.message}" }

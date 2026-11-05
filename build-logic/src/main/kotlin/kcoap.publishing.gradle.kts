@@ -9,6 +9,7 @@
 
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.SourcesJar
 
 plugins {
     id("com.vanniktech.maven.publish")
@@ -18,9 +19,10 @@ plugins {
 val repository = providers.gradleProperty("kcoap.repository").getOrElse("adihack/kcoap")
 
 mavenPublishing {
-    configure(KotlinMultiplatform(javadocJar = JavadocJar.Empty(), sourcesJar = true))
+    configure(KotlinMultiplatform(javadocJar = JavadocJar.Empty(), sourcesJar = SourcesJar.Sources()))
     publishToMavenCentral()
-    if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
+    // CI passes an empty value when the secret is not configured, which means "do not sign".
+    if (!providers.gradleProperty("signingInMemoryKey").orNull.isNullOrBlank()) signAllPublications()
     coordinates(group.toString(), project.name, version.toString())
 
     pom {
@@ -64,10 +66,18 @@ publishing {
     }
 }
 
+// Dokka reads module documentation in its own format: a "# Module <name>" header, and no other line may
+// start with "#". The module README is rewritten into it, with headings as setext or bold text.
+val writeModuleDoc = tasks.register<WriteDokkaModuleDoc>("writeModuleDoc") {
+    moduleName.set(project.name)
+    readme.from(layout.projectDirectory.file("README.md").asFile.takeIf { it.exists() } ?: emptyList<File>())
+    output.set(layout.buildDirectory.file("dokka-module/module.md"))
+}
+
 dokka {
     moduleName.set(project.name)
     dokkaSourceSets.configureEach {
-        includes.from(layout.projectDirectory.file("README.md").asFile.takeIf { it.exists() } ?: emptyList<File>())
+        includes.from(writeModuleDoc.flatMap { it.output })
         sourceLink {
             localDirectory.set(layout.projectDirectory.dir("src"))
             remoteUrl("https://github.com/$repository/tree/main/${project.name}/src")
