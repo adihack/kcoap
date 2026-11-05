@@ -21,7 +21,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * notifications per client, sending only the latest state when changes outpace the network and
  * superseding an unacknowledged notification (§4.5.2), a Confirmable notification at least every
  * [CoapServerConfig.confirmableNotificationInterval] (§4.5), removing observers on RST, timeout or a
- * non-2.xx notification (§3.2, §4.5), and 4.04 notifications when the resource is removed.
+ * non-2.xx notification (§3.2, §4.5), and 4.04 notifications when the resource is removed. Over a reliable
+ * transport (RFC 8323 §7) the notifications go on the registration's connection, in order, and a closed
+ * connection removes its observers.
  */
 @OptIn(ExperimentalAtomicApi::class)
 public abstract class ObservableResource(name: String) : CoapResource(name) {
@@ -30,9 +32,10 @@ public abstract class ObservableResource(name: String) : CoapResource(name) {
     override val isObservable: Boolean get() = true
 
     /**
-     * Whether notifications go Confirmable or Non-confirmable (RFC 7641 §4.5). Non-confirmable ones are
-     * cheaper for frequent changes; the server still sends a Confirmable one periodically, and to a client
-     * that neither message nor channel security authenticated at least every ninth notification, whose
+     * Whether notifications go Confirmable or Non-confirmable (RFC 7641 §4.5): a hint for datagram transports
+     * only, since a reliable transport has no message types and ignores it (RFC 8323 §7.2). Non-confirmable
+     * ones are cheaper for frequent changes; the server still sends a Confirmable one periodically, and to a
+     * client that neither message nor channel security authenticated at least every ninth notification, whose
      * ACK shows the client still wants them (RFC 7641 §7).
      */
     public open val notificationType: CoapMessageType get() = CoapMessageType.CON

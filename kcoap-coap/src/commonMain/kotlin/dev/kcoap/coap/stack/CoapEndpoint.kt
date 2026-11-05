@@ -8,7 +8,6 @@ import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.Connector
-import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.concurrent.Volatile
@@ -73,7 +72,7 @@ public class CoapEndpoint private constructor(
     scope: CoroutineScope,
     public val config: CoapEndpointConfig,
 ) {
-    /** An endpoint on [transport], for `coap` peers. */
+    /** An endpoint on [transport], for `coap` peers; it has no connections. */
     public constructor(
         transport: DatagramTransport,
         scope: CoroutineScope,
@@ -83,7 +82,9 @@ public class CoapEndpoint private constructor(
     /**
      * An endpoint on any combination of transports: [transport] for `coap` peers, [connectors] to open
      * connections to peers of the RFC 8323 schemes they serve, [listeners] to accept connections.
-     * [close] closes all of them.
+     * [close] closes all of them. A request to a peer the endpoint has no transport for fails with
+     * [CoapException.Reason.TRANSPORT_UNAVAILABLE]: a `coap` peer without [transport], or a peer of a scheme
+     * no connector serves, unless that peer already has a connection open, as one a listener accepted.
      */
     public constructor(
         scope: CoroutineScope,
@@ -92,12 +93,6 @@ public class CoapEndpoint private constructor(
         connectors: List<Connector> = emptyList(),
         listeners: List<ConnectionListener> = emptyList(),
     ) : this(transport, connectors, listeners, scope, config)
-
-    /**
-     * The datagram transport. An endpoint created without one has a placeholder that refuses to send, and
-     * requests to datagram peers fail at once.
-     */
-    public val transport: DatagramTransport = datagramTransport ?: NoDatagramTransport
 
     private val log = config.loggerFactory.logger(LogTags.COAP_EXCHANGE)
 
@@ -134,6 +129,9 @@ public class CoapEndpoint private constructor(
 
     /** RFC 7252 messaging with every datagram peer, when the endpoint has a datagram transport. */
     private val datagram: DatagramLink? = datagramTransport?.let { DatagramLink(it, this, config) }
+
+    /** The datagram transport, if the endpoint has one; for tests, which read its address. */
+    internal val transport: DatagramTransport? get() = datagram?.transport
 
     /** RFC 8323 connections: a [ConnectionLink] per peer, opened through [connectors] or accepted from [listeners]. */
     private val connections = ReliableConnections(this, connectors, listeners, this.scope, config)
@@ -195,9 +193,6 @@ public class CoapEndpoint private constructor(
         attached.complete(Unit)
     }
 
-    /** The largest message the datagram transport carries; block sizes towards datagram peers follow it. */
-    public val maxDatagramSize: Int get() = transport.maxDatagramSize
-
     /** The parameters messaging runs with. */
     public val parameters: TransmissionParameters get() = config.parameters
 
@@ -222,14 +217,28 @@ public class CoapEndpoint private constructor(
     /**
      * The link to [peer]: the datagram link, or the connection to [peer], which this opens if needed.
      *
-     * @throws IllegalArgumentException when the endpoint has no transport for [peer].
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], or as [ReliableConnections.linkFor] throws.
      */
     internal suspend fun linkFor(peer: Endpoint): PeerLink =
         if (isOnConnection(peer)) connections.linkFor(peer) else datagramLinkTo(peer)
 
-    /** The datagram link to [peer]; for a request that came in a datagram, and for tests. */
-    internal fun datagramLinkTo(peer: Endpoint): PeerLink =
-        requireNotNull(datagram) { "$peer needs a DatagramTransport; this endpoint has none" }.to(peer)
+    /**
+     * The datagram link to [peer]; for a request that came in a datagram, and for tests.
+     *
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   datagram transport.
+     */
+    internal fun datagramLinkTo(peer: Endpoint): PeerLink {
+        val link = datagram ?: throw CoapException(
+            "${schemeOf(peer)} needs a DatagramTransport; this endpoint has none for $peer",
+            CoapException.Reason.TRANSPORT_UNAVAILABLE,
+        )
+        return link.to(peer)
+    }
+
+    /** The scheme a datagram [peer] is reached by, for messages: `coaps` over DTLS, else `coap`. */
+    private fun schemeOf(peer: Endpoint): String = if (peer is Endpoint.Secure) "coaps" else "coap"
 
     /**
      * What one message to [peer] may be: the datagram size, or the peer's Max-Message-Size on its
@@ -250,6 +259,9 @@ public class CoapEndpoint private constructor(
      *
      * @param pacing [Pacing.PerMessage], or [Pacing.Body] for a Non-confirmable message of a Q-Block body
      *   whose granted [BodyLease] towards [peer] holds the slot (RFC 9177 §7.2).
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], with [CoapException.Reason.CONNECTION_CLOSED] when its connection cannot be
+     *   opened, or like [closeCause] once the endpoint is closed.
      * @throws IllegalArgumentException for a Confirmable request with [Pacing.Body], which would deadlock
      *   at NSTART 1 (RFC 9177 §7.1), or a lease towards another peer.
      * @throws IllegalStateException for a lease not yet granted or already released.
@@ -356,6 +368,9 @@ public class CoapEndpoint private constructor(
      * peer answers with a Reset: true if it answered, false if it never did within MAX_TRANSMIT_WAIT. To a
      * reliable peer (RFC 8323 §5.4) a Ping on its connection, opened if needed: true if the Pong came
      * within [ReliableTransportConfig.pingTimeout], false if not or if the connection failed.
+     *
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
+     *   transport for [peer], or like [closeCause] once the endpoint is closed.
      */
     public suspend fun ping(peer: Endpoint): Boolean = ping(peer, custody = false)
 
@@ -369,6 +384,7 @@ public class CoapEndpoint private constructor(
         val link = try {
             linkFor(peer)
         } catch (e: CoapException) {
+            if (e.reason == CoapException.Reason.TRANSPORT_UNAVAILABLE) throw e
             // A connection that cannot be opened is a peer that does not answer.
             log.debug { "Ping of $peer failed: ${e.message}" }
             return false
@@ -709,7 +725,7 @@ public class CoapEndpoint private constructor(
         emit(event)
     }
 
-    override fun toString(): String = "CoapEndpoint($transport)"
+    override fun toString(): String = "CoapEndpoint(${datagram?.transport ?: "no datagram transport"})"
 
     private fun describeTransports(connectors: List<Connector>, listeners: List<ConnectionListener>): String =
         listOfNotNull(
@@ -726,19 +742,4 @@ public class CoapEndpoint private constructor(
         /** Seconds after which a client refused for overload may try again. */
         const val OVERLOAD_MAX_AGE = 2L
     }
-}
-
-/** The datagram transport of an endpoint that has none: nothing ever arrives, and sending is refused. */
-private object NoDatagramTransport : DatagramTransport {
-    override val maxDatagramSize: Int = 1152
-
-    override suspend fun send(to: Endpoint, datagram: ByteArray) {
-        throw IllegalStateException("This endpoint has no DatagramTransport")
-    }
-
-    override suspend fun receive(): DatagramEvent = awaitCancellation()
-
-    override suspend fun close() {}
-
-    override fun toString(): String = "no datagram transport"
 }

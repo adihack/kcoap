@@ -65,10 +65,10 @@ internal class ReliableConnections(
      * handshakes and the CSM exchange, within [ReliableTransportConfig.connectTimeout]. Concurrent
      * callers share one attempt.
      *
-     * @throws IllegalArgumentException when no connector serves the peer's scheme.
-     * @throws CoapException with [CoapException.Reason.CONNECTION_CLOSED] when the connection cannot be
-     *   opened, or the peer asked not to reconnect yet (Hold-Off, §5.5); like [CoapEndpoint.closeCause]
-     *   once the endpoint is closed.
+     * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when [peer] has no connection
+     *   and no connector serves its scheme; with [CoapException.Reason.CONNECTION_CLOSED] when the connection
+     *   cannot be opened, or the peer asked not to reconnect yet (Hold-Off, §5.5); like
+     *   [CoapEndpoint.closeCause] once the endpoint is closed.
      */
     suspend fun linkFor(peer: Endpoint): ConnectionLink = find(peer, reserve = false).link
 
@@ -95,8 +95,10 @@ internal class ReliableConnections(
                     // An accepted connection serves requests to its peer too (RFC 8323 §3.3); a connector is
                     // needed only to open one.
                     existing == null -> {
-                        val connector = connectors.firstOrNull { scheme in it.schemes }
-                            ?: throw IllegalArgumentException("${scheme.scheme} needs a Connector; this endpoint has none for it")
+                        val connector = connectors.firstOrNull { scheme in it.schemes } ?: throw CoapException(
+                            "${scheme.scheme} needs a Connector; this endpoint has none for it",
+                            CoapException.Reason.TRANSPORT_UNAVAILABLE,
+                        )
                         Step.Join(startConnecting(peer, connector).also { if (reserve) it.reservations++ })
                     }
                     existing.isUsable -> Step.Use(existing)
@@ -380,17 +382,15 @@ internal class ReliableConnections(
         endpoint.report(event)
     }
 
-    companion object {
-        private val SHUTDOWN_FLUSH_TIMEOUT = 1.seconds
+    private companion object {
+        val SHUTDOWN_FLUSH_TIMEOUT = 1.seconds
 
-        /** The reliable scheme of [peer], or null for datagram peers. */
-        fun schemeOrNull(peer: Endpoint): CoapScheme? = when (peer) {
+        /** The RFC 8323 scheme of [peer]; the endpoint sends only peers on connections here. */
+        fun schemeOf(peer: Endpoint): CoapScheme = when (peer) {
             is Endpoint.Tcp -> peer.scheme
             is Endpoint.WebSocket -> peer.scheme
-            else -> null
+            is Endpoint.Udp, is Endpoint.Secure, is Endpoint.Opaque ->
+                throw IllegalArgumentException("$peer is not reached over a reliable transport")
         }
-
-        fun schemeOf(peer: Endpoint): CoapScheme =
-            schemeOrNull(peer) ?: throw IllegalArgumentException("$peer is not reached over a reliable transport")
     }
 }

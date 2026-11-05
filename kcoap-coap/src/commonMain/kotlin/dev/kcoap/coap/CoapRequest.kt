@@ -7,7 +7,8 @@ package dev.kcoap.coap
  *
  * @property options options besides those the URI gives, such as Accept or Content-Format.
  * @property isConfirmable whether the request goes in a Confirmable message (RFC 7252 §4.2) or a
- *   Non-confirmable one (§4.3).
+ *   Non-confirmable one (§4.3): a hint for datagram transports only, since a reliable transport has no
+ *   message types and ignores it (RFC 8323 §3.2).
  */
 public class CoapRequest(
     public val method: CoapCode,

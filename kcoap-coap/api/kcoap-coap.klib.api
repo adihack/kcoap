@@ -92,8 +92,8 @@ abstract fun interface dev.kcoap.coap.client/EndpointResolver { // dev.kcoap.coa
     abstract suspend fun resolve(dev.kcoap.coap/CoapUri): dev.kcoap.transport/Endpoint // dev.kcoap.coap.client/EndpointResolver.resolve|resolve(dev.kcoap.coap.CoapUri){}[0]
 
     final object Companion { // dev.kcoap.coap.client/EndpointResolver.Companion|null[0]
-        final val IpLiterals // dev.kcoap.coap.client/EndpointResolver.Companion.IpLiterals|{}IpLiterals[0]
-            final fun <get-IpLiterals>(): dev.kcoap.coap.client/EndpointResolver // dev.kcoap.coap.client/EndpointResolver.Companion.IpLiterals.<get-IpLiterals>|<get-IpLiterals>(){}[0]
+        final val Default // dev.kcoap.coap.client/EndpointResolver.Companion.Default|{}Default[0]
+            final fun <get-Default>(): dev.kcoap.coap.client/EndpointResolver // dev.kcoap.coap.client/EndpointResolver.Companion.Default.<get-Default>|<get-Default>(){}[0]
     }
 }
 
@@ -829,12 +829,8 @@ final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndp
         final fun <get-config>(): dev.kcoap.coap.stack/CoapEndpointConfig // dev.kcoap.coap.stack/CoapEndpoint.config.<get-config>|<get-config>(){}[0]
     final val isClosed // dev.kcoap.coap.stack/CoapEndpoint.isClosed|{}isClosed[0]
         final fun <get-isClosed>(): kotlin/Boolean // dev.kcoap.coap.stack/CoapEndpoint.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
-    final val maxDatagramSize // dev.kcoap.coap.stack/CoapEndpoint.maxDatagramSize|{}maxDatagramSize[0]
-        final fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.coap.stack/CoapEndpoint.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
     final val parameters // dev.kcoap.coap.stack/CoapEndpoint.parameters|{}parameters[0]
         final fun <get-parameters>(): dev.kcoap.coap.stack/TransmissionParameters // dev.kcoap.coap.stack/CoapEndpoint.parameters.<get-parameters>|<get-parameters>(){}[0]
-    final val transport // dev.kcoap.coap.stack/CoapEndpoint.transport|{}transport[0]
-        final fun <get-transport>(): dev.kcoap.transport/DatagramTransport // dev.kcoap.coap.stack/CoapEndpoint.transport.<get-transport>|<get-transport>(){}[0]
 
     final var closeCause // dev.kcoap.coap.stack/CoapEndpoint.closeCause|{}closeCause[0]
         final fun <get-closeCause>(): dev.kcoap.coap/CoapException? // dev.kcoap.coap.stack/CoapEndpoint.closeCause.<get-closeCause>|<get-closeCause>(){}[0]
@@ -1026,6 +1022,7 @@ final class dev.kcoap.coap/CoapException : kotlin/Exception { // dev.kcoap.coap/
         enum entry SESSION_ENDED // dev.kcoap.coap/CoapException.Reason.SESSION_ENDED|null[0]
         enum entry TRANSMISSION_TIMEOUT // dev.kcoap.coap/CoapException.Reason.TRANSMISSION_TIMEOUT|null[0]
         enum entry TRANSPORT_FAILED // dev.kcoap.coap/CoapException.Reason.TRANSPORT_FAILED|null[0]
+        enum entry TRANSPORT_UNAVAILABLE // dev.kcoap.coap/CoapException.Reason.TRANSPORT_UNAVAILABLE|null[0]
         enum entry UNVERIFIED_RESPONSE // dev.kcoap.coap/CoapException.Reason.UNVERIFIED_RESPONSE|null[0]
 
         final val entries // dev.kcoap.coap/CoapException.Reason.entries|#static{}entries[0]

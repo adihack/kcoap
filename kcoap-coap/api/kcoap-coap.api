@@ -107,6 +107,7 @@ public final class dev/kcoap/coap/CoapException$Reason : java/lang/Enum {
 	public static final field SESSION_ENDED Ldev/kcoap/coap/CoapException$Reason;
 	public static final field TRANSMISSION_TIMEOUT Ldev/kcoap/coap/CoapException$Reason;
 	public static final field TRANSPORT_FAILED Ldev/kcoap/coap/CoapException$Reason;
+	public static final field TRANSPORT_UNAVAILABLE Ldev/kcoap/coap/CoapException$Reason;
 	public static final field UNVERIFIED_RESPONSE Ldev/kcoap/coap/CoapException$Reason;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/CoapException$Reason;
@@ -593,7 +594,7 @@ public abstract interface class dev/kcoap/coap/client/EndpointResolver {
 }
 
 public final class dev/kcoap/coap/client/EndpointResolver$Companion {
-	public final fun getIpLiterals ()Ldev/kcoap/coap/client/EndpointResolver;
+	public final fun getDefault ()Ldev/kcoap/coap/client/EndpointResolver;
 }
 
 public final class dev/kcoap/coap/client/ObserveCancellation : java/lang/Enum {
@@ -949,9 +950,7 @@ public final class dev/kcoap/coap/stack/CoapEndpoint {
 	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getCloseCause ()Ldev/kcoap/coap/CoapException;
 	public final fun getConfig ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
-	public final fun getMaxDatagramSize ()I
 	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
-	public final fun getTransport ()Ldev/kcoap/transport/DatagramTransport;
 	public final fun isClosed ()Z
 	public final fun ping (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun ping (Ldev/kcoap/transport/Endpoint;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;

@@ -576,14 +576,21 @@ class ReliableTransportTest {
         val refused = assertFailsWith<CoapException> { client.get("coap+tcp://127.0.0.1:9/x") }
         assertEquals(CoapException.Reason.CONNECTION_CLOSED, refused.reason)
         assertTrue("refused" in refused.message!!)
-        assertFailsWith<IllegalArgumentException> { client.get("coap://127.0.0.1/x") }
-        assertFailsWith<IllegalArgumentException> { client.ping("coap://127.0.0.1") }
+        // A transport the endpoint does not have fails at once, naming the scheme, and sends nothing.
+        val noDatagrams = assertFailsWith<CoapException> { client.get("coap://127.0.0.1/x") }
+        assertEquals(CoapException.Reason.TRANSPORT_UNAVAILABLE, noDatagrams.reason)
+        assertTrue("coap needs a DatagramTransport" in noDatagrams.message!!)
+        assertEquals(
+            CoapException.Reason.TRANSPORT_UNAVAILABLE,
+            assertFailsWith<CoapException> { client.ping("coap://127.0.0.1") }.reason,
+        )
 
-        val udpOnly = CoapEndpoint(backgroundScope)
-        assertFailsWith<IllegalArgumentException> { CoapClient(udpOnly).get("coap+ws://127.0.0.1/x") }
-        assertEquals("no datagram transport", udpOnly.transport.toString())
-        assertFailsWith<IllegalStateException> { udpOnly.transport.send(Endpoint.Udp("127.0.0.1", 1), ByteArray(1)) }
-        udpOnly.close()
+        val nothing = CoapEndpoint(backgroundScope)
+        val noConnector = assertFailsWith<CoapException> { CoapClient(nothing).get("coap+ws://127.0.0.1/x") }
+        assertEquals(CoapException.Reason.TRANSPORT_UNAVAILABLE, noConnector.reason)
+        assertTrue("coap+ws needs a Connector" in noConnector.message!!)
+        assertEquals("CoapEndpoint(no datagram transport)", nothing.toString())
+        nothing.close()
     }
 
     /** Closing the endpoint releases its connections (RFC 8323 §5.5) and fails what is open. */
