@@ -19,6 +19,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -192,6 +194,31 @@ class EndpointLifecycleTest {
         delay(5.seconds)
         assertEquals(0, gauge.observerCount, "a handler still running after close() registered nothing")
         assertFalse(endpoint.isClosed, "the server did not own the endpoint")
+        collector.cancel()
+    }
+
+    @Test
+    fun aHandlerThatIgnoresCancellationRegistersNoObserverAfterTheServerStopped() = runTest {
+        val fixture = StackFixture(this)
+        val endpoint = fixture.endpoint()
+        val gate = CompletableDeferred<Unit>()
+        val handlerStarted = CompletableDeferred<Unit>()
+        val gauge = object : ObservableResource("gauge") {
+            override suspend fun handleGet(context: RequestContext): CoapResponse {
+                handlerStarted.complete(Unit)
+                withContext(NonCancellable) { gate.await() }
+                return CoapResponse.content("1")
+            }
+        }
+        val server = CoapServer(endpoint) { add(gauge) }
+        val client = fixture.client()
+        val collector = async { runCatching { client.observe(fixture.uri(server, "/gauge")).collect() } }
+        handlerStarted.await()
+
+        server.close()
+        gate.complete(Unit)
+        delay(5.seconds)
+        assertEquals(0, gauge.observerCount, "served as a plain GET (RFC 7641 §4.1)")
         collector.cancel()
     }
 

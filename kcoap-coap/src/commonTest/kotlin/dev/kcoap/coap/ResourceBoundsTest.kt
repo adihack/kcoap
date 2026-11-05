@@ -147,6 +147,32 @@ class ResourceBoundsTest {
         (pending + elsewhere + again).forEach { it.cancel() }
     }
 
+    @Test
+    fun exchangesInProgressOnAConnectionAreBoundedAndFreeTheirConnectionSlot() = runTest {
+        val fixture = ReliableFixture(this)
+        val gate = CompletableDeferred<Unit>()
+        val server = fixture.server {
+            resource("slow") {
+                get {
+                    gate.await()
+                    CoapResponse.content("done")
+                }
+            }
+        }
+        val config = CoapEndpointConfig(maxExchangesPerPeer = 1, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it })
+        val client = fixture.client(endpointConfig = config)
+        val first = async { client.get(fixture.uri("/slow")) }
+        delay(100)
+
+        val error = assertFailsWith<CoapException> { client.get(fixture.uri("/slow")) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, error.reason)
+        assertEquals(1, fixture.limits(Limit.EXCHANGES_PER_PEER))
+        gate.complete(Unit)
+        assertEquals("done", first.await().payloadAsText())
+        assertEquals("done", client.get(fixture.uri("/slow")).payloadAsText(), "the refused request left no count behind")
+        server.close()
+    }
+
     private class Gauge(name: String) : ObservableResource(name) {
         override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("1")
     }

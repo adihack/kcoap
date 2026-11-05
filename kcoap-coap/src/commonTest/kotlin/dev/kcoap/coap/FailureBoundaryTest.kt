@@ -1,6 +1,10 @@
 package dev.kcoap.coap
 
 import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
@@ -196,6 +200,50 @@ class FailureBoundaryTest {
             CoapException.Reason.TRANSPORT_FAILED,
             assertFailsWith<CoapException> { client.ping("coap://127.0.0.1:9") }.reason,
         )
+    }
+
+    @Test
+    fun aFailingProtectionOnAConnectionFailsTheRequestAndLeavesNothingRegistered() = runTest {
+        val fixture = ReliableFixture(this)
+        val server = fixture.server { resource("r") { get { CoapResponse.content("x") } } }
+        val failing = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
+                throw MessageSecurityException("No context for $peer")
+        }
+        val client = fixture.client(CoapClientConfig(security = failing))
+
+        assertFailsWith<MessageSecurityException> { client.get(fixture.uri("/r")) }
+        assertEquals(0, client.endpoint.exchangeCount())
+        server.close()
+    }
+
+    @Test
+    fun aGuardedCoroutineWhoseCleanupFailsToo() = runTest {
+        val fixture = StackFixture(this)
+        val records = mutableListOf<LogRecord>()
+        val loggers = LoggerFactory(
+            LogConfig.build {
+                level = LogLevel.ERROR
+                sink = LogSink { records += it }
+            },
+        )
+        val endpoint = CoapEndpoint(fixture.transport(), backgroundScope, CoapEndpointConfig(loggerFactory = loggers, timeSource = testScheduler.timeSource))
+
+        endpoint.launchGuarded("do the work", onFailure = { error("cleanup failed as well") }) { error("work failed") }.join()
+        assertEquals(listOf("work failed", "cleanup failed as well"), records.map { it.error?.message })
+    }
+
+    @Test
+    fun aTransportThatFailsToCloseStillEndsTheEndpoint() = runTest {
+        val fixture = StackFixture(this)
+        val inner = fixture.transport()
+        val stubborn = object : DatagramTransport by inner {
+            override suspend fun close() = error("cannot close")
+        }
+        val endpoint = CoapEndpoint(stubborn, backgroundScope, fixture.endpointConfig())
+
+        endpoint.close()
+        assertEquals(CoapException.Reason.CLOSED, endpoint.awaitClosed().reason)
     }
 
     @Test
