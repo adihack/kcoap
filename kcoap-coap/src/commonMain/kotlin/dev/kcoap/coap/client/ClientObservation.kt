@@ -100,10 +100,11 @@ internal class ClientObservation(
         if (!isReliable) order.accept(first.options.observe!!, client.endpoint.now())
         mutableEvents.emit(Event.Notification(client.blockwise.complete(peer, registration, first, confirmable)))
         while (true) {
+            // A notification with an unrecognized critical option ends the exchange with BAD_RESPONSE; the
+            // endpoint has rejected it, which also ends the observation on the server (RFC 7641 §3.6).
             val result = current.receiveCatching()
             val notification = result.getOrNull()
                 ?: return Event.Failure(result.exceptionOrNull() ?: CancellationException("Observation cancelled"))
-            client.checkResponse(notification)
             val value = notification.options.observe
             if (value == null) {
                 current.cancel()
@@ -122,10 +123,11 @@ internal class ClientObservation(
         var request = registration
         var echoed = false
         while (true) {
-            val current = client.endpoint.openExchange(peer, request, confirmable, client.config.security, isObservation = true)
+            val current = client.endpoint.openExchange(
+                peer, request, confirmable, client.config.security, isObservation = true, recognizedOptions = client.recognizedOptions,
+            )
             exchange = current
             val first = client.endpoint.awaitResponse(current, client.requestTimeout)
-            client.checkResponse(first)
             val echo = first.options.echo
             if (first.code == CoapCode.UNAUTHORIZED && echo != null && client.config.echoRetry && !echoed) {
                 current.cancel()
@@ -161,7 +163,8 @@ internal class ClientObservation(
                 val deregistration = registration.toBuilder().options { observe(1) }.build()
                 try {
                     val exchange = client.endpoint.openExchange(
-                        peer, deregistration, confirmable, client.config.security, isObservation = false, token = current.token,
+                        peer, deregistration, confirmable, client.config.security, isObservation = false,
+                        token = current.token, recognizedOptions = client.recognizedOptions,
                     )
                     client.endpoint.awaitResponse(exchange, client.requestTimeout)
                 } catch (e: Exception) {

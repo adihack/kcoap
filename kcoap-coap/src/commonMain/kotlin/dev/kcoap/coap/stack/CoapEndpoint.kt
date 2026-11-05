@@ -241,7 +241,9 @@ public class CoapEndpoint private constructor(
      * exchange that collects its responses. The token comes from [CoapEndpointConfig.tokenGenerator]
      * unless [token] is given, which re-registers or cancels an observation (RFC 7641 §3.3.1, §3.6) and
      * replaces the exchange that had it. The token and Message ID are assigned before [security]
-     * protects the request, and kept afterwards. Over a reliable transport, [confirmable] does not apply.
+     * protects the request, and kept afterwards. A response with a critical option outside
+     * [recognizedOptions] is rejected (RFC 7252 §5.4.1). Over a reliable transport, [confirmable] does not
+     * apply.
      */
     internal suspend fun openExchange(
         peer: Endpoint,
@@ -250,16 +252,17 @@ public class CoapEndpoint private constructor(
         security: ClientMessageSecurity?,
         isObservation: Boolean,
         token: ByteArray? = null,
+        recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS,
     ): ClientExchange {
         attach()
-        if (isReliable(peer)) return openReliableExchange(peer, request, security, isObservation, token)
+        if (isReliable(peer)) return openReliableExchange(peer, request, security, isObservation, token, recognizedOptions)
         requireDatagramTransport(peer)
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         val (exchange, messageId) = lock.withLock {
             // Checked under the lock that the terminal transition takes, so no exchange is added after they
             // were all failed: it fails at once instead of waiting for a response that never comes.
             ensureOpen()
-            register(peer, token, isObservation)?.let { it to messaging.allocateMessageId(peer, now()) }
+            register(peer, token, isObservation, recognizedOptions)?.let { it to messaging.allocateMessageId(peer, now()) }
         } ?: throw tooManyExchanges(peer)
         val plain = request.toBuilder().apply {
             this.type = type
@@ -300,6 +303,7 @@ public class CoapEndpoint private constructor(
         security: ClientMessageSecurity?,
         isObservation: Boolean,
         token: ByteArray?,
+        recognizedOptions: Set<Int>,
     ): ClientExchange {
         lock.withLock { ensureOpen() }
         // Counted on the connection before the request is, so its idle Release cannot start in between.
@@ -307,7 +311,7 @@ public class CoapEndpoint private constructor(
         val exchange = try {
             lock.withLock {
                 ensureOpen()
-                register(peer, token, isObservation)?.also { it.connection = connection }
+                register(peer, token, isObservation, recognizedOptions)?.also { it.connection = connection }
             } ?: throw tooManyExchanges(peer)
         } catch (e: Throwable) {
             withContext(NonCancellable) { connection.exchangeClosed(null) }
@@ -332,11 +336,12 @@ public class CoapEndpoint private constructor(
      * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
      * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.
      */
-    private fun register(peer: Endpoint, token: ByteArray?, isObservation: Boolean): ClientExchange? {
+    private fun register(peer: Endpoint, token: ByteArray?, isObservation: Boolean, recognizedOptions: Set<Int>): ClientExchange? {
         val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
         if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
-        val exchange = ClientExchange(this, peer, chosen, isObservation, log.with("peer" to peer, "token" to chosen.toHex()))
+        val logger = log.with("peer" to peer, "token" to chosen.toHex())
+        val exchange = ClientExchange(this, peer, chosen, isObservation, recognizedOptions, logger)
         val previous = exchanges.put(exchange.key, exchange)
         if (previous == null) {
             exchangesPerPeer[peer] = (exchangesPerPeer[peer] ?: 0) + 1
@@ -813,8 +818,20 @@ public class CoapEndpoint private constructor(
             withMessaging { reject(from, message.messageId, "no exchange for token ${message.tokenHex}") }
             return
         }
-        withMessaging { acknowledge(from, message.messageId) }
-        exchange.onSeparateResponse(message)
+        // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
+        // options, which only the verified response shows; so it is answered after both, and before it is
+        // handed on.
+        when (val inspection = exchange.inspect(message)) {
+            is ClientExchange.Inspection.Accepted -> {
+                withMessaging { acknowledge(from, message.messageId) }
+                exchange.accept(inspection.response)
+            }
+            is ClientExchange.Inspection.Rejected -> {
+                withMessaging { reject(from, message.messageId, inspection.cause.message ?: "unrecognized critical option") }
+                exchange.refuse(inspection.cause)
+            }
+            ClientExchange.Inspection.Unverified -> withMessaging { acknowledge(from, message.messageId) }
+        }
     }
 
     private suspend fun onSessionEnded(peer: Endpoint) {
@@ -857,7 +874,7 @@ public class CoapEndpoint private constructor(
             emit(EndpointEvent.MessageRejected(connection.peer, 0, "no exchange for token ${message.tokenHex}"))
             return
         }
-        exchange.onSeparateResponse(message)
+        exchange.onResponse(message)
     }
 
     /** RFC 8323 §3.4, §7.4: the connection's exchanges fail, and its observers and transfers are dropped. */
