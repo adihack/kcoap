@@ -131,12 +131,15 @@ Deviations of libcoap 4.3.5b's client, each pinned by the `upstreamLibcoap…` t
   wants neither, and a Q-Block1 block with M set must fill its block (RFC 7959 §2.3), so kcoap answers
   4.00; libcoap then gives the body up after its first set.
 - **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9): with
-  blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, sends Resets
-  to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later sets, gets
-  every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test also checks
-  kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered on its own
-  token from the cached body, and the Continues' sets on the original token, so it holds only while the fault
-  is libcoap's.
+  blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, usually sends
+  Resets to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later
+  sets, gets every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test
+  also checks kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered
+  on its own token from the cached body, and the Continues' sets on the original token, so it holds only while
+  the fault is libcoap's. It does not assert the Resets: whether libcoap sends any depends on how its request
+  for block 3 interleaves with kcoap's set. One interop run under load saw none; alone, the test saw Resets in
+  20 of 20 runs both before and after the PeerLink refactoring (WP-B1, ee9d3d7 and its head), so the timing is
+  libcoap's and not a change in kcoap.
 
 ```bash
 interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello
