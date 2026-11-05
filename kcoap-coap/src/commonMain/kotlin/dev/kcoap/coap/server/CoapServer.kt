@@ -372,7 +372,8 @@ public class CoapServer private constructor(
                 response = response.withOptions { observe(observable.nextSequence()) }
             } else {
                 // RFC 7641 §4.1: a server unwilling or unable to add an observer answers as to a plain GET;
-                // here because it stopped meanwhile, or because the observer bounds are reached (§7).
+                // here because it stopped meanwhile, the observer bounds are reached (§7), or another identity
+                // has the endpoint and token (ADR 0008).
                 observation = null
                 response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
                 limitOf(registration)?.let { endpoint.report(EndpointEvent.LimitReached(peer, it)) }
@@ -482,7 +483,10 @@ public class CoapServer private constructor(
         ObservationRegistry.Registration.TOO_MANY_OBSERVERS -> EndpointEvent.LimitReached.Limit.OBSERVERS
         ObservationRegistry.Registration.TOO_MANY_FOR_RESOURCE -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE
         ObservationRegistry.Registration.TOO_MANY_FOR_PEER -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_PEER
-        ObservationRegistry.Registration.ADDED, ObservationRegistry.Registration.CLOSED -> null
+        ObservationRegistry.Registration.ADDED,
+        ObservationRegistry.Registration.CLOSED,
+        ObservationRegistry.Registration.IDENTITY_CONFLICT,
+        -> null
     }
 
     /**

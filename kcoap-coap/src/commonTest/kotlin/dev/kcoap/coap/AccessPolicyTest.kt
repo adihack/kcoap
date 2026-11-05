@@ -283,17 +283,24 @@ class AccessPolicyTest {
         f.ask(request(f.peer, "counter", token = token) { observe(1) })
         f.ask(request(f.peer, "counter", kid = 2, token = token) { observe(1) })
         assertEquals(1, counter.observerCount, "neither cancelled kid 1's registration")
-        val other = f.ask(request(f.peer, "counter", token = token) { observe(0) })
-        assertNotNull(other.options.observe)
-        assertEquals(2, counter.observerCount, "another identity's registration does not replace it")
+        // RFC 7641 §4.1: one entry per endpoint and token. Another identity's registration neither replaces it nor
+        // adds one, which would send notifications on kid 1's token; it is answered as a plain GET.
+        for (kid in listOf(null, 2)) {
+            val other = f.ask(request(f.peer, "counter", kid = kid, token = token) { observe(0) })
+            assertEquals(CoapCode.CONTENT, other.code)
+            assertNull(other.options.observe, "kid $kid: not registered")
+            assertEquals("tick for ${kid?.let { "kid $it" } ?: "anyone"}", other.payloadAsText())
+            assertEquals(1, counter.observerCount, "kid $kid")
+        }
 
-        // RFC 7641 §4.1: the same identity, endpoint and token replaces; its own deregistration ends it.
+        // The same identity, endpoint and token replaces; its own deregistration ends it.
         f.ask(request(f.peer, "counter", kid = 1, token = token) { observe(0) })
-        assertEquals(2, counter.observerCount)
-        f.ask(request(f.peer, "counter", kid = 1, token = token) { observe(1) })
         assertEquals(1, counter.observerCount)
-        f.ask(request(f.peer, "counter", token = token) { observe(1) })
+        f.ask(request(f.peer, "counter", kid = 1, token = token) { observe(1) })
         assertEquals(0, counter.observerCount)
+        // Then the endpoint and token are free for anyone.
+        assertNotNull(f.ask(request(f.peer, "counter", token = token) { observe(0) }).options.observe)
+        assertEquals(1, counter.observerCount)
     }
 
     @Test
