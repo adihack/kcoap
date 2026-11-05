@@ -10,6 +10,7 @@
 //  - js / wasmJs: browsers and Node.js, with WebCrypto under the default crypto backend.
 //
 // The module is published unless kcoap.unpublished comes first.
+// Core modules also apply kcoap.core, which keeps their main code in commonMain.
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")

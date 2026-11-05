@@ -4,6 +4,7 @@
 plugins {
     id("kcoap.unpublished")
     id("kcoap.kmp-library")
+    id("kcoap.core")
 }
 
 kotlin {
