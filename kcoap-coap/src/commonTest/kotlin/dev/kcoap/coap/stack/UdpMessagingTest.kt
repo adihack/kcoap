@@ -337,6 +337,24 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun rfc7252Section5_4_1NoTimerAnswersADeliveredResponse() {
+        val messaging = messaging(separateResponseDelay = 1.seconds)
+        messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 11))
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 12))
+        messaging.takeEffects()
+        assertEquals(1.seconds, messaging.nextDeadline(), "only the request's Empty ACK is due")
+
+        messaging.onTimer(1.seconds)
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.ACK, 12)), messaging.takeEffects().transmitted())
+        messaging.onTimer(10.seconds)
+        assertEquals(emptyList(), messaging.takeEffects().transmitted(), "the response waits for the upper layer")
+
+        // Verified only now, with a critical option the exchange does not recognize (RFC 7252 §5.4.1).
+        messaging.reject(peer, 11, "unrecognized critical option")
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 11)), messaging.takeEffects().transmitted())
+    }
+
+    @Test
     fun separateResponsesAreDeliveredForTheUpperLayerToAcceptOrReject() {
         val messaging = messaging()
         messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 11))

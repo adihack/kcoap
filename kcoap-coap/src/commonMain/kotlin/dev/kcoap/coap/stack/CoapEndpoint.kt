@@ -887,8 +887,16 @@ public class CoapEndpoint private constructor(
         }
         // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
         // options, which only the verified response shows; so it is answered after both, and before it is
-        // handed on.
-        when (val inspection = exchange.inspect(message)) {
+        // handed on. No timer answers it meanwhile (UdpMessaging), so every way out of here answers it.
+        val inspection = try {
+            exchange.inspect(message)
+        } catch (e: Throwable) {
+            // An unexpected failure of the message security: the response is dropped, as one that failed
+            // verification, but acknowledged, so the peer does not retransmit it until it gives up.
+            withMessaging { acknowledge(from, message.messageId) }
+            throw e
+        }
+        when (inspection) {
             is ClientExchange.Inspection.Accepted -> {
                 withMessaging { acknowledge(from, message.messageId) }
                 exchange.accept(inspection.response)

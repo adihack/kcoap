@@ -21,7 +21,9 @@ internal sealed interface MessagingEffect {
 
     /**
      * A new separate response arrived in a Confirmable or Non-confirmable message. The upper layer must
-     * call [UdpMessaging.acknowledge] if it matches an exchange, or [UdpMessaging.reject] if not.
+     * answer it, with [UdpMessaging.acknowledge] if it accepts it, or [UdpMessaging.reject] if it matches
+     * no exchange or has a critical option the exchange does not recognize (RFC 7252 §5.4.1). No timer
+     * answers a Confirmable one in its place.
      */
     class DeliverResponse(val from: Endpoint, val message: CoapMessage) : MessagingEffect
 

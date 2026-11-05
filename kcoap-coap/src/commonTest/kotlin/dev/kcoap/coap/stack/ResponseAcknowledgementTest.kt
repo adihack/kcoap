@@ -12,9 +12,11 @@ import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -105,6 +107,82 @@ class ResponseAcknowledgementTest {
         assertEquals("verified", endpoint.awaitResponse(exchange, 10.seconds).payloadAsText())
         assertEquals(false, acknowledgedBeforeVerification)
         assertEquals(listOf(response.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+    }
+
+    @Test
+    fun rfc7252Section5_4_1NoTimerAcknowledgesAResponseWhileItIsVerified() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        // The Empty ACK of a slow request is due after 1 s; verifying the response takes 4 s.
+        val endpoint = fixture.endpoint(fixture.endpointConfig(separateResponseDelay = 1.seconds))
+        val security = verifying { response ->
+            delay(4.seconds)
+            response
+        }
+
+        val exchange = endpoint.openExchange(peer.address, get(), true, security)
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val response = peer.response(request, CoapMessageType.CON, "x") { options { add(unknownCritical) } }
+        peer.send(response)
+
+        val error = assertFailsWith<CoapException> { endpoint.awaitResponse(exchange, 10.seconds) }
+        assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
+        assertEquals(4.seconds, fixture.now)
+        assertEquals(listOf(response.messageId), fixture.sentBy(endpoint, CoapMessageType.RST).map { it.messageId })
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.ACK), "never acknowledged")
+    }
+
+    @Test
+    fun rfc7252Section5_2_2ASlowlyVerifiedResponseIsAcknowledgedOnlyOnce() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint(fixture.endpointConfig(separateResponseDelay = Duration.ZERO))
+        val security = verifying { response ->
+            delay(4.seconds)
+            response
+        }
+
+        val exchange = endpoint.openExchange(peer.address, get(), true, security)
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val response = peer.response(request, CoapMessageType.CON, "slow")
+        peer.send(response)
+
+        assertEquals("slow", endpoint.awaitResponse(exchange, 10.seconds).payloadAsText())
+        val acks = fixture.traffic.filter { it.from == fixture.address(endpoint) && it.message?.type == CoapMessageType.ACK }
+        assertEquals(listOf(response.messageId), acks.map { it.message?.messageId })
+        assertEquals(listOf(4.seconds), acks.map { it.at }, "acknowledged after verification, not by the timer")
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+    }
+
+    @Test
+    fun aResponseWhoseVerificationFailsUnexpectedlyIsStillAcknowledged() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val security = verifying { response ->
+            check(response.payloadAsText() != "broken") { "a bug in the message security" }
+            response
+        }
+
+        val exchange = endpoint.openExchange(peer.address, get(), true, security)
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val broken = peer.response(request, CoapMessageType.CON, "broken")
+        peer.send(broken)
+        delay(1.seconds)
+        assertEquals(listOf(broken.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+        assertTrue(exchange.isOpen, "the response is dropped")
+
+        val genuine = peer.response(request, CoapMessageType.CON, "genuine")
+        peer.send(genuine)
+        assertEquals("genuine", endpoint.awaitResponse(exchange, 10.seconds).payloadAsText())
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+        // §4.5: the peer's retransmission of the broken one is a duplicate and gets the same ACK.
+        peer.send(broken)
+        delay(1.seconds)
+        assertEquals(listOf(broken.messageId, genuine.messageId, broken.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
     }
 
     @Test

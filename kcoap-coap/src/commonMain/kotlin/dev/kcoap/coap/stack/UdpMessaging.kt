@@ -399,15 +399,14 @@ internal class UdpMessaging(
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
             message.isEmpty -> sendReset(entry, "CoAP ping")
-            message.isRequest || message.isResponse -> {
+            message.isRequest -> {
                 entry.ackDeadline = separateResponseDelay?.let { now + it }?.also(::schedule)
                 received.pending += entry
-                effects += if (message.isRequest) {
-                    MessagingEffect.DeliverRequest(from, message)
-                } else {
-                    MessagingEffect.DeliverResponse(from, message)
-                }
+                effects += MessagingEffect.DeliverRequest(from, message)
             }
+            // No timer acknowledges a response: the upper layer answers it with an ACK or a Reset only after
+            // verifying it and checking its critical options (RFC 7252 §5.4.1), however long that takes.
+            message.isResponse -> effects += MessagingEffect.DeliverResponse(from, message)
             // Reserved code classes 1, 6 and 7 (signaling exists only on reliable transports, RFC 8323).
             else -> sendReset(entry, "reserved code ${message.code}")
         }
