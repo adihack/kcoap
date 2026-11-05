@@ -171,7 +171,7 @@ internal class QBlock1Sender(
             response.code == CoapCode.REQUEST_ENTITY_INCOMPLETE &&
                 options.contentFormat == ContentFormat.MISSING_BLOCKS_CBOR_SEQ -> {
                 last408At = now
-                onMissing(now, response.payload)
+                onMissing(now, sequence, num, response.payload)
             }
             response.code == CoapCode.UNAUTHORIZED && options.echo != null && sequence < (echoFrom ?: numbers.size) ->
                 onEchoChallenge(now, sequence, num)
@@ -249,7 +249,7 @@ internal class QBlock1Sender(
         return actions
     }
 
-    private fun onMissing(now: Duration, payload: ByteArray): List<QBlockAction<Int>> {
+    private fun onMissing(now: Duration, sequence: Int, num: Long, payload: ByteArray): List<QBlockAction<Int>> {
         val listed = MissingBlocks.decode(payload) ?: return listOf(QBlockAction.Drop("Malformed missing-block list"))
         val missing = listed.filter { it < count }.take(timing.maxPayloads)
         if (missing.isEmpty()) return listOf(QBlockAction.Drop("No block of this body is missing: $listed"))
@@ -261,12 +261,33 @@ internal class QBlock1Sender(
             }
         }
         val actions = ArrayList<QBlockAction<Int>>()
+        releaseArrived(sequence, num, listed, actions)
         for (num in missing) actions += send(now, num)
         if (mode == BodyMode.NON) {
             for (num in sets.numbers(currentSet, count)) if (num !in sent) actions += send(now, num)
             if (!sets.isLast(currentSet, count)) nextSetAt = now + nonTimeoutRandom
         }
         return actions
+    }
+
+    /**
+     * A 4.08 on request [sequence], which carried block [num], lists the blocks the server misses up to the end
+     * of the highest set it has, ascending and at most MAX_PAYLOADS of them (§4.3, §5). So every block up to
+     * [num] that it does not list has arrived, or up to the last listed one when the list is full and may have
+     * been cut short. Their tokens are released, as a 2.31 would release them: once a later set has arrived,
+     * the server sends no 2.31 for a set it completes late, so without this a long body over a lossy path
+     * would hold a token per block. The 4.08's own request stays, since later 4.08s go there, and so does the
+     * latest 2.31's. Neither can a released block complete the body and carry the final response: it is there
+     * already.
+     */
+    private fun releaseArrived(sequence: Int, num: Long, listed: List<Long>, actions: MutableList<QBlockAction<Int>>) {
+        val isFull = listed.size >= timing.maxPayloads
+        val listedSet = listed.toHashSet()
+        val arrived = held.filter { held ->
+            val block = numbers[held]
+            held != sequence && held != latest231 && block !in listedSet && (if (isFull) block < listed.last() else block <= num)
+        }
+        release(arrived, actions)
     }
 
     /** Sends the blocks of [set] that were never sent and waits NON_TIMEOUT_RANDOM unless it is the last set. */

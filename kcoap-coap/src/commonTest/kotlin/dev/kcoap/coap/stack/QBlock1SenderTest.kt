@@ -205,10 +205,10 @@ class QBlock1SenderTest {
         // Figure 14 answers on the token of the body's last block, not of the request that completed it.
         val sender = sender(size = 4 * 64 - 10)
         sender.start(Duration.ZERO)
-        sender.onResponse(4.seconds, 3, missing(1, 2))
+        assertEquals(listOf(0), sender.onResponse(4.seconds, 3, missing(1, 2)).released(), "block 0 arrived")
         val actions = sender.onResponse(4.seconds, 3, response(CoapCode.CONTENT) { qBlock2(block(0, true)) })
         assertEquals(3, assertIs<QBlockAction.Deliver<Int>>(actions.first()).ref)
-        assertEquals(listOf(0, 1, 2, 4, 5), actions.released(), "every token but the one of the response")
+        assertEquals(listOf(1, 2, 4, 5), actions.released(), "every other token but the one of the response")
         assertIs<QBlockAction.Drop>(sender.onResponse(5.seconds, 3, continue231).single(), "after the end")
         assertEquals(emptyList(), sender.onTimer(10.seconds))
         assertEquals(emptyList(), sender.abandon())
@@ -302,6 +302,25 @@ class QBlock1SenderTest {
         val timedOut = sender.onTimeout(2.seconds, 2)
         assertEquals(CoapException.Reason.TRANSMISSION_TIMEOUT, assertIs<QBlockAction.Fail>(timedOut.first()).reason)
         assertEquals(emptyList(), sender.onAcknowledged(3.seconds, 3))
+    }
+
+    @Test
+    fun rfc9177Section5A408ReleasesTheTokensOfTheBlocksItShowsArrived() {
+        val sender = sender()
+        sender.start(Duration.ZERO)
+        sender.onTimer(pause)
+
+        // On block 15's request, the server misses 2 and 7: every other block up to 15 has arrived.
+        val short = sender.onResponse(3.seconds, 15, missing(2, 7))
+        assertEquals((0..14) - listOf(2, 7), short.released())
+        assertEquals(listOf("2/1@20", "7/1@21"), short.sent())
+
+        // A full list may have been cut short: only the blocks below its last entry count as arrived.
+        val cut = sender()
+        cut.start(Duration.ZERO)
+        cut.onTimer(pause)
+        val full = cut.onResponse(3.seconds, 19, missing(1, 3, 5, 7, 9, 11, 13, 15, 17, 18))
+        assertEquals(listOf(0, 2, 4, 6, 8, 10, 12, 14, 16), full.released())
     }
 
     @Test
