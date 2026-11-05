@@ -88,9 +88,63 @@ on its own (inner Block-wise, RFC 8613 §4.1.3.4.1); outer Block-wise for proxie
 **One endpoint per socket, one lock.** `CoapEndpoint` owns the messaging state machine and the exchange
 registry behind a single `Mutex` that is never held across a suspension: a call takes the lock, runs the
 state machine, takes its effects (datagrams to send, messages to deliver, outcomes of transmissions),
-releases the lock and only then performs them. Request handlers, message security and transports
-therefore run without the lock; each inbound request gets its own coroutine. The receive loop and a
-timer loop run in the scope the endpoint was given.
+releases the lock and only then performs them, under `NonCancellable`, because the state machine has
+committed to them and they may belong to other exchanges. Request handlers, message security and
+transports therefore run without the lock; each inbound request gets its own coroutine, up to
+`maxConcurrentRequests`. The receive loop and a timer loop run in the scope the endpoint was given, on
+its dispatcher (on Android or iOS a scope such as `lifecycleScope + Dispatchers.Default`), and start once
+a server or client attaches, so a server's resources are in place before the first request. Client-side
+response verification (OSCORE) runs on the receive loop, before the response is queued, so a forged
+notification cannot push out a genuine one; message-security backends should be fast or offload their
+own work.
+
+**Concurrency rules.** Every stateful component follows them, and `ConcurrencyStressTest` checks them on
+real threads, on the JVM and Kotlin/Native, through `kcoap-testkit`'s `Stress` helper:
+
+1. Mutable protocol state belongs to one `Mutex` per component, never held across a suspension, and
+   every flag that guards that state is read and written under it: the endpoint's closed state is set
+   under the lock that `openExchange` and `ping` check it under.
+2. Read-mostly registries are copy-on-write `AtomicReference`s: the resource tree, and the observers of
+   each resource, which the registry replaces under its lock. `@Volatile` is only for values read outside
+   any lock where a stale read is harmless.
+3. Effects and events run after the lock is released; an event listener that throws is isolated.
+4. Cleanup in `catch` or `finally` that suspends (a lock, settling a transmission, deregistering, freeing
+   a Request-Tag) runs in `withContext(NonCancellable)`, since cancellation is the normal way an
+   application stops work and must leak nothing. Lock-guarded sections stay non-suspending.
+5. Every coroutine the endpoint launches is a failure boundary. As a last resort the endpoint's scope
+   gets a logging `CoroutineExceptionHandler` when the application's scope has none, so nothing reaches
+   the platform's handler, which ends the process on Android and Kotlin/Native; one the application
+   installed is kept.
+
+**Lifecycle.** An endpoint ends in one terminal transition, whichever way it ends: `close()`, the
+cancellation of its scope, or a datagram transport whose `receive` fails (a socket the system closed, a
+network that went away). Under the lock it records `closeCause`, `CLOSED` or `TRANSPORT_FAILED` with the
+transport's error, and the messaging layer fails its transmissions; then exchanges fail, every `observe`
+collector gets a terminal failure, the server stops and drops its observers, connections are released
+(RFC 8323 §5.5), the transport is closed and the coroutines are cancelled. Every later request, ping or
+observation fails at once with the same reason, and `awaitClosed()` waits for the coroutines as well. A
+send the transport refuses with `IllegalArgumentException` (an endpoint it cannot carry) fails that
+message at once with `TRANSPORT_FAILED` instead of looking like a silent peer; any other send failure is
+left to retransmission, like a lost datagram. Recreating an endpoint after a failure is the application's
+decision. `CoapServer.close()` on a shared endpoint cancels its running handlers and takes no new
+observers.
+
+**Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
+answering spoofed traffic turns a server into an amplifier against the address it names. Everything a
+peer can make the endpoint keep or do is therefore bounded, with defaults sized for servers. At a bound
+the endpoint refuses only the extra work, never with an answer larger than what it received, keeps
+serving what it has, and reports `EndpointEvent.LimitReached`:
+
+| Bound | Default | Beyond it |
+|---|---|---|
+| `CoapEndpointConfig.maxDeduplicationEntries` | 50 000 | a new message is dropped without state or answer; duplicates are still answered (§4.5) |
+| `CoapEndpointConfig.maxConcurrentRequests` | 256 | a CON gets a piggybacked 5.03 with Max-Age, a NON is dropped, a connection gets 5.03 |
+| `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response or notification queued behind NSTART is not sent |
+| `CoapServerConfig.maxObservers`, `maxObserversPerResource` | 10 000, 1 000 | the registration is served without Observe (RFC 7641 §4.1) |
+| `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
+
+An observer that neither message nor channel security authenticated gets at most eight Non-confirmable
+notifications in a row, then a Confirmable one, whose ACK shows it still wants them (RFC 7641 §7).
 
 **Sans-IO where it pays off.** `UdpMessaging` is the part with the subtle timing rules (back-off,
 deduplication lifetimes, NSTART, superseding), so it takes datagrams and time and returns effects, and
@@ -98,11 +152,14 @@ its tests need neither a transport nor a clock. It is `internal` for now: the pl
 public sans-IO engine for Netty or Vert.x event loops, would also need the exchange, block-wise and
 Observe layers in that form, which they are not yet.
 
-**Time and randomness.** Every timer reads `CoapEndpointConfig.timeSource` and waits with coroutine
-delays, so under `runTest` with `testScheduler.timeSource` a 247-second lifetime passes in an instant.
-Retransmission jitter and the first Message ID come from an injected `Random`; tokens from a
-`TokenGenerator` backed by the platform CSPRNG (through `kotlin.uuid`), with per-session sequence
-numbers on DTLS endpoints (RFC 9175 §4.2).
+**Time and randomness.** Every timer reads `CoapEndpointConfig.timeSource` and waits with the delays of
+the endpoint scope's dispatcher, so the time source must advance with that dispatcher's clock:
+`TimeSource.Monotonic` with a real dispatcher, and under `runTest` `testScheduler.timeSource`, with which
+a 247-second lifetime passes in an instant. The endpoint warns once when it sees the two disagree.
+Request timeouts wait on the same dispatcher clock. Retransmission jitter and the first Message ID come
+from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG (through
+`kotlin.uuid`), with per-session sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per
+endpoint unless the configuration names one.
 
 **The DTLS readiness rules, as met:**
 
@@ -125,7 +182,8 @@ rejections, session ends and observer changes. Logging follows `code-style.md` u
 `coap.message`, `coap.exchange`, `coap.server`, `coap.client` and `transport`.
 
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
-virtual time; the JVM tests also run against libcoap over real UDP (`interop/README.md`).
+virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also
+run against libcoap over real UDP (`interop/README.md`).
 
 ### Over reliable transports (RFC 8323)
 
@@ -146,7 +204,9 @@ Transport                     Connection SPI: ByteStreamConnection (TCP) | Messa
 
 - **One messaging layer per connection.** Tokens, Custody bookkeeping and Release draining are per
   connection (§3.3). The endpoint keeps at most one connection per peer `Endpoint`; a released one takes
-  no new requests, and a new one opens only once it is gone, which the release timeout bounds. Every
+  no new requests, and a new one opens only once it is gone, which the release timeout bounds. A request
+  counts itself on its connection under the connection's lock, together with the check that it still
+  takes requests, so an idle Release never starts between the two. Every
   exchange and every server observation remembers its connection, so responses and notifications go
   back on it and a closed connection fails exactly what was on it (§3.4, §7.4).
 - **CSM first.** Each side sends its CSM at once, without waiting for the peer's (§3.3). The peer's CSM
