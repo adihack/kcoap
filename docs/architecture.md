@@ -128,7 +128,8 @@ send the transport refuses with `IllegalArgumentException` (an endpoint it canno
 message at once with `TRANSPORT_FAILED` instead of looking like a silent peer; any other send failure is
 left to retransmission, like a lost datagram. Recreating an endpoint after a failure is the application's
 decision. `CoapServer.close()` on a shared endpoint cancels its running handlers and takes no new
-observers.
+observers; a request on a connection whose handler it cancelled before the answer gets 5.03, since RFC
+8323 §3.3 has every request on a connection answered.
 
 **Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
 answering spoofed traffic turns a server into an amplifier against the address it names. Everything a

@@ -140,8 +140,10 @@ public class CoapServer private constructor(
 
     /**
      * Stops serving: requests from now on are rejected as if there were no server, the handlers still
-     * running are cancelled, and observers are dropped silently. Closes the endpoint too if the server
-     * created it. A server also stops when its endpoint closes.
+     * running are cancelled, and observers are dropped silently. A request on a connection whose handler
+     * was cancelled before it answered gets 5.03 Service Unavailable, since RFC 8323 §3.3 has every
+     * request on a connection answered. Closes the endpoint too if the server created it. A server also
+     * stops when its endpoint closes.
      */
     public suspend fun close() {
         endpoint.requestHandler = null
