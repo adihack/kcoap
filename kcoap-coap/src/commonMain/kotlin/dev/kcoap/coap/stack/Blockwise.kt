@@ -189,11 +189,22 @@ internal class ExpiringCache<K, V>(private val capacity: Int, private val lifeti
         return entry.value
     }
 
-    fun put(key: K, value: V, now: Duration) {
+    /** Like [get], but leaves the entry's expiry and its place in the eviction order as they are. */
+    fun peek(key: K, now: Duration): V? {
+        val entry = entries[key] ?: return null
+        if (entry.expiresAt > now) return entry.value
+        entries.remove(key)
+        return null
+    }
+
+    /** Stores [value]; returns the key evicted to make room for it, or null when there was room. */
+    fun put(key: K, value: V, now: Duration): K? {
         entries.remove(key)
         prune(now)
-        while (entries.size >= capacity) entries.remove(entries.keys.first())
+        var evicted: K? = null
+        if (entries.size >= capacity) evicted = entries.keys.first().also { entries.remove(it) }
         entries[key] = Entry(value, now + lifetime)
+        return evicted
     }
 
     fun remove(key: K): V? = entries.remove(key)?.value
