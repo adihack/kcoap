@@ -25,8 +25,11 @@ jobs:
       # JavaScript and as Wasm, with WebCrypto underneath as in browsers. Then the build checks:
       # checkKotlinAbi compares the public API with the committed dumps (run ./gradlew updateKotlinAbi
       # and commit the diff when an API change is intended), verifyCommonOnly keeps the core modules'
-      # main code in commonMain, and the build-logic TestKit tests check the convention plugins.
-      - name: Unit tests, checkKotlinAbi, verifyCommonOnly, build-logic tests
+      # main code in commonMain, verifyNoServerEngine keeps ktor-server-cio out of the WebSocket server's
+      # published dependencies, checkAndroidApi and checkAndroidApiDependencies check the jvm jars and
+      # their libraries against Android API level 26, and the build-logic TestKit tests check the
+      # convention plugins.
+      - name: Unit tests, ABI, common-only, server-engine and Android API checks, build-logic tests
         run: scripts/test unit
       - run: ./gradlew --console=plain koverXmlReport koverVerify -Pkcoap.tests=unit
       - name: Coverage summary
