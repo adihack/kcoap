@@ -241,6 +241,7 @@ class QBlockObserveTest {
             "§4.4, §7.2: the Continue carries no Observe and gets nothing on its own token; the next set follows at once",
         )
         assertEquals(bodies.map { it.toList() }, setup.received.map { it.payload.toList() })
+        assertEquals(1, setup.client.endpoint.exchangeCount(), "§4.4: the Continue's token went with its body")
     }
 
     @Test
@@ -279,6 +280,7 @@ class QBlockObserveTest {
         assertContentEquals(notification, setup.received.last().payload)
         assertEquals(1L, setup.received.last().options.observe, "the Observe of the body, though block 1 came without")
         assertEquals(2, setup.received.size)
+        assertEquals(1, setup.client.endpoint.exchangeCount(), "§4.4: their requests went with the body")
     }
 
     @Test
@@ -305,6 +307,7 @@ class QBlockObserveTest {
             "§4.4: 2/M=1 asks for the rest of set 0, answered without Observe; the Continue sends block 10 again on T0",
         )
         assertContentEquals(notification, setup.received.last().payload)
+        assertEquals(1, setup.client.endpoint.exchangeCount(), "§4.4: the follow-ups' tokens went with their body")
     }
 
     // ---------------------------------------------------------------- §10.3: Q-Block1 and Q-Block2 together
@@ -578,6 +581,7 @@ class QBlockObserveTest {
         assertTrue(delivered.size >= 5, "${delivered.size} whole bodies")
         assertEquals(setup.resource.version, delivered.last(), "the latest state arrives")
         assertTrue(setup.fixture.events.any { it is EndpointEvent.QBlockRecovery && !it.isRequestedByPeer }, "lost blocks were asked for")
+        assertEquals(1, setup.client.endpoint.exchangeCount(), "§4.4: the observation's token alone stays")
     }
 
     /** RFC 7641 §3.6, RFC 9177 §4.5: every block is a notification, and a Reset to any of them removes the observer. */

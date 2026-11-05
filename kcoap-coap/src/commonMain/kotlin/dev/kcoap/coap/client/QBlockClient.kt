@@ -61,7 +61,8 @@ import kotlinx.coroutines.withContext
  * assembled by [QBlock2Receiver]; its Continues and requests for missing blocks repeat the request's method
  * and options without Observe, ETag, payload (a FETCH keeps its payload unless it was uploaded with Q-Block1)
  * or Q-Block1, with the Request-Tag of the upload. Tokens are kept until the body ends, except those the
- * cores release and, for a long download, the oldest of [MAX_OPEN_FOLLOW_UPS] follow-ups. On a reliable
+ * cores release and, for a long download, the oldest of [MAX_OPEN_FOLLOW_UPS] follow-ups; the requests for a
+ * notification body go when that body is delivered, given up or superseded. On a reliable
  * transport nothing is asked for again (Appendix B), so the inbox there has room for every block of the
  * largest body ([ExchangeInbox.forReliableBody]) and never drops one.
  *
@@ -919,10 +920,17 @@ internal class QBlockClient(private val client: CoapClient) {
             }
         }
 
-        /** [body] is delivered or given up: its ETag is remembered, and the lease of its requests given back. */
+        /**
+         * [body] is delivered, given up or superseded: its ETag is remembered, and the tokens of its requests, its
+         * Continues and requests for missing blocks, are released with the lease they took, so only the
+         * observation's own token stays (§4.4). A late answer on one of them gets a Reset, which the server takes
+         * for that request alone (§4.5: it carries no Observe).
+         */
         private suspend fun finishNotification(body: Notification) {
             finish(body.etag)
             if (notification === body) notification = null
+            for (token in body.requests) release(token)
+            followUps.removeAll { it.key.token in body.requests }
             releaseLease()
         }
 
