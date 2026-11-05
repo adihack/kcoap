@@ -52,14 +52,16 @@ OSCORE request carries EDHOC message_3 (RFC 9668), two round trips in all:
 ```kotlin
 val security = PeerSecurity()
 val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = security))
-val (session, protection) = EdhocClientHandshake.over(client, serverUri, initiatorConfig, crypto).runCombined()
-security.install(serverEndpoint, protection)
+val server = CoapUri.parse("coap://192.0.2.1")
+val (session, protection) = EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()
+security.install(client, server, protection)
 client.get("coap://192.0.2.1/lights")
 ```
 
 The server side mounts `EdhocResource` (public of its own) under `/.well-known` and uses
-`CombinedRequestServer`; its handlers and policies see an `EdhocIdentity` with the client's authenticated
-credential. See
+`CombinedRequestServer` around its `OscoreServer`; the `EdhocServer` behind both adds a context per handshake
+to a `MutableSecurityContextRepository`, which a production server bounds. Its handlers and policies see an
+`EdhocIdentity` with the client's authenticated credential. See
 [kcoap-edhoc-oscore](kcoap-edhoc-oscore/README.md). More in the
 [client and server guide](docs/guide-client-server.md).
 

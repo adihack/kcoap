@@ -46,8 +46,8 @@ class OscoreFromEdhocTest {
         val responder = EdhocResponder(peers.responderConfig(), crypto)
         responder.processMessage1(initiator.createMessage1())
         initiator.processMessage2(responder.createMessage2())
-        responder.processMessage3(initiator.createMessage3().bytes)
-        return initiator.session!! to responder.session!!
+        val (message3, initiatorSession) = initiator.createMessage3()
+        return initiatorSession to responder.processMessage3(message3)
     }
 
     private fun request() = CoapMessage.request(CoapCode.GET) {

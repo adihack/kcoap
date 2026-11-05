@@ -33,12 +33,14 @@ internal class Peers private constructor(
     fun initiatorConfig(
         suites: List<CipherSuite> = listOf(CipherSuite.SUITE_0),
         connectionIdentifiers: ConnectionIdentifierProvider = ConnectionIdentifierProvider.Random,
+        ephemeralKeys: EphemeralKeySource = EphemeralKeySource.Random,
     ) = EdhocInitiatorConfig(
         method = method,
         cipherSuites = suites,
         credentials = listOf(client),
         credentialResolver = TrustedCredentials(backend, listOf(server.credential)),
         connectionIdentifiers = connectionIdentifiers,
+        ephemeralKeys = ephemeralKeys,
     )
 
     fun responderConfig(

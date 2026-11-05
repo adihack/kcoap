@@ -558,6 +558,17 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low to medium.
 - **Accept:** no `session!!` in the module (grep); `EdhocServer.handle` no longer catches `IllegalArgumentException`; EdhocOscoreTest and the combined-request tests pass; standard gate.
 
+> **Amendment (A3).** Done as listed, with these shapes: `handle(payload, peer)` keeps the peer SEC1 added;
+> `EdhocClientHandshake(config, crypto, server, path, loggerFactory, sequenceStore, exchange)` takes the
+> server URI and builds the resource URI from it, and the `EdhocOverCoap` builders return `CoapRequest` and
+> `CoapResponse`; `MutableSecurityContextRepository` has `addIfAbsent` besides `add` and `remove`, the atomic
+> insert SEC1's C_R guard needs; `PeerSecurity.install(client, uri, security)` returns the endpoint it
+> resolved. `EdhocException.malformed` is internal to kcoap-edhoc, so `parseRequest` raises the same error
+> (code 1) itself, with a generic diagnostic on the wire. `CombinedRequestServer` answers 4.00 when the
+> decorated layer does not take the rebuilt request. The A1 follow-up (an optional `sequenceStore` on
+> `EdhocServer` and `EdhocClientHandshake`) had landed with SEC1; A3 keeps it. U1's "filter once" is A2's
+> per-configuration memo, which both classes reuse across sessions, now tested at this level.
+
 **WP-A4: kcoap-crypto as the home of shared crypto blocks**
 
 - **Findings:** MB-7 (1); U10 (1–2); U3 (1–4, 6–7); U2 (1–2); U5 (2–4); API-10 (`KemEncapsulation`).

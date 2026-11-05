@@ -2,7 +2,7 @@ package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.cbor.CborReader
 import dev.kcoap.cbor.CborType
-import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.CryptoBackend
@@ -15,35 +15,45 @@ import dev.kcoap.edhoc.EdhocSession
 import dev.kcoap.log.LogTags
 import dev.kcoap.log.LoggerFactory
 import dev.kcoap.oscore.EphemeralSequenceNumberStore
-import dev.kcoap.oscore.InMemoryContextRepository
+import dev.kcoap.oscore.MutableSecurityContextRepository
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SequenceNumberStore
 import dev.kcoap.transport.Endpoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
-/** Called when an EDHOC session completes and its OSCORE context is in place. */
-public fun interface EdhocSessionListener {
-    public suspend fun onEstablished(session: EdhocSession, context: SecurityContext)
-}
-
 /**
  * The server (EDHOC Responder) side of EDHOC over CoAP: runs one [EdhocResponder] per session, keyed by
  * the C_R it chose, and turns every completed session into an OSCORE context in [contexts].
  *
  * - [handle] is the logic of the EDHOC resource (RFC 9528 Appendix A.2): message_1 starts a session and
- *   gets message_2, message_3 completes it (with message_4 when [sendMessage4] is set).
- * - [completeCombined] completes a session from the message_3 of an EDHOC + OSCORE request (RFC 9668).
+ *   gets message_2, message_3 completes it (with message_4 when [sendMessage4] is set). [EdhocResource]
+ *   mounts it in a CoAP server.
+ * - [completeCombined] completes a session from the message_3 of an EDHOC + OSCORE request (RFC 9668), for
+ *   [CombinedRequestServer].
+ *
+ * [contexts] is any [MutableSecurityContextRepository], usually the one the server's `OscoreServer` finds
+ * contexts in. Contexts from EDHOC accumulate there, one per completed handshake, and this server never removes
+ * them: a production server gives it a repository with a bound, which costs an evicted client only a new
+ * handshake (its requests then get OSCORE's 4.01 or 4.00, as [MutableSecurityContextRepository] explains). The
+ * default [InMemoryContextRepository][dev.kcoap.oscore.InMemoryContextRepository] has none.
+ *
+ * A session is established all or nothing: when deriving its context, adding it to [contexts] or telling
+ * [listener] fails or is cancelled, the context is taken out of [contexts] again, the session's secrets are
+ * wiped (RFC 9528 §9.8), and the client gets an EDHOC error, so neither side keeps a context of a handshake
+ * that failed. A failure of this side, such as a repository that throws, is answered with "EDHOC failed" in a
+ * 5.00 response (RFC 9528 Appendix A.2.3), its cause logged.
  *
  * C_R is chosen as RFC 9668 §4.1.2 requires: unused by other sessions, different from C_I, and not the
  * Recipient ID of a context in [contexts]. It is reserved in the same locked step that checks it, before
  * message_2 is composed, and stays reserved until the session's OSCORE context is in [contexts], so
  * concurrent handshakes of this server never share a C_R or collide with a context it is adding. The
- * context is added only if its Recipient ID is still free ([InMemoryContextRepository.addIfAbsent]): when
- * another writer of [contexts], such as a second EdhocServer for another application profile (RFC 9668
+ * context is added only if its Recipient ID is still free ([MutableSecurityContextRepository.addIfAbsent]):
+ * when another writer of [contexts], such as a second EdhocServer for another application profile (RFC 9668
  * §5) or the application, took it meanwhile, the handshake fails with an EDHOC error instead of replacing
  * that context.
  *
@@ -69,6 +79,11 @@ public fun interface EdhocSessionListener {
  * (6.4 per second by default) keep new clients out while the flood lasts. That takes an Echo
  * reachability check before message_2 (RFC 9528 Appendix A.2, RFC 9175), which belongs to the CoAP server.
  *
+ * The cipher suites [config] names are narrowed once to those [crypto] runs, on first use, and the answer is
+ * kept with [config] for every later session (docs/adr/0001-crypto-capabilities.md).
+ *
+ * @param contexts where the OSCORE context of every completed session goes, and where C_R is checked
+ *   against the Recipient IDs in use.
  * @param pendingSessionLifetime how long a session waits for message_3: by default MAX_TRANSMIT_WAIT
  *   (93 s, RFC 7252 §4.8.2), about as long as a client retransmits message_3 and waits for its answer.
  * @param pendingSessionGracePeriod how long a session waiting for message_3 is safe from eviction: by
@@ -81,12 +96,14 @@ public fun interface EdhocSessionListener {
  *   [oscoreParameters] describes. A name is unique only among the contexts in [contexts], so do not share
  *   a durable store with contexts kept anywhere else.
  * @param timeSource the clock of [pendingSessionLifetime] and [pendingSessionGracePeriod].
+ * @param listener told of every session that completes, with its context.
  * @param eventListener receives the [EdhocServerEvent]s.
+ * @param loggerFactory where the server's logger comes from, under [LogTags.EDHOC].
  */
 public class EdhocServer(
     private val config: EdhocResponderConfig,
     private val crypto: CryptoBackend,
-    private val contexts: InMemoryContextRepository,
+    private val contexts: MutableSecurityContextRepository,
     private val sendMessage4: Boolean = false,
     private val maxPendingSessions: Int = 64,
     private val maxPendingSessionsPerPeer: Int = 8,
@@ -96,7 +113,7 @@ public class EdhocServer(
     timeSource: TimeSource = TimeSource.Monotonic,
     private val listener: EdhocSessionListener = EdhocSessionListener { _, _ -> },
     eventListener: EdhocServerEventListener = EdhocServerEventListener.None,
-    private val loggers: LoggerFactory = LoggerFactory.Global,
+    private val loggerFactory: LoggerFactory = LoggerFactory.Global,
 ) {
     init {
         require(maxPendingSessions > 0) { "maxPendingSessions must be positive" }
@@ -105,7 +122,7 @@ public class EdhocServer(
         require(!pendingSessionGracePeriod.isNegative()) { "pendingSessionGracePeriod must not be negative" }
     }
 
-    private val log = loggers.logger(LogTags.EDHOC).child("server")
+    private val log = loggerFactory.logger(LogTags.EDHOC).child("server")
     private val pending = PendingSessions(
         maxPendingSessions,
         maxPendingSessionsPerPeer,
@@ -120,19 +137,25 @@ public class EdhocServer(
     public suspend fun pendingSessions(): Int = pending.waitingCount()
 
     /**
-     * Answers a POST from [peer] to the EDHOC resource. Never throws for peer errors: every failure becomes
-     * the EDHOC error response of RFC 9528 Appendix A.2.3.
+     * Answers a POST from [peer] to the EDHOC resource whose body is [payload] (RFC 9528 Appendix A.2.1):
+     * a 2.04 with message_2 for `true, message_1`, a 2.04 with message_4 or without payload for
+     * `C_R, message_3`, and a 2.04 for `C_R, error message`, which ends the session.
+     *
+     * It never throws for anything the peer sent: a malformed payload ([EdhocOverCoap.parseRequest]) and every
+     * failed EDHOC step become the EDHOC error response of RFC 9528 Appendix A.2.3, a 4.00, or a 5.00 for a
+     * message_1 refused over the bounds on pending sessions and for a failure of this server after message_3
+     * (its context repository, sequence number store or [listener] throwing). Only cancellation passes through.
      */
-    public suspend fun handle(request: CoapMessage, peer: Endpoint): CoapMessage {
+    public suspend fun handle(payload: ByteArray, peer: Endpoint): CoapResponse {
         val parsed = try {
-            EdhocOverCoap.parseRequest(request.payload)
-        } catch (e: IllegalArgumentException) {
-            return EdhocOverCoap.errorResponse(request, EdhocError.unspecified("Malformed EDHOC request").encode())
+            EdhocOverCoap.parseRequest(payload)
+        } catch (e: EdhocException) {
+            log.warn { "Rejected a request of ${log.payload(payload)} from $peer: ${e.message}" }
+            return errorResponse(e)
         }
         return when (parsed) {
-            is EdhocOverCoap.ServerRequest.NewSession -> startSession(request, parsed.message1, peer)
-            is EdhocOverCoap.ServerRequest.Continuation ->
-                continueSession(request, parsed.responderId, parsed.message, peer)
+            is EdhocOverCoap.ServerRequest.NewSession -> startSession(parsed.message1, peer)
+            is EdhocOverCoap.ServerRequest.Continuation -> continueSession(parsed.responderId, parsed.message, peer)
         }
     }
 
@@ -140,8 +163,9 @@ public class EdhocServer(
      * Processes the message_3 of an RFC 9668 EDHOC + OSCORE request from [peer] for the session
      * [responderId] (the 'kid' of the request) and returns the new OSCORE context.
      *
-     * @throws EdhocException when [peer] has no such session or message_3 does not verify; its
-     *   [EdhocException.errorMessage] is the error to send.
+     * @throws EdhocException when [peer] has no such session, message_3 does not verify, or this server fails
+     *   to establish the context; its [EdhocException.errorMessage] is the error to send, which
+     *   [CombinedRequestServer] sends in a 5.00 for a failure of this server, as for [handle].
      */
     public suspend fun completeCombined(
         responderId: ConnectionIdentifier,
@@ -155,22 +179,22 @@ public class EdhocServer(
                 taken.responder.abort(MESSAGE_4_REQUIRED)
                 throw EdhocException(EdhocError.unspecified(MESSAGE_4_REQUIRED))
             }
-            return establish(taken.responder, taken.responder.processMessage3(message3))
+            return establish(taken.responder, taken.responder.processMessage3(message3)).first
         } finally {
             withContext(NonCancellable) { pending.release(taken.session) }
         }
     }
 
-    private suspend fun startSession(request: CoapMessage, message1: ByteArray, peer: Endpoint): CoapMessage {
+    private suspend fun startSession(message1: ByteArray, peer: Endpoint): CoapResponse {
         val session = pending.admit(peer)
-            ?: return EdhocOverCoap.errorResponse(request, TOO_MANY_SESSIONS.encode(), isServerError = true)
+            ?: return EdhocOverCoap.errorResponse(TOO_MANY_SESSIONS.encode(), isServerError = true)
         var chosen: ConnectionIdentifier? = null
         val responder = EdhocResponder(
             config.withConnectionIdentifiers { backend, initiatorId ->
                 allocate(session, backend, initiatorId).also { chosen = it }
             },
             crypto,
-            loggers,
+            loggerFactory,
         )
         var isWaiting = false
         try {
@@ -179,10 +203,10 @@ public class EdhocServer(
             pending.await(session, responder)
             isWaiting = true
             log.debug { "Sent message_2 for C_R ${chosen?.bytes?.toHex()} to $peer" }
-            return EdhocOverCoap.messageResponse(request, message2)
+            return EdhocOverCoap.messageResponse(message2)
         } catch (e: EdhocException) {
             log.warn { "Rejected message_1 from $peer: ${e.message}" }
-            return errorResponse(request, e)
+            return errorResponse(e)
         } finally {
             if (!isWaiting) {
                 // A failed step has aborted already; this wipes Y and PRK_3e2m when cancellation came after it.
@@ -192,52 +216,79 @@ public class EdhocServer(
         }
     }
 
-    private suspend fun continueSession(
-        request: CoapMessage,
-        responderId: ConnectionIdentifier,
-        message: ByteArray,
-        peer: Endpoint,
-    ): CoapMessage {
+    private suspend fun continueSession(responderId: ConnectionIdentifier, message: ByteArray, peer: Endpoint): CoapResponse {
         val taken = pending.take(responderId, peer)
-            ?: return EdhocOverCoap.errorResponse(request, UNKNOWN_SESSION.encode())
+            ?: return EdhocOverCoap.errorResponse(UNKNOWN_SESSION.encode())
         try {
             if (isErrorMessage(message)) {
                 // The client gave up (RFC 9528 §6); error messages are never answered with another one.
                 taken.responder.abort("The client aborted the session")
                 log.info { "The client $peer aborted session ${responderId.bytes.toHex()}" }
-                return EdhocOverCoap.completedResponse(request)
+                return EdhocOverCoap.completedResponse()
             }
-            establish(taken.responder, taken.responder.processMessage3(message))
-            return if (sendMessage4) {
-                EdhocOverCoap.messageResponse(request, taken.responder.createMessage4())
-            } else {
-                EdhocOverCoap.completedResponse(request)
-            }
+            val (_, message4) = establish(taken.responder, taken.responder.processMessage3(message))
+            return message4?.let(EdhocOverCoap::messageResponse) ?: EdhocOverCoap.completedResponse()
         } catch (e: EdhocException) {
             log.warn { "Rejected message_3 from $peer: ${e.message}" }
-            return errorResponse(request, e)
+            return errorResponse(e)
         } finally {
             withContext(NonCancellable) { pending.release(taken.session) }
         }
     }
 
-    private suspend fun establish(responder: EdhocResponder, session: EdhocSession): SecurityContext {
-        val context = session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
-        if (!contexts.addIfAbsent(context)) {
-            // Another writer of the repository took this Recipient ID after allocate() found it free: its
-            // context stays, this session ends (RFC 9668 §4.1.2).
-            log.warn { "Context $context not added: its Recipient ID is in use" }
-            responder.abort(IDENTIFIER_IN_USE)
+    /**
+     * Turns the completed [session] into its OSCORE context in [contexts], with message_4 when [sendMessage4] is
+     * set, and tells [listener]: all or nothing. message_4 comes first, so that once the context is in place only
+     * the listener is left to fail. On any failure or cancellation the context is removed again if it may have
+     * been added, [responder] is aborted (wiping PRK_4e3m), [session] is destroyed (PRK_out, PRK_exporter), and
+     * a failure that is not EDHOC's becomes an [EdhocServerFailure], answered with a 5.00.
+     */
+    private suspend fun establish(responder: EdhocResponder, session: EdhocSession): Pair<SecurityContext, ByteArray?> {
+        // The context that may be in the repository: set before addIfAbsent, which may throw or be cancelled
+        // after adding it. Removing it is safe either way, since remove takes out only this very context.
+        var mayBeAdded: SecurityContext? = null
+        try {
+            val message4 = if (sendMessage4) responder.createMessage4() else null
+            val context = session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
+            mayBeAdded = context
+            if (!contexts.addIfAbsent(context)) {
+                // Another writer of the repository took this Recipient ID after allocate() found it free: its
+                // context stays, this session ends (RFC 9668 §4.1.2).
+                mayBeAdded = null
+                log.warn { "Context $context not added: its Recipient ID is in use" }
+                throw EdhocException(EdhocError.unspecified(IDENTIFIER_IN_USE))
+            }
+            log.info { "EDHOC session established: $context, suite ${session.cipherSuite.value}" }
+            listener.onEstablished(session, context)
+            return context to message4
+        } catch (e: Throwable) {
+            mayBeAdded?.let { withContext(NonCancellable) { removeAfterFailure(it) } }
+            responder.abort(NOT_ESTABLISHED)
             session.destroy()
-            throw EdhocException(EdhocError.unspecified(IDENTIFIER_IN_USE))
+            throw when (e) {
+                is EdhocException, is CancellationException -> e
+                is Exception -> {
+                    log.warn(e) { "Session ${session.responderConnectionIdentifier} failed after message_3" }
+                    EdhocServerFailure("$NOT_ESTABLISHED: ${e.message}", e)
+                }
+                else -> e
+            }
         }
-        log.info { "EDHOC session established: $context, suite ${session.cipherSuite.value}" }
-        listener.onEstablished(session, context)
-        return context
     }
 
-    private fun errorResponse(request: CoapMessage, e: EdhocException): CoapMessage =
-        EdhocOverCoap.errorResponse(request, e.errorMessage ?: EdhocError.unspecified("EDHOC failed").encode())
+    private suspend fun removeAfterFailure(context: SecurityContext) {
+        try {
+            contexts.remove(context)
+        } catch (e: Exception) {
+            log.warn(e) { "Context $context of a failed session could not be removed" }
+        }
+    }
+
+    private fun errorResponse(e: EdhocException): CoapResponse =
+        EdhocOverCoap.errorResponse(
+            e.errorMessage ?: EdhocError.unspecified(EdhocServerFailure.DIAGNOSTIC).encode(),
+            isServerError = e is EdhocServerFailure,
+        )
 
     /**
      * RFC 9668 §4.1.2: a C_R that is not C_I, not reserved by another session and not the Recipient ID of a
@@ -267,6 +318,7 @@ public class EdhocServer(
         const val ATTEMPTS_PER_LENGTH = 8
         const val MESSAGE_4_REQUIRED = "This EDHOC profile requires message_4"
         const val IDENTIFIER_IN_USE = "Connection identifier in use"
+        const val NOT_ESTABLISHED = "The OSCORE context was not established"
 
         /** Also the answer to a continuation from a peer other than the session's (RFC 9528 §9.7). */
         val UNKNOWN_SESSION = EdhocError.unspecified("No EDHOC session for C_R")

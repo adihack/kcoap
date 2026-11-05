@@ -12,6 +12,12 @@ adds its entry and migration note below.
 
 ### Added
 
+- Storage and routing for EDHOC-derived contexts (WP-A3): `MutableSecurityContextRepository` (kcoap-oscore), a
+  `SecurityContextRepository` with `add`, `addIfAbsent` and `remove` (of that very context only), which
+  `InMemoryContextRepository` implements and `EdhocServer` takes, so a server can keep its contexts in a bounded
+  or shared store;
+  `PeerSecurity.install(client, uri, security)`, which resolves the server's URI with the client's own
+  resolver and returns the endpoint it installed for; `CombinedHandshake`, the result of `runCombined()`.
 - Access control on the server (WP-SEC2): `AccessPolicy` with `Public`, `MessageSecurityRequired` and
   `Authenticated`, `AccessRequest`, `CoapResource.access`, `ResourceBuilder.access`,
   `CoapServerConfig.defaultAccess`, `LinkFormat.OSCORE` (`osc`, RFC 8613 §9). Verification on the client:
@@ -232,6 +238,52 @@ adds its entry and migration note below.
   only when present (PL-1).
 
 ### Changed (breaking)
+
+The EDHOC-OSCORE glue on SPIs and the application model (WP-A3):
+
+- **`EdhocServer.handle(payload, peer)` takes the request body and returns a `CoapResponse`** instead of
+  taking and returning a `CoapMessage`; `EdhocResource` passes `RequestContext.payload`. The `EdhocOverCoap`
+  builders speak the same model: `message1Request(resource, message1)` and
+  `continuationRequest(resource, responderId, message)` return a `CoapRequest` to the EDHOC resource's URI,
+  `messageResponse(message)`, `completedResponse()` and `errorResponse(errorMessage, isServerError)` a
+  `CoapResponse`, none of them taking a request any more. *Migration:* call `edhoc.handle(context.payload,
+  context.peer)` in a resource of your own, and `edhoc.handle(request.payload, peer)` in a test double.
+- **`EdhocClientHandshake` sends through `suspend (CoapRequest) -> CoapResponse`** and takes the `server`
+  URI as its third parameter: `EdhocClientHandshake(config, crypto, server, path, loggerFactory,
+  sequenceStore, exchange)`. The handshake posts to `path` at the scheme, host and port of `server`.
+  `over(client, server, ...)` passes `client::request`. *Migration:* pass the server's URI, and for a carrier
+  of your own return `CoapResponse` for a `CoapRequest`: `{ client.request(it) }`, or in tests
+  `{ edhocServer.handle(it.payload, peer) }`.
+- **`EdhocServer` takes `contexts: MutableSecurityContextRepository`** instead of the final
+  `InMemoryContextRepository`. Contexts from EDHOC accumulate there, one per handshake. *Migration:* none for
+  `InMemoryContextRepository`; a production server supplies a repository with a bound, since an evicted client
+  only runs EDHOC again, on OSCORE's 4.01 "Security context not found" or, once its old C_R went to another
+  client, 4.00 "Decryption failed".
+- **`CombinedRequestServer(edhoc, oscore)` takes any `ServerMessageSecurity`** as `oscore`, not only
+  `OscoreServer`, and answers a rebuilt combined request that layer does not take as protected (null) with
+  4.00. *Migration:* none; compiled callers recompile.
+- **`runCombined()` returns `CombinedHandshake(session, security)`** instead of
+  `Pair<EdhocOscoreSession, CombinedRequestSecurity>`. *Migration:* destructuring (`val (session, security) =`)
+  is unchanged; replace `.first` and `.second` with `.session` and `.security`.
+- **`EdhocTransferException` is an `EdhocException`** (error code 1, `errorMessage` null: nothing to send
+  back), and its `response` is a `CoapResponse`. *Migration:* a `catch (e: EdhocException)` now also catches
+  it, so catch `EdhocTransferException` first where you handle it apart.
+- **`EdhocOverCoap.parseRequest` throws `EdhocException`** for a malformed payload instead of
+  `IllegalArgumentException`: what the peer sent is an EDHOC failure (code 1, "Malformed EDHOC request" on the
+  wire, the detail in the exception message), and `EdhocServer.handle` no longer catches
+  `IllegalArgumentException`. The detail names the type of an offending CBOR item instead of quoting it, so
+  the peer's text never reaches a log, and the server logs the payload as its length (docs/logging.md).
+  *Migration:* catch `EdhocException`, and answer with its `errorMessage`.
+- **`InMemoryContextRepository.remove(context)` removes that very context only, and returns whether it did**
+  (`MutableSecurityContextRepository.remove`). It removed whatever context was held under the Recipient ID and
+  ID Context of `context`, so a late removal, such as an expiry timer, could take out the context of another
+  client that had the same Recipient ID since. *Migration:* remove the context you added or found; to clear a
+  pair whatever it holds, `find` its context first and remove that.
+- **`LoggerFactory` parameters are named `loggerFactory`** in `EdhocServer`, `EdhocClientHandshake` and
+  `EdhocClientHandshake.over`. *Migration:* rename the named argument `loggers =` to `loggerFactory =`.
+- `EdhocOscoreSession`, `EdhocSessionListener` and `EdhocTransferException` moved to files of their own, and
+  `SecurityContextRepository` and `InMemoryContextRepository` out of `OscoreEndpoints.kt`, in the same
+  packages. *Migration:* none: they are classes, so their names stay the same from Kotlin and Java.
 
 Fail-closed message security (WP-SEC2, [ADR 0008](docs/adr/0008-fail-closed-message-security.md)):
 
@@ -485,6 +537,17 @@ Build governance (WP-C1):
 
 ### Security
 
+- EDHOC server (WP-A3): when adding the OSCORE context after message_3, the sequence number store or the
+  `EdhocSessionListener` failed or was cancelled, the context could stay in the repository although the client
+  was told the handshake failed, PRK_4e3m, PRK_out and PRK_exporter were left for the garbage collector, and
+  the client got the CoAP server's plain 5.00. A session is now established all or nothing: the context is
+  removed again, the session wiped (RFC 9528 §9.8), and the client gets "EDHOC failed" in a 5.00 with
+  Content-Format application/edhoc+cbor-seq (RFC 9528 Appendix A.2.3), also for the combined request; message_4
+  is composed before the context is added.
+- EDHOC client (WP-A3): a handshake that failed or was cancelled left its secrets for the garbage collector:
+  the ephemeral key X when the request for message_2 failed or was answered with a 4.04, PRK_4e3m and the
+  session's PRK_out and PRK_exporter when the server rejected message_3 or the context could not be derived.
+  `EdhocClientHandshake` now aborts its Initiator and destroys the session on any failure (RFC 9528 §9.8).
 - CoAP server (WP-SEC2): configuring message security protected no resource by itself. Unprotected
   requests reached every handler that did not check `securityIdentity`, and before any handler ran they
   could buffer request bodies, register, replace or cancel observations of authenticated clients, get Q-Block2

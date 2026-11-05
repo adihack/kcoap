@@ -286,6 +286,8 @@ Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md
   requests in plain CoAP on purpose. Discovering the EDHOC resource before the handshake therefore takes a
   plain client (or `/.well-known/core` in `PeerSecurity`'s `unprotectedPaths`); a Q-Block probe the security
   layer will not send yet is skipped for that request, so EDHOC works on a client with `QBlockMode.PROBE`.
+  After the handshake, `security.install(client, serverUri, protection)` installs the protection for the
+  endpoint the client's own resolver finds for that URI, the one its requests go to.
 
 ## Testing without a network
 

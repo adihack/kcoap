@@ -7,6 +7,7 @@ import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.client.EndpointResolver
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.security.ClientMessageSecurity
@@ -109,8 +110,11 @@ class FullStackTest {
             EdhocClientHandshake.over(client, serverUri, peers.initiatorConfig(), crypto, sequenceStore = store)
         val (session, protection) = handshake.runCombined()
         assertEquals(setOf(session.oscore.name), store.names, "the context was derived with the given store")
-        security.install(address, protection)
+        // Installed by URI: the client's own resolver finds the endpoint its requests go to.
+        assertEquals(address, security.install(client, serverUri, protection))
         assertTrue(security.isProtected(address))
+        val unresolvable = CoapUri.parse("coap://edhoc.example")
+        assertFailsWith<IllegalArgumentException>("IpLiterals knows no DNS") { security.install(client, unresolvable, protection) }
 
         val lights = client.get("$base/lights")
         assertEquals("on", lights.payloadAsText())
@@ -142,6 +146,38 @@ class FullStackTest {
         notifications.join()
         client.close()
         server.close()
+    }
+
+    /**
+     * Install by URI resolves the server's name with the client's own resolver, as the client's requests do, so a
+     * protection installed for `coap://edhoc.example` covers the endpoint the requests to that name go to.
+     */
+    @Test
+    fun installByUriResolvesWithTheClientsResolver() = runTest {
+        val network = InMemoryNetwork(backgroundScope, Random(3))
+        val address = Endpoint.Udp("192.0.2.80", 5683)
+        val resolver = EndpointResolver { uri ->
+            if (uri.host == "edhoc.example") address else EndpointResolver.IpLiterals.resolve(uri)
+        }
+        val security = PeerSecurity()
+        val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig(security = security, resolver = resolver))
+        val protectedFor = mutableListOf<Endpoint>()
+        val protection = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+                protectedFor += peer
+                return null
+            }
+        }
+
+        assertEquals(address, security.install(client, CoapUri.parse("coap://edhoc.example"), protection))
+        assertTrue(security.isProtected(address))
+        val request = CoapMessage.request(CoapCode.GET) { options { uriPath("lights") } }
+        security.protectRequest(request, address)
+        assertEquals(listOf<Endpoint>(address), protectedFor, "the installed protection answers for that endpoint")
+        val literal = Endpoint.Udp("192.0.2.81", 5683)
+        assertEquals(literal, security.install(client, CoapUri.parse("coap://192.0.2.81"), protection))
+        assertFalse(security.isProtected(Endpoint.Udp("192.0.2.82", 5683)))
+        client.close()
     }
 
     /**
@@ -192,7 +228,7 @@ class FullStackTest {
         val handshake = EdhocClientHandshake.over(client, CoapUri.parse(base), peers.initiatorConfig(), crypto)
         val (_, protection) = handshake.runCombined()
         val beforeInstall = handed.toList()
-        security.install(address, protection)
+        security.install(client, CoapUri.parse(base), protection)
         assertContentEquals(bigBody, client.get("$base/firmware").payload)
 
         val edhocRequests = beforeInstall.filter { it.first.options.path == "/.well-known/edhoc" }
