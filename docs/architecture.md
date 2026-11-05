@@ -77,6 +77,8 @@ For CoAP over UDP the layers map onto code like this (`kcoap-coap`):
 ```
 CoapClient / CoapServer       client.*, server.*: suspend calls, Flow for Observe, resource tree + DSL
 Block-wise, Observe           BlockwiseClient / BlockwiseServer, ClientObservation / ObservationRegistry
+Q-Block (RFC 9177), opt-in    QBlockClient / QBlockServer driving the sans-IO cores QBlock1Sender,
+                              QBlock1Receiver, QBlock2Sender, QBlock2Receiver (stack.*)
 Exchanges                     CoapEndpoint + ClientExchange: tokens, matching by (Endpoint, token)
 Message security              ClientMessageSecurity / ServerMessageSecurity, called per message
 Messaging                     UdpMessaging: sans-IO, internal
@@ -111,6 +113,36 @@ Resets, timeouts and failures to a bounded inbox that all requests of one Q-Bloc
 driver. A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
 released when the body ends or at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (§7.2); its blocks take no
 slot of their own. A Confirmable body takes a slot per block instead, so NSTART runs it in lock-step.
+
+**The Q-Block layer** (RFC 9177; [ADR 0006](adr/0006-q-block.md)). Q-Block sits where Block-wise does,
+above message security, so under OSCORE its options are Inner (RFC 9177 Table 2) and every block, 2.31 and
+4.08 is protected on its own. It is off by default on both sides (`QBlockClientConfig.mode = OFF`,
+`QBlockServerConfig.isEnabled = false`), and then a Confirmable request with Q-Block gets 4.02 and a
+Non-confirmable one a Reset (§4.1). The rules live in four sans-IO state machines in `stack.*`: messages and
+`now` go in, `QBlockAction`s and the next deadline come out, so every figure of RFC 9177 runs as a script on
+virtual time. Thin drivers turn them into messages:
+
+- `QBlockClient` chooses Q-Block or RFC 7959 per request (off on reliable transports and under message
+  security unless configured, never with No-Response), finds out once per peer and protection whether the
+  server takes Q-Block (`QBlockSupport`: a Confirmable `GET /.well-known/core` with Q-Block2 0/0/16, kept by
+  the endpoint for all its clients), and drives uploads, downloads and observations over one inbox per body.
+  A body follows its request's message type: Non-confirmable bursts of MAX_PAYLOADS blocks under one
+  `BodyLease`, or Confirmable lock-step.
+- `QBlockServer` runs after message security and the address check: it assembles uploads (`PartialBody`),
+  serves response bodies from a bounded cache (`ServedBody`) with an ETag of its own per body, answers
+  Continues and requests for missing blocks, and sends the notifications of a Q-Block registration as bodies
+  (`NotificationBody`), one outstanding per observation. Before a burst to a client nothing authenticated it
+  verifies the address with Echo (`AmplificationPolicy.Q_BLOCK_BURSTS`, the default, RFC 9175 §2.4).
+- Under OSCORE both sides opt in (`withMessageSecurity`). `OscoreClient` takes the several responses of a
+  body to a request with Inner Q-Block, each with a Partial IV new in a replay window of that request, and the
+  notification bodies of such a registration by a window of the registration, with freshness by Partial IV
+  per body (RFC 8613 §4.1.3.5.2, §7.4.1), so the stack leaves the order of protected notifications to it as
+  before.
+
+Its tests run the cores figure by figure (`QBlockFiguresTest`), the client and server against each other on
+the in-memory network at 10 % and 30 % loss (`QBlockTest`), on real threads (`QBlockStressTest`), under
+OSCORE (`OscoreQBlockEndToEndTest`), and against libcoap both ways with a nightly soak
+([testing.md](testing.md#nightly-soak)).
 
 **Concurrency rules.** Every stateful component follows them, and `ConcurrencyStressTest` checks them on
 real threads, on the JVM and Kotlin/Native, through `kcoap-testkit`'s `Stress` helper:

@@ -91,7 +91,8 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   unprotected responses, such a request gets only the errors that end its body (4.00, 4.01 and 5.xx without
   Echo or a block option): the client acts on the others for the whole body, so they would let anyone on the
   path steer it. libcoap 4.3.5b protects and verifies only the first response to a request, so these bodies
-  are tested kcoap against kcoap, and its failure is pinned (QB-5).
+  are tested kcoap against kcoap, and its failure is pinned (QB-5). Notification bodies follow the same
+  window, per registration (below).
 - **Amplification.** A server bursting to an unauthenticated, unverified peer first verifies its address
   with Echo (RFC 9175 §2.4), for Q-Block bursts only, and for Observe registrations with Q-Block, whose
   notification bodies are bursts that no request asks for (QB-6).
@@ -121,10 +122,28 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   deregistration would send the body again under a new Request-Tag; when its 2.05 is lost and the client
   sends the last block again on a new token, the server sends the 2.05 again on the token of the request
   that completed the upload, where the notifications go (§4.3), and nothing on the copy. Its follow-ups
-  always carry the upload's Request-Tag and no payload (§4.7). Under OSCORE the client observes with Inner
-  Block2 even where both sides opt in to Q-Block: `OscoreClient` takes a notification only with a Partial IV
-  above every one before (RFC 8613 §7.4.1), and with reordering it dropped most blocks of a notification
-  body. Taking them by a window per registration is still open.
+  always carry the upload's Request-Tag and no payload (§4.7).
+- **Protected notification bodies** (QB-7). Under OSCORE every block of a notification body is a notification
+  with a Partial IV of its own (RFC 8613 §4.1.3.5.2 asks for a new one in every notification but the first),
+  so with reordering a block arrives below the Notification Number. QB-6 kept protected observations on Inner
+  Block2 because `OscoreClient` took only Partial IVs above it, and at 10 % loss with 20–50 ms of jitter it
+  dropped about 130 blocks per run. The RFCs allow taking them: §7.4.1 requires only that a client stop
+  processing a notification whose Partial IV it received before, and makes "only above the Notification
+  Number" a rule an application MAY choose; §4.1.3.5.2 requires the highest Partial IV to count as the
+  freshest, whatever the order of arrival; and RFC 9177 §4.4 and §4.5 give every payload of one body the same
+  ETag and Observe value, which makes the body one notification in RFC 7641's sense. So a registration that
+  carries Inner Q-Block checks its notifications against a replay window of the request (the context's
+  `replayWindowSize`, 32 by default, as for the other responses of a Q-Block body), and decides freshness per
+  body: a notification below the Notification Number passes only as a block of the body whose block holds
+  the highest Partial IV, identified by its ETag. Replays, blocks of older bodies, older notifications of one
+  message and a late notification without a Partial IV (the oldest of all) are dropped, so the stack still
+  gets only the freshest notification or a part of it, and leaves the order of protected notifications to
+  the security layer, as before. A block further back than the window is dropped and asked for again with a
+  request for missing blocks, which is a request of its own with its own window. Registrations without Inner
+  Q-Block keep the strict order. Taking any block of the freshest body without a window was rejected: it
+  would let a replayed block through, which §7.4.1 forbids.
+  The server needed nothing: each notification block already takes a new Partial IV and is protected with
+  the registration's binding, also the sets sent for a Continue on the registration's token.
 - **Strict towards libcoap's client.** A Q-Block2 follow-up that carries `Q-Block1 0/M` without payload
   gets 4.00; the deviation is pinned as an `upstream…` test.
 

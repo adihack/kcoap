@@ -742,8 +742,7 @@ public class QBlockServerConfig(
   `QBlockClient.rfc7959Reason` keeps observations under message security on RFC 7959 (Inner Block2), pinned
   by `QBlockObserveTest.rfc8613Section7_4_1AnObservationUnderMessageSecurityKeepsRfc7959` and
   `OscoreQBlockEndToEndTest.rfc8613Section7_4_1AProtectedObservationKeepsInnerBlock2WhenBothSidesOptIn`.
-  Still open: the OSCORE notifications of this package (a window per Q-Block2 registration in
-  `OscoreClient`, reordering in `OscoreQBlockTest`), which then lift that rule.
+  The OSCORE notifications of this package came with QB-7, which lifted that rule (below).
 
 **QB-7: interop soak, documentation, compliance**
 - **Scope:**
@@ -754,6 +753,35 @@ public class QBlockServerConfig(
   - `GuideExamplesTest` compiles the new section.
   - The docs match the configuration defaults.
   - Every libcoap deviation listed has a matching `upstream…` test.
+- **Status: done**, with the OSCORE notifications QB-6 left. Decision (ADR 0006, "Protected notification
+  bodies"): RFC 8613 §7.4.1 requires only that a notification whose Partial IV was received before is
+  refused, and makes "only above the Notification Number" a rule an application MAY choose; §4.1.3.5.2 takes
+  freshness from the highest Partial IV whatever the order of arrival; RFC 9177 §4.4 and §4.5 give the payloads
+  of one body one ETag and one Observe value. So `OscoreClient` checks the notifications of a registration with
+  Inner Q-Block against a window of that registration and decides freshness per body: below the Notification
+  Number only blocks of the freshest body (by ETag) pass; replays, older bodies, older notifications of one
+  message and a late notification without a Partial IV (the oldest) are dropped. Registrations without
+  Q-Block keep the strict order. `QBlockClient.rfc7959Reason` no longer keeps protected observations on RFC
+  7959, and the stack leaves the order of a notification to the security layer only when the exchange is
+  protected (a resolver that leaves a registration unprotected no longer skips the ordering). The server
+  needed nothing. Tests: `OscoreQBlockTest` (+7: bodies in any order for Q-Block2 and Q-Block1 FETCH
+  registrations, replays, an older body, a stale whole body, an older notification of one message, the
+  window edge, the strict order without Q-Block), `OscoreQBlockEndToEndTest` (+3, one turned around: protected
+  notification bodies; 5 seeds at 10 % loss with 20–50 ms of latency, every body whole, in order and once,
+  no genuine block refused, where the strict rule delivered 2 of 7; a held-back older body and a replayed
+  newer one never delivered), `QBlockObserveTest` (turned around; the stale-body case also with security that
+  leaves the registration unprotected).
+  The soak: L9 (`l9UploadsAndBodiesAt10PercentLossBothWays`) and the K soak
+  (`kSoakBodiesBothWaysAt10PercentLoss`) at 10 % loss on both sides, 3 runs in `scripts/test interop` and 20
+  with `-Pkcoap.soak=true` (`Soak`, [testing.md](testing.md#nightly-soak)); not scheduled in CI, since
+  `ci.yml` cancels a run in progress on the same ref and a `schedule` there would run every job, so it needs a
+  workflow of its own (left to the next owner of the CI files). L6 runs under the default
+  `AmplificationPolicy.Q_BLOCK_BURSTS` too: libcoap 4.3.5b repeats its registration with Echo. L9 found a
+  client deviation, pinned as `upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, and the K5 and K6
+  deviations got `upstream…` tests of their own. `QBlockStressTest` (3) runs Q-Block bodies with `Stress` on
+  `jvmTest` and `linuxX64Test`. Documentation: the guide's Q-Block section (`GuideExamplesTest`, which also
+  pins the defaults), the Q-Block layer in architecture.md, rfc-compliance.md (RFC 9177 done; §4.8 and §8–9
+  not applicable), checklist.md, kcoap-coap/README.md, interop/README.md.
 
 **Amendment to B1.**
 - Move `ResponseMode`, the inbox and `BodyLease` behind `PeerLink`: `DatagramLink` owns the lease; on `ConnectionLink` it does nothing.
