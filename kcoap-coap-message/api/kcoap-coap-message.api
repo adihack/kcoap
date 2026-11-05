@@ -1,0 +1,591 @@
+public final class dev/kcoap/coap/BlockOption {
+	public static final field Companion Ldev/kcoap/coap/BlockOption$Companion;
+	public static final field MAX_NUMBER J
+	public fun <init> (JZI)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMore ()Z
+	public final fun getNumber ()J
+	public final fun getOffset ()J
+	public final fun getSize ()I
+	public final fun getSizeExponent ()I
+	public fun hashCode ()I
+	public final fun isBert ()Z
+	public fun toString ()Ljava/lang/String;
+	public final fun toUint ()J
+}
+
+public final class dev/kcoap/coap/BlockOption$Companion {
+	public final fun fromUint (J)Ldev/kcoap/coap/BlockOption;
+	public final fun sizeExponentFor (I)I
+}
+
+public final class dev/kcoap/coap/CoapCode {
+	public static final field Companion Ldev/kcoap/coap/CoapCode$Companion;
+	public static final synthetic fun box-impl (I)Ldev/kcoap/coap/CoapCode;
+	public static fun constructor-impl (I)I
+	public fun equals (Ljava/lang/Object;)Z
+	public static fun equals-impl (ILjava/lang/Object;)Z
+	public static final fun equals-impl0 (II)Z
+	public static final fun getCodeClass-impl (I)I
+	public static final fun getDescription-impl (I)Ljava/lang/String;
+	public static final fun getDetail-impl (I)I
+	public final fun getValue ()I
+	public fun hashCode ()I
+	public static fun hashCode-impl (I)I
+	public static final fun isClientError-impl (I)Z
+	public static final fun isEmpty-impl (I)Z
+	public static final fun isRequest-impl (I)Z
+	public static final fun isResponse-impl (I)Z
+	public static final fun isServerError-impl (I)Z
+	public static final fun isSignaling-impl (I)Z
+	public static final fun isSuccess-impl (I)Z
+	public fun toString ()Ljava/lang/String;
+	public static fun toString-impl (I)Ljava/lang/String;
+	public final synthetic fun unbox-impl ()I
+}
+
+public final class dev/kcoap/coap/CoapCode$Companion {
+	public final fun getABORT-xRAr_a8 ()I
+	public final fun getBAD_GATEWAY-xRAr_a8 ()I
+	public final fun getBAD_OPTION-xRAr_a8 ()I
+	public final fun getBAD_REQUEST-xRAr_a8 ()I
+	public final fun getCHANGED-xRAr_a8 ()I
+	public final fun getCONFLICT-xRAr_a8 ()I
+	public final fun getCONTENT-xRAr_a8 ()I
+	public final fun getCONTINUE-xRAr_a8 ()I
+	public final fun getCREATED-xRAr_a8 ()I
+	public final fun getCSM-xRAr_a8 ()I
+	public final fun getDELETE-xRAr_a8 ()I
+	public final fun getDELETED-xRAr_a8 ()I
+	public final fun getEMPTY-xRAr_a8 ()I
+	public final fun getFETCH-xRAr_a8 ()I
+	public final fun getFORBIDDEN-xRAr_a8 ()I
+	public final fun getGATEWAY_TIMEOUT-xRAr_a8 ()I
+	public final fun getGET-xRAr_a8 ()I
+	public final fun getHOP_LIMIT_REACHED-xRAr_a8 ()I
+	public final fun getINTERNAL_SERVER_ERROR-xRAr_a8 ()I
+	public final fun getIPATCH-xRAr_a8 ()I
+	public final fun getMETHOD_NOT_ALLOWED-xRAr_a8 ()I
+	public final fun getNOT_ACCEPTABLE-xRAr_a8 ()I
+	public final fun getNOT_FOUND-xRAr_a8 ()I
+	public final fun getNOT_IMPLEMENTED-xRAr_a8 ()I
+	public final fun getPATCH-xRAr_a8 ()I
+	public final fun getPING-xRAr_a8 ()I
+	public final fun getPONG-xRAr_a8 ()I
+	public final fun getPOST-xRAr_a8 ()I
+	public final fun getPRECONDITION_FAILED-xRAr_a8 ()I
+	public final fun getPROXYING_NOT_SUPPORTED-xRAr_a8 ()I
+	public final fun getPUT-xRAr_a8 ()I
+	public final fun getRELEASE-xRAr_a8 ()I
+	public final fun getREQUEST_ENTITY_INCOMPLETE-xRAr_a8 ()I
+	public final fun getREQUEST_ENTITY_TOO_LARGE-xRAr_a8 ()I
+	public final fun getSERVICE_UNAVAILABLE-xRAr_a8 ()I
+	public final fun getTOO_MANY_REQUESTS-xRAr_a8 ()I
+	public final fun getUNAUTHORIZED-xRAr_a8 ()I
+	public final fun getUNPROCESSABLE_ENTITY-xRAr_a8 ()I
+	public final fun getUNSUPPORTED_CONTENT_FORMAT-xRAr_a8 ()I
+	public final fun getVALID-xRAr_a8 ()I
+	public final fun of-x47OSX8 (II)I
+}
+
+public final class dev/kcoap/coap/CoapMessage {
+	public static final field Companion Ldev/kcoap/coap/CoapMessage$Companion;
+	public static final field MAX_TOKEN_LENGTH I
+	public synthetic fun <init> (Ldev/kcoap/coap/CoapMessageType;II[BLdev/kcoap/coap/OptionSet;[BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCode-xRAr_a8 ()I
+	public final fun getMessageId ()I
+	public final fun getOptions ()Ldev/kcoap/coap/OptionSet;
+	public final fun getPayload ()[B
+	public final fun getPayloadSize ()I
+	public final fun getToken ()[B
+	public final fun getTokenHex ()Ljava/lang/String;
+	public final fun getType ()Ldev/kcoap/coap/CoapMessageType;
+	public final fun hasToken ([B)Z
+	public fun hashCode ()I
+	public final fun isEmpty ()Z
+	public final fun isRequest ()Z
+	public final fun isResponse ()Z
+	public final fun isSignaling ()Z
+	public final fun payloadAsText ()Ljava/lang/String;
+	public final fun toBuilder ()Ldev/kcoap/coap/CoapMessage$Builder;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/CoapMessage$Builder {
+	public final fun build ()Ldev/kcoap/coap/CoapMessage;
+	public final fun getCode-xRAr_a8 ()I
+	public final fun getMessageId ()I
+	public final fun getPayload ()[B
+	public final fun getToken ()[B
+	public final fun getType ()Ldev/kcoap/coap/CoapMessageType;
+	public final fun options (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapMessage$Builder;
+	public final fun payload (Ljava/lang/String;)Ldev/kcoap/coap/CoapMessage$Builder;
+	public final fun replaceOptions (Ldev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapMessage$Builder;
+	public final fun setCode-v96FvdI (I)V
+	public final fun setMessageId (I)V
+	public final fun setPayload ([B)V
+	public final fun setToken ([B)V
+	public final fun setType (Ldev/kcoap/coap/CoapMessageType;)V
+}
+
+public final class dev/kcoap/coap/CoapMessage$Companion {
+	public final fun build (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapMessage;
+	public final fun empty (Ldev/kcoap/coap/CoapMessageType;I)Ldev/kcoap/coap/CoapMessage;
+	public final fun request-va4rc68 (ILkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapMessage;
+	public static synthetic fun request-va4rc68$default (Ldev/kcoap/coap/CoapMessage$Companion;ILkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ldev/kcoap/coap/CoapMessage;
+	public final fun response-Yo_aEx4 (Ldev/kcoap/coap/CoapMessage;ILkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapMessage;
+	public static synthetic fun response-Yo_aEx4$default (Ldev/kcoap/coap/CoapMessage$Companion;Ldev/kcoap/coap/CoapMessage;ILkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ldev/kcoap/coap/CoapMessage;
+}
+
+public final class dev/kcoap/coap/CoapMessageType : java/lang/Enum {
+	public static final field ACK Ldev/kcoap/coap/CoapMessageType;
+	public static final field CON Ldev/kcoap/coap/CoapMessageType;
+	public static final field Companion Ldev/kcoap/coap/CoapMessageType$Companion;
+	public static final field NON Ldev/kcoap/coap/CoapMessageType;
+	public static final field RST Ldev/kcoap/coap/CoapMessageType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()I
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/CoapMessageType;
+	public static fun values ()[Ldev/kcoap/coap/CoapMessageType;
+}
+
+public final class dev/kcoap/coap/CoapMessageType$Companion {
+	public final fun fromValue (I)Ldev/kcoap/coap/CoapMessageType;
+}
+
+public final class dev/kcoap/coap/CoapOption {
+	public static final field Companion Ldev/kcoap/coap/CoapOption$Companion;
+	public static final field MAX_LENGTH I
+	public fun <init> (I[B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDefinition ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getLength ()I
+	public final fun getNumber ()I
+	public final fun getValue ()[B
+	public fun hashCode ()I
+	public final fun stringValue ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+	public final fun uintValue ()J
+}
+
+public final class dev/kcoap/coap/CoapOption$Companion {
+	public final fun empty (I)Ldev/kcoap/coap/CoapOption;
+	public final fun string (ILjava/lang/String;)Ldev/kcoap/coap/CoapOption;
+	public final fun uint (IJ)Ldev/kcoap/coap/CoapOption;
+}
+
+public final class dev/kcoap/coap/CoapOptions {
+	public static final field INSTANCE Ldev/kcoap/coap/CoapOptions;
+	public final fun byNumber (I)Ldev/kcoap/coap/OptionDefinition;
+	public final fun getACCEPT ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getAll ()Ljava/util/List;
+	public final fun getBLOCK1 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getBLOCK2 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getCONTENT_FORMAT ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getECHO ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getEDHOC ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getETAG ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getHOP_LIMIT ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getIF_MATCH ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getIF_NONE_MATCH ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getLOCATION_PATH ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getLOCATION_QUERY ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getMAX_AGE ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getNO_RESPONSE ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getOBSERVE ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getOSCORE ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getPROXY_SCHEME ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getPROXY_URI ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getQ_BLOCK1 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getQ_BLOCK2 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getREQUEST_TAG ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getSIZE1 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getSIZE2 ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getURI_HOST ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getURI_PATH ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getURI_PORT ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun getURI_QUERY ()Ldev/kcoap/coap/OptionDefinition;
+	public final fun oscoreClasses (I)Ljava/util/Set;
+}
+
+public final class dev/kcoap/coap/CoapRequest {
+	public synthetic fun <init> (ILdev/kcoap/coap/CoapUri;Ldev/kcoap/coap/OptionSet;[BZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILdev/kcoap/coap/CoapUri;Ldev/kcoap/coap/OptionSet;[BZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMethod-xRAr_a8 ()I
+	public final fun getOptions ()Ldev/kcoap/coap/OptionSet;
+	public final fun getPayload ()[B
+	public final fun getPayloadSize ()I
+	public final fun getUri ()Ldev/kcoap/coap/CoapUri;
+	public final fun isConfirmable ()Z
+	public final fun toBuilder ()Ldev/kcoap/coap/CoapRequest$Builder;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/CoapRequest$Builder {
+	public synthetic fun <init> (ILdev/kcoap/coap/CoapUri;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun accept (I)Ldev/kcoap/coap/CoapRequest$Builder;
+	public final fun build ()Ldev/kcoap/coap/CoapRequest;
+	public final fun contentFormat (I)Ldev/kcoap/coap/CoapRequest$Builder;
+	public final fun getMethod-xRAr_a8 ()I
+	public final fun getPayload ()[B
+	public final fun getUri ()Ldev/kcoap/coap/CoapUri;
+	public final fun isConfirmable ()Z
+	public final fun nonConfirmable ()Ldev/kcoap/coap/CoapRequest$Builder;
+	public final fun options (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapRequest$Builder;
+	public final fun payload (Ljava/lang/String;)Ldev/kcoap/coap/CoapRequest$Builder;
+	public final fun setConfirmable (Z)V
+	public final fun setPayload ([B)V
+}
+
+public final class dev/kcoap/coap/CoapResponse {
+	public static final field Companion Ldev/kcoap/coap/CoapResponse$Companion;
+	public synthetic fun <init> (ILdev/kcoap/coap/OptionSet;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILdev/kcoap/coap/OptionSet;[BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCode-xRAr_a8 ()I
+	public final fun getContentFormat ()Ljava/lang/Integer;
+	public final fun getOptions ()Ldev/kcoap/coap/OptionSet;
+	public final fun getPayload ()[B
+	public final fun getPayloadSize ()I
+	public fun hashCode ()I
+	public final fun isSuccess ()Z
+	public final fun payloadAsText ()Ljava/lang/String;
+	public final fun toMessage ([B)Ldev/kcoap/coap/CoapMessage;
+	public fun toString ()Ljava/lang/String;
+	public final fun withOptions (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapResponse;
+}
+
+public final class dev/kcoap/coap/CoapResponse$Companion {
+	public final fun changed ()Ldev/kcoap/coap/CoapResponse;
+	public final fun content (Ljava/lang/String;I)Ldev/kcoap/coap/CoapResponse;
+	public final fun content ([BLjava/lang/Integer;)Ldev/kcoap/coap/CoapResponse;
+	public static synthetic fun content$default (Ldev/kcoap/coap/CoapResponse$Companion;Ljava/lang/String;IILjava/lang/Object;)Ldev/kcoap/coap/CoapResponse;
+	public static synthetic fun content$default (Ldev/kcoap/coap/CoapResponse$Companion;[BLjava/lang/Integer;ILjava/lang/Object;)Ldev/kcoap/coap/CoapResponse;
+	public final fun created ([Ljava/lang/String;)Ldev/kcoap/coap/CoapResponse;
+	public final fun deleted ()Ldev/kcoap/coap/CoapResponse;
+	public final fun error-va4rc68 (ILjava/lang/String;)Ldev/kcoap/coap/CoapResponse;
+	public static synthetic fun error-va4rc68$default (Ldev/kcoap/coap/CoapResponse$Companion;ILjava/lang/String;ILjava/lang/Object;)Ldev/kcoap/coap/CoapResponse;
+	public final fun of (Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapResponse;
+}
+
+public final class dev/kcoap/coap/CoapUri {
+	public static final field Companion Ldev/kcoap/coap/CoapUri$Companion;
+	public fun <init> (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILjava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILjava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHost ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getPathSegments ()Ljava/util/List;
+	public final fun getPort ()I
+	public final fun getQuerySegments ()Ljava/util/List;
+	public final fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun hashCode ()I
+	public final fun isIpLiteral ()Z
+	public final fun toOptions (I)Ldev/kcoap/coap/OptionSet;
+	public static synthetic fun toOptions$default (Ldev/kcoap/coap/CoapUri;IILjava/lang/Object;)Ldev/kcoap/coap/OptionSet;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/CoapUri$Companion {
+	public final fun fromOptions (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILdev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapUri;
+	public final fun parse (Ljava/lang/String;)Ldev/kcoap/coap/CoapUri;
+}
+
+public final class dev/kcoap/coap/ContentFormat {
+	public static final field CBOR I
+	public static final field CID_EDHOC_CBOR_SEQ I
+	public static final field EDHOC_CBOR_SEQ I
+	public static final field EXI I
+	public static final field INSTANCE Ldev/kcoap/coap/ContentFormat;
+	public static final field JSON I
+	public static final field LINK_FORMAT I
+	public static final field MISSING_BLOCKS_CBOR_SEQ I
+	public static final field OCTET_STREAM I
+	public static final field OSCORE I
+	public static final field TEXT_PLAIN I
+	public static final field XML I
+}
+
+public final class dev/kcoap/coap/LinkFormat {
+	public static final field CONTENT_TYPE Ljava/lang/String;
+	public static final field HREF Ljava/lang/String;
+	public static final field INSTANCE Ldev/kcoap/coap/LinkFormat;
+	public static final field INTERFACE Ljava/lang/String;
+	public static final field OBSERVABLE Ljava/lang/String;
+	public static final field OSCORE Ljava/lang/String;
+	public static final field RESOURCE_TYPE Ljava/lang/String;
+	public static final field SIZE Ljava/lang/String;
+	public static final field TITLE Ljava/lang/String;
+	public final fun filter (Ljava/util/List;Ljava/util/List;)Ljava/util/List;
+	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun serialize (Ljava/util/List;)Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/OptionDefinition {
+	public fun <init> (ILjava/lang/String;Ldev/kcoap/coap/OptionFormat;IIZLjava/util/Set;Ljava/lang/String;)V
+	public final fun getFormat ()Ldev/kcoap/coap/OptionFormat;
+	public final fun getMaxLength ()I
+	public final fun getMinLength ()I
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNumber ()I
+	public final fun getOscoreClasses ()Ljava/util/Set;
+	public final fun getReference ()Ljava/lang/String;
+	public final fun getRepeatable ()Z
+	public final fun isCritical ()Z
+	public final fun isNoCacheKey ()Z
+	public final fun isUnsafe ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/OptionFormat : java/lang/Enum {
+	public static final field EMPTY Ldev/kcoap/coap/OptionFormat;
+	public static final field OPAQUE Ldev/kcoap/coap/OptionFormat;
+	public static final field STRING Ldev/kcoap/coap/OptionFormat;
+	public static final field UINT Ldev/kcoap/coap/OptionFormat;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/OptionFormat;
+	public static fun values ()[Ldev/kcoap/coap/OptionFormat;
+}
+
+public final class dev/kcoap/coap/OptionSet : java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
+	public static final field Companion Ldev/kcoap/coap/OptionSet$Companion;
+	public final fun all (I)Ljava/util/List;
+	public final fun contains (I)Z
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun first (I)Ldev/kcoap/coap/CoapOption;
+	public final fun getAccept ()Ljava/lang/Integer;
+	public final fun getBlock1 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getBlock2 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getContentFormat ()Ljava/lang/Integer;
+	public final fun getEcho ()[B
+	public final fun getEdhoc ()Z
+	public final fun getEtags ()Ljava/util/List;
+	public final fun getHopLimit ()Ljava/lang/Integer;
+	public final fun getIfMatch ()Ljava/util/List;
+	public final fun getIfNoneMatch ()Z
+	public final fun getLocationPath ()Ljava/util/List;
+	public final fun getLocationQuery ()Ljava/util/List;
+	public final fun getMaxAge ()J
+	public final fun getNoResponse ()Ljava/lang/Integer;
+	public final fun getObserve ()Ljava/lang/Long;
+	public final fun getOscore ()[B
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getProxyScheme ()Ljava/lang/String;
+	public final fun getProxyUri ()Ljava/lang/String;
+	public final fun getQBlock1 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getQBlock2 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getQBlock2List ()Ljava/util/List;
+	public final fun getRequestTags ()Ljava/util/List;
+	public final fun getSize ()I
+	public final fun getSize1 ()Ljava/lang/Long;
+	public final fun getSize2 ()Ljava/lang/Long;
+	public final fun getUriHost ()Ljava/lang/String;
+	public final fun getUriPath ()Ljava/util/List;
+	public final fun getUriPort ()Ljava/lang/Integer;
+	public final fun getUriQuery ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun isEmpty ()Z
+	public fun iterator ()Ljava/util/Iterator;
+	public final fun toBuilder ()Ldev/kcoap/coap/OptionSet$Builder;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/OptionSet$Builder {
+	public final fun accept (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun add (I[B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun add (Ldev/kcoap/coap/CoapOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun addAll (Ljava/lang/Iterable;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun addQBlock2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun block1 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun block2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun build ()Ldev/kcoap/coap/OptionSet;
+	public final fun clear ()Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun contentFormat (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun echo ([B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun edhoc ()Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun etag ([B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun hopLimit (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun ifMatch ([B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun ifNoneMatch ()Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun locationPath (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun locationQuery (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun maxAge (J)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun noResponse (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun observe (J)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun oscore ([B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun proxyScheme (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun proxyUri (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun qBlock1 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun qBlock2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun remove (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun requestTag ([B)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun set (Ldev/kcoap/coap/CoapOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun size1 (J)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun size2 (J)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun uriHost (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun uriPath (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun uriPathSegments (Ljava/util/List;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun uriPort (I)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun uriQuery (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+}
+
+public final class dev/kcoap/coap/OptionSet$Companion {
+	public final fun build (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/OptionSet;
+	public final fun getEMPTY ()Ldev/kcoap/coap/OptionSet;
+	public final fun of (Ljava/lang/Iterable;)Ldev/kcoap/coap/OptionSet;
+}
+
+public final class dev/kcoap/coap/OscoreClass : java/lang/Enum {
+	public static final field E Ldev/kcoap/coap/OscoreClass;
+	public static final field U Ldev/kcoap/coap/OscoreClass;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/OscoreClass;
+	public static fun values ()[Ldev/kcoap/coap/OscoreClass;
+}
+
+public final class dev/kcoap/coap/SignalingOptionDefinition {
+	public fun <init> (Ljava/util/Set;ILjava/lang/String;Ldev/kcoap/coap/OptionFormat;IIZLjava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/Set;ILjava/lang/String;Ldev/kcoap/coap/OptionFormat;IIZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCodes ()Ljava/util/Set;
+	public final fun getFormat ()Ldev/kcoap/coap/OptionFormat;
+	public final fun getMaxLength ()I
+	public final fun getMinLength ()I
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNumber ()I
+	public final fun getReference ()Ljava/lang/String;
+	public final fun getRepeatable ()Z
+	public final fun isCritical ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/SignalingOptions {
+	public static final field BASE_MAX_MESSAGE_SIZE J
+	public static final field INSTANCE Ldev/kcoap/coap/SignalingOptions;
+	public final fun byNumber-va4rc68 (II)Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getALTERNATIVE_ADDRESS ()Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getAll ()Ljava/util/List;
+	public final fun getBAD_CSM_OPTION ()Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getBLOCK_WISE_TRANSFER ()Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getCUSTODY ()Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getHOLD_OFF ()Ldev/kcoap/coap/SignalingOptionDefinition;
+	public final fun getMAX_MESSAGE_SIZE ()Ldev/kcoap/coap/SignalingOptionDefinition;
+}
+
+public final class dev/kcoap/coap/WebLink {
+	public fun <init> (Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun get (Ljava/lang/String;)Ljava/lang/String;
+	public final fun getAttributes ()Ljava/util/List;
+	public final fun getContentFormats ()Ljava/util/List;
+	public final fun getInterfaces ()Ljava/util/List;
+	public final fun getMaximumSize ()Ljava/lang/Long;
+	public final fun getResourceTypes ()Ljava/util/List;
+	public final fun getTarget ()Ljava/lang/String;
+	public final fun getTitle ()Ljava/lang/String;
+	public final fun has (Ljava/lang/String;)Z
+	public fun hashCode ()I
+	public final fun isObservable ()Z
+	public fun toString ()Ljava/lang/String;
+	public final fun values (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class dev/kcoap/coap/codec/CoapFormatException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Integer;Ldev/kcoap/coap/CoapMessageType;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Integer;Ldev/kcoap/coap/CoapMessageType;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMessageId ()Ljava/lang/Integer;
+	public final fun getSilentlyIgnore ()Z
+	public final fun getType ()Ldev/kcoap/coap/CoapMessageType;
+}
+
+public abstract interface class dev/kcoap/coap/codec/MessageCodec {
+	public abstract fun decode ([B)Ldev/kcoap/coap/CoapMessage;
+	public abstract fun encode (Ldev/kcoap/coap/CoapMessage;)[B
+}
+
+public final class dev/kcoap/coap/codec/ReliableMessageCodec : dev/kcoap/coap/codec/MessageCodec {
+	public static final field Companion Ldev/kcoap/coap/codec/ReliableMessageCodec$Companion;
+	public fun decode ([B)Ldev/kcoap/coap/CoapMessage;
+	public fun encode (Ldev/kcoap/coap/CoapMessage;)[B
+}
+
+public final class dev/kcoap/coap/codec/ReliableMessageCodec$Companion {
+	public final fun getTcp ()Ldev/kcoap/coap/codec/ReliableMessageCodec;
+	public final fun getWebSocket ()Ldev/kcoap/coap/codec/ReliableMessageCodec;
+}
+
+public final class dev/kcoap/coap/codec/ReliableStreamDecoder {
+	public static final field Companion Ldev/kcoap/coap/codec/ReliableStreamDecoder$Companion;
+	public static final field DEFAULT_MAX_MESSAGE_SIZE J
+	public fun <init> ()V
+	public fun <init> (J)V
+	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun feed ([B)Ljava/util/List;
+	public final fun getMaxMessageSize ()J
+	public final fun getPendingBytes ()I
+}
+
+public final class dev/kcoap/coap/codec/ReliableStreamDecoder$Companion {
+}
+
+public final class dev/kcoap/coap/codec/UdpMessageCodec : dev/kcoap/coap/codec/MessageCodec {
+	public static final field INSTANCE Ldev/kcoap/coap/codec/UdpMessageCodec;
+	public fun decode ([B)Ldev/kcoap/coap/CoapMessage;
+	public fun encode (Ldev/kcoap/coap/CoapMessage;)[B
+}
+
+public abstract interface class dev/kcoap/coap/security/ClientMessageSecurity {
+	public abstract fun protectRequest (Ldev/kcoap/coap/CoapMessage;Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/coap/security/MessageSecurityException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/lang/Throwable;[BLjava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/lang/Throwable;[BLjava/lang/Integer;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getContentFormat ()Ljava/lang/Integer;
+	public final fun getDiagnostic ()Ljava/lang/String;
+	public final fun getErrorPayload ()[B
+	public final fun getResponseCode-xRAr_a8 ()I
+}
+
+public abstract interface class dev/kcoap/coap/security/ProtectedRequest {
+	public abstract fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public abstract fun unprotectResponse (Ldev/kcoap/coap/CoapMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract class dev/kcoap/coap/security/ResponseVerification {
+	public abstract fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+}
+
+public final class dev/kcoap/coap/security/ResponseVerification$Unverified : dev/kcoap/coap/security/ResponseVerification {
+	public fun <init> (Ldev/kcoap/coap/CoapMessage;Ljava/lang/String;)V
+	public fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/security/ResponseVerification$Verified : dev/kcoap/coap/security/ResponseVerification {
+	public fun <init> (Ldev/kcoap/coap/CoapMessage;)V
+	public fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/coap/security/SecurityIdentity {
+	public abstract fun getDescription ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/coap/security/ServerMessageSecurity {
+	public abstract fun unprotectRequest (Ldev/kcoap/coap/CoapMessage;Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/coap/security/UnprotectedRequest {
+	public fun getChallenge ()Ldev/kcoap/coap/CoapMessage;
+	public abstract fun getIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public abstract fun getMessage ()Ldev/kcoap/coap/CoapMessage;
+	public abstract fun protectResponse (Ldev/kcoap/coap/CoapMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/coap/security/UnprotectedRequest$DefaultImpls {
+	public static fun getChallenge (Ldev/kcoap/coap/security/UnprotectedRequest;)Ldev/kcoap/coap/CoapMessage;
+}
+

@@ -28,7 +28,7 @@ public sealed class ResponseVerification {
      * or 4.02 (RFC 8613 §8.2) or an intermediary's 5.04, which anyone who saw the token can send. The stack acts
      * on nothing in it: it does not repeat the request for an Echo option, continue a block-wise body, change
      * what it knows about the peer, or end an observation. A request without a verified response yet ends with
-     * [dev.kcoap.coap.CoapException.Reason.UNVERIFIED_RESPONSE], which carries [message]; an established
+     * kcoap-coap's `CoapException.Reason.UNVERIFIED_RESPONSE`, which carries [message]; an established
      * observation drops it.
      *
      * @property reason why it is unverified, for logs.

@@ -12,5 +12,9 @@ kotlin {
             api(project(":kcoap-common"))
             api(project(":kcoap-transport"))
         }
+        commonTest.dependencies {
+            // ByteMutator, for the codec fuzz test.
+            implementation(project(":kcoap-testkit"))
+        }
     }
 }
