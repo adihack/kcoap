@@ -43,11 +43,22 @@ Findings SEC-3 and SEC-4 of the architecture review (WP-SEC2 in
   when it has no message-security identity (RFC 7252 §5.9.2.2: authenticate first) and **4.03** when it has
   one (§5.9.2.4), protected if the request was, without a diagnostic. A path that does not exist is governed
   by its nearest existing ancestor and gets 4.04 only when that policy permits it, so the names below a
-  protected resource do not leak. A policy that throws is answered with 5.00, like a failing handler.
+  protected resource do not leak. A policy that throws is answered with 5.00, like a failing handler. The
+  policy is found in the same walk down the tree as the resource, the deepest one set on the way, so a
+  resource removed at that moment, which has no parent any more, keeps the policy it inherited.
+- **Deviation from RFC 7252 §5.4.1.** Since the policy comes before the option check, a refused request with
+  an unrecognized critical option gets 4.01 or 4.03 instead of 4.02, and a refused Non-confirmable one gets
+  that response instead of a Reset. On purpose: which options a resource recognizes is the resource's, and a
+  caller it refuses learns nothing about it, not even that; the request would be refused just the same once
+  its options were fixed. docs/rfc-compliance.md records it in the RFC 7252 §5 row.
 - `/.well-known/core` lists a resource only when its policy permits a GET by the caller, and marks the
-  `MessageSecurityRequired` ones with `osc` (RFC 8613 §9).
-- Observe registrations are keyed by endpoint, token **and message-security identity**: RFC 7641 §4.1
-  replacement and §3.6 deregistration work within one identity only.
+  `MessageSecurityRequired` ones with `osc` (RFC 8613 §9). A policy that throws leaves out its own link and
+  no other, so the document, the Public EDHOC resource among it, is still served.
+- Observe registrations are kept per endpoint and token, as RFC 7641 §4.1 requires, **and belong to the
+  message-security identity that made them**: §4.1 replacement and §3.6 deregistration work within that
+  identity only, and a registration of another identity, or none, on the same endpoint and token is neither
+  added nor a replacement: it is answered as a plain GET, without Observe (§4.1 lets a server decline to add
+  an observer), so nobody can have notifications sent to someone else's token.
 - **Who:** `SecurityContext.identity` (default: its `OscoreIdentity`) is what `OscoreServer` reports for every
   request the context verifies. `EdhocSession.oscoreContext`, and so `EdhocServer`, attach an
   `EdhocIdentity` that carries the peer credential EDHOC authenticated and its identifier. The identity
@@ -68,7 +79,11 @@ Findings SEC-3 and SEC-4 of the architecture review (WP-SEC2 in
 - **How the application sees it: an exception, not a response.** The request fails with
   `CoapException(Reason.UNVERIFIED_RESPONSE)`, whose new `response` property holds the unverified response as
   it came. An established observation drops unverified responses (a real server sends no unprotected
-  notifications); a registration still waiting for its answer fails the same way. This is distinct from a
+  notifications), also on the requests for the rest of a notification body: a notification whose Block2 or
+  Q-Block2 follow-up gets only an unverified answer is dropped, and the next change brings a fresh one. A
+  registration still waiting for its answer fails the same way; on a reliable transport the client then
+  deregisters (RFC 8323 §7.4), since the server's own answer, which the unverified one came ahead of, may
+  have registered it. This is distinct from a
   timeout, so the unprotected 4.02 of a server without OSCORE now ends a Q-Block request at once, and
   distinct from a returned `CoapResponse`, so code that branches on `response.code` cannot act on a forgery
   by accident.
@@ -77,6 +92,12 @@ Findings SEC-3 and SEC-4 of the architecture review (WP-SEC2 in
   before anything is sent. `allowUnprotected = true` on either restores plaintext for such requests;
   `PeerSecurity.unprotectedPaths` (the EDHOC resource) stays. There is no setting in the core:
   `ClientMessageSecurity.protectRequest` returning null is an explicit choice of the security layer.
+- **The Q-Block probe follows the same rule.** A client in `QBlockMode.PROBE` with `withMessageSecurity` probes
+  before a request to a server it knows nothing about, the EDHOC request included. A probe the security layer
+  refuses to send (`MessageSecurityException`, as `PeerSecurity` before `install`) finds nothing and keeps
+  nothing: that request goes with RFC 7959 under its own protection, so the EDHOC request goes in the clear
+  and any other fails closed, and the first request after `install` probes. Discovery before the handshake
+  (`/.well-known/core`) is not in `unprotectedPaths`, so it takes a plain client or an extended set.
 
 ## Alternatives considered
 

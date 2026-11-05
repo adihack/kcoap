@@ -71,7 +71,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   the tree, `CoapServerConfig.defaultAccess` (`MessageSecurityRequired` with message security, else
   `Public`), asked before any work for the request; 4.01 or 4.03, protected when the request was; missing
   paths refused like their nearest ancestor; `/.well-known/core` filtered per caller.
-- **Observe, RFC 7641**: server observers keyed by endpoint, token and message-security identity, 24-bit
+- **Observe, RFC 7641**: one server observer per endpoint and token, replaced or cancelled only by its own
+  message-security identity (another identity's registration is answered without Observe), 24-bit
   sequence numbers, at
   most one outstanding notification per client (NSTART) with superseding at the next timeout (§4.5.2),
   NON notifications rate-limited with a CON at least every 24 hours, observers removed on RST, timeout,

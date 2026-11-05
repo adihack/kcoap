@@ -165,10 +165,13 @@ adds its entry and migration note below.
   block option) and drops every other unprotected response, so a 4.08, 4.13, 4.02, Echo challenge or block
   from outside OSCORE cannot steer a protected body or turn Q-Block off for the peer (RFC 9177 §11); a server
   without OSCORE answers with such a 4.02, so the request ends as a timeout. Other requests still get every
-  unprotected 4.xx and 5.xx. This falls outside RFC 8613's single-response model
-  (§7.4), which is why it is opt-in; it is tested kcoap against kcoap, at 10 % loss too. libcoap 4.3.5b
-  protects, or verifies, only the first response to a request, so with `withMessageSecurity` its Q-Block2
-  bodies break in both roles (pinned as `upstream…` tests); Q-Block1 uploads to its server work. No API change.
+  unprotected 4.xx and 5.xx. (This rule for unprotected responses is superseded by WP-SEC2, ADR 0008, below:
+  `OscoreClient` hands every unprotected 4.xx and 5.xx on as unverified, the stack acts on none of them, and
+  such a 4.02 ends the request at once with `UNVERIFIED_RESPONSE`.) This falls outside RFC 8613's
+  single-response model (§7.4), which is why it is opt-in; it is tested kcoap against kcoap, at 10 % loss
+  too. libcoap 4.3.5b protects, or verifies, only the first response to a request, so with
+  `withMessageSecurity` its Q-Block2 bodies break in both roles (pinned as `upstream…` tests); Q-Block1
+  uploads to its server work. No API change.
 - Protected observations with Q-Block notification bodies (RFC 9177 §4.5 under RFC 8613; QB-7): with
   `withMessageSecurity` on both sides an observation now registers with Inner Q-Block2 and takes its
   notifications as Q-Block2 bodies inside OSCORE, where before it kept Inner Block2. Every block of such a body
@@ -233,9 +236,11 @@ Fail-closed message security (WP-SEC2, [ADR 0008](docs/adr/0008-fail-closed-mess
   `AccessPolicy.Authenticated` to also take DTLS-authenticated clients; replace hand-written
   `if (securityIdentity is OscoreIdentity)` checks with the policy. Compiled callers of the
   `CoapServerConfig` constructor recompile.
-- **Observe registrations are keyed by endpoint, token and message-security identity**: a request of another
-  identity, or of none, neither replaces nor cancels a registration (RFC 7641 §3.6, §4.1). *Migration:* none
-  for clients that deregister the way they registered.
+- **Observe registrations belong to the message-security identity that made them**: a request of another
+  identity, or of none, neither replaces nor cancels a registration (RFC 7641 §3.6, §4.1), and a registration
+  of another identity on the same endpoint and token is answered as a plain GET, without Observe, since §4.1
+  allows one entry per endpoint and token. *Migration:* none for clients that deregister the way they
+  registered.
 - **`ProtectedRequest.unprotectResponse` returns `ResponseVerification`** (`Verified(message)` or
   `Unverified(message, reason)`) instead of a `CoapMessage`, and still throws `MessageSecurityException` for a
   response to drop. *Migration:* only implementations of the SPI change: wrap a verified response in
@@ -244,21 +249,34 @@ Fail-closed message security (WP-SEC2, [ADR 0008](docs/adr/0008-fail-closed-mess
   request (`ResponseVerification.Unverified`) is no longer returned as a response: the request fails with
   `CoapException(Reason.UNVERIFIED_RESPONSE)`, whose new `response` property holds it, and it is never
   repeated for an Echo option, continued block-wise or taken as a Q-Block answer; an established observation
-  ignores it. `OscoreClient` hands every unprotected 4.xx and 5.xx on that way, also to requests carrying
-  Inner Q-Block, so an unprotected 4.02 from a server without OSCORE ends such a request at once instead of
-  in a timeout. *Migration:* where you read an unprotected 4.01 such as "Security context not found" from
-  `response.code`, catch `CoapException` with `UNVERIFIED_RESPONSE` and read `e.response`; run EDHOC again
-  rather than repeating a request that is not idempotent, which may already have run.
+  ignores it, and drops a notification whose Block2 or Q-Block2 follow-up got only such an answer instead of
+  ending. On TCP and WebSockets a registration that ends this way is followed by a deregistration
+  (RFC 8323 §7.4), as after a rejected registration response. `OscoreClient` hands every unprotected 4.xx
+  and 5.xx on that way, also to requests carrying Inner Q-Block, so an unprotected 4.02 from a server without
+  OSCORE ends such a request at once instead of in a timeout. *Migration:* where you read an unprotected 4.01
+  such as "Security context not found" from `response.code`, catch `CoapException` with
+  `UNVERIFIED_RESPONSE` and read `e.response`; run EDHOC again rather than repeating a request that is not
+  idempotent, which may already have run.
 - **`OscoreClient` and `PeerSecurity` never send plaintext silently.** A request whose `ClientContextResolver`
   returns null, or to a server for which `PeerSecurity` has no protection installed (also after `remove`),
   fails with `MessageSecurityException` before anything is sent; `PeerSecurity`'s `unprotectedPaths` (the
-  EDHOC resource) still go unprotected. *Migration:* pass `allowUnprotected = true` to `OscoreClient` or
-  `PeerSecurity` where plain CoAP to some servers is intended, and install protections before requesting.
+  EDHOC resource) still go unprotected. A Q-Block probe (`QBlockMode.PROBE` with `withMessageSecurity`) that
+  the security layer refuses to send leaves Q-Block unknown for that request only, so EDHOC runs on such a
+  client and the first request after `install` probes. *Migration:* pass `allowUnprotected = true` to
+  `OscoreClient` or `PeerSecurity` where plain CoAP to some servers is intended, and install protections
+  before requesting; discover the EDHOC resource before the handshake with a plain client, or add
+  `/.well-known/core` to `PeerSecurity`'s `unprotectedPaths`.
 - **Requests of a context that EDHOC established carry an `EdhocIdentity`**, with the peer credential EDHOC
   authenticated and the context's `OscoreIdentity`, instead of the bare `OscoreIdentity`
   (`SecurityContext.identity`, which `OscoreServer` reports). *Migration:* authorize on
   `(securityIdentity as? EdhocIdentity)?.peerCredential`, or on `.oscore` where the Recipient ID is what you
   used; a provisioned context may name its peer with `SecurityContext.derive(..., identity = ...)`.
+- **Binary signatures changed**, so compiled callers recompile: the `CoapException` constructor (a fourth
+  parameter, `response`), `OscoreClient(ClientContextResolver, LoggerFactory)` and `PeerSecurity(Set)` (a new
+  `allowUnprotected` parameter each), `SecurityContext.Companion.derive` (a new `identity` parameter) and the
+  `CoapServerConfig` constructor (`defaultAccess`). Source stays compatible for all of them, as the new
+  parameters have defaults, except that an exhaustive `when` over `CoapException.Reason` needs a branch for
+  `UNVERIFIED_RESPONSE`.
 
 WebSocket transports (WP-W1):
 

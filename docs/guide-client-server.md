@@ -271,8 +271,9 @@ Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md
   caller may use, and marks OSCORE-only resources with `osc` (RFC 8613 §9).
 - **Who sent it.** `securityIdentity` is the identity of the security context: an `OscoreIdentity` (Recipient
   ID and ID Context), or, for a context EDHOC established, an `EdhocIdentity` with the peer's authenticated
-  credential (kcoap-edhoc-oscore). Observe registrations are kept per identity, so one client cannot
-  replace or cancel another's.
+  credential (kcoap-edhoc-oscore). An Observe registration belongs to the identity that made it, so one client
+  can neither replace nor cancel another's, nor register on its endpoint and token: that is answered as a
+  plain GET.
 - **What the client acts on.** Only responses its security layer verified. OSCORE sends its errors without
   protection (RFC 8613 §8.2), and anyone who sees the token can send one too, so such a response neither
   has the request repeated with its Echo value nor steers a block-wise or Q-Block body nor ends an
@@ -282,7 +283,9 @@ Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md
 - **No silent plaintext.** `OscoreClient` fails a request its resolver finds no context for, and
   kcoap-edhoc-oscore's `PeerSecurity` one to a server without an installed protection, with
   `MessageSecurityException`, before anything is sent; `allowUnprotected = true` on either sends such
-  requests in plain CoAP on purpose.
+  requests in plain CoAP on purpose. Discovering the EDHOC resource before the handshake therefore takes a
+  plain client (or `/.well-known/core` in `PeerSecurity`'s `unprotectedPaths`); a Q-Block probe the security
+  layer will not send yet is skipped for that request, so EDHOC works on a client with `QBlockMode.PROBE`.
 
 ## Testing without a network
 

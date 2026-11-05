@@ -92,7 +92,11 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   Echo or a block option): the client acts on the others for the whole body, so they would let anyone on the
   path steer it. libcoap 4.3.5b protects and verifies only the first response to a request, so these bodies
   are tested kcoap against kcoap, and its failure is pinned (QB-5). Notification bodies follow the same
-  window, per registration (below).
+  window, per registration (below). The rule for unprotected responses is superseded by WP-SEC2
+  ([ADR 0008](0008-fail-closed-message-security.md)): every unprotected 4.xx and 5.xx is handed to the stack
+  as unverified, for every request, and the stack acts on none of them, so such a 4.08, 4.02 or Echo
+  challenge ends the body with `UNVERIFIED_RESPONSE` and steers nothing, and a 4.02 from a server without
+  OSCORE ends the request at once instead of in a timeout.
 - **Amplification.** A server bursting to an unauthenticated, unverified peer first verifies its address
   with Echo (RFC 9175 §2.4), for Q-Block bursts only, and for Observe registrations with Q-Block, whose
   notification bodies are bursts that no request asks for (QB-6).

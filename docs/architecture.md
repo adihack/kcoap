@@ -76,8 +76,9 @@ closed in both roles ([ADR 0008](adr/0008-fail-closed-message-security.md)):
   before anything of the Request/Response layer runs for the request: no Block1 or Q-Block1 buffering, no
   Observe registration or deregistration, no Q-Block2 burst or address check, no handler. With message
   security configured the default policy is `MessageSecurityRequired`; `Authenticated` takes either layer's
-  identity; `Public` (the EDHOC resource, `/.well-known/core`) takes anyone. Observe registrations are
-  keyed by endpoint, token and identity.
+  identity; `Public` (the EDHOC resource, `/.well-known/core`) takes anyone. An Observe registration is
+  one entry per endpoint and token, which only its own identity replaces or cancels; another identity's
+  registration on them is answered as a plain GET.
 - **The identity belongs to the security context.** `SecurityContext.identity` is what OSCORE reports for
   every request it verifies: the `OscoreIdentity` by default, the `EdhocIdentity` with the authenticated
   peer credential for a context EDHOC established, or a name a provisioned context was given. A Recipient
