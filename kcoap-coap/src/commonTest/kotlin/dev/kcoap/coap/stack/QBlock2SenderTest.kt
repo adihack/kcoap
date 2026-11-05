@@ -148,6 +148,24 @@ class QBlock2SenderTest {
     }
 
     @Test
+    fun rfc9177Section4_5AResetToAnAnswerForMissingBlocksDropsOnlyWhatIsQueuedForThatRequest() {
+        val sender = sender()
+        sender.start(Duration.ZERO, "notification")
+        sender.onRequest(1.seconds, followUp(block(1, true), block(11, true), block(21, false)), "missing")
+        assertEquals(1.seconds + pause, sender.nextDeadline(), "the second chunk of missing blocks")
+
+        assertEquals(emptyList(), sender.onReset(1.seconds, "missing"))
+        assertFalse(sender.isStopped)
+        assertEquals(1.seconds + pause * 2, sender.nextDeadline(), "the next set, still put off by the chunk")
+        val next = sender.onTimer(1.seconds + pause * 2).sent()
+        assertEquals((10..19).map { "$it/1@notification" }, next, "nothing more for the forgotten request")
+
+        assertEquals(emptyList(), sender.onReset(2.seconds, "notification"))
+        assertTrue(sender.isStopped, "a Reset to the original request stops the body")
+        assertNull(sender.nextDeadline())
+    }
+
+    @Test
     fun rfc9177AppendixAConfirmableBlocksFollowAcknowledgementsUnderNstart() {
         val sender = sender(size = 6 * 64, mode = BodyMode.CON, parameters = TransmissionParameters(nstart = 3))
         assertEquals(listOf("0/1@get", "1/1@get", "2/1@get", "3/1@get"), sender.start(Duration.ZERO, "get").sent(), "block 0 piggybacked")

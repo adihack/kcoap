@@ -703,6 +703,31 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7641Section3_6AResetToAnAnswerForMissingBlocksLeavesTheObserver() = runTest {
+        val counter = Counter()
+        val f = fixture { add(counter) }
+        val registration = f.peer.send(register(f.peer))
+        f.peer.drain(5.seconds)
+        counter.change()
+        assertEquals(47, f.peer.drain(5.seconds).size, "the notification body")
+
+        val missing = f.peer.send(get(f.peer, block(3, false), path = "counter"))
+        val answer = f.peer.drain().single()
+        assertTrue(answer.hasToken(missing.token))
+        assertNull(answer.options.observe, "RFC 9177 §4.5: no notification")
+        // A client that released the request's token, as once its body is whole.
+        f.peer.reset(answer)
+        delay(1.seconds)
+
+        assertEquals(1, counter.observerCount, "RFC 7641 §3.6: only a Reset to a notification deregisters")
+        assertTrue(f.events.none { it is EndpointEvent.ObserverRemoved })
+        counter.change()
+        val next = f.peer.drain(5.seconds)
+        assertEquals(47, next.size)
+        assertTrue(next.all { it.hasToken(registration.token) && it.options.observe == 2L })
+    }
+
+    @Test
     fun rfc7959Section7_1AnObservationKeepsNoBodyOnceItLeftTheCache() = runTest {
         val counter = Counter()
         val f = fixture { add(counter) }

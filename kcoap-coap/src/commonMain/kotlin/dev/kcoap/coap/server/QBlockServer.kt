@@ -651,7 +651,7 @@ internal class QBlockServer(
                     is QBlockRequest -> respond(
                         target,
                         body.block(action.num, action.more, target.token, body.observeFor(target)),
-                        blockOwner(body, action.num),
+                        blockOwner(body, action.num, target),
                     )
                     is NotificationBody -> notifyBlock(body, target, action.num, action.more)
                 }
@@ -665,25 +665,33 @@ internal class QBlockServer(
     }
 
     /**
-     * How a block went: an acknowledgement sends the next Confirmable one, a Reset or a failure ends the body. For
-     * a body of an observation, every block is a notification (RFC 9177 §4.5): a Reset, a failure or a
-     * Confirmable block that is not acknowledged removes the observer too (RFC 7641 §3.6, §4.5).
+     * How block [num] of [body], sent to [target], went: an acknowledgement sends the next Confirmable one, a
+     * Reset or a failure ends the body. For a body of an observation, every block that carries Observe is a
+     * notification (RFC 9177 §4.5): a Reset, a failure or such a Confirmable block that is not acknowledged
+     * removes the observer too (RFC 7641 §3.6, §4.5). A block that answers a request for missing blocks carries
+     * no Observe and is no notification: a Reset to it shows only that its client forgot that request's token,
+     * so only what is still queued for that request goes, and the observer and the rest of the body stay.
      */
-    private fun blockOwner(body: ServedBody, num: Long) = TransmissionOwner { _, outcome ->
+    private fun blockOwner(body: ServedBody, num: Long, target: QBlockTarget) = TransmissionOwner { _, outcome ->
+        val isObserved = body.observation != null
         val event: ((QBlock2Sender<QBlockTarget>, Duration) -> List<QBlockAction<QBlockTarget>>)? = when (outcome) {
             is TransmissionOutcome.Acknowledged -> { sender, now -> sender.onAcknowledged(now, num) }
             TransmissionOutcome.TimedOut -> { sender, now -> sender.onTimeout(now, num) }
             TransmissionOutcome.Reset, is TransmissionOutcome.Failed -> { sender, now ->
-                log.debug { "Block $num of $body ended with $outcome: the body stops" }
-                sender.onReset(now)
+                log.debug { "Block $num of $body to $target ended with $outcome" }
+                if (isObserved) sender.onReset(now, target) else sender.onReset(now)
             }
             TransmissionOutcome.SlotReleased -> null
         }
-        val removal = when (outcome) {
-            TransmissionOutcome.Reset -> "reset by client"
-            TransmissionOutcome.TimedOut -> "notification not acknowledged"
-            is TransmissionOutcome.Failed -> outcome.cause.message ?: "failed"
-            else -> null
+        val removal = if (!isObserved || !target.carriesObserve) {
+            null
+        } else {
+            when (outcome) {
+                TransmissionOutcome.Reset -> "reset by client"
+                TransmissionOutcome.TimedOut -> "notification not acknowledged"
+                is TransmissionOutcome.Failed -> outcome.cause.message ?: "failed"
+                else -> null
+            }
         }
         if (event != null) {
             launch("continue a Q-Block2 body") {
@@ -839,7 +847,8 @@ internal class QBlockServer(
         try {
             val message = body.block(num, more, observation.token, body.observeFor(target))
             val outgoing = observation.unprotected?.protectResponse(message) ?: message
-            endpoint.sendSeparately(observation.peer, outgoing, target.type, blockOwner(body, num), connection = observation.connection)
+            val owner = blockOwner(body, num, target)
+            endpoint.sendSeparately(observation.peer, outgoing, target.type, owner, connection = observation.connection)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

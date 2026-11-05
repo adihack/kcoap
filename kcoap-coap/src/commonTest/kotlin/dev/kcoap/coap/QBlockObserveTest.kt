@@ -577,6 +577,45 @@ class QBlockObserveTest {
         }
     }
 
+    /**
+     * The registration response is the first notification (RFC 7641 §3.2): a Reset to a block of it, of set 0 or
+     * of a set sent for a Continue on the registration's token, removes the observer, and no later set follows.
+     */
+    @Test
+    fun rfc7641Section3_6AResetToABlockOfTheRegistrationResponseRemovesTheObserver() = runTest {
+        for (reset in listOf(4L, 12L)) {
+            val setup = setup({ body(24 * 64 - 10, it) }, blockSize = 64)
+            val peer = QBlockPeer.of(setup.fixture, setup.server)
+            fun get(token: ByteArray, block: BlockOption, observe: Long?) = CoapMessage.request(CoapCode.GET) {
+                type = CoapMessageType.NON
+                this.token = token
+                options {
+                    uriPath("obs")
+                    observe?.let { observe(it) }
+                    qBlock2(block)
+                }
+            }
+            val registration = peer.send(get(peer.token(), BlockOption(0, true, 2), observe = 0))
+            val blocks = peer.drain().toMutableList()
+            if (reset >= 10) {
+                peer.send(get(peer.token(), BlockOption(10, true, 2), observe = null))
+                blocks += peer.drain()
+            }
+            val target = blocks.single { it.options.qBlock2!!.number == reset }
+            assertTrue(target.hasToken(registration.token) && target.options.observe == 0L, "of the registration")
+            peer.reset(target)
+            delay(100.milliseconds)
+
+            assertEquals(0, setup.resource.observerCount, "a Reset to block $reset removes the observer")
+            assertEquals(emptyList(), peer.drain(10.seconds), "no later set of the body follows")
+            setup.resource.change()
+            assertNull(peer.next(10.seconds), "no notification")
+            val removed = setup.fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>()
+            assertEquals(listOf("reset by client"), removed.map { it.reason })
+            assertNothingLeft(setup)
+        }
+    }
+
     /** RFC 9177 §4.5, Figure 18: Confirmable notification bodies, every block acknowledged, Observe on each. */
     @Test
     fun rfc9177Figure18ConfirmableNotificationBodies() = runTest {
