@@ -43,8 +43,8 @@ class OscoreFuzzTest {
     @Test
     fun mutatedRequestsAndResponsesFailVerification() = runTest {
         val random = Random(0x05C1)
-        val clientContext = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2)), crypto)
-        val serverContext = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), replayWindowSize = 64), crypto)
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2)), crypto)
+        val serverContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), replayWindowSize = 64), crypto)
         val client = OscoreClient(clientContext)
         val server = OscoreServer(InMemoryContextRepository().apply { add(serverContext) })
         val original = CoapMessage.request(CoapCode.PUT) {

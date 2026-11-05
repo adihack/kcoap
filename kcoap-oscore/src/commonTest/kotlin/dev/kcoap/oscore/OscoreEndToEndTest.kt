@@ -7,6 +7,7 @@ import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.common.hexToBytes
+import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -19,6 +20,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -32,8 +34,8 @@ class OscoreEndToEndTest {
 
     private suspend fun pair(idContext: ByteArray? = null, includeIdContext: Boolean = false): Pair<SecurityContext, SecurityContext> {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
-        val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b), idContext = idContext, includeIdContext = includeIdContext), crypto)
-        val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a), idContext = idContext), crypto)
+        val client = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b), idContext = idContext, includeIdContext = includeIdContext), crypto)
+        val server = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a), idContext = idContext), crypto)
         return client to server
     }
 
@@ -233,25 +235,38 @@ class OscoreEndToEndTest {
         assertNull(client.protectRequest(request(), peer))
     }
 
-    /** RFC 8613 Appendix B.1.2: after a reboot the server proves the client's freshness with Echo first. */
+    /**
+     * RFC 8613 Appendix B.1.2: a server restored from its store has lost its replay window, so it proves
+     * the client's freshness with Echo first, also for a request it accepted before the restart.
+     */
     @Test
-    fun rebootedServerChallengesWithEcho() = runTest {
+    fun restartedServerChallengesWithEcho() = runTest {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
-        val clientContext = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
-        val serverContext = SecurityContext.derive(
-            SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)),
-            crypto,
-            requireFreshnessProof = true,
-        )
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverParameters = SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a))
+        val serverStore = EphemeralSequenceNumberStore()
         val client = OscoreClient(clientContext, loggers)
-        val server = serverFor(serverContext)
+
+        // Before the restart: a new context trusts its window, and its second notification takes a Partial IV.
+        val running = serverFor(SecurityContext.derive(serverParameters, crypto, serverStore))
+        val recorded = client.protectRequest(request(observe = 0).toBuilder().apply { code = CoapCode.GET; payload = ByteArray(0) }.build(), peer)!!
+        val beforeRestart = running.unprotectRequest(recorded.message, peer)!!
+        assertNull(beforeRestart.challenge, "a new context with the ephemeral store needs no proof")
+        fun notification(value: Long) = CoapMessage.response(beforeRestart.message, CoapCode.CONTENT) { options { observe(value) } }
+        beforeRestart.protectResponse(notification(1))
+        val usedBefore = OscoreOptionValue.decode(beforeRestart.protectResponse(notification(2)).options.oscore!!).partialIv!!.readUnsigned()
+
+        // After the restart the store knows the context: the recorded request is challenged, not processed.
+        val server = serverFor(SecurityContext.derive(serverParameters, crypto, serverStore))
+        assertNotNull(server.unprotectRequest(recorded.message, peer)!!.challenge, "a recorded request is not processed again")
 
         val first = client.protectRequest(request(), peer)!!
         val challenged = server.unprotectRequest(first.message, peer)!!
         val challenge = challenged.challenge!!
         assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
         val protectedChallenge = challenged.protectResponse(challenge)
-        assertTrue(protectedChallenge.options.oscore!!.isNotEmpty(), "the challenge carries the server's Partial IV")
+        val challengePiv = assertNotNull(OscoreOptionValue.decode(protectedChallenge.options.oscore!!).partialIv, "the challenge carries the server's Partial IV")
+        assertTrue(challengePiv.readUnsigned() > usedBefore, "above every Partial IV the server used before the restart")
 
         val seenByClient = first.unprotectResponse(protectedChallenge)
         assertEquals(CoapCode.UNAUTHORIZED, seenByClient.code)

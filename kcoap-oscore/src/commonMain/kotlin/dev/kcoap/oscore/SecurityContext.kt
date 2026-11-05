@@ -121,41 +121,66 @@ public class SecurityContext private constructor(
 
         /**
          * Derives Sender Key, Recipient Key and Common IV with HKDF (RFC 8613 §3.2.1) and restores the
-         * Sender Sequence Number from [sequenceStore].
+         * Sender Sequence Number from [sequenceStore] (Appendix B.1.1).
          *
-         * @param persistInterval how many sequence numbers to reserve per write to [sequenceStore].
-         * @param requireFreshnessProof set when the context was restored without its replay window, for
-         *   example after a reboot: the first request from the peer is then answered with an Echo
-         *   challenge, and the replay window starts at the Partial IV of the request that returns the
-         *   Echo value (RFC 8613 Appendix B.1.2).
+         * [sequenceStore] has no default, because the safe choice depends on where the keys come from:
+         *
+         * - A provisioned Master Secret that outlives the process needs a durable store. With
+         *   [EphemeralSequenceNumberStore] a restarted process starts at sequence number 0 again and
+         *   reuses AEAD nonces, which breaks the confidentiality and integrity of AES-CCM.
+         * - Keys that are new in this process run, such as EDHOC output, use
+         *   [EphemeralSequenceNumberStore].
+         *
+         * @param sequenceStore where the Sender Sequence Number is persisted; see [SequenceNumberStore].
+         * @param persistInterval how many sequence numbers to reserve per write to [sequenceStore] (K in
+         *   Appendix B.1.1), from 1 to 2^40. A restart skips at most this many numbers.
+         * @param freshness whether the replay window is trusted from the start or only after a request
+         *   proved its freshness with Echo (Appendix B.1.2). [FreshnessPolicy.AUTO] requires the proof
+         *   for a context restored from [sequenceStore] and for any store but the ephemeral one.
+         * @throws IllegalArgumentException when [persistInterval] is out of range, or [sequenceStore]
+         *   returns a value outside 0 to 2^40. Exceptions of [sequenceStore] reach the caller unchanged.
          */
         public suspend fun derive(
             parameters: SecurityContextParameters,
             crypto: CryptoBackend,
-            sequenceStore: SequenceNumberStore = InMemorySequenceNumberStore(),
+            sequenceStore: SequenceNumberStore,
             persistInterval: Long = 64,
-            requireFreshnessProof: Boolean = false,
+            freshness: FreshnessPolicy = FreshnessPolicy.AUTO,
         ): SecurityContext {
-            require(persistInterval > 0) { "persistInterval must be positive" }
+            require(persistInterval in 1..MAX_SEQUENCE_NUMBER + 1) { "persistInterval must be in 1..2^40" }
             val hkdf = Hkdf(crypto, parameters.hkdfAlgorithm)
             val prk = hkdf.extract(parameters.masterSalt, parameters.masterSecret)
             val aead = parameters.aeadAlgorithm
             val senderKey = hkdf.expand(prk, info(parameters, parameters.senderId, "Key", aead.keyLength), aead.keyLength)
             val recipientKey = hkdf.expand(prk, info(parameters, parameters.recipientId, "Key", aead.keyLength), aead.keyLength)
             val commonIv = hkdf.expand(prk, info(parameters, ByteArray(0), "IV", aead.nonceLength), aead.nonceLength)
-            val start = sequenceStore.load(parameters.name) ?: 0
+            val senderAead = crypto.aead(aead, senderKey)
+            val recipientAead = crypto.aead(aead, recipientKey)
+
+            val name = parameters.name
+            val restored = sequenceStore.load(name)
+            require(restored == null || restored in 0..MAX_SEQUENCE_NUMBER + 1) {
+                "$sequenceStore returned $restored for $name, outside 0..2^40"
+            }
+            // Recorded, so that deriving this context again from the same store counts as a restore.
+            if (restored == null) sequenceStore.store(name, 0)
+            val isFresh = when (freshness) {
+                FreshnessPolicy.AUTO -> restored == null && sequenceStore is EphemeralSequenceNumberStore
+                FreshnessPolicy.REQUIRE_PROOF -> false
+                FreshnessPolicy.ASSUME_FRESH -> true
+            }
             return SecurityContext(
                 parameters = parameters,
                 senderKey = senderKey,
                 recipientKey = recipientKey,
                 commonIv = commonIv,
-                senderAead = crypto.aead(aead, senderKey),
-                recipientAead = crypto.aead(aead, recipientKey),
+                senderAead = senderAead,
+                recipientAead = recipientAead,
                 sequenceStore = sequenceStore,
-                nextSequenceNumber = start,
+                nextSequenceNumber = restored ?: 0,
                 persistInterval = persistInterval,
                 crypto = crypto,
-                isFresh = !requireFreshnessProof,
+                isFresh = isFresh,
             )
         }
 

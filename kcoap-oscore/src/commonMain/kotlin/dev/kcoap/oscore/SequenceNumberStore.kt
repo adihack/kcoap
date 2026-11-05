@@ -1,15 +1,24 @@
 package dev.kcoap.oscore
 
 /**
- * Persists Sender Sequence Numbers across reboots (RFC 8613 Appendix B.1.1), so a restarted endpoint
- * never reuses a nonce.
+ * Persists Sender Sequence Numbers across restarts (RFC 8613 Appendix B.1.1), so a restarted endpoint
+ * never reuses an AEAD nonce under the same Sender Key.
  *
- * The context does not write every number: it reserves a block of numbers ahead, persists the end of
- * the block, and only writes again when the block is used up. After a reboot it continues from the
- * persisted value, skipping at most one block.
+ * The application supplies the store, because only it knows where durable storage is on its platform;
+ * `kcoap-oscore/README.md` has recipes. [EphemeralSequenceNumberStore] keeps numbers in memory and is
+ * only correct for keys that are new in this process run.
+ *
+ * A [SecurityContext] does not write every number: it reserves a block of numbers ahead, persists the
+ * end of the block, and writes again only when the block is used up. Every number it hands out is below
+ * a limit that [store] has already returned for, so after a restart it continues from the persisted
+ * value, skipping at most one block. [SecurityContext.derive] records a context it sees for the first
+ * time with the limit 0, so deriving it again counts as a restore ([FreshnessPolicy.AUTO]).
+ *
+ * Implementations shared by several contexts must be safe for concurrent calls. Keep the values out of
+ * backups that can be restored onto a device: an older value brought back is exactly a nonce reuse.
  */
 public interface SequenceNumberStore {
-    /** The last value [store]d for [contextName], or null for a context seen for the first time. */
+    /** The last value [store]d for [contextName], or null when the store never saw that context. */
     public suspend fun load(contextName: String): Long?
 
     /**
@@ -23,15 +32,4 @@ public interface SequenceNumberStore {
      * - The limits of one context never decrease; a retry repeats the same value.
      */
     public suspend fun store(contextName: String, limit: Long)
-}
-
-/** Keeps numbers in memory only: safe while the process runs, which is enough for tests and EDHOC-derived contexts. */
-public class InMemorySequenceNumberStore : SequenceNumberStore {
-    private val values = mutableMapOf<String, Long>()
-
-    override suspend fun load(contextName: String): Long? = values[contextName]
-
-    override suspend fun store(contextName: String, limit: Long) {
-        values[contextName] = limit
-    }
 }

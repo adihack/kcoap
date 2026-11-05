@@ -85,7 +85,7 @@ class OscorePartsTest {
     /** RFC 8613 Appendix B.1.1: a restart continues after the persisted block, never reusing a number. */
     @Test
     fun sequenceNumbersSurviveRestarts() = runTest {
-        val store = InMemorySequenceNumberStore()
+        val store = EphemeralSequenceNumberStore()
         val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2))
         val first = SecurityContext.derive(parameters, DefaultCryptoBackend(), store, persistInterval = 10)
         repeat(3) { first.takeSequenceNumber() }
@@ -96,11 +96,14 @@ class OscorePartsTest {
         assertEquals(10, restarted.takeSequenceNumber())
         assertEquals(20, store.load(parameters.name))
         assertFailsWith<IllegalArgumentException> { SecurityContext.derive(parameters, DefaultCryptoBackend(), store, persistInterval = 0) }
+        assertFailsWith<IllegalArgumentException>("more than the Partial IV range") {
+            SecurityContext.derive(parameters, DefaultCryptoBackend(), store, persistInterval = SecurityContext.MAX_SEQUENCE_NUMBER + 2)
+        }
     }
 
     @Test
     fun exhaustedSequenceNumbersStopTheContext() = runTest {
-        val store = InMemorySequenceNumberStore()
+        val store = EphemeralSequenceNumberStore()
         val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2))
         store.store(parameters.name, SecurityContext.MAX_SEQUENCE_NUMBER)
         val context = SecurityContext.derive(parameters, DefaultCryptoBackend(), store)
@@ -134,7 +137,7 @@ class OscorePartsTest {
     fun descriptionsNeverShowSecrets() = runTest {
         val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), idContext = byteArrayOf(3))
         assertEquals("SecurityContextParameters(sid=01,rid=02,idc=03, AES_CCM_16_64_128)", parameters.toString())
-        val context = SecurityContext.derive(parameters, DefaultCryptoBackend())
+        val context = ephemeralContext(parameters, DefaultCryptoBackend())
         assertEquals("SecurityContext(sid=01,rid=02,idc=03)", context.toString())
         assertContentEquals(secret, parameters.masterSecret)
         assertContentEquals(ByteArray(0), parameters.masterSalt)
@@ -149,8 +152,8 @@ class OscorePartsTest {
         // ChaCha20/Poly1305 where the platform has it (WebCrypto does not).
         val candidates = listOf(AeadAlgorithm.A128GCM, AeadAlgorithm.CHACHA20_POLY1305, AeadAlgorithm.AES_CCM_16_128_128)
         for (algorithm in candidates.filter { crypto.supports(it) }) {
-            val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), aeadAlgorithm = algorithm), crypto)
-            val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), aeadAlgorithm = algorithm), crypto)
+            val client = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), aeadAlgorithm = algorithm), crypto)
+            val server = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), aeadAlgorithm = algorithm), crypto)
             val request = dev.kcoap.coap.CoapMessage.request(CoapCode.GET) { options { uriPath("x") } }
             val (protected, _) = OscoreProtection.protectRequest(client, request)
             val decrypted = OscoreProtection.unprotectRequest(protected) { _, _ -> server }.message
