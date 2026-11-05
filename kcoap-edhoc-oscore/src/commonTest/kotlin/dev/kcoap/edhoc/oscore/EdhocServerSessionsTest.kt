@@ -712,6 +712,48 @@ class EdhocServerSessionsTest {
         assertEquals(0, server.pendingSessions())
     }
 
+    /**
+     * Cleaning up after a failure is best effort: a repository that cannot remove the context either still gets
+     * the server error of the first failure as its answer. An Error, which no handler turns into a response, passes
+     * through after the same cleanup.
+     */
+    @Test
+    fun cleanupAfterAFailureIsBestEffortAndErrorsPassThrough() = runTest {
+        val peers = Peers.create(crypto)
+        val delegate = InMemoryContextRepository()
+        val broken = object : MutableSecurityContextRepository by delegate {
+            override suspend fun addIfAbsent(context: SecurityContext): Boolean {
+                delegate.addIfAbsent(context)
+                throw IllegalStateException("The write timed out")
+            }
+
+            override suspend fun remove(context: SecurityContext): Boolean = throw IllegalStateException("The store is down")
+        }
+        val server = EdhocServer(peers.responderConfig(), crypto, broken)
+        val (response, responderId) = server.completeWith(peers, alice)
+        assertServerError(response, "remove failed as well")
+        assertNotNull(delegate.find(responderId.bytes, null), "a context that cannot be removed stays")
+        assertEquals(0, server.pendingSessions())
+
+        val contexts = InMemoryContextRepository()
+        val sessions = mutableListOf<EdhocSession>()
+        val fatal = EdhocServer(
+            peers.responderConfig(), crypto, contexts,
+            listener = { session, _ ->
+                sessions += session
+                throw NotImplementedError("fatal")
+            },
+        )
+        val initiator = initiator(peers)
+        initiator.processMessage2(fatal.start(alice, initiator).payload)
+        val (message3, session) = initiator.createMessage3()
+        val fatalId = session.responderConnectionIdentifier
+        assertFailsWith<NotImplementedError> { fatal.continueWith(alice, fatalId, message3) }
+        assertNull(contexts.find(fatalId.bytes, null))
+        assertEquals(0, fatal.pendingSessions())
+        assertFailsWith<IllegalStateException>("the session is destroyed") { sessions.single().oscoreMasterSecret() }
+    }
+
     // --- sequence numbers --------------------------------------------------------------------------------
 
     @Test

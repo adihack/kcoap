@@ -152,7 +152,8 @@ runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the fir
   ephemeral keys wiped; a second server on the same repository never replaces a context. Establishing is all
   or nothing: a repository that throws (before or after adding), a handler cancelled while it adds, a listener
   or a sequence number store that throws, each leave no context behind, no pending session and an unrun
-  listener, and get "EDHOC failed" in a 5.00, also through `CombinedRequestServer`.
+  listener, and get "EDHOC failed" in a 5.00, also through `CombinedRequestServer`; a repository that cannot
+  remove the context either still gets that answer, and an `Error` passes through after the same cleanup.
 
 Not yet: the reverse message flow (A.2.2), Block-wise of the combined request beyond the first-block
 rule, and live interop of the combined flow (planned with libedhoc and aiocoap).
