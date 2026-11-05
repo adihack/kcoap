@@ -10,6 +10,21 @@ Nothing has been released yet. The API is still changing as the refactoring plan
 [docs/target-architecture.md](docs/target-architecture.md) lands; each work package that breaks the API
 adds its entry and migration note below.
 
+### Project
+
+- kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
+  material listed in [docs/third-party.md](docs/third-party.md). Copyright 2026 Adrian Sołtys and the kcoap
+  contributors.
+- Contributions follow the [Developer Certificate of Origin 1.1](DCO), with no CLA: every commit carries a
+  `Signed-off-by` line matching its author, which a check verifies on every pull request.
+- A [trademark policy](TRADEMARKS.md) for kcoap™ and kcoap.dev™, and the community files
+  [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [SECURITY.md](SECURITY.md),
+  [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md) and [SPONSORS.md](SPONSORS.md).
+- Every POM names the license (`kcoap.license.name`, `kcoap.license.url`), the website https://kcoap.dev,
+  the maintainer, GitHub Issues and the SCM; the API reference carries the copyright and trademark footer.
+- A [documentation hub](docs/README.md), the [versioning and API stability policy](docs/versioning.md), and
+  a redesigned README with the kcoap logo.
+
 ### Added
 
 - Storage and routing for EDHOC-derived contexts (WP-A3): `MutableSecurityContextRepository` (kcoap-oscore), a
