@@ -47,7 +47,7 @@ public enum class QBlockMode {
  *   ([CoapClientConfig.security]). **Not functional yet**: several responses to one request fall outside
  *   OSCORE's single-response replay model (RFC 8613 §7.4), and until kcoap's OSCORE layer accepts them with a
  *   replay window per request, a client with message security uses RFC 7959 for every request whatever this
- *   says, and logs a warning once when it is set.
+ *   says, and a client created with both logs a warning.
  * @property missingBlockMBit whether a request for missing blocks asks for the missing tail of a
  *   MAX_PAYLOADS set with one Q-Block2 option with M set (RFC 9177 §4.4), instead of one option per block.
  */
