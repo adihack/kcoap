@@ -25,6 +25,7 @@ import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -152,6 +154,21 @@ class FailureBoundaryTest {
         assertEquals(0, gauge.observerCount)
         assertTrue("5.00" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
         assertTrue(collector.isCompleted, "the client's observation ended with the 5.00")
+    }
+
+    @Test
+    fun rfc7641Section3_2ARegistrationWhoseResponseFitsNoMessageLeavesNoObserver() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge(big = true)
+        val server = fixture.server(maxDatagramSize = 128) { add(gauge) }
+        val client = fixture.client()
+
+        // Served as 5.00 without Observe, which ends the client's observation at once.
+        val responses = client.observe(fixture.uri(server, "/gauge")).toList()
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, responses.single().code)
+        assertNull(responses.single().options.observe)
+        assertEquals(0, gauge.observerCount, "no observer counts against the bounds for it")
+        assertTrue("5.00" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
     }
 
     @Test

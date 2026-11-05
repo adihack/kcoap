@@ -319,7 +319,14 @@ public class CoapServer private constructor(
             response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
         }
         block1Control?.let { control -> response = response.withOptions { block1(control) } }
-        return Reply(blockwise.serve(key, request.token, block2, response, reserve, now, limits), observation)
+        val served = blockwise.serve(key, request.token, block2, response, reserve, now, limits)
+        if (observation != null && !served.isSuccess) {
+            // A representation that fits no block became 5.00, which ends the client's observation
+            // (RFC 7641 §3.2), so the server keeps no observer for it either.
+            observations.remove(observation, "registration response ${served.code}")
+            return Reply(served.withOptions { remove(CoapOptions.OBSERVE.number) })
+        }
+        return Reply(served, observation)
     }
 
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
