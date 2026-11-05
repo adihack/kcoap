@@ -146,9 +146,18 @@ class AsymmetricTest {
         val pair = backend.generateKeyPair(KeyType.X25519)
         assertEquals("KeyPair(X25519)", pair.toString())
         assertEquals("PrivateKey(X25519)", pair.privateKey.toString())
+    }
+
+    /** A destroyed key fails closed: its zeroed bytes would be a valid, publicly known key. */
+    @Test
+    fun destroyedKeysCannotBeUsed() = runTest {
+        val pair = backend.generateKeyPair(KeyType.X25519)
+        val peer = backend.generateKeyPair(KeyType.X25519)
         val software = pair.privateKey as SoftwarePrivateKey
         software.destroy()
-        assertContentEquals(ByteArray(32), software.encoded())
+        software.destroy()
+        assertFailsWith<IllegalStateException> { software.encoded() }
+        assertFailsWith<IllegalStateException> { backend.keyAgreement(software, peer.publicKey) }
     }
 
     @Test
