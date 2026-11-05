@@ -104,6 +104,7 @@ Details in [docs/architecture.md](docs/architecture.md#browsers) and
 - [Client and server guide](docs/guide-client-server.md), [logging](docs/logging.md),
   [testing](docs/testing.md).
 - [RFC compliance](docs/rfc-compliance.md), [roadmap](docs/roadmap.md), [interop](interop/README.md).
+- [Project checklist](docs/checklist.md): every requirement with its status, evidence and next step.
 - [Code style](docs/code-style.md): how the code is written, for contributors.
 
 ## Design in one paragraph

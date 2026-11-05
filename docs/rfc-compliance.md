@@ -3,6 +3,7 @@
 "100% RFC" here means every MUST and SHOULD of the published RFCs below, verified by the RFC's own test
 vectors where they exist and by interop runs against independent implementations. Status values:
 `todo`, `partial`, `done`. Drafts are listed separately and are out of scope until they become RFCs.
+[checklist.md](checklist.md) tracks every project requirement, these included, with evidence and next steps.
 
 ## Foundations
 
@@ -41,7 +42,7 @@ vectors where they exist and by interop runs against independent implementations
 | RFC 8323 §6 | BERT: SZX 7 in both directions, Block1 and Block2, numbering in 1024-byte units, only when both CSMs indicate it; plain SZX in answer switches to plain blocks | done | §6 Figures 13/14 shapes in `ReliableTransportTest`, libcoap both ways over TCP |
 | RFC 8323 §7 | Observe: no message types, Observe values ignored on receipt (§7.1), registration response before any notification, explicit deregistration (§7.4) | done | `ReliableTransportTest`, libcoap `/time` and `coap-client -s` |
 | RFC 8323 §4.1, §8 | WebSocket subprotocol `coap` at `/.well-known/coap`, required both ways; `coap+tcp`, `coaps+tcp`, `coap+ws`, `coaps+ws` URIs and default ports | done (`coaps+ws` on the ktor engine's TLS, not cross-tested) | `KtorWebSocketTransportTest`, libcoap |
-| RFC 9177 | Q-Block | optional (Q-Block options get 4.02, so peers fall back to RFC 7959) | |
+| RFC 9177 | Q-Block | required by the project, in progress (until it lands, Q-Block options get 4.02, so peers fall back to RFC 7959) | |
 
 Hop-Limit and OSCORE: RFC 8768 gives it no OSCORE class, so under the published RFCs it is Class E
 (RFC 8613 §4.1). draft-ietf-core-oscore-capable-proxies updates RFC 8768 to Class U, and libcoap already
