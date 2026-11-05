@@ -135,6 +135,22 @@ class EdgeCaseTest {
     }
 
     @Test
+    fun rfc9175Section4_2EveryEndpointOfOneConfigurationHasItsOwnTokenSequence() = runTest {
+        val fixture = StackFixture(this)
+        val shared = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        assertNull(shared.tokenGenerator)
+        val first = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
+        val second = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
+
+        val a = first.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        val b = second.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        assertEquals(0, a.token.size, "sequence number 0 of the first endpoint")
+        assertEquals(0, b.token.size, "sequence number 0 of the second endpoint, not 1 of a shared one")
+        a.cancel()
+        b.cancel()
+    }
+
+    @Test
     fun aTokenGeneratorMustStayWithinEightBytes() = runTest {
         val fixture = StackFixture(this)
         val client = fixture.client(endpointConfig = fixture.endpointConfig(tokenGenerator = TokenGenerator { ByteArray(9) }))

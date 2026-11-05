@@ -242,6 +242,8 @@ internal class ReliableConnections(
 
     override fun now(): Duration = endpoint.now()
 
+    override val clockCheck: ClockCheck get() = endpoint.clockCheck
+
     override suspend fun onRequest(driver: ConnectionDriver, message: CoapMessage, sequence: Long) {
         endpoint.onReliableRequest(driver, message, sequence)
     }

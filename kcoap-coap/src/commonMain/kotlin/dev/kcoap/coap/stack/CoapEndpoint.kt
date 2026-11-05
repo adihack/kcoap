@@ -124,6 +124,12 @@ public class CoapEndpoint private constructor(
     private val handlerPermits = Semaphore(config.maxConcurrentRequests)
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val clockStart = config.timeSource.markNow()
+
+    /** Warns when the time source and the dispatcher's clock disagree; shared with the connections. */
+    internal val clockCheck = ClockCheck(log)
+
+    /** This endpoint's own token generator unless the configuration names one (RFC 9175 §4.2 state is per endpoint). */
+    private val tokens: TokenGenerator = config.tokenGenerator ?: TokenGenerator.sessionSequence()
     private val job = SupervisorJob(scope.coroutineContext[Job])
 
     /**
@@ -367,7 +373,7 @@ public class CoapEndpoint private constructor(
 
     private fun allocateToken(peer: Endpoint): ByteArray {
         repeat(TOKEN_ATTEMPTS) {
-            val token = config.tokenGenerator.next(peer)
+            val token = tokens.next(peer)
             require(token.size <= CoapMessage.MAX_TOKEN_LENGTH) { "Token generator returned ${token.size} bytes" }
             if (ExchangeKey(peer, token.toHex()) !in exchanges) return token
         }
@@ -769,7 +775,7 @@ public class CoapEndpoint private constructor(
         log.info { "Session to $peer ended" }
         withMessaging { onSessionEnded(peer) }
         val bound = lock.withLock {
-            config.tokenGenerator.forget(peer)
+            tokens.forget(peer)
             exchanges.values.filter { it.peer == peer }
         }
         val cause = CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED)
@@ -813,7 +819,7 @@ public class CoapEndpoint private constructor(
         val peer = connection.peer
         log.debug { "Connection to $peer closed: $reason" }
         val bound = lock.withLock {
-            config.tokenGenerator.forget(peer)
+            tokens.forget(peer)
             exchanges.values.filter { it.connection === connection }
         }
         val cause = CoapException("The connection to $peer closed: $reason", CoapException.Reason.CONNECTION_CLOSED)
@@ -864,13 +870,23 @@ public class CoapEndpoint private constructor(
         }
     }
 
+    /**
+     * Fires the messaging layer's timers. It waits with the dispatcher's delays for deadlines read on the
+     * time source, so the two must be one clock ([clockCheck] warns when they are not). A wakeup means the
+     * state changed: the next deadline is recomputed, and the timers run only once one is due.
+     */
     private suspend fun timerLoop() {
         while (true) {
             val next = lock.withLock { messaging.nextDeadline() }
             val wait = next?.minus(now())
-            when {
-                wait == null -> wakeups.receive()
-                wait.isPositive() -> withTimeoutOrNull(wait) { wakeups.receive() }
+            if (wait == null) {
+                wakeups.receive()
+                continue
+            }
+            if (wait.isPositive()) {
+                val before = now()
+                if (withTimeoutOrNull(wait) { wakeups.receive() } != null) continue
+                clockCheck.afterTimeout(wait, now() - before)
             }
             try {
                 withMessaging(signal = false) { now -> onTimer(now) }

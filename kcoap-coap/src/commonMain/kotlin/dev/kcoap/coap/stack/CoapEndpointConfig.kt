@@ -23,9 +23,15 @@ import kotlin.time.TimeSource
  *   endpoint sends an Empty ACK and the response follows separately (RFC 7252 §5.2.2). It should stay
  *   below ACK_TIMEOUT so the client does not retransmit; null disables it, so a slow handler makes the
  *   client retransmit.
- * @property tokenGenerator chooses request tokens; one generator per endpoint.
- * @property timeSource the clock every timer uses (architecture rule 5: one shared clock). Under
- *   `runTest`, pass `testScheduler.timeSource` so retransmissions and lifetimes run on virtual time.
+ * @property tokenGenerator chooses request tokens. Null, the default, gives every endpoint a
+ *   [TokenGenerator.sessionSequence] of its own, so one configuration can serve several endpoints, such as
+ *   a server's and a client's. A generator given here that keeps state must not be shared between
+ *   endpoints.
+ * @property timeSource the clock every timer reads (architecture rule 5: one shared clock). Timers wait
+ *   with the delays of the endpoint scope's dispatcher, so this time source must advance with that
+ *   dispatcher's clock: the default `TimeSource.Monotonic` with a real dispatcher, and under `runTest`
+ *   `testScheduler.timeSource`, so retransmissions and lifetimes run on virtual time. The endpoint logs a
+ *   warning when it sees the two disagree.
  * @property random randomness for retransmission jitter and the first Message ID. Tokens come from
  *   [tokenGenerator], which uses a secure generator by default.
  * @property interceptors the message interceptor chain, in order.
@@ -53,7 +59,7 @@ import kotlin.time.TimeSource
 public class CoapEndpointConfig(
     public val parameters: TransmissionParameters = TransmissionParameters.Default,
     public val separateResponseDelay: Duration? = 1.seconds,
-    public val tokenGenerator: TokenGenerator = TokenGenerator.sessionSequence(),
+    public val tokenGenerator: TokenGenerator? = null,
     public val timeSource: TimeSource = TimeSource.Monotonic,
     public val random: Random = Random.Default,
     public val interceptors: List<MessageInterceptor> = emptyList(),

@@ -32,6 +32,9 @@ internal interface ConnectionOwner {
     /** The endpoint's clock. */
     fun now(): Duration
 
+    /** Checks that the clock advances with the dispatcher's. */
+    val clockCheck: ClockCheck
+
     /** A request arrived on [driver]; answer it with [ConnectionDriver.respond]. */
     suspend fun onRequest(driver: ConnectionDriver, message: CoapMessage, sequence: Long)
 
@@ -328,7 +331,10 @@ internal class ConnectionDriver(
             val wait = next?.minus(owner.now())
             when {
                 wait == null -> wakeups.receive()
-                wait.isPositive() -> withTimeoutOrNull(wait) { wakeups.receive() }
+                wait.isPositive() -> {
+                    val before = owner.now()
+                    if (withTimeoutOrNull(wait) { wakeups.receive() } == null) owner.clockCheck.afterTimeout(wait, owner.now() - before)
+                }
             }
             try {
                 withMessaging(signal = false) { now -> onTimer(now) }
