@@ -33,6 +33,8 @@ public class SecurityContext private constructor(
 ) {
     private val senderLock = Mutex()
     private val recipientLock = Mutex()
+
+    /** Numbers below this limit are durable in [sequenceStore]; only those may be handed out. */
     private var persistedLimit: Long = nextSequenceNumber
     private val replayWindow = ReplayWindow(parameters.replayWindowSize)
 
@@ -43,13 +45,20 @@ public class SecurityContext private constructor(
     /** The next Sender Sequence Number this context will use. */
     public suspend fun peekSequenceNumber(): Long = senderLock.withLock { nextSequenceNumber }
 
-    /** Takes the next Sender Sequence Number, persisting a new block first when needed (Appendix B.1.1). */
+    /**
+     * Takes the next Sender Sequence Number, persisting a new block first when needed (Appendix B.1.1).
+     *
+     * The new limit is committed only after [SequenceNumberStore.store] returned. If the write throws or
+     * is cancelled, nothing changes here and the next call writes again, so no number is ever handed out
+     * at or above a limit that is not durable.
+     */
     internal suspend fun takeSequenceNumber(): Long = senderLock.withLock {
         val number = nextSequenceNumber
         if (number > MAX_SEQUENCE_NUMBER) throw OscoreException(OscoreError.SEQUENCE_EXHAUSTED)
         if (number >= persistedLimit) {
-            persistedLimit = minOf(number + persistInterval, MAX_SEQUENCE_NUMBER + 1)
-            sequenceStore.store(parameters.name, persistedLimit)
+            val limit = minOf(number + persistInterval, MAX_SEQUENCE_NUMBER + 1)
+            sequenceStore.store(parameters.name, limit)
+            persistedLimit = limit
         }
         nextSequenceNumber = number + 1
         number

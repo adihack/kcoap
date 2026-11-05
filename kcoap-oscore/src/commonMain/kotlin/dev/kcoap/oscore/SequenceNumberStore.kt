@@ -12,7 +12,16 @@ public interface SequenceNumberStore {
     /** The last value [store]d for [contextName], or null for a context seen for the first time. */
     public suspend fun load(contextName: String): Long?
 
-    /** Records that numbers below [limit] may have been used. Must be durable before it returns. */
+    /**
+     * Records that numbers below [limit] may have been used by the context [contextName].
+     *
+     * - Durable when it returns: after a crash or power loss right afterwards, [load] returns at least
+     *   [limit].
+     * - It may throw or be cancelled. The persisted value is then the previous or the new limit, never a
+     *   torn or lower one. The context assumes nothing was persisted: it hands out no number at or above
+     *   the previous limit and writes again on its next use. Its exception reaches the caller unchanged.
+     * - The limits of one context never decrease; a retry repeats the same value.
+     */
     public suspend fun store(contextName: String, limit: Long)
 }
 
