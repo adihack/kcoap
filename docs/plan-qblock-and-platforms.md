@@ -535,6 +535,34 @@ public class QBlockServerConfig(
   - A Custody Pong is not held up by intermediate Q-Block1 requests.
   - The server state is empty after NON_PARTIAL_TIMEOUT.
   - WARN once at start when Q-Block is enabled with `security == null`.
+- **Status: done.** `KC/server/QBlockServer.kt` drives the QB-1 cores; `QBlockServerConfig.kt`,
+  `PartialBody.kt`, `ServedBody.kt`, `TimedBody.kt` (one timer coroutine per body), `QBlockRequest.kt` (the
+  cores' handle of a request: `InboundRequest`, inner request, `UnprotectedRequest`) and the sealed
+  `Reply.kt` (`Single`, `None`, `Body(body, actions, isNew)`). `CoapServer.answer` recognizes 19 and 31 only
+  where `QBlockServer.accepts` the request and hands such requests over after the address check; the
+  handler runs through `CoapServer.respondTo`. Decisions made on the way:
+  - A Q-Block2 body takes the size of the request's Q-Block2, else of its Q-Block1 blocks (what the client
+    showed it can take), else `maxBlockSize`, within what fits; a first request whose size does not fit
+    gets the whole body in the smaller size.
+  - Completed uploads are remembered from the moment the last block arrives, before the handler runs, so a
+    copy meanwhile is a duplicate and never starts a new partial body; a copy of the last (or completing)
+    block gets the final response again, from the cached Q-Block2 body (same ETag) when there was one.
+  - Bounds: a new upload beyond `maxPartialBodies` or `maxBodiesPerPeer` gets 5.03 with Max-Age =
+    NON_RECEIVE_TIMEOUT; a body beyond `maxCachedBodies` (or the peer's share) evicts the least recently
+    used one. One sweeper coroutine expires the caches at their earliest expiry, so the state is empty
+    NON_PARTIAL_TIMEOUT after the last use (`QBlockServerTest.rfc9177Section7_2NothingIsLeftAfterNonPartialTimeout`).
+  - Amplification: `mustVerifyAddress` is called with the blocks about to go for each burst (the first set
+    on the request, a Continue's set, a missing-block answer, and each later set on the timer, which stops
+    the body when the address is no longer verified). A challenged new POST or PATCH body keeps its response
+    for the repeat, which `QBlockServer.serve` shapes again.
+  - Until QB-6 an Observe registration carrying Q-Block2 is served without adding an observer (RFC 7641 §4.1).
+  - The blocks of a burst are handled concurrently, so on a multi-threaded dispatcher the request that
+    completes an upload, or shows a gap, need not be the last to arrive; §4.3 allows any token of the body.
+  - Tests: `KT/QBlockServerTest.kt` (41, a scripted client, `KT/QBlockPeer.kt`, including the refusal half of
+    Figure 12), `KT/QBlockReliableTest.kt` (4, Custody), `KJ/LibcoapClientAgainstKcoapQBlockTest.kt` (13), with
+    `KJ/DroppingTransport.kt` and `Libcoap.wire`. libcoap needed no leniency; its one deviation met here (a
+    Continue after an upload repeating `Q-Block1 0/M` without payload) is pinned as an `upstream…` test.
+    The kcoap-to-kcoap parts of `QBlockTest`/`QBlockReliableTest` need the client and move to QB-4.
 
 **QB-4: Q-Block client**
 - **Scope:**

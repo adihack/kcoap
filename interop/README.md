@@ -23,6 +23,7 @@ docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
 | `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
 | `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05; the Q-Block fallback with `-L 7 -v 7` (below) |
 | `LibcoapClientAgainstKcoapAddressVerificationTest` | `coap-client -B 10 -v 7 -o ...` (also `-N`, and `-L 7`) | a kcoap server with `AmplificationPolicy.ALL_RESPONSES` (RFC 9175 §2.4 item 3): a piggybacked 4.01 with Echo, then the whole 3000-byte body in Block2 after libcoap's repeat; a NON 4.01 for `-N`; libcoap's Q-Block probe of `/.well-known/core` answered 4.02 at once, never challenged |
+| `LibcoapClientAgainstKcoapQBlockTest` | `coap-client -L 7 -v 7 ...` (also `-L 15`, `-N`, `-l`) | a kcoap server with Q-Block on, over UDP, TCP and WebSockets (below) |
 
 ### Q-Block (RFC 9177)
 
@@ -31,15 +32,45 @@ libcoap 4.3.5 has no `-Q` flag. Q-Block is turned on with `-L`, the sum of libco
 in missing-block requests; 16 and 32 (client) and 64 and 128 (server) change other block-wise behaviour.
 The Q-Block runs use `-L 7` (and `-L 15` for the M bit) on both `coap-client` and `coap-server`.
 
-kcoap does not implement Q-Block yet (the plan is in
-[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), and it will stay off by default.
-What runs today pins the fallback of RFC 9177 §4.1: `coap-client -L 7` first sends a Confirmable
+kcoap's server implements Q-Block (QB-3; the client follows in QB-4, see
+[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), off by default. While it is off,
+the fallback of RFC 9177 §4.1 is pinned: `coap-client -L 7` first sends a Confirmable
 `GET /.well-known/core` with `Q-Block2: 0/_/16`, kcoap answers 4.02 "Unrecognized critical option 31",
 libcoap logs "Q-Block support not available" and sends its real request at once with RFC 7959 options
 (`LibcoapClientAgainstKcoapTest.fallsBackFromQBlockWhileItIsOff`).
 
+With `CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true))`, `LibcoapClientAgainstKcoapQBlockTest`
+runs the plan's cases against `coap-client -L 7 -v 7` (`-L` goes before `-f`), reads every message from
+libcoap's log (`Libcoap.wire`: the `v:1` line after each `netif: sent|recv` line) and compares the body
+bytes each time, since libcoap's client can exit 0 with a truncated body:
+
+| Case | libcoap side | What it shows |
+|---|---|---|
+| L1 | `-L 7 coap://…/` | the probe gets block 0 piggybacked with Q-Block2, ETag and Size2; libcoap logs "Q-Block support available" |
+| L2 | `-L 7 -N -b 64 -o … /big` (3000 B), also `-L 15`, and no `-b` | sets of 10 blocks with one ETag and Size2; libcoap's Continues 10, 20, 30, 40 answered on the original token, all in well under 1.5 s |
+| L3 | as L2, kcoap loses blocks 2 and 7 (`DroppingTransport`); `-L 15` with 3 to 9 lost | one missing-block request [2, 7] when block 10 arrives, answered on its own token; with the M bit `3/M`, answered with 3 to 9 only |
+| L4 | `-L 7 -N -b 64 -m put -f /data/big3000.txt` | nothing for blocks in the middle, 2.31 with Q-Block1 9, 19, 29, 39, then 2.04; one Request-Tag and Size1 throughout |
+| L5 | L4 with `-l 4,9`, and with `-l 48` | a Non-confirmable 4.08 `02 07` (Content-Format 272) at once on a block of the later set; `18 2e` NON_RECEIVE_TIMEOUT (4 s) after the last block that came |
+| L7 | L2 and L4 without `-N` | an Empty ACK per Q-Block1 block and the final response piggybacked, no 2.31; block 0 piggybacked, then Confirmable blocks one per ACK |
+| L8 | raw datagrams | a descending Q-Block2 list and Q-Block1 without Request-Tag or Size1 get 4.00, Block mixed with Q-Block 4.02 |
+| L10 | `-L 7 -b 64` over `coap+tcp` and `coap+ws` | blocks back to back, only the final response, no Continue |
+| L12 | L2 against a server with the default `AmplificationPolicy.Q_BLOCK_BURSTS` | the first burst request gets a Non-confirmable 4.01 with Echo; libcoap repeats it with the Echo value and gets the body |
+
+What the runs showed about libcoap 4.3.5b's client:
+
+- Its first Q-Block2 request has an empty token and a Request-Tag, and carries `Q-Block2 0/M/<size>`; its
+  Continues repeat the Request-Tag on tokens of their own.
+- Without `-b` it asks without Q-Block2, so kcoap, which keeps no per-client Q-Block state (ADR 0006),
+  answers with RFC 7959 Block2, which libcoap follows to the end.
+- **Continue after an upload** (pinned as
+  `upstreamLibcoapRepeatsQBlock1WithoutPayloadInFollowUpsOfAnUploadAndGets400`): when a Q-Block1 POST gets
+  a Q-Block2 body back, libcoap's Continue repeats `Q-Block1 0/M` and Size1 without a payload. RFC 9177 §4.7
+  wants neither, and a Q-Block1 block with M set must fill its block (RFC 7959 §2.3), so kcoap answers
+  4.00; libcoap then gives the body up after its first set.
+
 ```bash
 interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello
+interop/libcoap/coap.sh coap-client -L 7 -N -b 64 -v 7 -B 30 -m put -f /data/big3000.txt coap://127.0.0.1:5683/store
 interop/libcoap/coap.sh coap-server -p 5683 -L 7 -v 7
 ```
 
