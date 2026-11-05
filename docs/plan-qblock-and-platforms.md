@@ -392,7 +392,7 @@ public class QBlockServerConfig(
 - **Verification.** Only on macOS: the CI `apple` job (`scripts/test apple`) runs every new Q-Block commonTest on the simulator.
 
 ### JVM application server
-- **Done.** UDP, TCP and WebSocket listeners (`KtorWebSocketListener` hard-codes CIO; W1 fixes that). Events and interceptors. `SecurityContextRepository`. Bounded RFC 7959 state. OSCORE B.1.2 Echo.
+- **Done.** UDP, TCP and WebSocket listeners (`KtorWebSocketListener` takes its server engine since W1). Events and interceptors. `SecurityContextRepository`. Bounded RFC 7959 state. OSCORE B.1.2 Echo.
 - **Missing, by priority:**
   1. RFC 9175 amplification mitigation and server Echo (coap-core-16): **SRV-1**, required by the Q-Block bursts.
   2. Concurrency fixes and stress tests (S1).
