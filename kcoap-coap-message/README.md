@@ -67,4 +67,8 @@ layers, tokens and Message IDs, Block-wise, Observe, Q-Block, the client and the
 - In kcoap-coap, where they need the stack: link format in `DiscoveryTest`, the signaling options in
   `SignalTest`, and the message-security SPI with a fake OSCORE-like layer in `MessageSecurityTest`,
   `AccessPolicyTest` and `UnverifiedResponseTest`. kcoap-oscore implements the SPI against RFC 8613
-  Appendix C. The root Kover report counts the tests of every module.
+  Appendix C.
+- Line coverage in the root Kover report (`./gradlew koverXmlReport`), which counts the tests of every
+  module: 98.7% for `dev.kcoap.coap`, 100% for `dev.kcoap.coap.codec` and 93.8% for
+  `dev.kcoap.coap.security`. This module's own tests alone cover 69.5%
+  (`./gradlew :kcoap-coap-message:koverXmlReport`).
