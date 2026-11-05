@@ -26,17 +26,22 @@ internal class WellKnownCore(private val owner: CoapServer) : CoapResource(NAME)
         return CoapResponse.content(LinkFormat.serialize(links).encodeToByteArray(), ContentFormat.LINK_FORMAT)
     }
 
-    /** Depth first, in the order resources were added: those the caller of [context] may use. */
+    /**
+     * Depth first, in the order resources were added: those the caller of [context] may use. Each resource is
+     * governed by its own policy, else the one it inherits on the way down, else the server's default; a policy
+     * that throws leaves its link out and no other.
+     */
     suspend fun links(context: RequestContext): List<WebLink> {
         val links = mutableListOf<WebLink>()
-        suspend fun visit(resource: CoapResource) {
+        suspend fun visit(resource: CoapResource, inherited: AccessPolicy?) {
+            val governing = resource.access ?: inherited
             if (resource.isDiscoverable) {
-                val policy = owner.accessOf(resource)
+                val policy = governing ?: owner.config.defaultAccess
                 if (owner.permitsDiscovery(policy, resource, context)) links += link(resource, policy)
             }
-            resource.children.forEach { visit(it) }
+            resource.children.forEach { visit(it, governing) }
         }
-        visit(owner.root)
+        visit(owner.root, null)
         return links
     }
 

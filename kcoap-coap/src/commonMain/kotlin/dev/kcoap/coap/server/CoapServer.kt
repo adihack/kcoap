@@ -267,10 +267,11 @@ public class CoapServer private constructor(
     private suspend fun answer(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?): Reply? {
         val options = request.options
         val peer = inbound.peer
-        val resource = rootResource.find(options.uriPath)
+        val target = lookUp(options.uriPath)
+        val resource = target.resource
         // ADR 0008: the policy decides before any work for the request, so a refused one buffers no Block1 or
         // Q-Block1 body, touches no observation, gets no held-back response and no burst, and runs no handler.
-        refusal(inbound, request, unprotected, resource)?.let { return Reply.Single(it) }
+        refusal(inbound, request, unprotected, target)?.let { return Reply.Single(it) }
         // RFC 9177 §4.1: Q-Block1 and Q-Block2 count as recognized only where the Q-Block layer takes them.
         val qBlockAccepted = qBlock.accepts(inbound, unprotected)
         val recognized = OptionCheck.SERVER_RECOGNIZED + (if (qBlockAccepted) OptionCheck.Q_BLOCK_RECOGNIZED else emptySet()) +
@@ -437,7 +438,7 @@ public class CoapServer private constructor(
     // ---------------------------------------------------------------- access (ADR 0008)
 
     /**
-     * The answer that refuses [request] for [resource], or null when the policy permits it. A path that does
+     * The answer that refuses [request] for its [target], or null when the policy permits it. A path that does
      * not exist is governed by its nearest existing ancestor, so it is refused wherever an existing resource
      * would be, and gets 4.04 only from a policy that permits it.
      */
@@ -445,12 +446,12 @@ public class CoapServer private constructor(
         inbound: InboundRequest,
         request: CoapMessage,
         unprotected: UnprotectedRequest?,
-        resource: CoapResource?,
+        target: Target,
     ): CoapResponse? {
         val path = request.options.uriPath
         val identity = unprotected?.identity
-        val access = AccessRequest(request.code, path, resource, inbound.peer, identity, inbound.peerIdentity)
-        val policy = accessOf(resource ?: nearestExisting(path))
+        val access = AccessRequest(request.code, path, target.resource, inbound.peer, identity, inbound.peerIdentity)
+        val policy = target.access
         if (policy.permits(access)) return null
         log.warn { "Refused ${request.code} ${request.options.path} from ${inbound.peer} (${identity?.description ?: "no message security"}): $policy" }
         // RFC 7252 §5.9.2.2: 4.01 asks the client to authenticate first; one that message security authenticated
@@ -458,25 +459,42 @@ public class CoapServer private constructor(
         return CoapResponse(if (identity == null) CoapCode.UNAUTHORIZED else CoapCode.FORBIDDEN)
     }
 
-    /** The policy that governs [resource]: its own, else its nearest ancestor's, else [CoapServerConfig.defaultAccess]. */
-    internal fun accessOf(resource: CoapResource): AccessPolicy {
-        var current: CoapResource? = resource
-        while (current != null) {
-            current.access?.let { return it }
-            current = current.parent
+    /** The resource a request names, null if none, and the policy that governs it. */
+    private class Target(val resource: CoapResource?, val access: AccessPolicy)
+
+    /**
+     * The resource at [segments] and its policy, found in one walk down the tree from the root: the deepest policy
+     * set on the way, the resource's own or its nearest ancestor's, else [CoapServerConfig.defaultAccess]. A path
+     * that does not exist gets the policy of its nearest existing ancestor. Taken from the walk rather than from
+     * the resource's parent links, a resource removed meanwhile, which has none, keeps the policy it inherited.
+     */
+    private fun lookUp(segments: List<String>): Target {
+        var current: CoapResource = rootResource
+        var access = current.access
+        for (segment in segments) {
+            current = current.child(segment) ?: return Target(null, access ?: config.defaultAccess)
+            current.access?.let { access = it }
         }
-        return config.defaultAccess
+        return Target(current, access ?: config.defaultAccess)
     }
 
-    /** Whether `/.well-known/core` shows [resource], governed by [policy], to the caller of [context]: a GET by it. */
-    internal suspend fun permitsDiscovery(policy: AccessPolicy, resource: CoapResource, context: RequestContext): Boolean =
-        policy.permits(AccessRequest(CoapCode.GET, resource.segments, resource, context.peer, context.securityIdentity, context.peerIdentity))
-
-    /** The deepest resource of the tree on [segments]: the root when even the first segment does not exist. */
-    private fun nearestExisting(segments: List<String>): CoapResource {
-        var current: CoapResource = rootResource
-        for (segment in segments) current = current.child(segment) ?: return current
-        return current
+    /**
+     * Whether `/.well-known/core` shows [resource], governed by [policy], to the caller of [context]: a GET by it.
+     * A policy that throws hides that one link (fail closed) and is logged, so the rest of the document, the
+     * Public EDHOC resource among it, is still served.
+     */
+    internal suspend fun permitsDiscovery(policy: AccessPolicy, resource: CoapResource, context: RequestContext): Boolean {
+        val request = AccessRequest(
+            CoapCode.GET, resource.segments, resource, context.peer, context.securityIdentity, context.peerIdentity,
+        )
+        return try {
+            policy.permits(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "The access policy of ${resource.path} failed; /.well-known/core leaves it out" }
+            false
+        }
     }
 
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {

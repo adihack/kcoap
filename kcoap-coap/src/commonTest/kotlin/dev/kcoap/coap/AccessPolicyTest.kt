@@ -6,16 +6,19 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.AccessRequest
 import dev.kcoap.coap.server.AmplificationPolicy
+import dev.kcoap.coap.server.CoapResource
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
+import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceAttributes
 import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -347,6 +350,65 @@ class AccessPolicyTest {
 
         assertEquals(CoapCode.INTERNAL_SERVER_ERROR, f.ask(request(f.peer, "broken")).code)
         assertEquals(0, handled)
+    }
+
+    @Test
+    fun adr0008APolicyThatFailsHidesOnlyItsOwnLinkFromWellKnownCore() = runTest {
+        val f = fixture {
+            resource(".well-known") {
+                resource("edhoc") {
+                    access = AccessPolicy.Public
+                    post { CoapResponse.changed() }
+                }
+            }
+            resource("broken") {
+                access = AccessPolicy { error("the ACL store is down") }
+                get { CoapResponse.content("never") }
+            }
+            resource("open") {
+                access = AccessPolicy.Public
+                get { CoapResponse.content("open") }
+            }
+        }
+
+        val answer = f.ask(request(f.peer, ".well-known/core"))
+
+        assertEquals(CoapCode.CONTENT, answer.code, "not 5.00 for everyone")
+        assertEquals("</.well-known/edhoc>,</open>", answer.payloadAsText(), "fail closed for that link alone")
+    }
+
+    /** A resource that leaves its parent while the server reads its policy, as if removed at that moment. */
+    private class Leaving(name: String) : CoapResource(name) {
+        var ran = false
+
+        override val access: AccessPolicy?
+            get() {
+                parent?.remove(name)
+                return null
+            }
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse {
+            ran = true
+            return CoapResponse.content("ran")
+        }
+    }
+
+    @Test
+    fun adr0008AResourceRemovedDuringTheLookupKeepsThePolicyItInherited() = runTest {
+        val leaving = Leaving("item")
+        // A plain server: the default is Public, and only /api asks for authentication.
+        val f = fixture(CoapServerConfig()) {
+            resource("api") {
+                access = AccessPolicy.Authenticated
+                add(leaving)
+            }
+        }
+
+        val answer = f.ask(request(f.peer, "api/item"))
+
+        assertEquals(CoapCode.UNAUTHORIZED, answer.code, "the policy of /api, not the default of a detached resource")
+        assertNull(leaving.parent, "it was removed during the lookup")
+        assertFalse(leaving.ran, "its handler never ran")
     }
 
     @Test
