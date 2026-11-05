@@ -323,6 +323,7 @@ public final class dev/kcoap/coap/ContentFormat {
 	public static final field INSTANCE Ldev/kcoap/coap/ContentFormat;
 	public static final field JSON I
 	public static final field LINK_FORMAT I
+	public static final field MISSING_BLOCKS_CBOR_SEQ I
 	public static final field OCTET_STREAM I
 	public static final field OSCORE I
 	public static final field TEXT_PLAIN I
@@ -394,6 +395,9 @@ public final class dev/kcoap/coap/OptionSet : java/lang/Iterable, kotlin/jvm/int
 	public final fun getPath ()Ljava/lang/String;
 	public final fun getProxyScheme ()Ljava/lang/String;
 	public final fun getProxyUri ()Ljava/lang/String;
+	public final fun getQBlock1 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getQBlock2 ()Ldev/kcoap/coap/BlockOption;
+	public final fun getQBlock2List ()Ljava/util/List;
 	public final fun getRequestTags ()Ljava/util/List;
 	public final fun getSize ()I
 	public final fun getSize1 ()Ljava/lang/Long;
@@ -414,6 +418,7 @@ public final class dev/kcoap/coap/OptionSet$Builder {
 	public final fun add (I[B)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun add (Ldev/kcoap/coap/CoapOption;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun addAll (Ljava/lang/Iterable;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun addQBlock2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun block1 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun block2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun build ()Ldev/kcoap/coap/OptionSet;
@@ -433,6 +438,8 @@ public final class dev/kcoap/coap/OptionSet$Builder {
 	public final fun oscore ([B)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun proxyScheme (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun proxyUri (Ljava/lang/String;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun qBlock1 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
+	public final fun qBlock2 (Ldev/kcoap/coap/BlockOption;)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun remove (I)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun requestTag ([B)Ldev/kcoap/coap/OptionSet$Builder;
 	public final fun set (Ldev/kcoap/coap/CoapOption;)Ldev/kcoap/coap/OptionSet$Builder;
@@ -1057,18 +1064,23 @@ public final class dev/kcoap/coap/stack/TokenGenerator$DefaultImpls {
 public final class dev/kcoap/coap/stack/TransmissionParameters {
 	public static final field Companion Ldev/kcoap/coap/stack/TransmissionParameters$Companion;
 	public fun <init> ()V
-	public synthetic fun <init> (JDIIJIJILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (JDIIJIJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JDIIJIJIJJIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JDIIJIJIJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getAckRandomFactor ()D
 	public final fun getAckTimeout-UwyO8pc ()J
 	public final fun getDefaultLeisure-UwyO8pc ()J
 	public final fun getExchangeLifetime-UwyO8pc ()J
 	public final fun getMaxLatency-UwyO8pc ()J
+	public final fun getMaxPayloads ()I
 	public final fun getMaxRetransmit ()I
 	public final fun getMaxRtt-UwyO8pc ()J
 	public final fun getMaxTransmitSpan-UwyO8pc ()J
 	public final fun getMaxTransmitWait-UwyO8pc ()J
 	public final fun getNonLifetime-UwyO8pc ()J
+	public final fun getNonMaxRetransmit ()I
+	public final fun getNonPartialTimeout-UwyO8pc ()J
+	public final fun getNonReceiveTimeout-UwyO8pc ()J
+	public final fun getNonTimeout-UwyO8pc ()J
 	public final fun getNstart ()I
 	public final fun getProbingRate ()I
 	public final fun getProcessingDelay-UwyO8pc ()J
