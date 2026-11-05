@@ -6,6 +6,7 @@ import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.CompletableDeferred
@@ -37,8 +38,12 @@ class SequenceNumberPersistenceTest {
         val writes = mutableListOf<Long>()
         var failNext: Failure? = null
         var failAlways = false
+        var failLoad = false
 
-        override suspend fun load(contextName: String): Long? = durable[contextName]
+        override suspend fun load(contextName: String): Long? {
+            if (failLoad) throw StorageFullException()
+            return durable[contextName]
+        }
 
         override suspend fun store(contextName: String, limit: Long) {
             writes += limit
@@ -199,6 +204,48 @@ class SequenceNumberPersistenceTest {
         SecurityContext.derive(parameters, crypto, store)
         assertEquals(listOf(0L), store.writes, "the first derivation records the context; the second restores it")
         assertEquals(0, SecurityContext.derive(parameters, crypto, store).peekSequenceNumber())
+    }
+
+    /** Counts HMAC calls: HKDF makes every key with them (RFC 8613 §3.2.1), so zero means no key exists. */
+    private class CountingCrypto(private val delegate: CryptoBackend) : CryptoBackend by delegate {
+        var hmacCalls = 0
+
+        override suspend fun hmac(algorithm: HashAlgorithm, key: ByteArray, data: ByteArray): ByteArray {
+            hmacCalls++
+            return delegate.hmac(algorithm, key, data)
+        }
+    }
+
+    @Test
+    fun aFailingLoadReachesTheCallerBeforeAnyKeyExists() = runTest {
+        val store = FlakyStore().apply { failLoad = true }
+        val counting = CountingCrypto(crypto)
+        assertFailsWith<StorageFullException> { SecurityContext.derive(parameters, counting, store) }
+        assertEquals(0, counting.hmacCalls, "no key was derived")
+        assertTrue(store.writes.isEmpty(), "nothing was recorded")
+    }
+
+    @Test
+    fun aFirstWriteFailingBeforeItIsDurableLeavesTheContextNew() = runTest {
+        val store = FlakyStore().apply { failNext = FlakyStore.Failure.BEFORE_WRITE }
+        val counting = CountingCrypto(crypto)
+        assertFailsWith<StorageFullException> { SecurityContext.derive(parameters, counting, store) }
+        assertEquals(0, counting.hmacCalls, "no key was derived")
+
+        val context = SecurityContext.derive(parameters, crypto, store)
+        assertEquals(listOf(0L, 0), store.writes, "the next derivation still sees a new context and records it")
+        assertEquals(0, context.peekSequenceNumber())
+    }
+
+    @Test
+    fun aFirstWriteFailingAfterItIsDurableMakesTheNextDerivationARestore() = runTest {
+        val store = FlakyStore().apply { failNext = FlakyStore.Failure.AFTER_WRITE }
+        assertFailsWith<StorageFullException> { SecurityContext.derive(parameters, crypto, store) }
+        assertEquals(0, store.durable[parameters.name])
+
+        val context = SecurityContext.derive(parameters, crypto, store)
+        assertEquals(listOf(0L), store.writes, "restored from the durable 0, so nothing is recorded again")
+        assertEquals(0, context.peekSequenceNumber())
     }
 
     @Test

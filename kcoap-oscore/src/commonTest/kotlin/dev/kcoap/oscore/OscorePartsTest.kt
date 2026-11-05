@@ -3,9 +3,11 @@ package dev.kcoap.oscore
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
+import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
+import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.supports
 import kotlinx.coroutines.test.runTest
@@ -171,6 +173,54 @@ class OscorePartsTest {
         assertTrue(calls.drop(1).all { (key, _) -> key === prk }, "every Expand step used the same PRK")
         assertContentEquals(secret, parameters.masterSecret(), "the parameters keep their own copy")
         assertContentEquals(salt, parameters.masterSalt())
+    }
+
+    /** The keys the backend got for AEADs it then could not build belong to no context: they are wiped. */
+    @Test
+    fun aBackendThatCannotBuildTheAeadGetsItsKeysWiped() = runTest {
+        val default = DefaultCryptoBackend()
+        val keys = mutableListOf<ByteArray>()
+        // The Sender AEAD is built, the Recipient AEAD fails, as when a platform lacks the algorithm.
+        val failing = object : CryptoBackend by default {
+            override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead {
+                keys += key
+                if (keys.size == 2) throw UnsupportedAlgorithmException(algorithm.name)
+                return default.aead(algorithm, key)
+            }
+        }
+        val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2))
+        assertFailsWith<UnsupportedAlgorithmException> { ephemeralContext(parameters, failing) }
+
+        val expected = SecurityContext.deriveKeys(parameters, default)
+        assertEquals(listOf(expected.senderKey.size, expected.recipientKey.size), keys.map { it.size })
+        assertFalse(expected.senderKey.all { it == 0.toByte() }, "the real keys are not zero")
+        assertTrue(keys.all { key -> key.all { it == 0.toByte() } }, "Sender and Recipient Key wiped")
+    }
+
+    /** A backend failing during HKDF-Expand (§3.2.1) fails the derivation with its own exception. */
+    @Test
+    fun aFailingKeyExpansionReachesTheCaller() = runTest {
+        val default = DefaultCryptoBackend()
+        val parameters = SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2))
+        // HMAC call 1 is the Extract; 2, 3 and 4 expand the Sender Key, the Recipient Key and the Common IV.
+        for (failingCall in 2..4) {
+            var calls = 0
+            var aeads = 0
+            val failing = object : CryptoBackend by default {
+                override suspend fun hmac(algorithm: HashAlgorithm, key: ByteArray, data: ByteArray): ByteArray {
+                    if (++calls == failingCall) throw IllegalStateException("HMAC $failingCall failed")
+                    return default.hmac(algorithm, key, data)
+                }
+
+                override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead {
+                    aeads++
+                    return default.aead(algorithm, key)
+                }
+            }
+            val error = assertFailsWith<IllegalStateException> { ephemeralContext(parameters, failing) }
+            assertEquals("HMAC $failingCall failed", error.message)
+            assertEquals(0, aeads, "no AEAD was built after a failed expansion")
+        }
     }
 
     /** A GCM context works end to end too; only the nonce length differs. */

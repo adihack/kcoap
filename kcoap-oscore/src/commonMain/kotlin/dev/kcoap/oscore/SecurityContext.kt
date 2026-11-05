@@ -2,6 +2,7 @@ package dev.kcoap.oscore
 
 import dev.kcoap.cbor.CborWriter
 import dev.kcoap.common.constantTimeEquals
+import dev.kcoap.common.wipe
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
@@ -134,7 +135,14 @@ public class SecurityContext private constructor(
     override fun toString(): String = "SecurityContext($name)"
 
     /** The output of the key derivation (RFC 8613 §3.2.1), which the Appendix C vectors check. */
-    internal class DerivedKeys(val senderKey: ByteArray, val recipientKey: ByteArray, val commonIv: ByteArray)
+    internal class DerivedKeys(val senderKey: ByteArray, val recipientKey: ByteArray, val commonIv: ByteArray) {
+        /** Overwrites all three, for keys that no context took over. */
+        fun wipe() {
+            senderKey.wipe()
+            recipientKey.wipe()
+            commonIv.wipe()
+        }
+    }
 
     public companion object {
         /** RFC 8613 §7.2.1: Sender Sequence Numbers stay below 2^40, the 5-byte Partial IV range. */
@@ -155,6 +163,10 @@ public class SecurityContext private constructor(
          * - Keys that are new in this process run, such as EDHOC output, use
          *   [EphemeralSequenceNumberStore].
          *
+         * The store is read, and a new context recorded, before any key exists, so a failing store leaves
+         * no key material behind. When the backend cannot build the AEAD, the derived keys and the Common
+         * IV are wiped before the exception reaches the caller.
+         *
          * @param sequenceStore where the Sender Sequence Number is persisted; see [SequenceNumberStore].
          * @param persistInterval how many sequence numbers to reserve per write to [sequenceStore] (K in
          *   Appendix B.1.1), from 1 to 2^40. A restart skips at most this many numbers.
@@ -162,7 +174,9 @@ public class SecurityContext private constructor(
          *   proved its freshness with Echo (Appendix B.1.2). [FreshnessPolicy.AUTO] requires the proof
          *   for a context restored from [sequenceStore] and for any store but the ephemeral one.
          * @throws IllegalArgumentException when [persistInterval] is out of range, or [sequenceStore]
-         *   returns a value outside 0 to 2^40. Exceptions of [sequenceStore] reach the caller unchanged.
+         *   returns a value outside 0 to 2^40. Exceptions of [sequenceStore] and of [crypto] reach the
+         *   caller unchanged. When the first write for a new context throws after it became durable, the
+         *   next derivation counts as a restore.
          */
         public suspend fun derive(
             parameters: SecurityContextParameters,
@@ -172,12 +186,6 @@ public class SecurityContext private constructor(
             freshness: FreshnessPolicy = FreshnessPolicy.AUTO,
         ): SecurityContext {
             require(persistInterval in 1..MAX_SEQUENCE_NUMBER + 1) { "persistInterval must be in 1..2^40" }
-            val keys = deriveKeys(parameters, crypto)
-            val algorithm = parameters.aeadAlgorithm
-            // The backend owns the key arrays from here on: its AEAD objects may keep them.
-            val senderAead = crypto.aead(algorithm, keys.senderKey)
-            val recipientAead = crypto.aead(algorithm, keys.recipientKey)
-
             val name = parameters.name
             val restored = sequenceStore.load(name)
             require(restored == null || restored in 0..MAX_SEQUENCE_NUMBER + 1) {
@@ -189,6 +197,20 @@ public class SecurityContext private constructor(
                 FreshnessPolicy.AUTO -> restored == null && sequenceStore is EphemeralSequenceNumberStore
                 FreshnessPolicy.REQUIRE_PROOF -> false
                 FreshnessPolicy.ASSUME_FRESH -> true
+            }
+
+            val keys = deriveKeys(parameters, crypto)
+            val algorithm = parameters.aeadAlgorithm
+            val senderAead: Aead
+            val recipientAead: Aead
+            try {
+                // The backend owns the key arrays from here on: its AEAD objects may keep them.
+                senderAead = crypto.aead(algorithm, keys.senderKey)
+                recipientAead = crypto.aead(algorithm, keys.recipientKey)
+            } catch (e: Throwable) {
+                // No context takes the keys over; an AEAD built before the failure is dropped with them.
+                keys.wipe()
+                throw e
             }
             return SecurityContext(
                 parameters = parameters,
@@ -205,7 +227,8 @@ public class SecurityContext private constructor(
 
         /**
          * HKDF-Extract over the Master Secret and Salt, then HKDF-Expand to the two keys and the Common IV
-         * (RFC 8613 §3.2.1). The copies of the Master Secret and Salt and the PRK are wiped afterwards.
+         * (RFC 8613 §3.2.1). The copies of the Master Secret and Salt and the PRK are wiped afterwards, and
+         * so is every key already expanded when a later step fails.
          */
         internal suspend fun deriveKeys(parameters: SecurityContextParameters, crypto: CryptoBackend): DerivedKeys {
             val hkdf = Hkdf(crypto, parameters.hkdfAlgorithm)
@@ -217,15 +240,21 @@ public class SecurityContext private constructor(
                 secret.fill(0)
                 salt.fill(0)
             }
+            val expanded = mutableListOf<ByteArray>()
+            suspend fun expand(id: ByteArray, type: String, length: Int): ByteArray =
+                hkdf.expand(prk, info(parameters, id, type, length), length).also { expanded += it }
             try {
                 val aead = parameters.aeadAlgorithm
                 return DerivedKeys(
-                    senderKey = hkdf.expand(prk, info(parameters, parameters.senderId, "Key", aead.keyLength), aead.keyLength),
-                    recipientKey = hkdf.expand(prk, info(parameters, parameters.recipientId, "Key", aead.keyLength), aead.keyLength),
-                    commonIv = hkdf.expand(prk, info(parameters, ByteArray(0), "IV", aead.nonceLength), aead.nonceLength),
+                    senderKey = expand(parameters.senderId, "Key", aead.keyLength),
+                    recipientKey = expand(parameters.recipientId, "Key", aead.keyLength),
+                    commonIv = expand(ByteArray(0), "IV", aead.nonceLength),
                 )
+            } catch (e: Throwable) {
+                expanded.forEach { it.wipe() }
+                throw e
             } finally {
-                prk.fill(0)
+                prk.wipe()
             }
         }
 

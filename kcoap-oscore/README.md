@@ -150,7 +150,9 @@ Not yet: Appendix B.2
     challenge's Partial IV is above every one it used before;
   - each `FreshnessPolicy` is tested for new, restored, re-derived and durable contexts;
   - a request replayed between a challenge and its answer gets the same Echo value, and the answer
-    still proves freshness.
+    still proves freshness;
+  - a store that fails while a context is derived reaches the caller before any key exists, and a
+    backend that cannot build the AEAD gets its keys wiped.
 - `EphemeralSequenceNumberStore` shared by parallel contexts on `Dispatchers.Default`: every number once,
   and none used before it was stored.
 - Interop with libcoap v4.3.5b in both directions, raw and through the CoAP stack, including B.1.2
