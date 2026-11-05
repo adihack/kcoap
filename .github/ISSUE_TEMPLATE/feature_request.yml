@@ -5,9 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for the idea. If an RFC requirement is missing, the RFC compliance form fits better.
-        A large change, such as a new module or a change to the public API, is agreed in an issue first,
-        and an architectural decision is recorded as an ADR ([CONTRIBUTING.md](https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md#before-you-start)).
+        Thank you for the idea. If an RFC requirement is missing, the RFC compliance form fits better. A large change, such as a new module or a change to the public API, is agreed in an issue first, and an architectural decision is recorded as an ADR ([CONTRIBUTING.md](https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md#before-you-start)).
   - type: checkboxes
     id: searched
     attributes:

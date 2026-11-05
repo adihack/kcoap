@@ -5,11 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you. Every implementation kcoap is tested against finds mistakes that tests against kcoap
-        itself cannot. Logs or captures from **both sides** help most.
+        Thank you. Every implementation kcoap is tested against finds mistakes that tests against kcoap itself cannot. Logs or captures from **both sides** help most.
 
-        If the problem could let an attacker read, forge or replay messages, do not report it here:
-        follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
+        If the problem could let an attacker read, forge or replay messages, do not report it here: follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
   - type: checkboxes
     id: searched
     attributes:
@@ -117,9 +115,7 @@ body:
     attributes:
       label: Logs and captures
       description: |
-        Logs of both sides, in a code block (three backticks before and after). Attach a packet
-        capture as a .zip file by dragging it here. Remove private keys, OSCORE Master Secrets and
-        Salts, and EDHOC secrets first.
+        Logs of both sides, in a code block (three backticks before and after). Attach a packet capture as a .zip file by dragging it here. Remove private keys, OSCORE Master Secrets and Salts, and EDHOC secrets first.
   - type: checkboxes
     id: secrets
     attributes:

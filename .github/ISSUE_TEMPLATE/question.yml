@@ -5,10 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        The [documentation hub](https://github.com/adihack/kcoap/blob/main/docs/README.md), the
-        [client and server guide](https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md)
-        and the module READMEs answer many questions. [SUPPORT.md](https://github.com/adihack/kcoap/blob/main/SUPPORT.md)
-        lists where to look.
+        The [documentation hub](https://github.com/adihack/kcoap/blob/main/docs/README.md), the [client and server guide](https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md) and the module READMEs answer many questions. [SUPPORT.md](https://github.com/adihack/kcoap/blob/main/SUPPORT.md) lists where to look.
   - type: checkboxes
     id: searched
     attributes:

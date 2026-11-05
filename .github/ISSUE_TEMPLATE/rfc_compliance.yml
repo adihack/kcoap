@@ -5,12 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you. [docs/rfc-compliance.md](https://github.com/adihack/kcoap/blob/main/docs/rfc-compliance.md)
-        lists what kcoap implements, section by section, with its known gaps and deliberate deviations.
-        Please check it first.
+        Thank you. The [RFC compliance](https://github.com/adihack/kcoap/blob/main/docs/rfc-compliance.md) page lists what kcoap implements, section by section, with its known gaps and deliberate deviations. Please check it first.
 
-        If the deviation weakens security, do not report it here: follow
-        [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
+        If the deviation weakens security, do not report it here: follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
   - type: checkboxes
     id: checked
     attributes:
