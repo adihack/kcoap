@@ -43,10 +43,10 @@ import kotlinx.coroutines.test.runTest
 /**
  * Q-Block (RFC 9177) under OSCORE (RFC 8613) between kcoap's client and server on the in-memory network and
  * virtual time: what each side's `withMessageSecurity` chooses, bodies both ways with their Q-Block options
- * inside OSCORE, a replayed block response, unprotected responses injected on a body's tokens, a restarted
- * server's freshness challenge, and 10 % loss over many seeds. On the JVM only: elsewhere the crypto backend
- * suspends on the platform (WebCrypto), and virtual time would run ahead of it. The rules themselves are tested
- * on every target in [OscoreQBlockTest].
+ * inside OSCORE, a replayed block response, unprotected responses injected on a body's tokens, the protected
+ * capability kept apart on a shared endpoint, a restarted server's freshness challenge, and 10 % loss over many
+ * seeds. On the JVM only: elsewhere the crypto backend suspends on the platform (WebCrypto), and virtual time
+ * would run ahead of it. The rules themselves are tested on every target in [OscoreQBlockTest].
  */
 class OscoreQBlockEndToEndTest {
     private val crypto = DefaultCryptoBackend()
@@ -224,6 +224,12 @@ class OscoreQBlockEndToEndTest {
         val fallback = setup.events.filterIsInstance<EndpointEvent.QBlockFallback>().single()
         assertTrue("4.02" in fallback.reason, "the protected probe got an inner 4.02: ${fallback.reason}")
         assertTrue(setup.inner.any { it.options.block2 != null }, "RFC 7959 carried the body")
+        // The 4.02 went inside OSCORE: on the wire the answer to the probe is a protected 2.04 (RFC 8613 §4.2).
+        val probeOnTheWire = setup.wire.first { it.from == setup.clientTransport.localEndpoint && it.message?.code?.isRequest == true }
+        val answer = setup.fromServer().single { it.code.isResponse && it.token.contentEquals(probeOnTheWire.message!!.token) }
+        assertTrue(answer.options.oscore != null, "the 4.02 is protected")
+        assertEquals(CoapCode.CHANGED, answer.code, "its outer code is 2.04, not 4.02")
+        assertProtectedOnTheWire(setup)
         setup.close()
     }
 
@@ -242,6 +248,34 @@ class OscoreQBlockEndToEndTest {
         assertContentEquals(big, setup.stored.single())
         assertTrue(setup.inner.any { it.options.qBlock1 != null } && setup.inner.any { it.options.block1 != null })
         assertTrue(setup.fromServer().any { it.type == CoapMessageType.RST }, "the Q-Block1 block was rejected")
+        assertProtectedOnTheWire(setup)
+        setup.close()
+    }
+
+    @Test
+    fun rfc9177Section4_1AProtectedFallbackLeavesQBlockToTheUnprotectedRequestsOfTheEndpoint() = runTest {
+        // A server that takes Q-Block from unprotected requests only, and one endpoint with two clients: the
+        // setup's OSCORE client and a plain one, which share the endpoint's capability cache.
+        val setup = setup(server = QBlockServerConfig(isEnabled = true))
+        val plain = CoapClient(setup.client.endpoint, CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE)))
+        val big = body(3000, 1)
+
+        assertContentEquals(big, plain.get(setup.uri("/big")) { nonConfirmable() }.payload)
+        assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
+        assertContentEquals(big, plain.get(setup.uri("/big")) { nonConfirmable() }.payload)
+        assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
+
+        val unprotected = setup.wire.filter { it.from == setup.clientTransport.localEndpoint }
+            .mapNotNull { it.message }.filter { it.code.isRequest && it.options.oscore == null }
+        assertEquals(1, unprotected.count { it.options.path == "/.well-known/core" }, "one unprotected probe")
+        val plainGets = unprotected.filter { it.options.path == "/big" }
+        assertTrue(plainGets.size >= 2 && plainGets.all { it.options.qBlock2 != null }, "both plain GETs went in Q-Block2")
+        assertTrue(unprotected.none { it.has(blockOptions) }, "the protected fallback left the plain client on Q-Block")
+        assertEquals(1, setup.inner.count { it.options.path == "/.well-known/core" }, "one protected probe, apart from the plain one")
+        val protectedGets = setup.inner.filter { it.options.path == "/big" }
+        assertTrue(protectedGets.none { it.has(qBlockOptions) }, "the OSCORE client took the 4.02 for its later requests")
+        assertTrue(protectedGets.any { it.options.block2 != null }, "Inner Block2 carried the protected bodies")
+        assertEquals(1, setup.events.count { it is EndpointEvent.QBlockFallback }, "only the protected probe fell back")
         setup.close()
     }
 
