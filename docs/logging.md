@@ -70,7 +70,7 @@ component its own to trace it alone:
 
 ```kotlin
 val traceOneDevice = LoggerFactory(LogConfig.build { level = LogLevel.TRACE; sink = RingBufferSink(500) })
-val client = OscoreClient(context, loggers = traceOneDevice)
+val client = OscoreClient(context, loggerFactory = traceOneDevice)
 ```
 
 Inside kcoap, loggers carry context as fields instead of message text:

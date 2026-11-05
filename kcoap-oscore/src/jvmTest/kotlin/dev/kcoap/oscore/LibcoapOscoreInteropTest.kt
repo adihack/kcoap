@@ -52,7 +52,7 @@ class LibcoapOscoreInteropTest {
         startContainer("coap-server", "-A", "127.0.0.1", "-p", "$port", "-E", "/conf/server.conf", "-v", "7")
         waitForServer(port)
 
-        val context = SecurityContext.derive(
+        val context = ephemeralContext(
             SecurityContextParameters(secret.hexToBytes(), senderId = "01".hexToBytes(), recipientId = "02".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
         )
@@ -94,11 +94,11 @@ class LibcoapOscoreInteropTest {
     @Test
     fun libcoapClientAgainstKcoapServer() = runBlocking {
         assumeDocker()
-        val serverContext = SecurityContext.derive(
+        // A restarted server: its store knows the context, so libcoap's client must answer the
+        // Appendix B.1.2 Echo challenge (FreshnessPolicy.AUTO).
+        val serverContext = restoredContext(
             SecurityContextParameters(secret.hexToBytes(), senderId = "12".hexToBytes(), recipientId = "11".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
-            // Like a rebooted server: libcoap's client must answer the Appendix B.1.2 Echo challenge.
-            requireFreshnessProof = true,
         )
         val server = OscoreServer(InMemoryContextRepository().apply { add(serverContext) })
         writeConf("client.conf", sender = "11", recipient = "12")

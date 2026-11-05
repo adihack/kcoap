@@ -80,13 +80,13 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
-    loggers: LoggerFactory = LoggerFactory.Global,
+    loggerFactory: LoggerFactory = LoggerFactory.Global,
 ) : ClientMessageSecurity {
-    private val log = loggers.logger(LogTags.OSCORE).child("client")
+    private val log = loggerFactory.logger(LogTags.OSCORE).child("client")
 
     /** Protects every request with [context]. */
-    public constructor(context: SecurityContext, loggers: LoggerFactory = LoggerFactory.Global) :
-        this(ClientContextResolver { _, _ -> context }, loggers)
+    public constructor(context: SecurityContext, loggerFactory: LoggerFactory = LoggerFactory.Global) :
+        this(ClientContextResolver { _, _ -> context }, loggerFactory)
 
     override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
         val context = contexts.contextFor(peer, request) ?: return null
@@ -160,9 +160,9 @@ public class OscoreClient(
  */
 public class OscoreServer(
     private val contexts: SecurityContextRepository,
-    loggers: LoggerFactory = LoggerFactory.Global,
+    loggerFactory: LoggerFactory = LoggerFactory.Global,
 ) : ServerMessageSecurity {
-    private val log = loggers.logger(LogTags.OSCORE).child("server")
+    private val log = loggerFactory.logger(LogTags.OSCORE).child("server")
 
     override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
         if (CoapOptions.OSCORE.number !in request.options) return null

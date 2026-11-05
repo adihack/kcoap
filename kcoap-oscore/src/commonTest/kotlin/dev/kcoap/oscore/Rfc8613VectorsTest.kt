@@ -16,7 +16,7 @@ class Rfc8613VectorsTest {
     private val masterSalt = "9e7ca92223786340".hexToBytes()
     private val idContext = "37cbf3210017a2d3".hexToBytes()
 
-    /** A store that makes a new context start at [sequence], as the vectors' Sender Sequence Number 20. */
+    /** A store that makes a context start at [sequence], as the vectors' Sender Sequence Number 20. */
     private fun startingAt(sequence: Long) = object : SequenceNumberStore {
         override suspend fun load(contextName: String): Long = sequence
         override suspend fun store(contextName: String, limit: Long) {}
@@ -39,14 +39,18 @@ class Rfc8613VectorsTest {
         ),
         crypto,
         startingAt(sequence),
+        // The vectors are about the message transformation, not about freshness (Appendix B.1.2).
+        freshness = FreshnessPolicy.ASSUME_FRESH,
     )
 
     private class Derived(val senderKey: String, val recipientKey: String, val commonIv: String, val senderNonce: String, val recipientNonce: String)
 
     private suspend fun assertDerivation(context: SecurityContext, expected: Derived, label: String) {
-        assertEquals(expected.senderKey, context.senderKey.toHex(), "$label Sender Key")
-        assertEquals(expected.recipientKey, context.recipientKey.toHex(), "$label Recipient Key")
-        assertEquals(expected.commonIv, context.commonIv.toHex(), "$label Common IV")
+        val keys = SecurityContext.deriveKeys(context.parameters, crypto)
+        assertEquals(expected.senderKey, keys.senderKey.toHex(), "$label Sender Key")
+        assertEquals(expected.recipientKey, keys.recipientKey.toHex(), "$label Recipient Key")
+        assertEquals(expected.commonIv, keys.commonIv.toHex(), "$label Common IV")
+        assertEquals(expected.commonIv, context.commonIv.toHex(), "$label Common IV of the context")
         assertEquals(expected.senderNonce, context.nonce(context.senderId, byteArrayOf(0)).toHex(), "$label sender nonce")
         assertEquals(expected.recipientNonce, context.nonce(context.recipientId, byteArrayOf(0)).toHex(), "$label recipient nonce")
     }

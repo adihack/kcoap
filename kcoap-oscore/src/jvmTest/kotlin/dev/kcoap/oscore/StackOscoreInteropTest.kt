@@ -64,7 +64,7 @@ class StackOscoreInteropTest {
             "coap-server", "-A", "127.0.0.1", "-p", "$port", "-E", "/conf/server.conf", "-d", "5", "-v", "4",
         ).trim()
 
-        val context = SecurityContext.derive(
+        val context = ephemeralContext(
             SecurityContextParameters(secret.hexToBytes(), senderId = "01".hexToBytes(), recipientId = "02".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
         )
@@ -91,10 +91,10 @@ class StackOscoreInteropTest {
     @Test
     fun libcoapClientWithOscoreAgainstKcoapServer() = runBlocking {
         assumeDocker()
-        val context = SecurityContext.derive(
+        // A restarted server, which challenges libcoap's first request (Appendix B.1.2).
+        val context = restoredContext(
             SecurityContextParameters(secret.hexToBytes(), senderId = "12".hexToBytes(), recipientId = "11".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
-            requireFreshnessProof = true,
         )
         val repository = InMemoryContextRepository().apply { add(context) }
         val big = (0 until 2000).joinToString("") { ('a' + it % 26).toString() }

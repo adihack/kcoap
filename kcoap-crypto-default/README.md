@@ -12,7 +12,8 @@ The default `CryptoBackend`, on [cryptography-kotlin](https://github.com/whyoleg
 
 ```kotlin
 val crypto = DefaultCryptoBackend()
-val context = SecurityContext.derive(parameters, crypto)
+// A durable SequenceNumberStore for pre-shared keys: see kcoap-oscore/README.md.
+val context = SecurityContext.derive(parameters, crypto, sequenceStore)
 if (!crypto.supports(AeadAlgorithm.CHACHA20_POLY1305)) { /* offer another AEAD */ }
 ```
 

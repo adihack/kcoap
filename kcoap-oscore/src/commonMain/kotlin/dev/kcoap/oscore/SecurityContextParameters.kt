@@ -46,8 +46,15 @@ public class SecurityContextParameters(
         require(!includeIdContext || context != null) { "includeIdContext needs an ID Context" }
     }
 
-    public val masterSecret: ByteArray get() = secret.copyOf()
-    public val masterSalt: ByteArray get() = salt.copyOf()
+    /**
+     * A copy of the Master Secret, for provisioning and persistence code. A function, so every copy of the
+     * secret shows at the call site; wipe the copy when done with it.
+     */
+    public fun masterSecret(): ByteArray = secret.copyOf()
+
+    /** A copy of the Master Salt; secret-derived when EDHOC exported it (RFC 9528 Appendix A.1). */
+    public fun masterSalt(): ByteArray = salt.copyOf()
+
     public val senderId: ByteArray get() = sender.copyOf()
     public val recipientId: ByteArray get() = recipient.copyOf()
     public val idContext: ByteArray? get() = context?.copyOf()

@@ -6,7 +6,9 @@ import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.common.hexToBytes
+import dev.kcoap.common.readUnsigned
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -19,6 +21,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -32,8 +35,8 @@ class OscoreEndToEndTest {
 
     private suspend fun pair(idContext: ByteArray? = null, includeIdContext: Boolean = false): Pair<SecurityContext, SecurityContext> {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
-        val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b), idContext = idContext, includeIdContext = includeIdContext), crypto)
-        val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a), idContext = idContext), crypto)
+        val client = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b), idContext = idContext, includeIdContext = includeIdContext), crypto)
+        val server = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a), idContext = idContext), crypto)
         return client to server
     }
 
@@ -233,25 +236,38 @@ class OscoreEndToEndTest {
         assertNull(client.protectRequest(request(), peer))
     }
 
-    /** RFC 8613 Appendix B.1.2: after a reboot the server proves the client's freshness with Echo first. */
+    /**
+     * RFC 8613 Appendix B.1.2: a server restored from its store has lost its replay window, so it proves
+     * the client's freshness with Echo first, also for a request it accepted before the restart.
+     */
     @Test
-    fun rebootedServerChallengesWithEcho() = runTest {
+    fun restartedServerChallengesWithEcho() = runTest {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
-        val clientContext = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
-        val serverContext = SecurityContext.derive(
-            SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)),
-            crypto,
-            requireFreshnessProof = true,
-        )
+        val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
+        val serverParameters = SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a))
+        val serverStore = EphemeralSequenceNumberStore()
         val client = OscoreClient(clientContext, loggers)
-        val server = serverFor(serverContext)
+
+        // Before the restart: a new context trusts its window, and its second notification takes a Partial IV.
+        val running = serverFor(SecurityContext.derive(serverParameters, crypto, serverStore))
+        val recorded = client.protectRequest(request(observe = 0).toBuilder().apply { code = CoapCode.GET; payload = ByteArray(0) }.build(), peer)!!
+        val beforeRestart = running.unprotectRequest(recorded.message, peer)!!
+        assertNull(beforeRestart.challenge, "a new context with the ephemeral store needs no proof")
+        fun notification(value: Long) = CoapMessage.response(beforeRestart.message, CoapCode.CONTENT) { options { observe(value) } }
+        beforeRestart.protectResponse(notification(1))
+        val usedBefore = OscoreOptionValue.decode(beforeRestart.protectResponse(notification(2)).options.oscore!!).partialIv!!.readUnsigned()
+
+        // After the restart the store knows the context: the recorded request is challenged, not processed.
+        val server = serverFor(SecurityContext.derive(serverParameters, crypto, serverStore))
+        assertNotNull(server.unprotectRequest(recorded.message, peer)!!.challenge, "a recorded request is not processed again")
 
         val first = client.protectRequest(request(), peer)!!
         val challenged = server.unprotectRequest(first.message, peer)!!
         val challenge = challenged.challenge!!
         assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
         val protectedChallenge = challenged.protectResponse(challenge)
-        assertTrue(protectedChallenge.options.oscore!!.isNotEmpty(), "the challenge carries the server's Partial IV")
+        val challengePiv = assertNotNull(OscoreOptionValue.decode(protectedChallenge.options.oscore!!).partialIv, "the challenge carries the server's Partial IV")
+        assertTrue(challengePiv.readUnsigned() > usedBefore, "above every Partial IV the server used before the restart")
 
         val seenByClient = first.unprotectResponse(protectedChallenge)
         assertEquals(CoapCode.UNAUTHORIZED, seenByClient.code)
@@ -259,22 +275,49 @@ class OscoreEndToEndTest {
         assertEquals(0, seenByClient.payloadSize, "no diagnostic payload")
 
         val wrongEcho = client.protectRequest(request().toBuilder().options { echo(byteArrayOf(1, 2, 3)) }.build(), peer)!!
-        assertTrue(server.unprotectRequest(wrongEcho.message, peer)!!.challenge != null, "a wrong Echo gets a new challenge")
-        val newEcho = first.let {
-            // The previous challenge was replaced; take the current one from a fresh round.
-            val retry = client.protectRequest(request(), peer)!!
-            retry.unprotectResponse(server.unprotectRequest(retry.message, peer)!!.let { it.protectResponse(it.challenge!!) }).options.echo!!
-        }
-        assertTrue(!newEcho.contentEquals(echo))
+        val challengedAgain = server.unprotectRequest(wrongEcho.message, peer)!!
+        val repeated = wrongEcho.unprotectResponse(challengedAgain.protectResponse(challengedAgain.challenge!!))
+            .options.echo!!
+        assertContentEquals(echo, repeated, "a wrong Echo is challenged again, with the outstanding value")
 
-        val proof = client.protectRequest(request().toBuilder().options { echo(newEcho) }.build(), peer)!!
+        val proof = client.protectRequest(request().toBuilder().options { echo(echo) }.build(), peer)!!
         val accepted = server.unprotectRequest(proof.message, peer)!!
         assertNull(accepted.challenge, "the Echo proves freshness")
-        assertContentEquals(newEcho, accepted.message.options.echo)
+        assertContentEquals(echo, accepted.message.options.echo)
 
         // The request that proved freshness set the lower limit: the earlier ones are replays now.
         val replay = assertFailsWith<MessageSecurityException> { server.unprotectRequest(first.message, peer) }
         assertEquals("Replay detected", replay.diagnostic)
         assertNull(server.unprotectRequest(client.protectRequest(request(), peer)!!.message, peer)!!.challenge)
+    }
+
+    /**
+     * RFC 8613 Appendix B.1.2, RFC 9175 §2.3: an attacker who replays a recorded request between a
+     * challenge and the client's answer gets a challenge with the same Echo value, so the answer still
+     * proves freshness. A new value per challenge would let every replay revoke the one the client holds.
+     */
+    @Test
+    fun aReplayBetweenChallengeAndAnswerDoesNotRevokeTheEcho() = runTest {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val clientParameters = SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b))
+        val client = OscoreClient(ephemeralContext(clientParameters, crypto), loggers)
+        val serverParameters = SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a))
+        val server = serverFor(restoredContext(serverParameters, crypto))
+        suspend fun echoOfChallengeTo(request: ProtectedRequest): ByteArray {
+            val challenged = server.unprotectRequest(request.message, peer)!!
+            return request.unprotectResponse(challenged.protectResponse(challenged.challenge!!)).options.echo!!
+        }
+
+        val recorded = client.protectRequest(request(), peer)!!
+        val first = client.protectRequest(request(), peer)!!
+        val echo = echoOfChallengeTo(first)
+        repeat(3) { assertContentEquals(echo, echoOfChallengeTo(recorded), "replay ${it + 1} gets the same value") }
+
+        val answer = client.protectRequest(request().toBuilder().options { echo(echo) }.build(), peer)!!
+        val accepted = server.unprotectRequest(answer.message, peer)!!
+        assertNull(accepted.challenge, "the client's answer is accepted")
+        assertFailsWith<MessageSecurityException>("the recorded request is a replay now") {
+            server.unprotectRequest(recorded.message, peer)
+        }
     }
 }
