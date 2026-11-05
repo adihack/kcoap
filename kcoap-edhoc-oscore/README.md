@@ -89,7 +89,11 @@ independent of the CoAP endpoint and easy to test.
 
 `PeerSecurity` holds one protection per server. A request to a server without one fails with
 `MessageSecurityException` instead of going out in plaintext, except for `unprotectedPaths` (the EDHOC
-resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP on purpose.
+resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP on purpose. Discovery before the
+handshake (`client.discover(server)` for `rt=core.edhoc`) asks `/.well-known/core`, so it takes a plain client or
+`PeerSecurity(unprotectedPaths = setOf("/.well-known/edhoc", "/.well-known/core"))`, and an EDHOC resource at
+another path needs that path in `unprotectedPaths`. A client with `QBlockMode.PROBE` and `withMessageSecurity`
+runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the first request after it probes.
 
 ## Verified by
 

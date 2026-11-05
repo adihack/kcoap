@@ -22,7 +22,11 @@ import kotlinx.coroutines.sync.withLock
  *
  * A request to a server without a protection fails with [MessageSecurityException] before anything is sent,
  * also after [remove], so a missing [install] never sends plaintext silently (ADR 0008). A client that talks to
- * some servers without message security sets [allowUnprotected].
+ * some servers without message security sets [allowUnprotected]. That includes discovery before the handshake:
+ * `client.discover(server)` asks `/.well-known/core`, which is not in [unprotectedPaths] by default, so finding the
+ * EDHOC resource (`rt=core.edhoc`) takes a plain client, or `/.well-known/core` added to [unprotectedPaths]; so does
+ * an EDHOC resource at another path than the default. A client with Q-Block in `QBlockMode.PROBE` under message
+ * security needs nothing of the kind: its probe, refused until [install], leaves the request to the rules here.
  *
  * @param unprotectedPaths Uri-Paths always sent unprotected, by default the EDHOC resource.
  * @param allowUnprotected whether requests to a server without a protection go out unprotected; false by

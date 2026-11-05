@@ -7,10 +7,15 @@ import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.client.QBlockClientConfig
+import dev.kcoap.coap.client.QBlockMode
+import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -135,6 +140,73 @@ class FullStackTest {
             counter.notifyObservers()
         }
         notifications.join()
+        client.close()
+        server.close()
+    }
+
+    /**
+     * A client that probes for Q-Block under message security (RFC 9177 §4.1) asks before every request whose
+     * server it knows nothing about, the EDHOC request included. Before the protection is installed,
+     * `PeerSecurity` will not send the probe (ADR 0008), so the EDHOC request goes in the clear with RFC 7959 and
+     * nothing is kept; the first request after the install probes, protected, and Q-Block carries the bodies.
+     */
+    @Test
+    fun edhocRunsOnAClientThatProbesForQBlockUnderMessageSecurity() = runTest {
+        val network = InMemoryNetwork(backgroundScope, Random(11))
+        val endpointConfig = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val peers = Peers.create(crypto)
+        val contexts = InMemoryContextRepository()
+        val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts)
+        val serverTransport = network.attach()
+        val bigBody = ByteArray(3000) { (it % 251).toByte() }
+        val serverConfig = CoapServerConfig(
+            security = CombinedRequestServer(edhoc, OscoreServer(contexts)),
+            qBlock = QBlockServerConfig(isEnabled = true, withMessageSecurity = true),
+        )
+        val server = CoapServer(serverTransport, backgroundScope, serverConfig, endpointConfig) {
+            resource(".well-known") { add(EdhocResource(edhoc)) }
+            resource("firmware") { get { CoapResponse.content(bigBody, ContentFormat.OCTET_STREAM) } }
+        }
+
+        // Every request the client hands to message security, inner as it is, and whether it went protected.
+        val security = PeerSecurity()
+        val handed = mutableListOf<Pair<CoapMessage, Boolean>>()
+        val recording = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+                val protected = try {
+                    security.protectRequest(request, peer)
+                } catch (e: MessageSecurityException) {
+                    handed += request to false
+                    throw e
+                }
+                handed += request to (protected != null)
+                return protected
+            }
+        }
+        val qBlock = QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true)
+        val clientConfig = CoapClientConfig(security = recording, qBlock = qBlock)
+        val client = CoapClient(network.attach(), backgroundScope, clientConfig, endpointConfig)
+        val address = serverTransport.localEndpoint
+        val base = "coap://${address.host}:${address.port}"
+
+        val handshake = EdhocClientHandshake.over(client, CoapUri.parse(base), peers.initiatorConfig(), crypto)
+        val (_, protection) = handshake.runCombined()
+        val beforeInstall = handed.toList()
+        security.install(address, protection)
+        assertContentEquals(bigBody, client.get("$base/firmware").payload)
+
+        val edhocRequests = beforeInstall.filter { it.first.options.path == "/.well-known/edhoc" }
+        assertTrue(edhocRequests.isNotEmpty() && edhocRequests.none { it.second }, "message_1 went in the clear")
+        assertTrue(edhocRequests.none { it.first.options.qBlock2 != null }, "with RFC 7959")
+        val refused = beforeInstall.filter { it.first.options.path == "/.well-known/core" }
+        assertTrue(refused.isNotEmpty() && refused.none { it.second }, "the probe was not sent before the install")
+        val afterInstall = handed.drop(beforeInstall.size)
+        assertTrue(afterInstall.all { it.second }, "everything after the install is protected")
+        val probe = afterInstall.first().first
+        assertEquals("/.well-known/core", probe.options.path, "the first request after the install probes")
+        val gets = afterInstall.drop(1).map { it.first }
+        assertTrue(gets.isNotEmpty(), "the GET went after the probe")
+        assertTrue(gets.all { it.options.path == "/firmware" && it.options.qBlock2 != null }, "Q-Block2 inside OSCORE")
         client.close()
         server.close()
     }

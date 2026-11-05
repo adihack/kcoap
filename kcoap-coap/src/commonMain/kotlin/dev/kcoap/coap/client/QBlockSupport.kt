@@ -4,6 +4,7 @@ import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability
@@ -33,6 +34,11 @@ import kotlinx.coroutines.withContext
  * - No answer, or under message security only an answer that could not be verified, leaves it
  *   [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
  *   min(1 minute, [QBlockClientConfig.capabilityLifetime]).
+ * - A probe the security layer refuses to send ([MessageSecurityException] from `protectRequest`, such as
+ *   kcoap-edhoc-oscore's `PeerSecurity` before a protection is installed) leaves it [Capability.UNKNOWN] for
+ *   that request alone, and nothing is kept: the request goes with RFC 7959 and its own protection decides
+ *   whether it is sent (ADR 0008), so the EDHOC request goes in the clear, and the first request after the
+ *   protection is installed probes.
  *
  * The answer is kept for [QBlockClientConfig.capabilityLifetime] in the endpoint's [QBlockCapabilities], which
  * all clients of the endpoint share, and which the endpoint clears for a server whose DTLS session ends or
@@ -79,7 +85,10 @@ internal class QBlockSupport(
         if (!isOwner) return probe.await()
         var result: Capability? = null
         try {
-            val (capability, reason) = probe(peer)
+            val (capability, reason) = probe(peer) ?: run {
+                result = Capability.UNKNOWN
+                return Capability.UNKNOWN
+            }
             result = capability
             record(key, capability, reason)
             return capability
@@ -128,8 +137,11 @@ internal class QBlockSupport(
         if (reason != null) endpoint.report(EndpointEvent.QBlockFallback(key.peer, reason))
     }
 
-    /** The probe and its verdict, with the reason for a fallback. */
-    private suspend fun probe(peer: Endpoint): Pair<Capability, String?> {
+    /**
+     * The probe and its verdict, with the reason for a fallback; null when the security layer would not send it
+     * (ADR 0008), which says nothing about the server.
+     */
+    private suspend fun probe(peer: Endpoint): Pair<Capability, String?>? {
         val request = CoapMessage.request(CoapCode.GET) {
             options {
                 uriPath(config.probePath)
@@ -138,6 +150,9 @@ internal class QBlockSupport(
         }
         val response = try {
             client.exchange(peer, request, confirmable = true, recognized = QBlockClient.RECOGNIZED_OPTIONS)
+        } catch (e: MessageSecurityException) {
+            log.debug { "No Q-Block probe of $peer: ${e.message}" }
+            return null
         } catch (e: CoapException) {
             return when (e.reason) {
                 CoapException.Reason.RESET -> Capability.UNSUPPORTED to "The Q-Block probe was answered with a Reset"
