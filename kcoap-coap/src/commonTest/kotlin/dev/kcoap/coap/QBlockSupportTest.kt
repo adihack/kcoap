@@ -491,21 +491,20 @@ class QBlockSupportTest {
     }
 
     @Test
-    fun messageSecurityTurnsQBlockOffEvenWhenAllowedUntilOscoreTakesSeveralResponses() = runTest {
+    fun messageSecurityTurnsQBlockOffUnlessWithMessageSecurityAllowsIt() = runTest {
         val passThrough = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
         }
-        val off = scripted(security = passThrough)
-        off.server.resources["/small"] = body(40)
-        off.client.get(off.server.uri("/small"))
-        assertTrue(off.requests().none { it.hasQBlock() })
+        val off = scripted(QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED), security = passThrough)
+        off.server.resources["/big"] = body(300)
+        assertContentEquals(body(300), off.client.get(off.server.uri("/big")) { nonConfirmable() }.payload)
+        assertTrue(off.requests().none { it.hasQBlock() }, "RFC 7959 under message security by default")
         assertFalse(QBlockClientConfig().withMessageSecurity)
 
         val on = scripted(QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true), security = passThrough)
         on.server.resources["/big"] = body(300)
         assertContentEquals(body(300), on.client.get(on.server.uri("/big")) { nonConfirmable() }.payload)
-        assertTrue(on.requests().none { it.hasQBlock() }, "withMessageSecurity has no effect yet")
-        assertEquals(0, on.client.qBlock!!.support.size())
+        assertTrue(on.requests().all { it.hasQBlock() }, "withMessageSecurity lets protected requests use Q-Block")
     }
 
     @Test

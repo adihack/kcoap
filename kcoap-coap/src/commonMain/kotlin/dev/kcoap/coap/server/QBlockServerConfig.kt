@@ -31,6 +31,9 @@ package dev.kcoap.coap.server
  * @property withMessageSecurity whether requests protected by [CoapServerConfig.security] may use Q-Block.
  *   Several responses to one request fall outside the single-response model of OSCORE (RFC 8613 §7.4), so
  *   protected requests use RFC 7959 block-wise transfer by default: a protected Q-Block request gets 4.02.
+ *   Turned on, every response after the first to a request takes a new Partial IV (RFC 8613 §8.3), and the
+ *   client's OSCORE must take several responses per request, as kcoap-oscore's `OscoreClient` does for requests
+ *   carrying Q-Block; libcoap 4.3.5b's client verifies only the first, so it does not get Q-Block2 bodies.
  * @property onReliableTransports whether requests over TCP and WebSockets (RFC 8323) may use Q-Block. There
  *   the blocks of a body go back to back and only the final response matters (RFC 9177 Appendix B).
  * @property maxPartialBodies the most Q-Block1 uploads being assembled at a time, across all clients; one
