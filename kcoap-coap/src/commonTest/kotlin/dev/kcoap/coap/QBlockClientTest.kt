@@ -421,6 +421,23 @@ class QBlockClientTest {
     }
 
     @Test
+    fun rfc9177Section4_3OptionsThatLeaveNoRoomForA16ByteBlockFailTheUploadWithMessageTooLarge() = runTest {
+        val setup = setup(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+
+        // 1120 bytes of Uri-Query fit a datagram of 1152, but leave 8 bytes next to Q-Block1, Size1 and Request-Tag.
+        val failure = assertFailsWith<CoapException> {
+            setup.client.put(setup.server.uri("/store"), body(200)) {
+                nonConfirmable()
+                options { repeat(5) { uriQuery("q$it=" + "x".repeat(219)) } }
+            }
+        }
+
+        assertEquals(CoapException.Reason.MESSAGE_TOO_LARGE, failure.reason)
+        assertTrue(setup.requests().isEmpty(), "nothing was sent")
+        setup.assertNothingLeft()
+    }
+
+    @Test
     fun rfc9177Section7_2ALongNonUploadToAServerThatAnswersOnlyOnItsLadderHoldsBoundedTokens() = runTest {
         val setup = setup(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
         // libcoap sends no 2.31 while set 0 has a gap, and its first 4.08 NON_RECEIVE_TIMEOUT after the last block.

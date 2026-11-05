@@ -406,6 +406,43 @@ class QBlockSupportTest {
         assertTrue(endpoint.qBlockCapabilities.toString().contains("1024"))
     }
 
+    // ---------------------------------------------------------------- a body without any response
+
+    @Test
+    fun rfc9177Section7_2ANonUploadThatGetsNoResponseAtAllForgetsTheProbe() = runTest {
+        val setup = scripted()
+        setup.server.resources["/small"] = body(40)
+        setup.client.get(setup.server.uri("/small"))
+        assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
+        setup.fixture.network.filter = { it.from != setup.server.address }
+
+        val failure = assertFailsWith<CoapException> { setup.client.put(setup.server.uri("/store"), body(150)) { nonConfirmable() } }
+
+        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, failure.reason)
+        assertNull(setup.client.known(setup.server.address), "§7.2: the server may no longer take Q-Block")
+        setup.fixture.network.filter = { true }
+        setup.client.get(setup.server.uri("/small"))
+        assertEquals(2, probes(setup).map { it.messageId }.toSet().size, "the next request probes again")
+        assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
+    }
+
+    @Test
+    fun rfc9177Section7_2ANonDownloadThatGetsNoResponseAtAllForgetsTheProbe() = runTest {
+        val setup = scripted()
+        setup.server.resources["/small"] = body(40)
+        setup.server.resources["/big"] = body(600)
+        setup.client.get(setup.server.uri("/small"))
+        setup.fixture.network.filter = { it.from != setup.server.address }
+
+        val failure = assertFailsWith<CoapException> { setup.client.get(setup.server.uri("/big")) { nonConfirmable() } }
+
+        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, failure.reason)
+        assertNull(setup.client.known(setup.server.address))
+        setup.fixture.network.filter = { true }
+        assertContentEquals(body(600), setup.client.get(setup.server.uri("/big")).payload)
+        assertEquals(2, probes(setup).map { it.messageId }.toSet().size, "the next request probes again")
+    }
+
     @Test
     fun rfc8323Section3_4AClosedConnectionForgetsWhatTheProbeFound() = runTest {
         val fixture = ReliableFixture(this)
