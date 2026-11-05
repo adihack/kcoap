@@ -272,6 +272,7 @@ public final class dev/kcoap/edhoc/EdhocMethod$Companion {
 }
 
 public final class dev/kcoap/edhoc/EdhocPeerErrorException : dev/kcoap/edhoc/EdhocException {
+	public fun <init> (Ldev/kcoap/edhoc/EdhocError;)V
 	public fun <init> (Ldev/kcoap/edhoc/EdhocError;Ldev/kcoap/edhoc/CipherSuite;)V
 	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocError;Ldev/kcoap/edhoc/CipherSuite;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun getErrorMessage ()[B

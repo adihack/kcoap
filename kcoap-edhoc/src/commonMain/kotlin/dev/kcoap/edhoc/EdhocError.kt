@@ -6,6 +6,7 @@ import dev.kcoap.cbor.CborInt
 import dev.kcoap.cbor.CborText
 import dev.kcoap.cbor.CborValue
 import dev.kcoap.cbor.CborWriter
+import kotlin.jvm.JvmOverloads
 
 /**
  * An EDHOC error message, RFC 9528 §6: the CBOR sequence `( ERR_CODE : int, ERR_INFO : any )`.
@@ -147,7 +148,7 @@ public open class EdhocException(
  * (RFC 9528 §6.3.1). Then the Initiator is back at [EdhocPhase.START] with that suite selected, and
  * [EdhocInitiator.createMessage1] starts the next attempt.
  */
-public class EdhocPeerErrorException(
+public class EdhocPeerErrorException @JvmOverloads constructor(
     error: EdhocError,
     /**
      * The suite selected for the next message_1 when the Initiator can retry after error code 2
