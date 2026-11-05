@@ -47,7 +47,7 @@ abstract fun interface dev.kcoap.oscore/SecurityContextRepository { // dev.kcoap
 abstract interface dev.kcoap.oscore/MutableSecurityContextRepository : dev.kcoap.oscore/SecurityContextRepository { // dev.kcoap.oscore/MutableSecurityContextRepository|null[0]
     abstract suspend fun add(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/MutableSecurityContextRepository.add|add(dev.kcoap.oscore.SecurityContext){}[0]
     abstract suspend fun addIfAbsent(dev.kcoap.oscore/SecurityContext): kotlin/Boolean // dev.kcoap.oscore/MutableSecurityContextRepository.addIfAbsent|addIfAbsent(dev.kcoap.oscore.SecurityContext){}[0]
-    abstract suspend fun remove(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/MutableSecurityContextRepository.remove|remove(dev.kcoap.oscore.SecurityContext){}[0]
+    abstract suspend fun remove(dev.kcoap.oscore/SecurityContext): kotlin/Boolean // dev.kcoap.oscore/MutableSecurityContextRepository.remove|remove(dev.kcoap.oscore.SecurityContext){}[0]
 }
 
 abstract interface dev.kcoap.oscore/SequenceNumberStore { // dev.kcoap.oscore/SequenceNumberStore|null[0]
@@ -69,7 +69,7 @@ final class dev.kcoap.oscore/InMemoryContextRepository : dev.kcoap.oscore/Mutabl
     final suspend fun add(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/InMemoryContextRepository.add|add(dev.kcoap.oscore.SecurityContext){}[0]
     final suspend fun addIfAbsent(dev.kcoap.oscore/SecurityContext): kotlin/Boolean // dev.kcoap.oscore/InMemoryContextRepository.addIfAbsent|addIfAbsent(dev.kcoap.oscore.SecurityContext){}[0]
     final suspend fun find(kotlin/ByteArray, kotlin/ByteArray?): dev.kcoap.oscore/SecurityContext? // dev.kcoap.oscore/InMemoryContextRepository.find|find(kotlin.ByteArray;kotlin.ByteArray?){}[0]
-    final suspend fun remove(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/InMemoryContextRepository.remove|remove(dev.kcoap.oscore.SecurityContext){}[0]
+    final suspend fun remove(dev.kcoap.oscore/SecurityContext): kotlin/Boolean // dev.kcoap.oscore/InMemoryContextRepository.remove|remove(dev.kcoap.oscore.SecurityContext){}[0]
 }
 
 final class dev.kcoap.oscore/OscoreClient : dev.kcoap.coap.security/ClientMessageSecurity { // dev.kcoap.oscore/OscoreClient|null[0]

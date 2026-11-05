@@ -121,9 +121,9 @@ class EdhocOscoreTest {
             override suspend fun addIfAbsent(context: SecurityContext): Boolean =
                 delegate.addIfAbsent(context).also { calls += "addIfAbsent ${context.recipientId.toHex()}" }
 
-            override suspend fun remove(context: SecurityContext) {
+            override suspend fun remove(context: SecurityContext): Boolean {
                 calls += "remove"
-                delegate.remove(context)
+                return delegate.remove(context)
             }
         }
         val session = handshake(peers, EdhocServer(peers.responderConfig(), crypto, repository)).run()

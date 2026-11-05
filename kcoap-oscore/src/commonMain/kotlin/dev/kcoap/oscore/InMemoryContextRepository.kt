@@ -24,8 +24,11 @@ public class InMemoryContextRepository : MutableSecurityContextRepository {
         true
     }
 
-    override suspend fun remove(context: SecurityContext) {
-        lock.withLock { contexts.remove(key(context.recipientId, context.idContext)) }
+    override suspend fun remove(context: SecurityContext): Boolean = lock.withLock {
+        val key = key(context.recipientId, context.idContext)
+        if (contexts[key] !== context) return@withLock false
+        contexts.remove(key)
+        true
     }
 
     /**

@@ -41,6 +41,11 @@ public interface MutableSecurityContextRepository : SecurityContextRepository {
      */
     public suspend fun addIfAbsent(context: SecurityContext): Boolean
 
-    /** Removes the context held under the Recipient ID and ID Context of [context], if there is one. */
-    public suspend fun remove(context: SecurityContext)
+    /**
+     * Removes [context] itself, in one step that no other writer can interleave with, and returns whether it did:
+     * only when [context] is the very context held under its Recipient ID and ID Context. A context that has
+     * been replaced or evicted already leaves the newer one in place, so a late removal, such as an expiry timer
+     * or a second revocation, never takes out another client's context that got the same Recipient ID since.
+     */
+    public suspend fun remove(context: SecurityContext): Boolean
 }
