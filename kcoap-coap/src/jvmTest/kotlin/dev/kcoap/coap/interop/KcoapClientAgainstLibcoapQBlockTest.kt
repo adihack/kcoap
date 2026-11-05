@@ -2,6 +2,7 @@ package dev.kcoap.coap.interop
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
@@ -32,6 +33,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
@@ -145,6 +147,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
         blockSize: Int? = 64,
         dropOut: (CoapMessage) -> Boolean = { false },
         dropIn: (CoapMessage) -> Boolean = { false },
+        timeout: Duration = 90.seconds,
         block: suspend (CoapClient) -> Unit,
     ) = runBlocking {
         wire.clear()
@@ -157,7 +160,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
         )
         val client = CoapClient(endpoint, CoapClientConfig(blockSize = blockSize, qBlock = qBlock))
         try {
-            withTimeout(90.seconds) { block(client) }
+            withTimeout(timeout) { block(client) }
             assertEquals(0, endpoint.exchangeCount(), "no exchange is left")
         } finally {
             endpoint.close()
@@ -421,6 +424,48 @@ class KcoapClientAgainstLibcoapQBlockTest {
         }
     }
 
+    /**
+     * Pinned (K5): `coap-server` without `-L` answers kcoap's probe, a Confirmable GET with Q-Block2 0/_/16, with a
+     * piggybacked 4.02 that repeats the Q-Block2 option it rejects. RFC 7252 §5.4.1 only says the option was not
+     * recognized; kcoap's client checks the code alone, so the repeated option does no harm.
+     */
+    @Test
+    fun upstreamLibcoapRepeatsTheQBlock2OptionItRejectsInIts402K5() = withServer("-v", "7") { server ->
+        withClient { client ->
+            client.get("${server.uri}/example_data") { nonConfirmable() }
+
+            val probe = requests("/.well-known/core").single().message
+            val answer = received().first { it.message.hasToken(probe.token) }.message
+            assertEquals(CoapCode.BAD_OPTION, answer.code)
+            assertEquals(listOf("0/_/16"), answer.qBlock2, "the deviation: the rejected option comes back")
+            assertEquals(QBlockCapabilities.Capability.UNSUPPORTED, client.qBlock!!.support.known(Endpoint.Udp("127.0.0.1", server.port), false))
+        }
+    }
+
+    /**
+     * Pinned (K6): libcoap 4.3.5's server leaves Observe out of the blocks of a notification body that it sends for
+     * a Continue, where RFC 9177 §4.5 wants the body's Observe value on every payload, those after a Continue
+     * included. kcoap's client takes such blocks by their ETag (ADR 0006), so the body still arrives whole.
+     */
+    @Test
+    fun upstreamLibcoapLeavesObserveOutOfTheBlocksItSendsForAContinueK6() = withServer("-L", "7", "-N", "-v", "7") { server ->
+        withClient { client ->
+            val received = Channel<CoapResponse>(Channel.UNLIMITED)
+            val observation = scope.launch {
+                client.observe("${server.uri}/example_data") { nonConfirmable() }.collect { received.send(it) }
+            }
+            assertContentEquals(exampleData, withTimeout(10.seconds) { received.receive() }.payload)
+            observation.cancel()
+            delay(1.seconds)
+
+            val registration = requests("/example_data").first().message
+            val body = blocks().map { it.message }.filter { it.hasToken(registration.token) }
+            assertEquals((0L..23L).toList(), body.map { it.options.qBlock2!!.number }.sorted())
+            assertTrue(body.filter { it.options.qBlock2!!.number < 10 }.all { it.options.observe != null }, "the first set carries Observe")
+            assertTrue(body.filter { it.options.qBlock2!!.number >= 10 }.all { it.options.observe == null }, "the deviation: none after a Continue")
+        }
+    }
+
     // ---------------------------------------------------------------- K6
 
     /**
@@ -609,5 +654,65 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertTrue(requests("/example_data").all { it.message.options.qBlock2 != null })
             assertNoMessageMixesBlockAndQBlock()
         }
+    }
+
+    // ---------------------------------------------------------------- K soak
+
+    /**
+     * The K soak, L9's counterpart: [Soak.runs] runs (3 here, 20 in the nightly soak) of a Non-confirmable PUT of
+     * 3000 bytes and a GET of what libcoap then holds, with 10 % loss on both sides (`-l 10%` on libcoap's,
+     * [LossyTransport] on kcoap's). Every run ends with the right body, a clean [CoapException], or libcoap's
+     * plain 4.08 for an upload with three gaps or more (its limit, pinned in
+     * [upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4]); libcoap holds the new body or
+     * the one before, never a mix; no exchange is left after a run, and no message mixes Block and Q-Block. In
+     * the nightly soak a quarter of the uploads and half the downloads complete at least.
+     */
+    @Test
+    fun kSoakBodiesBothWaysAt10PercentLoss() = withServer("-L", "7", "-v", "7", "-l", "10%") { server ->
+        val random = java.util.Random(11)
+        fun lose(): Boolean = synchronized(random) { random.nextDouble() < 0.1 }
+        var held = exampleData
+        var uploads = 0
+        var downloads = 0
+        val outcomes = mutableListOf<String>()
+        repeat(Soak.runs) { run ->
+            withClient(dropOut = { lose() }, dropIn = { lose() }, timeout = 10.minutes) { client ->
+                val upload = body(3000, 100 + run)
+                val put = runCatching { client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() } }
+                put.exceptionOrNull()?.let { assertCleanFailure(it, "run $run PUT") }
+                val code = put.getOrNull()?.code
+                outcomes += "PUT ${code ?: put.exceptionOrNull()?.let { (it as CoapException).reason }}"
+                when (code) {
+                    CoapCode.CHANGED, CoapCode.CREATED -> uploads++
+                    null, CoapCode.REQUEST_ENTITY_INCOMPLETE -> Unit
+                    else -> throw AssertionError("run $run: PUT answered $code")
+                }
+
+                val get = runCatching { client.get("${server.uri}/example_data") { nonConfirmable() } }
+                get.exceptionOrNull()?.let { assertCleanFailure(it, "run $run GET") }
+                val got = get.getOrNull()
+                outcomes += "GET ${got?.code ?: get.exceptionOrNull()?.let { (it as CoapException).reason }}"
+                if (got != null) {
+                    assertEquals(CoapCode.CONTENT, got.code, "run $run")
+                    val isNew = got.payload.contentEquals(upload)
+                    assertTrue(isNew || got.payload.contentEquals(held), "run $run: libcoap holds the new body or the one before")
+                    if (isNew) held = upload
+                    if (code == CoapCode.CHANGED || code == CoapCode.CREATED) assertTrue(isNew, "run $run: the stored body is the upload")
+                    downloads++
+                }
+                assertNoMessageMixesBlockAndQBlock()
+            }
+        }
+        println("K soak, ${Soak.runs} runs: $outcomes")
+        if (Soak.isNightly) {
+            // libcoap gives up uploads with three gaps, so fewer uploads than downloads complete.
+            assertTrue(uploads * 4 >= Soak.runs && downloads * 2 >= Soak.runs, "runs complete: $uploads uploads, $downloads bodies; $outcomes")
+        }
+    }
+
+    /** A run of the soak may fail only the ways a lossy path explains. */
+    private fun assertCleanFailure(error: Throwable, run: String) {
+        val reasons = setOf(CoapException.Reason.RESPONSE_TIMEOUT, CoapException.Reason.BLOCKWISE_FAILED, CoapException.Reason.TRANSMISSION_TIMEOUT)
+        assertTrue(error is CoapException && error.reason in reasons, "$run ended with $error")
     }
 }
