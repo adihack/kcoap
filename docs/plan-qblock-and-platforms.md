@@ -625,6 +625,10 @@ public class QBlockServerConfig(
   request (`OscoreQBlockClientTest`). Tests: `QBlockClientReliableTest` (300-block bodies on a connection),
   PROBE-mode silence tests for the probe invalidation, MESSAGE_TOO_LARGE, and against libcoap a 300-block
   K4 and a 320-block K10.
+  After the merge with QB-3: `KT/QBlockEndToEndTest.kt` (6) runs the client against the server on the
+  in-memory network: NON and CON bodies both ways, an upload answered in Q-Block2, the Echo before the
+  first burst, and 10 seeds at 10 % loss each way with no state left on either side. The full soak of
+  `QBlockTest` (20 seeds, 30 % loss, 20 KiB, connections) is still to come.
 
 **QB-5: OSCORE with Q-Block**
 - **Scope:**
