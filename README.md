@@ -147,6 +147,6 @@ Test vectors are generated from the RFC texts and NIST files by `tools/regen-vec
 
 ## Before the first publish
 
-- The Maven group and package are `dev.kcoap`; publishing under it needs the `kcoap.dev` domain (or
-  switch to an `io.github.<user>` group).
+- The Maven group and package are `dev.kcoap`, backed by the `kcoap.dev` domain; the namespace still
+  has to be verified in the Central Portal ([docs/releasing.md](docs/releasing.md)).
 - Pick a license.

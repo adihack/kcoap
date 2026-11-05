@@ -89,9 +89,13 @@ workflow's own token cannot turn it on.
 - **License.** Maven Central rejects artifacts without one. Add a `LICENSE` file and set
   `kcoap.license.name` and `kcoap.license.url` in `gradle.properties`
   (for example `Apache-2.0` and `https://www.apache.org/licenses/LICENSE-2.0.txt`).
-- **Namespace.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`). Central verifies a
-  namespace through DNS, so this needs the `kcoap.dev` domain; without it, use `io.github.adihack`, which
-  Central verifies through the GitHub account.
+- **Namespace.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`), backed by the
+  `kcoap.dev` domain. Register it once in the [Central Portal](https://central.sonatype.com):
+  1. Sign in and choose *Namespaces* → *Add namespace* → `dev.kcoap`.
+  2. Add the verification key that the Portal shows as a DNS `TXT` record on `kcoap.dev`.
+  3. Choose *Verify namespace* once the record resolves (`dig +short TXT kcoap.dev`).
+  4. Generate a user token under *Account* → *Generate user token*. Its username and password become
+     the `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD` repository secrets.
 
 ## Trying a release locally
 
