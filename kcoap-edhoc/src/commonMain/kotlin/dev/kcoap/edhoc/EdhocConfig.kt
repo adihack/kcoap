@@ -1,11 +1,14 @@
 package dev.kcoap.edhoc
 
+import dev.kcoap.crypto.CryptoBackend
+
 /**
  * The application profile (RFC 9528 §3.9) of an [EdhocInitiator].
  *
  * @property method the authentication method; the Initiator decides it alone (RFC 9528 §3.2).
- * @property cipherSuites the supported suites in order of preference, most preferred first. The order is
- *   fixed: SUITES_I is always a prefix of it (RFC 9528 §5.2.2).
+ * @property cipherSuites the supported suites in order of preference, most preferred first. Only those the
+ *   crypto backend runs ([CipherSuite.isSupportedBy]) are offered, and the order is fixed: SUITES_I is
+ *   always a prefix of them (RFC 9528 §5.2.2). [supportedBy] narrows the list to them up front.
  * @property credentials own credentials; the first one usable for the method and the selected suite is used.
  *   A suite without a usable credential can still be listed, but a session that selects it fails when
  *   message_3 is created.
@@ -13,7 +16,8 @@ package dev.kcoap.edhoc
  * @property connectionIdentifiers chooses C_I, once per message_1.
  * @property ephemeralKeys source of X; fresh random keys unless replaying test vectors.
  * @property initialCipherSuite the suite to select in the first message_1, for example one remembered
- *   from an earlier session with this Responder (RFC 9528 §6.3.1); by default the most preferred.
+ *   from an earlier session with this Responder (RFC 9528 §6.3.1); by default the most preferred one the
+ *   crypto backend runs.
  */
 public class EdhocInitiatorConfig(
     public val method: EdhocMethod,
@@ -43,6 +47,36 @@ public class EdhocInitiatorConfig(
         }
     }
 
+    /**
+     * This configuration with only the cipher suites [crypto] runs for [method], in the same order of
+     * preference ([CipherSuite.isSupportedBy], docs/adr/0001-crypto-capabilities.md). [EdhocInitiator]
+     * makes the same choice in every session; calling this once where the configuration is set up finds a
+     * backend that cannot run it before any session starts, and shows what will be offered.
+     *
+     * @throws IllegalArgumentException naming the dropped suites and what each needs, when no suite with a
+     *   usable credential is left, or when [initialCipherSuite] is dropped.
+     */
+    public suspend fun supportedBy(crypto: CryptoBackend): EdhocInitiatorConfig {
+        val runnable = runnableSuites(crypto)
+        problemWith(runnable)?.let { throw IllegalArgumentException(it) }
+        return EdhocInitiatorConfig(
+            method, runnable.suites, credentials, credentialResolver, connectionIdentifiers, eadHandler,
+            ephemeralKeys, initialCipherSuite,
+        )
+    }
+
+    internal suspend fun runnableSuites(crypto: CryptoBackend): RunnableSuites =
+        RunnableSuites.of(cipherSuites, crypto, method)
+
+    /** Why the Initiator cannot start with [runnable], or null when it can. */
+    internal fun problemWith(runnable: RunnableSuites): String? = when {
+        runnable.suites.none { credentialFor(it) != null } ->
+            "No cipher suite with a credential runs on this crypto backend: ${runnable.describeDropped()}"
+        initialCipherSuite != null && initialCipherSuite !in runnable.suites ->
+            "The initial cipher suite ${initialCipherSuite.value} ${runnable.reasonFor(initialCipherSuite)}"
+        else -> null
+    }
+
     internal fun credentialFor(suite: CipherSuite): LocalCredential? =
         credentials.firstOrNull { it.isUsableFor(method.initiatorAuthentication, suite) }
 }
@@ -51,7 +85,9 @@ public class EdhocInitiatorConfig(
  * The application profile (RFC 9528 §3.9) of an [EdhocResponder].
  *
  * @property methods the methods the Responder accepts.
- * @property cipherSuites the supported suites. Their order has no meaning in SUITES_R (RFC 9528 §6.3).
+ * @property cipherSuites the supported suites. Only those the crypto backend runs for the received method
+ *   ([CipherSuite.isSupportedBy]) are accepted and named in SUITES_R, where their order has no meaning
+ *   (RFC 9528 §6.3). [supportedBy] narrows the list to them up front.
  * @property credentials own credentials; the first one usable for the received method and suite is used.
  * @property credentialResolver resolves and authorizes ID_CRED_I.
  * @property connectionIdentifiers chooses C_R given C_I.
@@ -75,6 +111,34 @@ public class EdhocResponderConfig(
         validateSuites(this.cipherSuites)
         require(this.credentials.isNotEmpty()) { "At least one credential is needed" }
     }
+
+    /**
+     * This configuration with only the cipher suites [crypto] runs for at least one of [methods] with a
+     * credential ([CipherSuite.isSupportedBy], docs/adr/0001-crypto-capabilities.md). [EdhocResponder] makes
+     * the same choice, per method, for every message_1, so SUITES_R names only runnable suites and a selected
+     * suite it cannot run gets error code 2 (RFC 9528 §6.3). Calling this once where the configuration is set
+     * up finds a backend that cannot run it before any session starts.
+     *
+     * @throws IllegalArgumentException naming the dropped suites and what each needs, when no method is left
+     *   with a runnable suite.
+     */
+    public suspend fun supportedBy(crypto: CryptoBackend): EdhocResponderConfig {
+        val runnable = methods.associateWith { runnableSuitesFor(it, crypto) }
+        val kept = cipherSuites.filter { suite -> runnable.values.any { suite in it.suites } }
+        require(kept.isNotEmpty()) {
+            "No cipher suite with a credential runs on this crypto backend: " +
+                runnable.entries.joinToString("; ") { (method, suites) ->
+                    "method ${method.value}: ${suites.describeDropped().ifEmpty { "no suite with a credential" }}"
+                }
+        }
+        return EdhocResponderConfig(
+            methods, kept, credentials, credentialResolver, connectionIdentifiers, eadHandler, ephemeralKeys,
+        )
+    }
+
+    /** The suites usable with [method] ([suitesFor]) that [crypto] runs. */
+    internal suspend fun runnableSuitesFor(method: EdhocMethod, crypto: CryptoBackend): RunnableSuites =
+        RunnableSuites.of(suitesFor(method), crypto, method)
 
     /** The suites usable with [method]: compatible with it and with a credential to authenticate. */
     internal fun suitesFor(method: EdhocMethod): List<CipherSuite> =

@@ -1,6 +1,7 @@
 package dev.kcoap.edhoc
 
 import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.log.LogTags
 import dev.kcoap.log.LoggerFactory
 import kotlin.coroutines.cancellation.CancellationException
@@ -10,26 +11,40 @@ import kotlin.coroutines.cancellation.CancellationException
  * leaves transport, correlation and deduplication (RFC 9528 §3.4, §7) to the caller.
  *
  * ```
- * val initiator = EdhocInitiator(config, backend)
+ * val initiator = EdhocInitiator(config, crypto)
  * val reply = transport.exchange(initiator.createMessage1())
  * initiator.processMessage2(reply)                 // throws EdhocException
- * transport.send(initiator.createMessage3())
- * val session = initiator.session!!               // PRK_out, exporter, peer credential
+ * val (message3, session) = initiator.createMessage3()
+ * transport.send(message3)                         // session: PRK_out, exporter, peer credential
  * initiator.processMessage4(transport.receive())  // only if the application profile uses message_4
  * ```
+ *
+ * Only the configured suites that [crypto] runs for the method are offered ([CipherSuite.isSupportedBy]):
+ * [createMessage1] asks the backend, whose answers are memoized, and SUITES_I is a prefix of those suites.
+ * [EdhocInitiatorConfig.supportedBy] makes the same choice once, up front.
  *
  * Every failure is an [EdhocException]; its [EdhocException.errorMessage], when not null, is the error
  * message to send to the Responder, and the state machine is then [EdhocPhase.ABORTED]. One exception
  * is cipher suite negotiation (RFC 9528 §6.3): when the Responder answers message_1 with error code 2 and
- * names a suite this Initiator prefers, [processMessage2] throws [EdhocPeerErrorException] and returns to
- * [EdhocPhase.START], so [createMessage1] can be called again with that suite selected.
+ * names a suite this Initiator prefers and runs, [processMessage2] throws an [EdhocPeerErrorException]
+ * whose [EdhocPeerErrorException.retryWith] is that suite, and the Initiator is back at [EdhocPhase.START],
+ * so [createMessage1] can be called again:
+ *
+ * ```
+ * try {
+ *     initiator.processMessage2(reply)
+ * } catch (e: EdhocPeerErrorException) {
+ *     if (e.retryWith == null) throw e
+ *     reply = transport.exchange(initiator.createMessage1())   // SUITES_I now ends with e.retryWith
+ * }
+ * ```
  *
  * Calling a method out of order throws [IllegalStateException] and leaves the state unchanged. Instances
  * are not thread-safe; drive one from a single coroutine at a time.
  */
 public class EdhocInitiator(
     private val config: EdhocInitiatorConfig,
-    private val backend: CryptoBackend,
+    private val crypto: CryptoBackend,
     loggerFactory: LoggerFactory = LoggerFactory.Global,
 ) {
     private val log = loggerFactory.logger(LogTags.EDHOC).with("role" to "initiator")
@@ -37,12 +52,16 @@ public class EdhocInitiator(
     /** Test hook for the intermediate values of RFC 9529; never set in production. */
     internal var intermediateValues: IntermediateValues? = null
 
-    private var state: State = State.Start(config.initialCipherSuite ?: config.cipherSuites.first())
+    private var state: State = State.Start(config.initialCipherSuite ?: config.cipherSuites.first(), runnable = null)
 
     /** Where the handshake stands. */
     public val phase: EdhocPhase get() = state.phase
 
-    /** The suite selected for the current or next message_1. */
+    /**
+     * The suite selected for the current or next message_1. Until the first [createMessage1] asks the
+     * crypto backend, this is the configured choice; that call replaces a default the backend cannot run
+     * with the most preferred suite it can.
+     */
     public val cipherSuite: CipherSuite get() = state.suite
 
     /** The authenticated Responder credential, once message_2 has been verified. */
@@ -65,17 +84,19 @@ public class EdhocInitiator(
 
     /**
      * Composes message_1 (RFC 9528 §5.2.2): SUITES_I up to the selected suite, a fresh ephemeral key pair,
-     * and C_I.
+     * and C_I. SUITES_I holds only suites the crypto backend runs for the method; the first call asks the
+     * backend which ones those are, and fails with an [EdhocException] naming what is missing when no suite
+     * with a credential, or not the configured initial suite, is among them.
      */
     public suspend fun createMessage1(): ByteArray {
         val start = expect<State.Start>("createMessage1")
         return step("message_1", isReply = false) {
-            val suite = start.suite
-            val suites = config.cipherSuites.take(config.cipherSuites.indexOf(suite) + 1).map { it.value }
-            val keySchedule = KeySchedule(suite, backend)
-            val exchange = EphemeralKeyExchange.forSuite(suite, backend, config.ephemeralKeys)
+            val (suite, runnable) = start.runnable?.let { start.suite to it } ?: firstSelection()
+            val suites = runnable.take(runnable.indexOf(suite) + 1).map { it.value }
+            val keySchedule = KeySchedule(suite, crypto)
+            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys)
             val share = exchange.initiatorShare()
-            val connectionIdentifier = config.connectionIdentifiers.choose(backend, null)
+            val connectionIdentifier = config.connectionIdentifiers.choose(crypto, null)
             val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_1)
             val message1 = Message1(config.method.value, suites, share.gX, connectionIdentifier, ead).encode()
             val hashMessage1 = keySchedule.hash(message1)
@@ -86,20 +107,38 @@ public class EdhocInitiator(
                     "EAD_1 ${ead.describe()}"
             }
             log.trace { "message_1 ${log.payload(message1)}" }
-            state = State.WaitingForMessage2(suite, keySchedule, exchange, share, connectionIdentifier, hashMessage1)
+            state = State.WaitingForMessage2(
+                suite, runnable, keySchedule, exchange, share, connectionIdentifier, hashMessage1,
+            )
             message1
         }
     }
 
     /**
+     * The suites the crypto backend runs for the method, asked once per Initiator, and the suite the first
+     * message_1 selects.
+     */
+    private suspend fun firstSelection(): Pair<CipherSuite, List<CipherSuite>> {
+        val runnable = config.runnableSuites(crypto)
+        if (runnable.hasDropped) log.debug { "Not offered on this crypto backend: ${runnable.describeDropped()}" }
+        config.problemWith(runnable)?.let { throw EdhocException.unspecified(it) }
+        return (config.initialCipherSuite ?: runnable.suites.first()) to runnable.suites
+    }
+
+    /**
      * Processes message_2 (RFC 9528 §5.3.3): decrypts PLAINTEXT_2, hands EAD_2 to the [EadHandler], resolves
      * ID_CRED_R through the [CredentialResolver] and verifies Signature_or_MAC_2.
+     *
+     * An error message in reply to message_1 throws [EdhocPeerErrorException]. With error code 2 and a
+     * SUITES_R naming a suite this Initiator prefers and runs, its [EdhocPeerErrorException.retryWith] is
+     * that suite and the Initiator is back at [EdhocPhase.START] (RFC 9528 §6.3.1); otherwise the session
+     * is aborted.
      */
     public suspend fun processMessage2(message2: ByteArray) {
         val waiting = expect<State.WaitingForMessage2>("processMessage2")
+        log.trace { "message_2 ${log.payload(message2)}" }
+        if (MessageReader.startsWithInteger(message2)) retryOrAbort(waiting, Handshake.peerError(message2))
         step("message_2") {
-            log.trace { "message_2 ${log.payload(message2)}" }
-            if (MessageReader.startsWithInteger(message2)) handleErrorInReplyToMessage1(waiting, message2)
             val keySchedule = waiting.keySchedule
             val content = SingleByteStringMessage.decode(message2, "message_2")
             val gYLength = waiting.suite.keyExchange.responderShareLength
@@ -148,7 +187,7 @@ public class EdhocInitiator(
         val suite = waiting.suite
         val keySchedule = waiting.keySchedule
         val kind = config.method.responderAuthentication
-        val authenticator = SignatureOrMac(keySchedule, backend)
+        val authenticator = SignatureOrMac(keySchedule, crypto)
         if (received.signatureOrMac.size != authenticator.expectedLength(kind)) {
             throw EdhocException.unspecified("Signature_or_MAC_2 has the wrong length")
         }
@@ -181,9 +220,10 @@ public class EdhocInitiator(
     }
 
     /**
-     * Composes message_3 (RFC 9528 §5.4.2) and completes the session: [session] is available afterwards.
+     * Composes message_3 (RFC 9528 §5.4.2) and completes the session, which comes with it; [session]
+     * returns the same session afterwards.
      */
-    public suspend fun createMessage3(): ByteArray {
+    public suspend fun createMessage3(): Message3 {
         val verified = expect<State.VerifiedMessage2>("createMessage3")
         return step("message_3") {
             val suite = verified.suite
@@ -203,14 +243,14 @@ public class EdhocInitiator(
                 verified.prk3e2m.copyOf()
             }
             val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_3)
-            val authenticator = SignatureOrMac(keySchedule, backend)
+            val authenticator = SignatureOrMac(keySchedule, crypto)
             val input = AuthenticationInput(KeySchedule.MAC_3, null, own.identifier, th3, own.credential, ead)
             val mac3 = authenticator.mac(prk4e3m, input, kind)
             val signatureOrMac3 = authenticator.create(mac3, input, kind, own.privateKey)
             val plaintext3 = AuthenticatedPlaintext(null, own.identifier, signatureOrMac3, ead).encode()
             val k3 = keySchedule.k3(verified.prk3e2m, th3)
             val iv3 = keySchedule.iv3(verified.prk3e2m, th3)
-            val ciphertext3 = Handshake.encrypt(backend, suite, k3, iv3, plaintext3, Handshake.encrypt0Aad(th3))
+            val ciphertext3 = Handshake.encrypt(crypto, suite, k3, iv3, plaintext3, Handshake.encrypt0Aad(th3))
             val message3 = SingleByteStringMessage.encode(ciphertext3)
             val th4 = keySchedule.nextTranscriptHash(th3, plaintext3, own.credential.encoded)
             val prkOut = keySchedule.prkOut(prk4e3m, th4)
@@ -227,13 +267,13 @@ public class EdhocInitiator(
             val session = EdhocSession(
                 EdhocRole.INITIATOR, config.method, suite, verified.initiatorConnectionIdentifier,
                 verified.responderConnectionIdentifier, verified.peerIdentifier, verified.peerCredential,
-                prkOut, prkExporter, backend,
+                prkOut, prkExporter, crypto,
             )
             wipeAll(verified.prk3e2m, k3, iv3, prkOut, prkExporter)
             log.debug { "message_3: ID_CRED_I ${own.identifier}, EAD_3 ${ead.describe()}; session completed" }
             log.trace { "message_3 ${log.payload(message3)}" }
             state = State.Completed(session, keySchedule, prk4e3m, th4)
-            message3
+            Message3(message3, session)
         }
     }
 
@@ -253,7 +293,7 @@ public class EdhocInitiator(
             record("K_4", k4)
             record("IV_4", iv4)
             val aad4 = Handshake.encrypt0Aad(completed.th4)
-            val plaintext4 = Handshake.decrypt(backend, keySchedule.suite, k4, iv4, ciphertext4, aad4, "message_4")
+            val plaintext4 = Handshake.decrypt(crypto, keySchedule.suite, k4, iv4, ciphertext4, aad4, "message_4")
             wipeAll(k4, iv4)
             val ead = Plaintext4.decode(plaintext4)
             config.eadHandler.receive(EdhocMessage.MESSAGE_4, ead)
@@ -274,28 +314,35 @@ public class EdhocInitiator(
         return if (answersMessage2) EdhocError.unspecified(diagnostic).encode() else null
     }
 
-    /** RFC 9528 §6.3.1: on error code 2, retry with the most preferred suite the Responder names. */
-    private fun handleErrorInReplyToMessage1(waiting: State.WaitingForMessage2, message: ByteArray): Nothing {
-        val error = Handshake.peerError(message)
+    /**
+     * An error message in reply to message_1. RFC 9528 §6.3.1: on error code 2, retry with the most
+     * preferred suite in SUITES_R that this Initiator runs, unless that is the suite just rejected; abort
+     * otherwise.
+     */
+    private fun retryOrAbort(waiting: State.WaitingForMessage2, error: EdhocError): Nothing {
         val suitesR = error.cipherSuites
-        val next = suitesR?.let { offered -> config.cipherSuites.firstOrNull { it.value in offered } }
+        val next = suitesR?.let { offered -> waiting.runnable.firstOrNull { it.value in offered } }
         if (next != null && next != waiting.suite) {
             log.debug { "Responder supports $suitesR; selecting suite ${next.value} for the next message_1" }
             waiting.destroy()
-            state = State.Start(next)
-            throw RetryWithSuite(error)
+            state = State.Start(next, waiting.runnable)
+            throw EdhocPeerErrorException(error, retryWith = next)
         }
-        throw EdhocPeerErrorException(error)
+        val failure = EdhocPeerErrorException(error)
+        abortWith(failure)
+        log.warn { "message_2 failed: ${failure.message}" }
+        throw failure
     }
 
     private inline fun <reified T : State> expect(operation: String): T =
         state as? T ?: throw IllegalStateException("$operation is not allowed in phase $phase")
 
-    /** Runs one protocol step; any failure aborts the session and surfaces as an [EdhocException]. */
+    /**
+     * Runs one protocol step; any failure aborts the session and surfaces as an [EdhocException]. A missing
+     * algorithm is this side's failure, and the diagnostic says so instead of blaming the peer's input.
+     */
     private inline fun <R> step(what: String, isReply: Boolean = true, block: () -> R): R = try {
         block()
-    } catch (e: RetryWithSuite) {
-        throw EdhocPeerErrorException(e.error)
     } catch (e: EdhocException) {
         if (!isReply) e.isReply = false
         abortWith(e)
@@ -304,6 +351,11 @@ public class EdhocInitiator(
     } catch (e: CancellationException) {
         abortWith(EdhocException.unspecified("Cancelled while processing $what", e))
         throw e
+    } catch (e: UnsupportedAlgorithmException) {
+        val failure = EdhocException.unavailable(e.algorithm, e).also { it.isReply = isReply }
+        abortWith(failure)
+        log.warn { "$what failed: ${failure.message}" }
+        throw failure
     } catch (e: Exception) {
         val failure = EdhocException.unspecified("Processing $what failed", e).also { it.isReply = isReply }
         abortWith(failure)
@@ -320,17 +372,20 @@ public class EdhocInitiator(
         intermediateValues?.record(name, value.copyOf())
     }
 
-    /** Leaves [step] after a successful renegotiation without aborting. */
-    private class RetryWithSuite(val error: EdhocError) : Exception()
-
     private sealed class State(val phase: EdhocPhase, val suite: CipherSuite) {
         /** Overwrites the secrets this state holds. */
         open fun destroy() {}
 
-        class Start(suite: CipherSuite) : State(EdhocPhase.START, suite)
+        /**
+         * Ready for message_1. [runnable] is null until the crypto backend has been asked which suites it
+         * runs; until then [suite] is only the configured choice.
+         */
+        class Start(suite: CipherSuite, val runnable: List<CipherSuite>?) : State(EdhocPhase.START, suite)
 
         class WaitingForMessage2(
             suite: CipherSuite,
+            /** The suites SUITES_I was taken from, which a retry chooses from (RFC 9528 §6.3.1). */
+            val runnable: List<CipherSuite>,
             val keySchedule: KeySchedule,
             val exchange: EphemeralKeyExchange,
             val share: InitiatorShare,

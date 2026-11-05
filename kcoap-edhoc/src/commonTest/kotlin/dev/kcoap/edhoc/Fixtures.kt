@@ -5,7 +5,10 @@ import dev.kcoap.cose.CoseCurve
 import dev.kcoap.cose.CoseKey
 import dev.kcoap.cose.CoseKeyType
 import dev.kcoap.cose.CwtClaimsSet
+import dev.kcoap.crypto.Aead
+import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KemEncapsulation
 import dev.kcoap.crypto.KeyPair
@@ -14,16 +17,17 @@ import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.Shake256
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
+import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 
 /** Credentials, configurations and handshakes shared by the tests. */
 internal object Fixtures {
     /**
-     * The registered suites [backend] runs on this platform: for the default backend all but 25, and
-     * where the platform has no ChaCha20/Poly1305 (WebCrypto) not suites 4 and 5 either.
+     * The registered suites [backend] runs with [method] on this platform: for the default backend all
+     * but 25, and where the platform has no ChaCha20/Poly1305 (WebCrypto) not suites 4 and 5 either.
      */
-    suspend fun registeredSuitesRunBy(backend: CryptoBackend): List<CipherSuite> =
-        CipherSuite.registered.filter { it.isSupportedBy(backend) }
+    suspend fun registeredSuitesRunBy(backend: CryptoBackend, method: EdhocMethod): List<CipherSuite> =
+        CipherSuite.registered.filter { it.isSupportedBy(backend, method) }
 
     /** The key type [kind] needs in [suite]. */
     fun keyTypeFor(kind: AuthenticationKind, suite: CipherSuite): KeyType = when (kind) {
@@ -108,15 +112,14 @@ internal object Fixtures {
         return initiator to responder
     }
 
-    /** The messages and both state machines of one complete handshake. */
+    /** The messages, both state machines and both sessions of one complete handshake. */
     class Handshake(
         val initiator: EdhocInitiator,
         val responder: EdhocResponder,
         val messages: List<ByteArray>,
-    ) {
-        val initiatorSession: EdhocSession get() = initiator.session!!
-        val responderSession: EdhocSession get() = responder.session!!
-    }
+        val initiatorSession: EdhocSession,
+        val responderSession: EdhocSession,
+    )
 
     suspend fun handshake(
         backend: CryptoBackend,
@@ -129,15 +132,15 @@ internal object Fixtures {
         responder.processMessage1(message1)
         val message2 = responder.createMessage2()
         initiator.processMessage2(message2)
-        val message3 = initiator.createMessage3()
-        responder.processMessage3(message3)
+        val (message3, initiatorSession) = initiator.createMessage3()
+        val responderSession = responder.processMessage3(message3)
         val messages = mutableListOf(message1, message2, message3)
         if (withMessage4) {
             val message4 = responder.createMessage4()
             initiator.processMessage4(message4)
             messages += message4
         }
-        return Handshake(initiator, responder, messages)
+        return Handshake(initiator, responder, messages, initiatorSession, responderSession)
     }
 }
 
@@ -206,6 +209,62 @@ internal open class FakePostQuantumBackend : DefaultCryptoBackend() {
 
     /** [prefix] followed by deterministic filler up to [length] bytes. */
     private fun pad(prefix: ByteArray, length: Int): ByteArray = prefix + Shake256.digest(prefix, length - prefix.size)
+}
+
+/**
+ * [inner] without some algorithms, as a platform that lacks them: their operations throw
+ * [UnsupportedAlgorithmException] and the `supports` members say so (docs/adr/0001-crypto-capabilities.md).
+ * A key type in [keyTypes] takes its key agreement and signatures with it.
+ */
+internal class RestrictedBackend(
+    private val inner: CryptoBackend = DefaultCryptoBackend(),
+    private val aeads: Set<AeadAlgorithm> = emptySet(),
+    private val keyTypes: Set<KeyType> = emptySet(),
+    private val signatures: Set<SignatureAlgorithm> = emptySet(),
+    private val hashes: Set<HashAlgorithm> = emptySet(),
+) : CryptoBackend by inner {
+    override suspend fun supports(algorithm: AeadAlgorithm): Boolean = algorithm !in aeads && inner.supports(algorithm)
+
+    override suspend fun supports(type: KeyType): Boolean = type !in keyTypes && inner.supports(type)
+
+    override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
+        algorithm !in signatures && algorithm.keyType !in keyTypes && inner.supports(algorithm)
+
+    override suspend fun supports(algorithm: HashAlgorithm): Boolean = algorithm !in hashes && inner.supports(algorithm)
+
+    override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead =
+        if (algorithm in aeads) unsupported(algorithm.name) else inner.aead(algorithm, key)
+
+    override suspend fun digest(algorithm: HashAlgorithm, data: ByteArray): ByteArray =
+        if (algorithm in hashes) unsupported(algorithm.name) else inner.digest(algorithm, data)
+
+    override suspend fun hmac(algorithm: HashAlgorithm, key: ByteArray, data: ByteArray): ByteArray =
+        if (algorithm in hashes) unsupported(algorithm.name) else inner.hmac(algorithm, key, data)
+
+    override suspend fun generateKeyPair(type: KeyType): KeyPair =
+        if (type in keyTypes) unsupported(type.name) else inner.generateKeyPair(type)
+
+    override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray {
+        if (privateKey.type in keyTypes) unsupported(privateKey.type.name)
+        return inner.keyAgreement(privateKey, peerPublicKey)
+    }
+
+    override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
+        if (isMissing(algorithm)) unsupported(algorithm.name) else inner.sign(algorithm, privateKey, data)
+
+    override suspend fun verify(
+        algorithm: SignatureAlgorithm,
+        publicKey: ByteArray,
+        data: ByteArray,
+        signature: ByteArray,
+    ): Boolean {
+        if (isMissing(algorithm)) unsupported(algorithm.name)
+        return inner.verify(algorithm, publicKey, data, signature)
+    }
+
+    private fun isMissing(algorithm: SignatureAlgorithm) = algorithm in signatures || algorithm.keyType in keyTypes
+
+    private fun unsupported(algorithm: String): Nothing = throw UnsupportedAlgorithmException(algorithm)
 }
 
 /** Records EAD items and hands out the ones configured per message. */

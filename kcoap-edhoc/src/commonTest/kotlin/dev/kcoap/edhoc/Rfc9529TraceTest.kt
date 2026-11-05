@@ -69,7 +69,7 @@ class Rfc9529TraceTest {
         val message2 = responder.createMessage2()
         assertHex(t.MESSAGE_2, message2, "message_2")
         initiator.processMessage2(message2)
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         assertHex(t.MESSAGE_3, message3, "message_3")
         responder.processMessage3(message3)
         val message4 = responder.createMessage4()
@@ -202,7 +202,7 @@ class Rfc9529TraceTest {
         val message2 = responder.createMessage2()
         assertHex(t.MESSAGE_2, message2, "message_2")
         initiator.processMessage2(message2)
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         assertHex(t.MESSAGE_3, message3, "message_3")
         responder.processMessage3(message3)
         val message4 = responder.createMessage4()

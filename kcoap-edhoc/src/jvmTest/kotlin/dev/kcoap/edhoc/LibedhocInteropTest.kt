@@ -113,7 +113,7 @@ class LibedhocInteropTest {
             assertTrue(message1.toHex().startsWith("00" + "82181802"), "SUITES_I = [24, 2]")
             second.send(message1)
             initiator.processMessage2(second.receiveMessage())
-            second.send(initiator.createMessage3())
+            second.send(initiator.createMessage3().bytes)
             compare(initiator.session!!, second.results())
             assertEquals(0, second.exitStatus())
         }
@@ -173,7 +173,7 @@ class LibedhocInteropTest {
             peer.send(initiator.createMessage1())
             val message2 = peer.receiveMessage()
             initiator.processMessage2(message2)
-            peer.send(initiator.createMessage3().flipLastBit())
+            peer.send(initiator.createMessage3().bytes.flipLastBit())
             assertEquals("1", peer.expect("failed").tokens[1])
             assertEquals(EdhocError.UNSPECIFIED_ERROR, EdhocError.decode(peer.receiveMessage()).code)
             assertEquals(1, peer.exitStatus())
@@ -248,7 +248,7 @@ class LibedhocInteropTest {
             peer.send(message1)
             // RFC 9528: error code 2 with SUITES_R = 0. libedhoc answers with message_2 and completes.
             preferringZero.processMessage2(peer.receiveMessage())
-            peer.send(preferringZero.createMessage3())
+            peer.send(preferringZero.createMessage3().bytes)
             compare(preferringZero.session!!, peer.results())
         }
 
@@ -359,7 +359,7 @@ class LibedhocInteropTest {
                 val initiator = EdhocInitiator(initiatorConfig(session, identities, ead), backend)
                 peer.send(initiator.createMessage1())
                 initiator.processMessage2(peer.receiveMessage())
-                peer.send(initiator.createMessage3())
+                peer.send(initiator.createMessage3().bytes)
                 if (session.withMessage4) initiator.processMessage4(peer.receiveMessage())
                 compare(initiator.session!!, peer.results())
                 assertEquals(0, peer.exitStatus())

@@ -2,6 +2,7 @@ package dev.kcoap.edhoc
 
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.log.LogTags
 import dev.kcoap.log.LoggerFactory
 import kotlin.coroutines.cancellation.CancellationException
@@ -10,13 +11,17 @@ import kotlin.coroutines.cancellation.CancellationException
  * The EDHOC Responder (RFC 9528 §5), as a sans-IO state machine for one session.
  *
  * ```
- * val responder = EdhocResponder(config, backend)
+ * val responder = EdhocResponder(config, crypto)
  * responder.processMessage1(message1)          // throws EdhocException, e.g. error code 2 with SUITES_R
  * transport.reply(responder.createMessage2())
- * responder.processMessage3(transport.receive())
- * val session = responder.session!!
+ * val session = responder.processMessage3(transport.receive())
  * transport.reply(responder.createMessage4())  // only if the application profile uses message_4
  * ```
+ *
+ * Only the configured suites that [crypto] runs for the received method are accepted and named in SUITES_R
+ * ([CipherSuite.isSupportedBy]): [processMessage1] asks the backend, whose answers are memoized, and
+ * answers a selected suite it cannot run with error code 2 and the suites it can (RFC 9528 §6.3).
+ * [EdhocResponderConfig.supportedBy] makes the same choice once, up front.
  *
  * Every failure is an [EdhocException] whose [EdhocException.errorMessage], when not null, is the error
  * message to send to the Initiator; the state machine is then [EdhocPhase.ABORTED]. After
@@ -28,7 +33,7 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 public class EdhocResponder(
     private val config: EdhocResponderConfig,
-    private val backend: CryptoBackend,
+    private val crypto: CryptoBackend,
     loggerFactory: LoggerFactory = LoggerFactory.Global,
 ) {
     private val log = loggerFactory.logger(LogTags.EDHOC).with("role" to "responder")
@@ -63,8 +68,9 @@ public class EdhocResponder(
 
     /**
      * Processes message_1 (RFC 9528 §5.2.3): checks the method, the cipher suite negotiation of §6.3 and
-     * G_X, and hands EAD_1 to the [EadHandler]. A selected suite that is unsupported, or preceded in
-     * SUITES_I by a supported one, fails with error code 2 and SUITES_R.
+     * G_X, and hands EAD_1 to the [EadHandler]. Supported suites are those configured for the method that
+     * the crypto backend runs. A selected suite that is not supported, or preceded in SUITES_I by a
+     * supported one, fails with error code 2 and a SUITES_R of supported suites.
      */
     public suspend fun processMessage1(message1: ByteArray) {
         expect<State.Start>("processMessage1")
@@ -73,8 +79,15 @@ public class EdhocResponder(
             val received = Message1.decode(message1)
             val method = EdhocMethod.fromValue(received.method)?.takeIf { it in config.methods }
                 ?: throw EdhocException.unspecified("Method ${received.method} not supported")
-            val supported = config.suitesFor(method)
-            if (supported.isEmpty()) throw EdhocException.unspecified("Method ${method.value} not supported")
+            val runnable = config.runnableSuitesFor(method, crypto)
+            if (runnable.hasDropped) log.debug { "Not accepted on this crypto backend: ${runnable.describeDropped()}" }
+            val supported = runnable.suites
+            if (supported.isEmpty()) {
+                // The peer learns only that the method is not supported; the local message says why.
+                val error = EdhocError.unspecified("Method ${method.value} not supported")
+                val why = if (runnable.hasDropped) ": ${runnable.describeDropped()}" else ""
+                throw EdhocException(error, "${error.diagnostic}$why")
+            }
             val supportedValues = supported.map { it.value }
             val firstSupported = received.suites.firstOrNull { it in supportedValues }
             if (firstSupported != received.selectedSuite) {
@@ -87,7 +100,7 @@ public class EdhocResponder(
             if (received.gX.size != suite.keyExchange.initiatorShareLength) {
                 throw EdhocException.unspecified("G_X has the wrong length for cipher suite ${suite.value}")
             }
-            val keySchedule = KeySchedule(suite, backend)
+            val keySchedule = KeySchedule(suite, crypto)
             val hashMessage1 = keySchedule.hash(message1)
             record("H(message_1)", hashMessage1)
             config.eadHandler.receive(EdhocMessage.MESSAGE_1, received.ead)
@@ -111,9 +124,9 @@ public class EdhocResponder(
             val (method, suite, initiatorConnectionIdentifier) = verified.negotiation
             val keySchedule = verified.keySchedule
             val own = config.credentialFor(method, suite)!!
-            val exchange = EphemeralKeyExchange.forSuite(suite, backend, config.ephemeralKeys)
+            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys)
             val share = exchange.respond(verified.gX)
-            val connectionIdentifier = config.connectionIdentifiers.choose(backend, initiatorConnectionIdentifier)
+            val connectionIdentifier = config.connectionIdentifiers.choose(crypto, initiatorConnectionIdentifier)
             if (connectionIdentifier == initiatorConnectionIdentifier) {
                 share.privateKey?.destroyIfSoftware()
                 throw EdhocException.unspecified("C_R must differ from C_I")
@@ -138,7 +151,7 @@ public class EdhocResponder(
                 prk2e.copyOf()
             }
             val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_2)
-            val authenticator = SignatureOrMac(keySchedule, backend)
+            val authenticator = SignatureOrMac(keySchedule, crypto)
             val input = AuthenticationInput(
                 KeySchedule.MAC_2, connectionIdentifier, own.identifier, th2, own.credential, ead,
             )
@@ -171,11 +184,12 @@ public class EdhocResponder(
 
     /**
      * Processes message_3 (RFC 9528 §5.4.3): decrypts PLAINTEXT_3, hands EAD_3 to the [EadHandler], resolves
-     * ID_CRED_I and verifies Signature_or_MAC_3. On success the session is [EdhocPhase.COMPLETED].
+     * ID_CRED_I and verifies Signature_or_MAC_3. On success the state machine is [EdhocPhase.COMPLETED]
+     * and returns the session, which [session] returns afterwards too.
      */
-    public suspend fun processMessage3(message3: ByteArray) {
+    public suspend fun processMessage3(message3: ByteArray): EdhocSession {
         val waiting = expect<State.WaitingForMessage3>("processMessage3")
-        step("message_3") {
+        return step("message_3") {
             log.trace { "message_3 ${log.payload(message3)}" }
             if (MessageReader.startsWithInteger(message3)) throw EdhocPeerErrorException(Handshake.peerError(message3))
             val (method, suite, initiatorConnectionIdentifier) = waiting.negotiation
@@ -187,7 +201,7 @@ public class EdhocResponder(
             record("K_3", k3)
             record("IV_3", iv3)
             val aad3 = Handshake.encrypt0Aad(th3)
-            val plaintext3 = Handshake.decrypt(backend, suite, k3, iv3, ciphertext3, aad3, "message_3")
+            val plaintext3 = Handshake.decrypt(crypto, suite, k3, iv3, ciphertext3, aad3, "message_3")
             wipeAll(k3, iv3)
             record("PLAINTEXT_3", plaintext3)
             val received = AuthenticatedPlaintext.decode(plaintext3, withConnectionIdentifier = false, "PLAINTEXT_3")
@@ -204,7 +218,7 @@ public class EdhocResponder(
             val session = EdhocSession(
                 EdhocRole.RESPONDER, method, suite, initiatorConnectionIdentifier,
                 waiting.responderConnectionIdentifier, received.credentialIdentifier, verified.credential,
-                prkOut, prkExporter, backend,
+                prkOut, prkExporter, crypto,
             )
             wipeAll(prkOut, prkExporter)
             waiting.destroy()
@@ -213,6 +227,7 @@ public class EdhocResponder(
                     "session completed"
             }
             state = State.Completed(waiting.negotiation, session, keySchedule, verified.prk, th4)
+            session
         }
     }
 
@@ -224,7 +239,7 @@ public class EdhocResponder(
         val (method, suite) = waiting.negotiation
         val keySchedule = waiting.keySchedule
         val kind = method.initiatorAuthentication
-        val authenticator = SignatureOrMac(keySchedule, backend)
+        val authenticator = SignatureOrMac(keySchedule, crypto)
         if (received.signatureOrMac.size != authenticator.expectedLength(kind)) {
             throw EdhocException.unspecified("Signature_or_MAC_3 has the wrong length")
         }
@@ -270,7 +285,7 @@ public class EdhocResponder(
             record("K_4", k4)
             record("IV_4", iv4)
             val ciphertext4 = Handshake.encrypt(
-                backend, keySchedule.suite, k4, iv4, Plaintext4.encode(ead), Handshake.encrypt0Aad(completed.th4),
+                crypto, keySchedule.suite, k4, iv4, Plaintext4.encode(ead), Handshake.encrypt0Aad(completed.th4),
             )
             wipeAll(k4, iv4)
             val message4 = SingleByteStringMessage.encode(ciphertext4)
@@ -296,7 +311,10 @@ public class EdhocResponder(
     private inline fun <reified T : State> expect(operation: String): T =
         state as? T ?: throw IllegalStateException("$operation is not allowed in phase $phase")
 
-    /** Runs one protocol step; any failure aborts the session and surfaces as an [EdhocException]. */
+    /**
+     * Runs one protocol step; any failure aborts the session and surfaces as an [EdhocException]. A missing
+     * algorithm is this side's failure, and the diagnostic says so instead of blaming the peer's input.
+     */
     private inline fun <R> step(what: String, block: () -> R): R = try {
         block()
     } catch (e: EdhocException) {
@@ -306,6 +324,11 @@ public class EdhocResponder(
     } catch (e: CancellationException) {
         abortWith(EdhocException.unspecified("Cancelled while processing $what", e))
         throw e
+    } catch (e: UnsupportedAlgorithmException) {
+        val failure = EdhocException.unavailable(e.algorithm, e)
+        abortWith(failure)
+        log.warn { "$what failed: ${failure.message}" }
+        throw failure
     } catch (e: Exception) {
         val failure = EdhocException.unspecified("Processing $what failed", e)
         abortWith(failure)

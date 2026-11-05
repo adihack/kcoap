@@ -13,33 +13,66 @@ val initiator = EdhocInitiator(
         method = EdhocMethod.STATIC_DH_STATIC_DH,
         cipherSuites = listOf(CipherSuite.SUITE_2),            // order of preference
         credentials = listOf(LocalCredential.staticDiffieHellman(credI, CredentialIdentifier.KeyId(kidI), keyI)),
-        credentialResolver = TrustedCredentials(backend, listOf(credR)),
+        credentialResolver = TrustedCredentials(crypto, listOf(credR)),
     ),
-    backend,
+    crypto,
 )
-val responder = EdhocResponder(EdhocResponderConfig(setOf(EdhocMethod.STATIC_DH_STATIC_DH), ...), backend)
+val responder = EdhocResponder(EdhocResponderConfig(setOf(EdhocMethod.STATIC_DH_STATIC_DH), ...), crypto)
 
 responder.processMessage1(initiator.createMessage1())
 initiator.processMessage2(responder.createMessage2())
-responder.processMessage3(initiator.createMessage3())
+val (message3, session) = initiator.createMessage3()
+val responderSession = responder.processMessage3(message3)
 initiator.processMessage4(responder.createMessage4())     // only if the application profile uses message_4
 
-val session = initiator.session!!
 val masterSecret = session.oscoreMasterSecret()            // EDHOC_Exporter(0, h'', key length)
 ```
 
 Every failure is an `EdhocException` carrying the `EdhocError` of RFC 9528 §6; `errorMessage` is the
 error message to send, or null when none may be sent (the peer sent an error, or nothing was received
 yet). When the Responder answers message_1 with error code 2, `processMessage2` throws
-`EdhocPeerErrorException` and, if the Initiator supports a suite in SUITES_R, returns to
-`EdhocPhase.START` with that suite selected: call `createMessage1()` again (RFC 9528 §6.3.1). Calls out
-of order throw `IllegalStateException`. `EdhocPhase` mirrors the states of RFC 9528 Appendix I.
+`EdhocPeerErrorException`. If SUITES_R names a suite the Initiator prefers and runs, the exception's
+`retryWith` is that suite and the Initiator is back at `EdhocPhase.START` with it selected: call
+`createMessage1()` again (RFC 9528 §6.3.1). Otherwise `retryWith` is null and the session is aborted.
+
+```kotlin
+try {
+    initiator.processMessage2(reply)
+} catch (e: EdhocPeerErrorException) {
+    if (e.retryWith == null) throw e
+    reply = transport.exchange(initiator.createMessage1())
+}
+```
+
+Calls out of order throw `IllegalStateException`. `EdhocPhase` mirrors the states of RFC 9528
+Appendix I.
+
+### Only suites the backend runs
+
+Platforms differ in what their cryptography offers: WebCrypto has no ChaCha20/Poly1305, so suites 4 and
+5 cannot run in a browser. `suite.isSupportedBy(crypto, method)` asks the `CryptoBackend`
+(`supports(...)`, [ADR 0001](../docs/adr/0001-crypto-capabilities.md)) for everything a session with
+that method needs: the key exchange, the signature algorithm if a side signs, both AEADs and both
+hashes. It is true exactly when a handshake on that backend succeeds, which a test checks for every
+suite and method on every target. Both state machines use it:
+
+- The Initiator offers only suites it runs: SUITES_I is a prefix of them, and a retry picks from them.
+- The Responder accepts and names in SUITES_R only suites it runs; a selected suite it cannot run is
+  answered with error code 2 and the ones it can (RFC 9528 §6.3).
+- A backend that turns out to lack an algorithm mid-handshake fails with a diagnostic that names it
+  ("P_256 is not available in this crypto backend"), never as a peer's invalid key.
+
+The state machines ask for every session, which costs a lookup with a backend that memoizes its answers,
+as `DefaultCryptoBackend` does. `config.supportedBy(crypto)` (both roles) makes the same choice once, up
+front: it returns the configuration narrowed to the runnable suites and throws `IllegalArgumentException`,
+naming each dropped suite and what it needs, when nothing usable is left.
 
 | Type | Role |
 |---|---|
 | `EdhocInitiator`, `EdhocResponder` | State machines over sealed internal states; one instance per session |
-| `EdhocInitiatorConfig`, `EdhocResponderConfig` | Application profile (RFC 9528 §3.9): method(s), suites, credentials, callbacks |
-| `EdhocSession` | PRK_out, PRK_exporter, `exporter`, `oscoreMasterSecret/Salt`, `keyUpdate` (Appendix H), peer credential, C_I / C_R |
+| `EdhocInitiatorConfig`, `EdhocResponderConfig` | Application profile (RFC 9528 §3.9): method(s), suites, credentials, callbacks; `supportedBy(crypto)` |
+| `EdhocSession`, `Message3` | PRK_out, PRK_exporter, `exporter`, `oscoreMasterSecret/Salt`, `keyUpdate` (Appendix H), peer credential, C_I / C_R; `Message3` is message_3 with the session it completes |
+| `EdhocPeerErrorException` | The peer sent an error message; `retryWith` is the suite of the next message_1 after error code 2 |
 | `CipherSuite`, `KeyExchangeAlgorithm` | Registry of RFC 9528 §10.2 plus suite -24; the key exchange is Diffie-Hellman or KEM |
 | `AuthenticationCredential`, `X509Certificate` | CRED_x as CCS or DER certificate, with the authentication key |
 | `CredentialIdentifier` | ID_CRED_x: `KeyId`, `X509Thumbprint`, `X509Chain`, `Kccs`, `Other` |
@@ -60,8 +93,8 @@ both in the configuration and when a Responder receives such a message_1.
   implemented (its EdDSA needs Ed448, which no backend provides). Suite -24 = libedhoc's
   `EDHOC_CIPHER_SUITE_PQC_1` (ML-KEM-512, ML-DSA-44, AES-CCM-16-128-128, SHAKE256) with a backend that
   provides ML-KEM and ML-DSA. Private suites can be declared with the `CipherSuite` constructor.
-  `suite.isSupportedBy(backend)` tells whether a backend runs a suite where it is: in browsers,
-  WebCrypto has no ChaCha20/Poly1305, so suites 4 and 5 are not available there.
+  Only the suites the backend runs are offered and accepted (see above): in browsers, WebCrypto has no
+  ChaCha20/Poly1305, so suites 4 and 5 are not available there.
 - Key schedule of §4: HKDF for SHA-2, KMAC256 with empty customization for SHAKE256, the EDHOC_KDF info
   encoding, TH_2/TH_3/TH_4, PRK_2e / PRK_3e2m / PRK_4e3m / PRK_out, and the long-PLAINTEXT_2 keystream
   of Appendix G.
@@ -89,6 +122,7 @@ because with OSCORE both would become the same Recipient ID (§3.3.3).
 | RFC 9529 §3 (trace 2) | Method 3, suite 2, CCS by `kid`: the rejected first message_1 and the error `02 02`, renegotiation to SUITES_I = [6, 2], then the same values as trace 1 plus SALT_3e2m, G_RX, SALT_4e3m, G_IY |
 | RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve, the low-order X25519 point, a short MAC, non-deterministic CBOR |
 | Round trips | Every method × suites 0–6 and 24 (every suite the backend supports: on WebCrypto not 4 and 5); both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
+| Suite negotiation | `SuiteNegotiationTest`: for every suite and method on every target, `isSupportedBy` is true exactly when a loopback handshake succeeds (the default backend, one without ChaCha20/Poly1305 and ES256, the PQ test double); SUITES_R holds only runnable suites; a selected suite the Responder cannot run gets error code 2 and the retry succeeds; SUITES_I and retries draw only on runnable suites; missing curves, KEMs and algorithms are named; `supportedBy` in both roles |
 | Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation; on the JVM with real ML-KEM and ML-DSA from `kcoap-crypto-bc` (`PostQuantumBouncyCastleTest`), with CCS (AKP COSE_Key) and ML-DSA X.509 credentials |
 | libedhoc (live, JVM) | `LibedhocInteropTest`: sessions with fresh ephemeral keys against libedhoc 0363bd3 in a container, kcoap as Initiator and as Responder, for suites 0, 2, 4, 24 × methods 0–3 and suite -24 (liboqs) × method 0; kid/CCS and x5chain; integer and byte-string identifiers; message_4; negotiation (error code 2) both ways; tampering; EAD. Both sides must agree on OSCORE secret/salt, Sender/Recipient IDs, EDHOC_Exporter and PRK_out, before and after key update |
 

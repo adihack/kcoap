@@ -65,13 +65,15 @@ class PostQuantumTest {
         assertEquals(1 + 1 + 3 + 800 + 1, message1.size)
         assertEquals("0037590320", message1.copyOf(5).toHexString())
         responder.processMessage1(message1)
+        // The backend's one probe of ML-KEM-512 (the capability check) has run by now.
+        val encapsulationsBefore = backend.encapsulations
         val message2 = responder.createMessage2()
         initiator.processMessage2(message2)
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         responder.processMessage3(message3)
         initiator.processMessage4(responder.createMessage4())
 
-        assertEquals(1, backend.encapsulations)
+        assertEquals(1, backend.encapsulations - encapsulationsBefore)
         for (values in listOf(initiatorValues, responderValues)) {
             assertEquals(768, values["G_Y"].size, "G_Y is the ML-KEM-512 ciphertext")
             assertEquals(32, values["G_XY"].size, "G_XY is the ML-KEM shared secret")

@@ -243,10 +243,10 @@ class EdhocOscoreTest {
         val second = EdhocInitiator(peers.initiatorConfig(), crypto)
         second.processMessage2(server.handle(EdhocOverCoap.message1Request(second.createMessage1())).payload)
         assertEquals(1, server.pendingSessions())
-        val firstMessage3 = first.createMessage3()
+        val firstMessage3 = first.createMessage3().bytes
         val dropped = server.handle(EdhocOverCoap.continuationRequest(first.peerConnectionIdentifier(), firstMessage3))
         assertEquals(CoapCode.BAD_REQUEST, dropped.code)
-        val secondMessage3 = second.createMessage3()
+        val secondMessage3 = second.createMessage3().bytes
         val kept = server.handle(EdhocOverCoap.continuationRequest(second.peerConnectionIdentifier(), secondMessage3))
         assertEquals(CoapCode.CHANGED, kept.code)
         assertFailsWith<IllegalArgumentException> { EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository(), maxPendingSessions = 0) }

@@ -12,7 +12,6 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocInitiatorConfig
 import dev.kcoap.edhoc.EdhocPeerErrorException
-import dev.kcoap.edhoc.EdhocPhase
 import dev.kcoap.edhoc.EdhocSession
 import dev.kcoap.log.LogTags
 import dev.kcoap.log.LoggerFactory
@@ -58,7 +57,7 @@ public class EdhocClientHandshake(
     public suspend fun run(expectMessage4: Boolean = false): EdhocOscoreSession {
         val initiator = EdhocInitiator(config, crypto, loggers)
         exchangeMessages1And2(initiator)
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         val responderId = initiator.session!!.peerConnectionIdentifier
         val response = exchange(EdhocOverCoap.continuationRequest(responderId, message3, path))
         checkResponse(response, "message_3")
@@ -79,7 +78,7 @@ public class EdhocClientHandshake(
     public suspend fun runCombined(): Pair<EdhocOscoreSession, CombinedRequestSecurity> {
         val initiator = EdhocInitiator(config, crypto, loggers)
         exchangeMessages1And2(initiator)
-        val message3 = initiator.createMessage3()
+        val message3 = initiator.createMessage3().bytes
         val session = initiator.session!!
         val context = session.oscoreContext(crypto)
         val security = CombinedRequestSecurity(OscoreClient(context, loggers), message3)
@@ -95,8 +94,8 @@ public class EdhocClientHandshake(
                 return
             } catch (e: EdhocPeerErrorException) {
                 // §6.3: the Initiator is back at START with the server's preferred suite selected.
-                if (initiator.phase != EdhocPhase.START) throw e
-                log.debug { "Retrying message_1 with suite ${initiator.cipherSuite.value}" }
+                val next = e.retryWith ?: throw e
+                log.debug { "Retrying message_1 with suite ${next.value}" }
             }
         }
         throw EdhocTransferException("Cipher suite negotiation did not converge")

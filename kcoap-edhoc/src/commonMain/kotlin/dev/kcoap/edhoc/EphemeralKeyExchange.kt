@@ -8,6 +8,7 @@ import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SoftwarePrivateKey
+import dev.kcoap.crypto.UnsupportedAlgorithmException
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -16,12 +17,15 @@ import kotlin.coroutines.cancellation.CancellationException
  * suites) and Y (Responder, Diffie-Hellman suites; a KEM Responder encapsulates instead).
  */
 public fun interface EphemeralKeySource {
-    /** A key pair of [type]. EDHOC destroys software private keys once it no longer needs them. */
-    public suspend fun keyPair(backend: CryptoBackend, type: KeyType): KeyPair
+    /**
+     * A key pair of [type], made with or for [crypto]. EDHOC destroys software private keys once it no
+     * longer needs them.
+     */
+    public suspend fun keyPair(crypto: CryptoBackend, type: KeyType): KeyPair
 
     public companion object {
         /** A new key pair from [CryptoBackend.generateKeyPair] each time. */
-        public val Random: EphemeralKeySource = EphemeralKeySource { backend, type -> backend.generateKeyPair(type) }
+        public val Random: EphemeralKeySource = EphemeralKeySource { crypto, type -> crypto.generateKeyPair(type) }
     }
 }
 
@@ -33,12 +37,20 @@ internal class ResponderShare(val gY: ByteArray, val sharedSecret: ByteArray, va
 
 /**
  * Strategy for the ephemeral key exchange of a cipher suite (RFC 9528 §3.7, §4.1.1.1; draft-ietf-lake-pqsuites
- * §3). Both implementations validate the peer's share and turn backend failures into [EdhocException]s.
+ * §3). Both implementations validate the peer's share and turn backend failures into [EdhocException]s. A
+ * backend that lacks the curve or KEM fails with a diagnostic that names it, not one about the peer's key.
  */
 internal sealed class EphemeralKeyExchange(
-    protected val backend: CryptoBackend,
+    protected val crypto: CryptoBackend,
     protected val keys: EphemeralKeySource,
 ) {
+    /** An ephemeral key pair of [type], for the curve or KEM called [algorithm]. */
+    protected suspend fun ephemeralKeyPair(type: KeyType, algorithm: String): KeyPair = try {
+        keys.keyPair(crypto, type)
+    } catch (e: UnsupportedAlgorithmException) {
+        throw EdhocException.unavailable(algorithm, e)
+    }
+
     /** Initiator, message_1: generate X and G_X. */
     abstract suspend fun initiatorShare(): InitiatorShare
 
@@ -62,16 +74,16 @@ internal sealed class EphemeralKeyExchange(
      * P-256 or P-384 becomes the compressed point `02 || x`, which yields the same shared secret whichever
      * square root the peer's y is.
      */
-    class DiffieHellman(private val curve: EcdhCurve, backend: CryptoBackend, keys: EphemeralKeySource) :
-        EphemeralKeyExchange(backend, keys) {
+    class DiffieHellman(private val curve: EcdhCurve, crypto: CryptoBackend, keys: EphemeralKeySource) :
+        EphemeralKeyExchange(crypto, keys) {
 
         override suspend fun initiatorShare(): InitiatorShare {
-            val pair = keys.keyPair(backend, curve.keyType)
+            val pair = ephemeralKeyPair(curve.keyType, curve.name)
             return InitiatorShare(shareOf(pair), pair.privateKey)
         }
 
         override suspend fun respond(gX: ByteArray): ResponderShare {
-            val pair = keys.keyPair(backend, curve.keyType)
+            val pair = ephemeralKeyPair(curve.keyType, curve.name)
             return ResponderShare(shareOf(pair), agree(pair.privateKey, peerKeyFromShare(gX)), pair.privateKey)
         }
 
@@ -85,8 +97,8 @@ internal sealed class EphemeralKeyExchange(
             agree(privateKey, peerKeyFromShare(share))
 
         private suspend fun agree(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray {
-            val secret = backendCall("Invalid public key for ${curve.name}") {
-                backend.keyAgreement(privateKey, peerPublicKey)
+            val secret = backendCall(curve.name, "Invalid public key for ${curve.name}") {
+                crypto.keyAgreement(privateKey, peerPublicKey)
             }
             // RFC 9528 §9.2: the all-zero check of RFC 7748 §6 is mandatory for X25519 and X448
             // (RFC 9529 §4.2.4). It never holds for valid NIST curve points, so it is applied to all curves.
@@ -111,19 +123,19 @@ internal sealed class EphemeralKeyExchange(
     }
 
     /** KEM-based exchange (draft-ietf-lake-pqsuites §3): G_X = ek, G_Y = c, G_XY = K. */
-    class Kem(private val algorithm: KemAlgorithm, backend: CryptoBackend, keys: EphemeralKeySource) :
-        EphemeralKeyExchange(backend, keys) {
+    class Kem(private val algorithm: KemAlgorithm, crypto: CryptoBackend, keys: EphemeralKeySource) :
+        EphemeralKeyExchange(crypto, keys) {
 
         override suspend fun initiatorShare(): InitiatorShare {
-            val pair = keys.keyPair(backend, algorithm.keyType)
+            val pair = ephemeralKeyPair(algorithm.keyType, algorithm.name)
             val ek = pair.publicKey
             require(ek.size == algorithm.keyType.publicKeyLength) { "Encapsulation key does not fit ${algorithm.name}" }
             return InitiatorShare(ek, pair.privateKey)
         }
 
         override suspend fun respond(gX: ByteArray): ResponderShare {
-            val encapsulation = backendCall("Invalid ${algorithm.name} encapsulation key") {
-                backend.encapsulate(algorithm, gX)
+            val encapsulation = backendCall(algorithm.name, "Invalid ${algorithm.name} encapsulation key") {
+                crypto.encapsulate(algorithm, gX)
             }
             if (encapsulation.ciphertext.size != algorithm.ciphertextLength ||
                 encapsulation.sharedSecret.size != algorithm.sharedSecretLength
@@ -134,7 +146,9 @@ internal sealed class EphemeralKeyExchange(
         }
 
         override suspend fun complete(privateKey: PrivateKey, gY: ByteArray): ByteArray {
-            val secret = backendCall("Invalid ${algorithm.name} ciphertext") { backend.decapsulate(privateKey, gY) }
+            val secret = backendCall(algorithm.name, "Invalid ${algorithm.name} ciphertext") {
+                crypto.decapsulate(privateKey, gY)
+            }
             if (secret.size != algorithm.sharedSecretLength) {
                 throw EdhocException.unspecified("${algorithm.name} shared secret has the wrong size")
             }
@@ -152,23 +166,26 @@ internal sealed class EphemeralKeyExchange(
     companion object {
         private const val COMPRESSED_EVEN_Y: Byte = 0x02
 
-        fun forSuite(suite: CipherSuite, backend: CryptoBackend, keys: EphemeralKeySource): EphemeralKeyExchange =
+        fun forSuite(suite: CipherSuite, crypto: CryptoBackend, keys: EphemeralKeySource): EphemeralKeyExchange =
             when (val exchange = suite.keyExchange) {
-                is KeyExchangeAlgorithm.DiffieHellman -> DiffieHellman(exchange.curve, backend, keys)
-                is KeyExchangeAlgorithm.Kem -> Kem(exchange.algorithm, backend, keys)
+                is KeyExchangeAlgorithm.DiffieHellman -> DiffieHellman(exchange.curve, crypto, keys)
+                is KeyExchangeAlgorithm.Kem -> Kem(exchange.algorithm, crypto, keys)
             }
 
         /**
-         * Runs a backend operation on peer input. Backends report invalid keys with platform-specific
-         * exceptions, so everything except cancellation becomes an [EdhocException] (RFC 9528 §9.8: abort
-         * when public key validation fails).
+         * Runs a backend operation of [algorithm] on peer input. Backends report invalid keys with
+         * platform-specific exceptions, so everything except cancellation becomes an [EdhocException]
+         * (RFC 9528 §9.8: abort when public key validation fails): [diagnostic] about the peer's input, or,
+         * when the backend lacks [algorithm] altogether, a diagnostic that names it.
          */
-        private inline fun <T> backendCall(diagnostic: String, block: () -> T): T = try {
+        private inline fun <T> backendCall(algorithm: String, diagnostic: String, block: () -> T): T = try {
             block()
         } catch (e: CancellationException) {
             throw e
         } catch (e: EdhocException) {
             throw e
+        } catch (e: UnsupportedAlgorithmException) {
+            throw EdhocException.unavailable(algorithm, e)
         } catch (e: Exception) {
             throw EdhocException.unspecified(diagnostic, e)
         }
