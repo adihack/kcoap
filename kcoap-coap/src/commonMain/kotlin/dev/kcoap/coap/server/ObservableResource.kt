@@ -36,7 +36,8 @@ public abstract class ObservableResource(name: String) : CoapResource(name) {
      * only, since a reliable transport has no message types and ignores it (RFC 8323 §7.2). Non-confirmable
      * ones are cheaper for frequent changes; the server still sends a Confirmable one periodically, and to a
      * client that neither message nor channel security authenticated at least every ninth notification, whose
-     * ACK shows the client still wants them (RFC 7641 §7).
+     * ACK shows the client still wants them (RFC 7641 §7). Only [CoapMessageType.NON] asks for Non-confirmable
+     * notifications; any other value asks for Confirmable ones.
      */
     public open val notificationType: CoapMessageType get() = CoapMessageType.CON
 

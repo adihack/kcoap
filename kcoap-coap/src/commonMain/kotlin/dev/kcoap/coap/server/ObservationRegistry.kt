@@ -362,9 +362,10 @@ internal class ServerObservation(
             return@withLock
         }
         changedMeanwhile = false
-        // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK.
+        // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK. Only a
+        // resource that asks for NON may get Non-confirmable notifications; any other type it names asks for CON.
         val confirmable = (qBlockSize != null && server.mustConfirmBodies(this)) ||
-            policy.nextIsConfirmable(resource.notificationType == CoapMessageType.CON, now)
+            policy.nextIsConfirmable(requested = resource.notificationType != CoapMessageType.NON, now)
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         val notification = server.notification(this, type)
         if (notification == null) {
