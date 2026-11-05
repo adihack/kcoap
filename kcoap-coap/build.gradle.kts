@@ -13,6 +13,9 @@ kotlin {
             implementation(project(":kcoap-testkit"))
         }
         jvmTest.dependencies {
+            // The Content-Format 272 codec is checked against kcoap-cbor here only: with kcoap-cbor on the
+            // common test classpath, Kotlin/Wasm 2.4.21 emits an invalid module (ConcurrencyStressTest).
+            implementation(project(":kcoap-cbor"))
             // The libcoap interop tests talk to coap-server and coap-client over real UDP, TCP and
             // WebSocket sockets.
             implementation(project(":kcoap-transport-ktor"))

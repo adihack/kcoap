@@ -21,7 +21,26 @@ docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
 | Test class | Peer | What runs |
 |---|---|---|
 | `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
-| `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05 |
+| `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05; the Q-Block fallback with `-L 7 -v 7` (below) |
+
+### Q-Block (RFC 9177)
+
+libcoap 4.3.5 has no `-Q` flag. Q-Block is turned on with `-L`, the sum of libcoap's `COAP_BLOCK_*` flags:
+1 lets libcoap do block-wise transfers, 2 delivers a single body, 4 tries Q-Block, 8 (client) sets the M bit
+in missing-block requests; 16 and 32 (client) and 64 and 128 (server) change other block-wise behaviour.
+The Q-Block runs use `-L 7` (and `-L 15` for the M bit) on both `coap-client` and `coap-server`.
+
+kcoap does not implement Q-Block yet (the plan is in
+[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), and it will stay off by default.
+What runs today pins the fallback of RFC 9177 §4.1: `coap-client -L 7` first sends a Confirmable
+`GET /.well-known/core` with `Q-Block2: 0/_/16`, kcoap answers 4.02 "Unrecognized critical option 31",
+libcoap logs "Q-Block support not available" and sends its real request at once with RFC 7959 options
+(`LibcoapClientAgainstKcoapTest.fallsBackFromQBlockWhileItIsOff`).
+
+```bash
+interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello
+interop/libcoap/coap.sh coap-server -p 5683 -L 7 -v 7
+```
 
 ### Over TCP and WebSockets (RFC 8323)
 

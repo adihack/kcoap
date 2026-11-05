@@ -46,6 +46,15 @@ public class OptionSet private constructor(private val options: List<CoapOption>
     public val block1: BlockOption? get() = first(CoapOptions.BLOCK1.number)?.let { BlockOption.fromUint(it.uintValue()) }
     public val block2: BlockOption? get() = first(CoapOptions.BLOCK2.number)?.let { BlockOption.fromUint(it.uintValue()) }
     public val size1: Long? get() = first(CoapOptions.SIZE1.number)?.uintValue()
+
+    /** The Q-Block1 option (RFC 9177 §4.2), which a message carries at most once. */
+    public val qBlock1: BlockOption? get() = first(CoapOptions.Q_BLOCK1.number)?.let { BlockOption.fromUint(it.uintValue()) }
+
+    /** The first Q-Block2 option (RFC 9177 §4.2); a request for missing blocks repeats it, see [qBlock2List]. */
+    public val qBlock2: BlockOption? get() = first(CoapOptions.Q_BLOCK2.number)?.let { BlockOption.fromUint(it.uintValue()) }
+
+    /** Every Q-Block2 option in order: one per block a request for missing blocks asks for (RFC 9177 §4.4). */
+    public val qBlock2List: List<BlockOption> get() = all(CoapOptions.Q_BLOCK2.number).map { BlockOption.fromUint(it.uintValue()) }
     public val size2: Long? get() = first(CoapOptions.SIZE2.number)?.uintValue()
 
     public val oscore: ByteArray? get() = first(CoapOptions.OSCORE.number)?.value
@@ -116,6 +125,18 @@ public class OptionSet private constructor(private val options: List<CoapOption>
         public fun block1(block: BlockOption): Builder = set(CoapOption.uint(CoapOptions.BLOCK1.number, block.toUint()))
         public fun block2(block: BlockOption): Builder = set(CoapOption.uint(CoapOptions.BLOCK2.number, block.toUint()))
         public fun size1(size: Long): Builder = set(CoapOption.uint(CoapOptions.SIZE1.number, size))
+
+        /** Sets the Q-Block1 option (RFC 9177 §4.2), replacing an earlier one. */
+        public fun qBlock1(block: BlockOption): Builder = set(CoapOption.uint(CoapOptions.Q_BLOCK1.number, block.toUint()))
+
+        /** Sets a single Q-Block2 option (RFC 9177 §4.2), replacing every earlier one. */
+        public fun qBlock2(block: BlockOption): Builder = set(CoapOption.uint(CoapOptions.Q_BLOCK2.number, block.toUint()))
+
+        /**
+         * Adds one more Q-Block2 option, as a request for missing blocks does for each block it asks for; RFC
+         * 9177 §4.4 wants them in strictly ascending block order with one size.
+         */
+        public fun addQBlock2(block: BlockOption): Builder = add(CoapOption.uint(CoapOptions.Q_BLOCK2.number, block.toUint()))
         public fun size2(size: Long): Builder = set(CoapOption.uint(CoapOptions.SIZE2.number, size))
         public fun oscore(value: ByteArray): Builder = set(CoapOption(CoapOptions.OSCORE.number, value))
         public fun edhoc(): Builder = set(CoapOption.empty(CoapOptions.EDHOC.number))

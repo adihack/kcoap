@@ -81,6 +81,12 @@ public object ContentFormat {
     /** EDHOC messages prefixed with a connection identifier (RFC 9528 §10.9, Appendix A.2). */
     public const val CID_EDHOC_CBOR_SEQ: Int = 65
 
+    /**
+     * `application/missing-blocks+cbor-seq` (RFC 9177 §5, §12.3): the payload of a 4.08 that lists the
+     * missing Q-Block1 block numbers as a CBOR Sequence of unsigned integers.
+     */
+    public const val MISSING_BLOCKS_CBOR_SEQ: Int = 272
+
     /** OSCORE messages carried over HTTP (RFC 8613 §11). */
     public const val OSCORE: Int = 10001
 }
