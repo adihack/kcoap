@@ -5,6 +5,7 @@ import dev.kcoap.cbor.CborInt
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.ContentFormat
@@ -23,7 +24,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** The building blocks of Q-Block (RFC 9177): codec, structural checks, options, parameters. */
+/** The building blocks of Q-Block (RFC 9177): codec, structural checks, sets, bitset, parameters. */
 class QBlockPartsTest {
     // ---------------------------------------------------------------- §5: application/missing-blocks+cbor-seq
 
@@ -229,6 +230,61 @@ class QBlockPartsTest {
         assertTrue(Blockwise.operationOptions(first).any { it.number == CoapOptions.REQUEST_TAG.number })
     }
 
+    // ---------------------------------------------------------------- sets, bitset, mode
+
+    @Test
+    fun rfc9177Section7_2MaxPayloadsSets() {
+        val sets = QBlockSets(10)
+        assertEquals(0, sets.of(9))
+        assertEquals(1, sets.of(10))
+        assertEquals(20, sets.first(2))
+        assertEquals(19, sets.last(1, 47))
+        assertEquals(46, sets.last(4, 47))
+        assertEquals(40L..46L, sets.numbers(4, 47))
+        assertTrue(sets.numbers(5, 47).isEmpty())
+        assertTrue(sets.isLast(4, 47))
+        assertFalse(sets.isLast(3, 47))
+        assertTrue(sets.isContinue(10))
+        assertFalse(sets.isContinue(0))
+        assertFalse(sets.isContinue(11))
+        assertEquals("QBlockSets(MAX_PAYLOADS=10)", sets.toString())
+        assertFailsWith<IllegalArgumentException> { QBlockSets(0) }
+    }
+
+    @Test
+    fun receivedBlocksTrackArrivalsAndGaps() {
+        val blocks = ReceivedBlocks(200)
+        assertEquals(-1, blocks.highest)
+        assertTrue(blocks.add(5))
+        assertFalse(blocks.add(5), "a duplicate")
+        assertTrue(5 in blocks)
+        assertFalse(200 in blocks)
+        assertFalse(-1 in blocks)
+        assertEquals(listOf(0L, 1L, 2L), blocks.missing(0L..199L, limit = 3))
+        assertTrue(blocks.addRange(0, 130))
+        assertFalse(blocks.addRange(0, 3))
+        assertEquals(130, blocks.firstMissing)
+        assertTrue(blocks.hasAllUpTo(129))
+        assertFalse(blocks.hasAllUpTo(130))
+        assertEquals(listOf(130L, 131L), blocks.missing(0L..131L), "full words are skipped")
+        assertEquals(listOf(199L), blocks.missing(199L..400L))
+        assertEquals(130, blocks.received)
+        assertFalse(blocks.isComplete)
+        blocks.addRange(130, 70)
+        assertTrue(blocks.isComplete)
+        assertEquals(200, blocks.firstMissing)
+        assertEquals("ReceivedBlocks(200 of 200, highest 199)", blocks.toString())
+        assertFailsWith<IllegalArgumentException> { blocks.add(200) }
+        assertFailsWith<IllegalArgumentException> { ReceivedBlocks(ReceivedBlocks.MAX_COUNT + 1) }
+    }
+
+    @Test
+    fun rfc9177Section7BodyModeFollowsTheMessageTypeAndTransport() {
+        assertEquals(BodyMode.NON, BodyMode.of(CoapMessageType.NON, isReliable = false))
+        assertEquals(BodyMode.CON, BodyMode.of(CoapMessageType.CON, isReliable = false))
+        assertEquals(BodyMode.RELIABLE, BodyMode.of(CoapMessageType.NON, isReliable = true))
+    }
+
     // ---------------------------------------------------------------- §7.2 parameters
 
     @Test
@@ -240,6 +296,23 @@ class QBlockPartsTest {
         assertEquals(4, parameters.nonMaxRetransmit)
         assertEquals(247.seconds, parameters.nonPartialTimeout)
         assertTrue("MAX_PAYLOADS=10, NON_TIMEOUT=2s, NON_RECEIVE_TIMEOUT=4s, NON_MAX_RETRANSMIT=4" in parameters.toString())
+        val timing = QBlockTiming(parameters)
+        assertEquals(listOf(4, 8, 16, 32, 64).map { it.seconds }, (0..4).map { timing.receiveWait(it) })
+        assertEquals(124.seconds, timing.receiveLadder)
+        assertEquals(247.5.seconds, timing.nonProbingWait(2.5.seconds))
+        assertEquals(247.seconds, timing.nonPartialTimeout)
+        assertEquals(10, timing.maxPayloads)
+        assertTrue(timing.toString().startsWith("QBlockTiming(TransmissionParameters("))
+    }
+
+    @Test
+    fun rfc9177Section7_2NonTimeoutRandomIsBetweenNonTimeoutAndItsRandomFactor() {
+        val timing = QBlockTiming(TransmissionParameters())
+        val random = Random(5)
+        val draws = List(200) { timing.drawNonTimeoutRandom(random) }
+        assertTrue(draws.all { it >= 2.seconds && it <= 3.seconds }, "$draws")
+        assertTrue(draws.toSet().size > 100, "spread over the range")
+        assertEquals(draws.take(3), Random(5).let { r -> List(3) { timing.drawNonTimeoutRandom(r) } }, "from the injected random")
     }
 
     @Test
@@ -253,5 +326,24 @@ class QBlockPartsTest {
         assertEquals(1.75.seconds, TransmissionParameters(ackTimeout = 500.milliseconds).nonReceiveTimeout)
         assertEquals(5.seconds, TransmissionParameters(ackRandomFactor = 2.0).nonReceiveTimeout)
         assertEquals(6.seconds, TransmissionParameters(ackTimeout = 3.seconds).nonReceiveTimeout)
-    }}
+    }
+
+    @Test
+    fun qBlockActionsDescribeThemselves() {
+        val actions = listOf(
+            QBlockAction.SendBlock(3, true, 7), QBlockAction.Send231(7, 9), QBlockAction.Send408(7, listOf(1L, 2L)),
+            QBlockAction.NoResponse(7), QBlockAction.Reject(7, CoapCode.BAD_REQUEST, "why"), QBlockAction.SendContinue(10),
+            QBlockAction.RequestMissing(listOf(block(1, false))), QBlockAction.Deliver(7, CoapMessage.build { }),
+            QBlockAction.Fail(dev.kcoap.coap.CoapException.Reason.RESET, "gone"), QBlockAction.Restart(32),
+            QBlockAction.Discard("old"), QBlockAction.Release(listOf(1, 2)), QBlockAction.Drop("dup"),
+        )
+        assertEquals(
+            listOf(
+                "SendBlock(3/1 on 7)", "Send231(9 on 7)", "Send408([1, 2] on 7)", "NoResponse(7)", "Reject(7, 4.00 Bad Request why)",
+                "SendContinue(10)", "RequestMissing(1/0/64)", "Deliver(CON 0.00 mid=0 on 7)", "Fail(RESET: gone)", "Restart(32)",
+                "Discard(old)", "Release([1, 2])", "Drop(dup)",
+            ),
+            actions.map { it.toString() },
+        )
+    }
 }
