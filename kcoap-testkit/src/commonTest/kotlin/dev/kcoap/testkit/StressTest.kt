@@ -1,5 +1,7 @@
 package dev.kcoap.testkit
 
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -13,8 +15,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 
+@OptIn(ExperimentalAtomicApi::class)
 class StressTest {
     @Test
     fun everyIterationRunsExactlyOnce() = runTest {
@@ -50,9 +54,18 @@ class StressTest {
     }
 
     @Test
+    fun anIterationThatTimesOutFailsTheRun() = runTest {
+        // A TimeoutCancellationException is a CancellationException, which would end only its worker quietly.
+        val error = assertFailsWith<AssertionError> {
+            Stress.run(iterations = 3) { withTimeout(1.milliseconds) { awaitCancellation() } }
+        }
+        assertTrue("was cancelled" in error.message!!, error.message)
+    }
+
+    @Test
     fun theBackgroundScopeEndsWithItsIteration() = runTest {
-        val lock = Mutex()
-        var cancelled = 0
+        // Counted without a lock: a cancelled coroutine cannot take a contended Mutex in its finally.
+        val cancelled = AtomicInt(0)
         Stress.run(iterations = 5, parallelism = 2) {
             val started = CompletableDeferred<Unit>()
             background.launch {
@@ -60,12 +73,12 @@ class StressTest {
                     started.complete(Unit)
                     awaitCancellation()
                 } finally {
-                    lock.withLock { cancelled++ }
+                    cancelled.addAndFetch(1)
                 }
             }
             started.await()
         }
-        assertEquals(5, cancelled)
+        assertEquals(5, cancelled.load())
     }
 
     @Test

@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The endpoint under real concurrency: [Stress] runs every test on Dispatchers.Default, a thread pool on
@@ -148,7 +148,8 @@ class ConcurrencyStressTest {
             // Registered clients got three states; refused ones a single plain response (RFC 7641 §4.1).
             assertTrue(received.all { it.size == 3 || (it.size == 1 && it.single().options.observe == null) }, "$received")
             assertTrue(highest.load() <= bound, "at most $bound observers, saw ${highest.load()}")
-            withTimeout(10.seconds) { while (gauge.observerCount > 0) delay(5) }
+            withTimeoutOrNull(10.seconds) { while (gauge.observerCount > 0) delay(5) }
+                ?: fail("${gauge.observerCount} observers still registered after their clients stopped")
         }
     }
 
@@ -205,9 +206,9 @@ class ConcurrencyStressTest {
                 }
             }
             assertEquals(0, client.endpoint.exchangeCount())
-            withTimeout(5.seconds) {
+            withTimeoutOrNull(5.seconds) {
                 while (!connections.connections().filter { !it.isAccepted }.all { it.isClosed }) delay(5)
-            }
+            } ?: fail("a connection stayed open after close() raced its setup")
         }
     }
 }

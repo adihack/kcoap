@@ -2,6 +2,7 @@ package dev.kcoap.testkit
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -55,7 +57,12 @@ public object Stress {
      * iteration gets a [StressScope] with its number and a [StressScope.background] scope that is
      * cancelled, and joined, when the iteration ends.
      *
-     * @throws AssertionError when the iterations do not finish within [timeout].
+     * An iteration that ends with a [CancellationException] of its own, such as the
+     * `TimeoutCancellationException` of a `withTimeout` in [body], fails the run: a cancelled coroutine does
+     * not fail its parent, so otherwise the run would succeed with that iteration's checks never made.
+     *
+     * @throws AssertionError when the iterations do not finish within [timeout], or an iteration was
+     *   cancelled from inside.
      * @throws IllegalArgumentException when a count is not positive or [timeout] is not positive.
      */
     public suspend fun run(
@@ -110,6 +117,10 @@ public object Stress {
         val backgroundJob = SupervisorJob(context[Job])
         try {
             coroutineScope { StressScope(index, this, CoroutineScope(context + backgroundJob)).body() }
+        } catch (e: CancellationException) {
+            // The run itself is still going, so the cancellation came from inside the iteration.
+            if (currentCoroutineContext().isActive) throw AssertionError("Iteration $index was cancelled: ${e.message}", e)
+            throw e
         } finally {
             withContext(NonCancellable) { backgroundJob.cancelAndJoin() }
         }

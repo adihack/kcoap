@@ -18,7 +18,8 @@ applications built on it.
   listener reports the identities it is given.
 - `Stress`: concurrency stress tests on real threads. `Stress.run` repeats a body a bounded number of
   times on `Dispatchers.Default`, several iterations at once, within a real-time timeout, and gives each
-  iteration a `background` scope that ends with it; `Stress.race` starts several actions at the same
+  iteration a `background` scope that ends with it. An iteration that fails, or is cancelled from inside
+  (a `withTimeout` in it that expires), fails the run. `Stress.race` starts several actions at the same
   moment and keeps each outcome. On the JVM and Kotlin/Native that is a thread pool; on JS and Wasm the
   event loop, so the same common test still interleaves at suspension points.
 
