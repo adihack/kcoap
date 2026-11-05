@@ -49,8 +49,8 @@ WP-A3 (the EDHOC-OSCORE glue on SPIs and the application model) later updated ed
 edhoc-oscore-5, edhoc-oscore-x5, kmp-6, kmp-x3, architecture-1 and architecture-4; no status changed.
 
 The project documents (the Apache-2.0 license, the DCO, the community files, the documentation hub and
-the versioning policy) later updated architecture-5, architecture-x4 and testing-cicd-7, and moved
-architecture-x4 from Partial to Done; the summary counts include that.
+the versioning policy) later updated architecture-5, architecture-x4, testing-cicd-7 and testing-cicd-8,
+and moved architecture-x4 from Partial to Done; the summary counts include that.
 
 No build or test ran for this document. The evidence is the source tree, the JUnit results under
 `*/build/test-results`, the Kover report `build/reports/kover/report.xml` (`scripts/coverage-summary`),
@@ -270,7 +270,7 @@ Files: [testing.md](testing.md), [interop/README.md](../interop/README.md), [scr
 | testing-cicd-5 | One command for unit tests, one for interop (building the images), documented | Partial | [scripts/test](../scripts/test) `unit`, `interop`, `coverage`, `apple`, `all` (`1d95636`), documented in README and [testing.md](testing.md). | Interop can pass without running: `build_images \|\| true` plus JUnit assumptions skip silently, and jvmTest is cacheable outside kcoap-coap. Next: a strict mode that fails on skips, and no caching for interop tasks. |
 | testing-cicd-6 | GitHub CI: Linux (JVM, native, JS, Wasm), macOS (iOS simulator, macOS), interop, coverage report | Done | [ci.yml](../.github/workflows/ci.yml) jobs unit, interop, apple and docs; run 41949553396 at `f0dc39d` green (counts above); the coverage table goes to the step summary. | Browsers are not tested; CI coverage is unit-only; hygiene in testing-cicd-x4. |
 | testing-cicd-7 | GitHub CD: release from tags, Maven Central and GitHub Packages, signing, release notes, API docs | Partial | [release.yml](../.github/workflows/release.yml) (`1d95636`, `0faabe0`), `kcoap.publishing.gradle.kts`, [releasing.md](releasing.md) with the release freeze and a 0.1.0 checklist (`05aa66c`). | Never run: no tag, no release, Pages not enabled. The license is in every POM now (architecture-x4); the `dev.kcoap` namespace waits for the owner's DNS verification, and there are no signing secrets. |
-| testing-cicd-8 | History authored as Adrian Soltys, pushed to github.com/adihack/kcoap | Done | Every commit is authored and committed by Adrian Soltys; `origin` is adihack/kcoap; `f0dc39d` is the remote branch head and PR #1's head. | When written, `05aa66c` was not pushed; `main` holds only the skeleton; PR #1 is a draft; commits are unsigned. |
+| testing-cicd-8 | History authored as Adrian Soltys, pushed to github.com/adihack/kcoap | Done | Every commit is authored and committed by Adrian Soltys; `origin` is adihack/kcoap; `f0dc39d` is the remote branch head and PR #1's head. | When written, `05aa66c` was not pushed; `main` holds only the skeleton; PR #1 is a draft; commits carry no GPG or SSH signature, and those up to the DCO baseline (`.github/dco-baseline`) carry no Signed-off-by. |
 | testing-cicd-x1 | OSCORE cross-tests beyond the basics: the core-wg test spec (libcoap `oscore_testcases.sh`), the byte-exact oracle, and a run through libcoap as an OSCORE-unaware proxy, both roles | To do | Listed as todo in rfc-compliance.md and [interop/README.md](../interop/README.md). | Start with the test spec in both roles. |
 | testing-cicd-x2 | Interop under network impairment (loss, duplication, reordering) | To do | Impairment exists only in the in-memory network. | A netem or proxy layer between kcoap and libcoap or libedhoc. |
 | testing-cicd-x3 | Cross-tests for each CoAP feature as it lands: Q-Block, multicast, proxying and caching, Hop-Limit, server Echo | Partial | Q-Block landed with its cross-tests in both roles (K1–K12, L1–L12, soaks; testing-cicd-3), and server Echo with `LibcoapClientAgainstKcoapAddressVerificationTest` and L12. | Multicast, proxying and caching, Hop-Limit do not exist yet. Make a libcoap cross-test part of each feature's definition of done. |
@@ -294,10 +294,11 @@ Files: [testing.md](testing.md), [interop/README.md](../interop/README.md), [scr
   RFC 8032 and RFC 9529 trace tests verify the signature there instead of comparing bytes.
 - Stale or conflicting docs: rfc-compliance.md marks RFC 8949 §4.2 and RFC 9052/9053 as todo while
   roadmap.md says CBOR and COSE are done; rfc-compliance.md marks RFC 7641, 7959, 8132 and 7967 as done,
-  while coap-core-11, coap-core-12, coap-core-14 and coap-core-15 here are Partial (the README's protocol
-  table follows the rows here); interop/README.md
-  claims a replay-error case the test does not assert; CipherSuite.kt and kcoap-edhoc/README.md say no
-  backend has Ed448, though cryptography-kotlin 0.6.0 and Bouncy Castle do;
+  while coap-core-11, coap-core-12, coap-core-14 and coap-core-15 here are Partial, marks RFC 9528
+  Appendix A.2.1 and RFC 9668 §3 as done, while edhoc-oscore-2 and edhoc-oscore-4 are Partial, and marks
+  RFC 8768 as todo, while coap-core-17 is Partial (the README's protocol table follows the rows here);
+  interop/README.md claims a replay-error case the test does not assert; CipherSuite.kt and
+  kcoap-edhoc/README.md say no backend has Ed448, though cryptography-kotlin 0.6.0 and Bouncy Castle do;
   CHANGELOG.md lists Hop-Limit as added, though only the option is registered (coap-core-17).
 - [target-architecture.md](target-architecture.md) orders refactoring work packages (WP-A1, WP-T1, …)
   and roadmap features (E1–E11); rows name them where they match. Q-Block is planned in

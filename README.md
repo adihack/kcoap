@@ -27,8 +27,8 @@
 
 kcoap™ is CoAP, OSCORE and EDHOC for Kotlin Multiplatform: one implementation, in common Kotlin, for
 Android, iOS, JVM servers, Linux gateways, browsers and Node.js. It aims at complete compliance with the
-published RFCs and checks each part against the RFCs' own test vectors and in live interop with
-libcoap, whose maintainers include RFC authors, and libedhoc.
+published RFCs and checks its parts against the RFCs' own test vectors where they exist and in live
+interop with libcoap, whose maintainers include RFC authors, and libedhoc.
 
 ## Highlights
 
@@ -39,9 +39,9 @@ libcoap, whose maintainers include RFC authors, and libedhoc.
   TCP, WebSockets, OSCORE, Q-Block), and as Initiator and as Responder against libedhoc, for every suite
   and method both implement. The upstream deviations found on the way are listed in
   [interop](interop/README.md) and pinned by tests where they can be.
-- **Post-quantum EDHOC.** The KEM-based suite -24 (ML-KEM-512, ML-DSA-44) of
-  draft-ietf-lake-pqsuites runs on the JVM and Android, on ML-KEM and ML-DSA checked against NIST's ACVP
-  vectors, and live against libedhoc's liboqs build in both roles.
+- **Post-quantum EDHOC.** The KEM-based key exchange of draft-ietf-lake-pqsuites, as libedhoc's
+  private suite -24 (ML-KEM-512, ML-DSA-44), runs on the JVM and Android, on ML-KEM and ML-DSA checked
+  against NIST's ACVP vectors, and live against libedhoc's liboqs build in both roles.
 - **Q-Block (RFC 9177).** Client and server, with Observe and under OSCORE, over UDP, TCP and
   WebSockets. Every figure of the RFC replays as a test on virtual time, and soaks run at 10 % and 30 %
   loss. Off by default ([ADR 0006](docs/adr/0006-q-block.md)).
@@ -60,7 +60,7 @@ States follow [docs/checklist.md](docs/checklist.md), which names every open ite
 
 | Protocol | RFC | State | Verified by |
 |---|---|---|---|
-| CoAP over UDP: messaging, client and server, options, URIs, conditional requests | 7252 | partial: caching (§5.6), proxying (§5.7) and multicast (§8) to do; DTLS (§9) last | per-section unit tests and end-to-end runs on a simulated lossy network; libcoap both directions |
+| CoAP over UDP: messaging, client and server, options, URIs, conditional requests | 7252 | partial: caching (§5.6), proxying (§5.7) and multicast (§8) to do; option-length checks (§5.4.3) and dot-segment removal in URIs (§5.10.1) open; DTLS (§9) last | per-section unit tests and end-to-end runs on a simulated lossy network; libcoap both directions |
 | Link format, `/.well-known/core` | 6690 | done | RFC 6690 §5 examples; libcoap discovery both directions |
 | Observe | 7641 | partial: the Content-Format of notifications and 4.06 (§4.2) to do | `ObserveTest`; libcoap over UDP, TCP and WebSockets |
 | Block-wise transfers | 7959 | partial: inner Block-wise only; If-None-Match is repeated after the first Block1 block (§2.10) | `BlockwiseTest`; libcoap both directions |
@@ -69,11 +69,11 @@ States follow [docs/checklist.md](docs/checklist.md), which names every open ite
 | No-Response | 7967 | partial: the server is done; the client still waits for its timeout | `RequestResponseTest`, `EdgeCaseTest` |
 | Echo, Request-Tag | 9175 | partial: address verification against amplification done; server freshness checks (§2.3) to do | `MessageSecurityTest`, `BlockwiseTest`, `AmplificationTest`; libcoap |
 | Hop-Limit | 8768 | partial: the option and 5.08 exist; the processing belongs to proxies, which kcoap does not have yet | `CoapModelTest` |
-| CoAP over TCP and WebSockets: CSM, Ping/Pong, Release, Abort, BERT, Observe | 8323 | done, except TLS for `coaps+tcp` | RFC 8323 figures byte for byte; in-memory and loopback tests; libcoap both directions over TCP and WebSockets |
-| OSCORE | 8613 | partial: Outer Block-wise, protected signaling over TCP, proxies, HTTP and Appendix B.2 to do | every Appendix C vector byte for byte; libcoap both directions, raw and through the stack |
+| CoAP over TCP and WebSockets: CSM, Ping/Pong, Release, Abort, BERT, Observe | 8323 | partial: TLS for `coaps+tcp` to do; `coaps+ws` on the ktor engine's TLS, not cross-tested | RFC 8323 figures byte for byte; in-memory and loopback tests; libcoap both directions over TCP and WebSockets |
+| OSCORE | 8613 | partial: Outer Block-wise, protected signaling over TCP, proxies, HTTP and Appendix B.2 to do; nonce reuse after sequence-number exhaustion (§7.2.1) open | every Appendix C vector byte for byte; libcoap both directions, raw and through the stack |
 | EDHOC: methods 0–3, suites 0–6 and 24 | 9528 | partial: suite 25, CWT and C509 credentials, and the Initiator's C_R = C_I check to do | both RFC 9529 traces byte for byte, all §4 invalid messages; libedhoc both roles |
-| Post-quantum EDHOC: KEM-based suite -24 | draft-ietf-lake-pqsuites §3 | done (JVM, Android) | round trips with real ML-KEM and ML-DSA; libedhoc (liboqs) both roles |
-| EDHOC over CoAP, EDHOC→OSCORE, combined request | 9528 App. A, 9668 | partial: forward flow and combined request done; reverse flow (App. A.2.2) to do; no independent peer yet | RFC 9668 Figure 4 byte for byte; full-stack tests |
+| Post-quantum EDHOC: KEM-based key exchange (private suite -24) | draft-ietf-lake-pqsuites §3 | done (JVM, Android) | round trips with real ML-KEM and ML-DSA; libedhoc (liboqs) both roles |
+| EDHOC over CoAP, EDHOC→OSCORE, combined request | 9528 App. A, 9668 | partial: forward flow and combined request work end to end, with MUSTs still missing (the client's EDHOC error on a failed message_2 or message_4, the sequential fallback for a large COMB_PAYLOAD, Outer Block1 reassembly); reverse flow (App. A.2.2) to do; no independent peer yet | RFC 9668 Figure 4 byte for byte; full-stack tests |
 | ML-KEM, ML-DSA | FIPS 203, 204 | done (JVM, Android) | NIST ACVP vectors |
 | DTLS 1.2 | 6347, 7925, 9146 | interfaces only; the engine comes last | — |
 
@@ -280,9 +280,9 @@ scripts/test all        # unit, interop and coverage
 ```
 
 Extra arguments go to Gradle (`scripts/test interop --tests '*Oscore*'`), and every run ends with a
-table of tests per target. CI runs the same suites on Linux and macOS for every push and pull request;
-a `v*` tag publishes a release ([releasing](docs/releasing.md)). Details, including what each suite
-covers, are in [testing](docs/testing.md).
+table of tests per target. CI runs the same suites on Linux and macOS for every push to `main` and every
+pull request; a `v*` tag publishes a release ([releasing](docs/releasing.md)). Details, including what
+each suite covers, are in [testing](docs/testing.md).
 
 Test vectors are generated from the RFC texts and NIST files by `tools/regen-vectors.sh` and
 `tools/regen-pq-vectors.sh`.
