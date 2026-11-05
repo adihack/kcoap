@@ -18,10 +18,13 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocPeerErrorException
 import dev.kcoap.edhoc.EdhocRole
+import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.oscore.OscoreClient
 import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.OscoreServer
+import dev.kcoap.oscore.SecurityContext
+import dev.kcoap.oscore.SecurityContextParameters
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -92,6 +95,32 @@ class EdhocOscoreTest {
         assertTrue(one.description.startsWith("EDHOC AuthenticationCredential(CCS"), one.description)
         assertTrue(one.description.endsWith("OSCORE rid=05"), one.description)
         assertEquals(one.description, one.toString())
+    }
+
+    @Test
+    fun adr0008PeerSecurityFailsClosedForAServerWithoutAProtection() = runTest {
+        val (clientContext, _) = contextPair()
+        val security = PeerSecurity()
+
+        val failure = assertFailsWith<MessageSecurityException> { security.protectRequest(request("lights"), peer) }
+        assertEquals("No message security installed for $peer", failure.message)
+        assertNull(security.protectRequest(request(".well-known/edhoc"), peer), "the EDHOC resource goes unprotected")
+
+        security.install(peer, OscoreClient(clientContext))
+        assertNotNull(security.protectRequest(request("lights"), peer)!!.message.options.oscore)
+        security.remove(peer)
+        assertFailsWith<MessageSecurityException>("removed, so closed again") { security.protectRequest(request("lights"), peer) }
+
+        val opportunistic = PeerSecurity(allowUnprotected = true)
+        assertNull(opportunistic.protectRequest(request("lights"), peer), "plaintext only when allowed explicitly")
+    }
+
+    /** A matching client and server context, without EDHOC. */
+    private suspend fun contextPair(): Pair<SecurityContext, SecurityContext> {
+        val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
+        val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto, EphemeralSequenceNumberStore())
+        val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a)), crypto, EphemeralSequenceNumberStore())
+        return client to server
     }
 
     @Test

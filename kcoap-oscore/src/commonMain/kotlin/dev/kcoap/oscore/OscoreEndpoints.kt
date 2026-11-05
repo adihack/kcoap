@@ -18,7 +18,11 @@ import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Chooses the security context for an outgoing request, or null to send it unprotected. */
+/**
+ * Chooses the security context for an outgoing request. Null means no context: [OscoreClient] then fails the
+ * request with [MessageSecurityException] unless it was built with `allowUnprotected`, when null sends the
+ * request in plaintext (ADR 0008).
+ */
 public fun interface ClientContextResolver {
     public suspend fun contextFor(peer: Endpoint, request: CoapMessage): SecurityContext?
 }
@@ -136,10 +140,18 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * request alike, and the stack acts on nothing in them: it ends a request that has no verified response yet,
  * and an established observation ignores them (ADR 0008). Any other unprotected response is dropped like one
  * that fails verification.
+ *
+ * **No context.** A request for which [contexts] returns null fails with [MessageSecurityException] before
+ * anything is sent, so a missing context never sends plaintext silently. With [allowUnprotected], null sends
+ * the request unprotected instead, for a client that talks OSCORE to some servers and plain CoAP to others.
+ *
+ * @param allowUnprotected whether a request [contexts] finds no context for goes out unprotected; false by
+ *   default, which fails it.
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
     loggerFactory: LoggerFactory = LoggerFactory.Global,
+    private val allowUnprotected: Boolean = false,
 ) : ClientMessageSecurity {
     private val log = loggerFactory.logger(LogTags.OSCORE).child("client")
 
@@ -148,7 +160,7 @@ public class OscoreClient(
         this(ClientContextResolver { _, _ -> context }, loggerFactory)
 
     override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
-        val context = contexts.contextFor(peer, request) ?: return null
+        val context = contexts.contextFor(peer, request) ?: return noContext(request, peer)
         val (protected, binding) = try {
             OscoreProtection.protectRequest(context, request)
         } catch (e: OscoreException) {
@@ -156,6 +168,16 @@ public class OscoreClient(
         }
         log.debug { "Protected ${request.code} for $peer with $context, piv=${binding.requestPiv.toHex()}" }
         return ClientExchange(protected, binding)
+    }
+
+    /** No context for [request]: plaintext when [allowUnprotected] says so, otherwise a failure (fail closed). */
+    private fun noContext(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
+        if (allowUnprotected) {
+            log.debug { "No OSCORE context for ${request.code} ${request.options.path} to $peer; sent unprotected" }
+            return null
+        }
+        log.warn { "No OSCORE context for ${request.code} ${request.options.path} to $peer; not sent" }
+        throw MessageSecurityException("No OSCORE context for $peer")
     }
 
     private inner class ClientExchange(

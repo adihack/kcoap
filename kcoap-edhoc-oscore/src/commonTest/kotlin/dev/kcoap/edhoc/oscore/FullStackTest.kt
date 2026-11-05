@@ -7,6 +7,7 @@ import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
@@ -27,6 +28,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -90,8 +92,8 @@ class FullStackTest {
         val base = "coap://${address.host}:${address.port}"
         val serverUri = CoapUri.parse(base)
 
-        // Without a protection installed, the request goes unprotected and is refused, as a plain client's is.
-        assertEquals(CoapCode.UNAUTHORIZED, client.get("$base/lights").code, "no OSCORE yet")
+        // Without a protection installed, PeerSecurity sends nothing rather than plaintext; a plain client is refused.
+        assertFailsWith<MessageSecurityException>("no OSCORE yet") { client.get("$base/lights") }
         val plain = CoapClient(network.attach(), backgroundScope, endpointConfig = endpointConfig)
         assertEquals(CoapCode.UNAUTHORIZED, plain.get("$base/lights").code)
         assertEquals(emptyList(), lightsSeenBy, "the handler never ran for it")

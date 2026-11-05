@@ -25,7 +25,16 @@ import dev.kcoap.transport.Endpoint
  * is unchanged.
  */
 public interface ClientMessageSecurity {
-    /** Protects [request] for [peer], or returns null to send it unprotected. */
+    /**
+     * Protects [request] for [peer], or returns null to send it unprotected.
+     *
+     * Null is plaintext on the wire, so an implementation returns it only where its configuration says so
+     * explicitly, such as the EDHOC resource or an opt-in like kcoap-oscore's `allowUnprotected`. One that is
+     * meant to protect [peer] and cannot, because no context or protection is installed for it, throws
+     * [MessageSecurityException] instead, which fails the request before anything is sent (ADR 0008).
+     *
+     * @throws MessageSecurityException when the request must be protected and cannot be.
+     */
     public suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest?
 }
 

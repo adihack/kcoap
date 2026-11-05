@@ -160,6 +160,21 @@ class OscoreEndToEndTest {
     }
 
     @Test
+    fun adr0008AClientWithoutAContextForTheRequestFailsClosedUnlessToldOtherwise() = runTest {
+        val (clientContext, _) = pair()
+        val other = Endpoint.Udp("192.0.2.9", 5683)
+        val resolver = ClientContextResolver { target, _ -> clientContext.takeIf { target == peer } }
+
+        val failure = assertFailsWith<MessageSecurityException> { OscoreClient(resolver, loggers).protectRequest(request(), other) }
+        assertEquals("No OSCORE context for $other", failure.message)
+        assertNotNull(OscoreClient(resolver, loggers).protectRequest(request(), peer), "a request with a context is protected")
+
+        val opportunistic = OscoreClient(resolver, loggers, allowUnprotected = true)
+        assertNull(opportunistic.protectRequest(request(), other), "plaintext only when allowed explicitly")
+        assertNotNull(opportunistic.protectRequest(request(), peer))
+    }
+
+    @Test
     fun adr0008AVerifiedRequestCarriesItsContextsIdentity() = runTest {
         val secret = "0102030405060708090a0b0c0d0e0f10".hexToBytes()
         val named = object : SecurityIdentity {
@@ -271,8 +286,8 @@ class OscoreEndToEndTest {
     }
 
     @Test
-    fun resolverMayDeclineToProtect() = runTest {
-        val client = OscoreClient(ClientContextResolver { _, _ -> null })
+    fun resolverMayDeclineToProtectWhereUnprotectedRequestsAreAllowed() = runTest {
+        val client = OscoreClient(ClientContextResolver { _, _ -> null }, allowUnprotected = true)
         assertNull(client.protectRequest(request(), peer))
     }
 
