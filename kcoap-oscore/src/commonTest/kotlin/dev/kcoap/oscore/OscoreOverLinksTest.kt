@@ -1,7 +1,6 @@
 package dev.kcoap.oscore
 
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.ContentFormat
@@ -15,6 +14,7 @@ import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.crypto.backend.DefaultCryptoBackend

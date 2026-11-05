@@ -2,7 +2,6 @@ package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.ContentFormat
 import kotlin.time.Duration

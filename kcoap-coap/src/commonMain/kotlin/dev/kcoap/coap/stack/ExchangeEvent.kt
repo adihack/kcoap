@@ -1,6 +1,5 @@
 package dev.kcoap.coap.stack
 
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 
 /** What an exchange in [ResponseMode.Inbox] reports to its [ExchangeInbox]. */

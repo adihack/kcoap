@@ -2,7 +2,6 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
@@ -11,6 +10,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.LinkCapabilities
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.ClientExchange

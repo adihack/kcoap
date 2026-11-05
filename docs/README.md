@@ -68,7 +68,8 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [kcoap-transport-ktor-websocket](../kcoap-transport-ktor-websocket/README.md) | The WebSocket client transport, browsers included |
 | [kcoap-transport-ktor-websocket-server](../kcoap-transport-ktor-websocket-server/README.md) | The WebSocket server transport, standalone or mounted in a ktor application |
 | [kcoap-testkit](../kcoap-testkit/README.md) | The in-memory network and connections for tests of kcoap and of applications |
-| [kcoap-coap](../kcoap-coap/README.md) | CoAP messages, codecs, the endpoint, `CoapClient` and `CoapServer` |
+| [kcoap-coap-message](../kcoap-coap-message/README.md) | CoAP messages, options, URIs, link format, the codecs and the message-security SPI, without the stack |
+| [kcoap-coap](../kcoap-coap/README.md) | The CoAP endpoint, `CoapClient` and `CoapServer`, on kcoap-coap-message |
 | [kcoap-oscore](../kcoap-oscore/README.md) | OSCORE: what is implemented and what verifies it |
 | [kcoap-edhoc](../kcoap-edhoc/README.md) | EDHOC Initiator and Responder as sans-IO state machines, suites and credentials |
 | [kcoap-edhoc-oscore](../kcoap-edhoc-oscore/README.md) | EDHOC over CoAP, EDHOC→OSCORE and the combined request |

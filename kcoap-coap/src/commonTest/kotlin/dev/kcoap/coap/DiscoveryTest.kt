@@ -5,6 +5,7 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceAttributes
+import dev.kcoap.coap.stack.CoapException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -15,63 +16,6 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 class DiscoveryTest {
-    @Test
-    fun rfc6690Section5ExamplesSerializeAndParse() {
-        // The RFC 6690 §5 example document, without the line feeds.
-        val text = "</sensors>;ct=40;title=\"Sensor Index\"," +
-            "</sensors/temp>;rt=\"temperature-c\";if=\"sensor\"," +
-            "</sensors/light>;rt=\"light-lux\";if=\"sensor\"," +
-            "<http://www.example.com/sensors/t123>;anchor=\"/sensors/temp\";rel=\"describedby\"," +
-            "</t>;anchor=\"/sensors/temp\";rel=\"alternate\""
-        val links = LinkFormat.parse(text)
-        assertEquals(5, links.size)
-        assertEquals("/sensors", links[0].target)
-        assertEquals(listOf(40), links[0].contentFormats)
-        assertEquals("Sensor Index", links[0].title)
-        assertEquals(listOf("temperature-c"), links[1].resourceTypes)
-        assertEquals(listOf("sensor"), links[1].interfaces)
-        assertEquals("/sensors/temp", links[3]["anchor"])
-        assertEquals(text, LinkFormat.serialize(links))
-        assertEquals(links, LinkFormat.parse(LinkFormat.serialize(links)))
-    }
-
-    @Test
-    fun linkFormatHandlesFlagsSpacesEscapesAndCommasInQuotes() {
-        val links = LinkFormat.parse(" </a>;obs;sz=262144 , </b> ; title=\"x, \\\"y\\\"\";rt=\"one two\";ct=\"0 40\" ")
-        assertTrue(links[0].isObservable)
-        assertEquals(262144L, links[0].maximumSize)
-        assertNull(links[0]["obs"])
-        assertEquals("x, \"y\"", links[1].title)
-        assertEquals(listOf("one", "two"), links[1].resourceTypes)
-        assertEquals(listOf(0, 40), links[1].contentFormats)
-        assertEquals("</b>;title=\"x, \\\"y\\\"\";rt=\"one two\";ct=\"0 40\"", links[1].toString())
-        assertEquals(emptyList(), LinkFormat.parse("  "))
-        assertEquals(null, LinkFormat.parse("</big>;sz=99999999999999999999")[0].maximumSize)
-        assertEquals(links[0], LinkFormat.parse("</a>;obs;sz=262144")[0])
-        assertEquals(links[0].hashCode(), LinkFormat.parse("</a>;obs;sz=262144")[0].hashCode())
-        for (broken in listOf("<a", "</a>;", "</a> x", "</a>;t=\"open", "</a>;t=\"\\", "a")) {
-            assertFailsWith<IllegalArgumentException>(broken) { LinkFormat.parse(broken) }
-        }
-    }
-
-    @Test
-    fun rfc6690Section4_1QueryFiltering() {
-        val links = LinkFormat.parse("</sensors/temp>;rt=\"temperature-c\";if=\"sensor\",</sensors/light>;rt=\"light-lux core.sen-light\";if=\"sensor\",</fw>;sz=262144;obs")
-        fun targets(vararg query: String) = LinkFormat.filter(links, query.toList()).map { it.target }
-        assertEquals(listOf("/sensors/light"), targets("rt=light-lux"))
-        assertEquals(listOf("/sensors/light"), targets("rt=core.sen-light"), "each relation-type value matches alone")
-        assertEquals(listOf("/sensors/temp", "/sensors/light"), targets("if=sensor"))
-        assertEquals(listOf("/sensors/temp", "/sensors/light"), targets("href=/sensors*"))
-        assertEquals(listOf("/fw"), targets("href=/fw"))
-        assertEquals(listOf("/sensors/temp"), targets("rt=temp*"))
-        assertEquals(listOf("/fw"), targets("sz=*"))
-        assertEquals(listOf("/fw"), targets("obs"))
-        assertEquals(listOf("/fw"), targets("sz=262144"))
-        assertEquals(emptyList(), targets("rt=nothing"))
-        assertEquals(listOf("/sensors/light"), targets("if=sensor", "rt=light*"))
-        assertEquals(links, LinkFormat.filter(links, emptyList()))
-    }
-
     @Test
     fun rfc6690Section4WellKnownCoreListsTheDiscoverableResources() = runTest {
         val fixture = StackFixture(this)
@@ -194,26 +138,7 @@ class DiscoveryTest {
     }
 
     @Test
-    fun modelTypesValidateAndRender() {
-        val response = CoapResponse.content("hi")
-        assertEquals("2.05 Content [Content-Format: 0] 2 bytes", response.toString())
-        assertEquals(response, CoapResponse.of(response.toMessage(byteArrayOf(1))))
-        assertEquals(response.hashCode(), CoapResponse.content("hi").hashCode())
-        assertFalse(response == CoapResponse.content("ho"))
-        assertTrue(response.isSuccess)
-        assertEquals(CoapCode.CONTENT, CoapResponse.content(byteArrayOf(1)).code)
-        assertNull(CoapResponse.content(byteArrayOf(1)).contentFormat)
-        assertEquals(CoapCode.DELETED, CoapResponse.deleted().code)
-        assertEquals("4.04 Not Found", CoapResponse.error(CoapCode.NOT_FOUND).toString())
-        assertFailsWith<IllegalArgumentException> { CoapResponse(CoapCode.GET) }
-        assertFailsWith<IllegalArgumentException> { CoapResponse.error(CoapCode.CONTENT) }
-
-        val request = CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/x")).payload("body").accept(50).nonConfirmable().build()
-        assertEquals("0.02 POST coap://[::1]/x [Accept: 50] 4 bytes NON", request.toString())
-        assertEquals(request.toString(), request.toBuilder().build().toString())
-        assertEquals(4, request.payloadSize)
-        assertFailsWith<IllegalArgumentException> { CoapRequest(CoapCode.CONTENT, CoapUri.parse("coap://[::1]/x")) }
-
+    fun resourceAttributesValidateAndRender() {
         val attributes = ResourceAttributes(title = "t")
         assertTrue(attributes.toString().contains("title"))
         assertFailsWith<IllegalArgumentException> { ResourceAttributes(contentFormats = listOf(70000)) }

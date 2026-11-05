@@ -10,6 +10,7 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.testkit.DatagramFate
 import dev.kcoap.transport.DatagramEvent

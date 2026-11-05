@@ -349,7 +349,7 @@ class QBlockPartsTest {
             QBlockAction.SendBlock(3, true, 7), QBlockAction.Send231(7, 9), QBlockAction.Send408(7, listOf(1L, 2L)),
             QBlockAction.NoResponse(7), QBlockAction.Reject(7, CoapCode.BAD_REQUEST, "why"), QBlockAction.SendContinue(10),
             QBlockAction.RequestMissing(listOf(block(1, false))), QBlockAction.Deliver(7, CoapMessage.build { }),
-            QBlockAction.Fail(dev.kcoap.coap.CoapException.Reason.RESET, "gone"), QBlockAction.Restart(32),
+            QBlockAction.Fail(CoapException.Reason.RESET, "gone"), QBlockAction.Restart(32),
             QBlockAction.Discard("old"), QBlockAction.Release(listOf(1, 2)), QBlockAction.Drop("dup"),
         )
         assertEquals(

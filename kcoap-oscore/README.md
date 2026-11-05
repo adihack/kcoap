@@ -30,6 +30,31 @@ Both plug into the CoAP stack through `dev.kcoap.coap.security` (`ClientMessageS
 `ServerMessageSecurity`), at the place RFC 8613 Figure 1 puts OSCORE: below Block-wise and Observe,
 above retransmission and deduplication.
 
+The module depends on [kcoap-coap-message](../kcoap-coap-message/README.md) (the message model, the option
+codec and that SPI), not on the endpoint stack: OSCORE's API carries no `CoapEndpoint`, `CoapClient` or
+`CoapServer`, so a proxy, a gateway or another CoAP stack can call `OscoreClient` and `OscoreServer` on
+`CoapMessage`s of its own. An application that runs OSCORE through kcoap's client and server adds
+[kcoap-coap](../kcoap-coap/README.md) to its dependencies.
+
+This module verifies, decrypts and reports; kcoap-coap's client and server act on what it reports. So the
+fail-closed rules below and the freshness check of Appendix B.1.2 hold only through them. A caller that uses
+`OscoreClient` and `OscoreServer` without kcoap-coap takes over these duties of the SPI, which the KDoc in
+[`MessageSecurity.kt`](../kcoap-coap-message/src/commonMain/kotlin/dev/kcoap/coap/security/MessageSecurity.kt)
+and [`ResponseVerification.kt`](../kcoap-coap-message/src/commonMain/kotlin/dev/kcoap/coap/security/ResponseVerification.kt)
+states, or OSCORE fails open:
+
+1. When `UnprotectedRequest.challenge` is not null, send `protectResponse(challenge)` and never process
+   `message`: its context cannot yet tell a fresh request from a replay (RFC 8613 §7.4, Appendix B.1.2).
+2. Treat null from `unprotectRequest` as an unauthenticated request, and refuse it unless the resource is
+   meant to be public (ADR 0008).
+3. Act only on `ResponseVerification.Verified`. On `Unverified`, never repeat the request (not even for an
+   Echo option), continue a body or end an observation: anyone on the path can send one, and a repeat runs a
+   non-idempotent request twice (RFC 8613 §8.2).
+4. Assign the token and the Message ID before `protectRequest`, and keep them: OSCORE protects neither, and
+   responses are matched by token.
+5. Protect every response to a request, each notification and each Q-Block block included, with the same
+   `UnprotectedRequest`, and verify every response to a request with the same `ProtectedRequest`.
+
 `OscoreServer` finds contexts through the `SecurityContextRepository` SPI (`find` by Recipient ID and ID
 Context). `MutableSecurityContextRepository` adds `add`, `addIfAbsent` and `remove`, for contexts that come
 and go while the server runs: kcoap-edhoc-oscore's `EdhocServer` adds one per completed handshake.
@@ -38,7 +63,8 @@ one with a bound, since an evicted client only runs EDHOC again: on 4.01 "Securi
 4.00 "Decryption failed" once the server gave its Recipient ID to another client. `remove(context)` removes
 that very context only, so a late removal never takes out a newer context under the same Recipient ID.
 
-Both fail closed ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)):
+Through kcoap-coap's client and server, both fail closed
+([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)):
 
 - `OscoreClient` fails a request its `ClientContextResolver` finds no context for with
   `MessageSecurityException`; `OscoreClient(resolver, allowUnprotected = true)` sends such requests in

@@ -13,6 +13,7 @@ import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.test.Test

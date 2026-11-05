@@ -1,5 +1,6 @@
 package dev.kcoap.coap
 
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.testkit.InMemoryConnections
 import dev.kcoap.testkit.InMemoryLink
 import dev.kcoap.testkit.InMemoryNetwork

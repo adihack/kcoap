@@ -18,12 +18,20 @@ kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default ── kcoap-
               │                   ├─ kcoap-transport-ktor-websocket ── kcoap-transport-ktor-websocket-server
               │                   ├─ kcoap-testkit
               │                   └─ kcoap-dtls
-              └─ kcoap-coap ── kcoap-oscore ──┬── kcoap-edhoc-oscore
-                       kcoap-edhoc (cbor, cose, crypto) ─┘
+              └─ kcoap-coap-message ─┬─ kcoap-coap ─────────────────────┐
+                    (transport)      └─ kcoap-oscore (cose, crypto) ────┼── kcoap-edhoc-oscore
+                                      kcoap-edhoc (cbor, cose, crypto) ─┘
 ```
 
 Protocol modules depend on SPIs, never on a backend or transport: applications choose
 `kcoap-crypto-default` or `kcoap-crypto-bc`, and `kcoap-transport-ktor` or their own transport.
+
+`kcoap-coap-message` is CoAP's wire vocabulary: the message model, options, URIs, link format, the codecs and
+the message-security SPI, with no coroutines. `kcoap-coap` builds the endpoint stack on it and exports it
+(`api`), so an application that uses the stack needs nothing else. `kcoap-oscore` depends on the vocabulary
+only, not on the stack, so the compiler keeps OSCORE independent of the endpoint, and OSCORE can protect the
+messages of another stack, a proxy or a gateway. `kcoap-edhoc-oscore` needs both, because `EdhocResource` and
+`EdhocClientHandshake.over` speak to `CoapServer` and `CoapClient`.
 
 ## Where the patterns are
 
@@ -93,7 +101,8 @@ closed in both roles ([ADR 0008](adr/0008-fail-closed-message-security.md)):
 ## The CoAP endpoint as built
 
 One `CoapEndpoint` runs one exchange layer over every transport it was given, through an internal link per
-peer ([ADR 0005](adr/0005-peer-link-seam.md)). The layers map onto code like this (`kcoap-coap`):
+peer ([ADR 0005](adr/0005-peer-link-seam.md)). The layers map onto code like this (`kcoap-coap`; the
+message-security SPI, like the message model and the codecs, is in `kcoap-coap-message`):
 
 ```
 CoapClient / CoapServer       client.*, server.*: suspend calls, Flow for Observe, resource tree + DSL
@@ -708,8 +717,9 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | Module | Scope | State |
 |---|---|---|
 | `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, security interfaces | interfaces |
-| `kcoap-coap` | Message model, codecs, the endpoint with client and server over UDP and RFC 8323 connections, block-wise and BERT, Observe | UDP, TCP and WebSocket done |
-| `kcoap-oscore` | RFC 8613 behind the message-security SPI | done |
+| `kcoap-coap-message` | Message model, options, URIs, link format, the UDP and RFC 8323 codecs, the message-security SPI; no coroutines | done |
+| `kcoap-coap` | The endpoint with client and server over UDP and RFC 8323 connections, block-wise and BERT, Observe, Q-Block, `CoapException` | UDP, TCP and WebSocket done |
+| `kcoap-oscore` | RFC 8613 behind the message-security SPI, on `kcoap-coap-message` only | done |
 | `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
 | `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
 | `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |

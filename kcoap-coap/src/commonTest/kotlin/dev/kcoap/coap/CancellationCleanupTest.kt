@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpoint
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.Signal

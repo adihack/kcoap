@@ -4,7 +4,8 @@ How to serve and request CoAP resources with kcoap over UDP, TCP and WebSockets.
 compiled and run (on free ports instead of 5683) by
 `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/GuideExamplesTest.kt`.
 
-Modules: `kcoap-coap` (the stack), `kcoap-transport-ktor` (UDP and TCP sockets),
+Modules: `kcoap-coap` (the stack, which brings the message model of `kcoap-coap-message` along),
+`kcoap-transport-ktor` (UDP and TCP sockets),
 `kcoap-transport-ktor-websocket` and `kcoap-transport-ktor-websocket-server` (WebSockets), and for tests
 `kcoap-testkit` (a simulated network and in-memory connections).
 

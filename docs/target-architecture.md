@@ -673,6 +673,28 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
   - `sort(kcoap-coap.api before)` equals `sort(kcoap-coap.api after ∪ kcoap-coap-message.api)`, apart from the one `CoapException` package line.
   - Standard gate.
 
+> **Amendment (B2).** Done as listed. The moved tests are `CoapModelTest`, `CoapOptionsTest` and the three codec
+> tests, and kcoap-coap's tests of moved types that use no stack: `LinkFormatTest` (the three link-format tests
+> of `DiscoveryTest`), `SignalingOptionsTest` (the registry test of `SignalTest` and its rendering assertions
+> that need no `Signal`) and `CoapModelTest.requestsAndResponsesValidateAndRender` (the `CoapRequest` and
+> `CoapResponse` half of `DiscoveryTest.modelTypesValidateAndRender`); `MessageSecurityTypesTest` is new. Tests
+> that use the stack stay in kcoap-coap even where they cover moved types (`/.well-known/core` in
+> `DiscoveryTest`, `Signal` in `SignalTest`, and `MessageSecurityTest`, `AccessPolicyTest` and
+> `UnverifiedResponseTest` for the security SPI). The module's own tests cover 94.0% of its lines. "The one
+> `CoapException` package line" is every dump line that names `CoapException` (21 JVM, 26 klib, including
+> `CoapEndpoint.closeCause` and `awaitClosed`); with that rename the sorted dumps are equal. KDoc links from
+> moved code into kcoap-coap (`AccessPolicy`, `CoapException.Reason`) and from kcoap-oscore to `AccessPolicy`
+> became code spans. Ownership deviations: kcoap-edhoc-oscore's build file gains `api(kcoap-coap-message)`
+> next to `api(kcoap-coap)`, because its API uses `CoapRequest` and the security SPI directly
+> ([code-style.md](code-style.md#dependencies-and-api): every module declares what it imports); and one-line
+> wording fixes name kcoap-coap-message where the moved code now is, in the READMEs of kcoap-transport-ktor and
+> kcoap-transport-ktor-websocket (the framing; CSM and signaling stay in kcoap-coap) and in the KDoc of
+> `EdhocClientHandshake` (the application model). Follow-up for B3 or a later API WP: kcoap-oscore is now usable
+> without the stack, but only the stack keeps ADR 0008 and the Appendix B.1.2 freshness check, so kcoap-oscore's
+> README lists what such a caller must do. The SPI should also make the first duty hard to miss: a challenged
+> `UnprotectedRequest` should not expose its decrypted `message` (a separate challenged type, say), so a gateway
+> cannot process a possible replay by ignoring `challenge`.
+
 **WP-B3: kcoap-coap public API cleanup**
 
 - **Findings:** API-03 (1–4); API-08 (1, 7); API-10 (list copies); API-11 (3, 5, 6); U8 (1–3, 5); API-07 (2); the errors/observability findings for coap.

@@ -2,12 +2,12 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.BlockSizing
 import dev.kcoap.coap.stack.Blockwise
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.MessageLimits
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.common.ByteArrayBuilder

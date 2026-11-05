@@ -1,10 +1,10 @@
 package dev.kcoap.coap.client
 
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.ClientExchange
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.Logger

@@ -1,17 +1,17 @@
 # kcoap-coap
 
-CoAP itself: the message model and codecs, and the endpoint stack with client and server APIs for
-CoAP over UDP and over reliable transports (TCP, WebSockets; RFC 8323). Common Kotlin, no I/O of its own: transports plug in through `kcoap-transport`.
+The CoAP endpoint stack, with client and server APIs for CoAP over UDP and over reliable transports (TCP,
+WebSockets; RFC 8323). Common Kotlin, no I/O of its own: transports plug in through `kcoap-transport`.
+
+It builds on [kcoap-coap-message](../kcoap-coap-message/README.md), CoAP's wire vocabulary (the message
+model, options, URIs, link format, the codecs and the message-security SPI), and depends on it with `api`:
+an application that depends on kcoap-coap gets both, and imports the model from `dev.kcoap.coap` as before.
 
 ## Packages
 
 | Package | What |
 |---|---|
-| `dev.kcoap.coap` | `CoapMessage`, `CoapCode`, `OptionSet` and the option registry, `BlockOption`, `CoapUri`, `CoapRequest`, `CoapResponse`, `CoapException`, `LinkFormat` / `WebLink` (RFC 6690) |
-| `dev.kcoap.coap` (signaling) | `SignalingOptions`: the RFC 8323 §5.2 signaling option registry, per signaling code |
-| `dev.kcoap.coap.codec` | `UdpMessageCodec` (RFC 7252 §3), `ReliableMessageCodec` and `ReliableStreamDecoder` (RFC 8323 §3.2, §4.2) |
-| `dev.kcoap.coap.security` | The message-security SPI OSCORE implements (`kcoap-oscore`) |
-| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`; internally the exchange layer, the `PeerLink` seam with `DatagramLink` (on the sans-IO `UdpMessaging`) and `ConnectionLink` (on the sans-IO `ReliableMessaging`) |
+| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`, `CoapException` (how an exchange failed, with its `Reason`); internally the exchange layer, the `PeerLink` seam with `DatagramLink` (on the sans-IO `UdpMessaging`) and `ConnectionLink` (on the sans-IO `ReliableMessaging`) |
 | `dev.kcoap.coap.server` | `CoapServer`, `CoapResource`, `ObservableResource`, `RequestContext`, `ResourceAttributes`, the `ResourceBuilder` DSL |
 | `dev.kcoap.coap.client` | `CoapClient`, `CoapClientConfig`, `EndpointResolver`, `ObserveCancellation` |
 
@@ -154,9 +154,11 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   `kcoap-testkit`'s in-memory connections on virtual time; `ReliableLoopbackTest` over real TCP and
   WebSocket sockets; libcoap in both directions over `coap+tcp` and `coap+ws` (`interop/README.md`).
 
-- RFC 8613 Appendix C messages through the UDP codec, and the RFC 7252, 7641, 7959, 6690, 9175 rules
-  as unit tests named after their sections, on virtual time over `kcoap-testkit`'s simulated network,
-  including loss, duplication and reordering.
+- The RFC 7252, 7641, 7959, 6690, 9175 rules as unit tests named after their sections, on virtual time
+  over `kcoap-testkit`'s simulated network, including loss, duplication and reordering. The tests that
+  need no stack are in kcoap-coap-message: the codecs (RFC 8613 Appendix C messages byte for byte, the
+  RFC 8323 framings, fuzzing), link format, the signaling-option registry, `CoapRequest` and
+  `CoapResponse`.
 - The message-security SPI with a fake OSCORE-like protection (inner options and code moved into the
   payload): protection per block and per notification, unprotected 4.01 / 4.00 errors with Max-Age 0,
   structured error bodies, challenges. Access policies against a scripted client (`AccessPolicyTest`:

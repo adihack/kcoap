@@ -5,6 +5,7 @@ import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MissingBlocks
 import dev.kcoap.coap.stack.QBlockCapabilities

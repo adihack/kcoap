@@ -71,9 +71,9 @@ public interface ProtectedRequest {
 public interface ServerMessageSecurity {
     /**
      * Verifies and decrypts [request] from [peer]. Returns null when the request does not use this kind
-     * of protection, so the stack processes it as a plain request, which only resources whose
-     * [dev.kcoap.coap.server.AccessPolicy] permits it reach (with message security configured, the default
-     * policy refuses it, ADR 0008).
+     * of protection, so the stack processes it as a plain request, which only resources whose `AccessPolicy`
+     * (kcoap-coap's server) permits it reach (with message security configured, the default policy refuses it,
+     * ADR 0008).
      *
      * @throws MessageSecurityException when the request is protected but invalid; the stack answers with
      *   [MessageSecurityException.responseCode], unprotected, as RFC 8613 §8.2 requires.
@@ -87,7 +87,7 @@ public interface UnprotectedRequest {
     public val message: CoapMessage
 
     /**
-     * Who sent it, for authorization ([dev.kcoap.coap.server.AccessPolicy]). Requests of one security context
+     * Who sent it, for authorization (kcoap-coap's `AccessPolicy`). Requests of one security context
      * should give equal identities: the server keys block-wise state and Observe registrations by it.
      */
     public val identity: SecurityIdentity

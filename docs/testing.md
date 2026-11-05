@@ -14,7 +14,7 @@ first byte that differs, which pins down the exact step that is wrong.
 | `kcoap-crypto-bc` | NIST ACVP ML-KEM and ML-DSA key generation, encapsulation, signing |
 | `kcoap-cbor` | RFC 8949 Appendix A |
 | `kcoap-cose` | RFC 8613 C.4 (AAD), RFC 9529 credentials |
-| `kcoap-coap` | RFC 8613 Appendix C messages (codec) |
+| `kcoap-coap-message` | RFC 8613 Appendix C messages (codec) |
 | `kcoap-oscore` | RFC 8613 Appendix C.1–C.8, every intermediate value, both sides |
 | `kcoap-edhoc` | RFC 9529 traces |
 

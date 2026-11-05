@@ -199,8 +199,9 @@ More in the [client and server guide](docs/guide-client-server.md).
 | [`kcoap-transport-ktor-websocket`](kcoap-transport-ktor-websocket/README.md) | WebSocket client on the ktor client, any engine, browsers included |
 | [`kcoap-transport-ktor-websocket-server`](kcoap-transport-ktor-websocket-server/README.md) | WebSocket server on the ktor server, standalone or mounted |
 | [`kcoap-testkit`](kcoap-testkit/README.md) | Simulated network with loss, duplication and reordering, and in-memory TCP/WebSocket connections, for tests |
-| [`kcoap-coap`](kcoap-coap/README.md) | Messages, codecs, the CoAP endpoint, `CoapClient`, `CoapServer` |
-| [`kcoap-oscore`](kcoap-oscore/README.md) | OSCORE |
+| [`kcoap-coap-message`](kcoap-coap-message/README.md) | CoAP messages, options, URIs, link format, the UDP and RFC 8323 codecs, the message-security SPI; no coroutines |
+| [`kcoap-coap`](kcoap-coap/README.md) | The CoAP endpoint, `CoapClient`, `CoapServer`, on `kcoap-coap-message`, which it brings along |
+| [`kcoap-oscore`](kcoap-oscore/README.md) | OSCORE; it needs `kcoap-coap-message`, not the endpoint |
 | [`kcoap-edhoc`](kcoap-edhoc/README.md) | EDHOC Initiator and Responder |
 | [`kcoap-edhoc-oscore`](kcoap-edhoc-oscore/README.md) | EDHOC over CoAP, EDHOC→OSCORE, the combined request |
 | [`kcoap-dtls`](kcoap-dtls/README.md) | DTLS interfaces and registries; the engine is implemented last, and the module is not published until then |

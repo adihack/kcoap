@@ -3,6 +3,7 @@ package dev.kcoap.coap
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapResource
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.common.hexToBytes

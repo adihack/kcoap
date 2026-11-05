@@ -6,6 +6,8 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
+            // The message model, codecs and message-security SPI appear throughout the public API.
+            api(project(":kcoap-coap-message"))
             api(project(":kcoap-common"))
             api(project(":kcoap-transport"))
             api(libs.kotlinx.coroutines.core)

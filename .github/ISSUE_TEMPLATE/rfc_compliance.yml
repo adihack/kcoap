@@ -57,6 +57,7 @@ body:
     attributes:
       label: Module
       options:
+        - kcoap-coap-message
         - kcoap-coap
         - kcoap-oscore
         - kcoap-edhoc

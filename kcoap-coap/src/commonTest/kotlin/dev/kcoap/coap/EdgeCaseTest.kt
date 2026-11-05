@@ -15,6 +15,7 @@ import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.TokenGenerator
 import dev.kcoap.testkit.InMemoryTransport
