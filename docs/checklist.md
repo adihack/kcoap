@@ -31,6 +31,10 @@ again against the tree and the git history:
 - `05aa66c` added documents only: [target-architecture.md](target-architecture.md), the ADRs,
   [CHANGELOG.md](../CHANGELOG.md) and the release freeze. The code is the same as in `f0dc39d`.
 
+WP-A1 (OSCORE safe persistence) later updated the rows it changed: oscore-8, kmp-x3 and
+architecture-x6. kmp-x3 and architecture-x6 moved from To do to Partial; the summary counts include
+that, and the run figures below are still those of `f0dc39d`.
+
 No build or test ran for this document. The evidence is the source tree, the JUnit results under
 `*/build/test-results`, the Kover report `build/reports/kover/report.xml` (`scripts/coverage-summary`),
 and GitHub Actions run 41949553396 for `f0dc39d`, which passed every job:
@@ -66,10 +70,10 @@ All rows, including the 48 `x` rows:
 | [OSCORE](#oscore) | 16 | 6 | 4 | 5 | 1 |
 | [EDHOC](#edhoc) | 12 | 5 | 3 | 3 | 1 |
 | [EDHOC with CoAP and OSCORE](#edhoc-with-coap-and-oscore) | 12 | 0 | 6 | 6 | 0 |
-| [Kotlin Multiplatform](#kotlin-multiplatform) | 16 | 1 | 7 | 6 | 2 |
-| [Architecture, code, logging, docs](#architecture-code-logging-docs) | 12 | 0 | 8 | 4 | 0 |
+| [Kotlin Multiplatform](#kotlin-multiplatform) | 16 | 1 | 8 | 5 | 2 |
+| [Architecture, code, logging, docs](#architecture-code-logging-docs) | 12 | 0 | 9 | 3 | 0 |
 | [Tests, cross-tests, CI/CD](#tests-cross-tests-cicd) | 15 | 3 | 7 | 5 | 0 |
-| **Total** | **124** | **21** | **52** | **45** | **6** |
+| **Total** | **124** | **21** | **54** | **43** | **6** |
 
 ## CBOR, COSE, crypto
 
@@ -142,7 +146,7 @@ Modules: [kcoap-oscore](../kcoap-oscore), with the security SPI in [kcoap-coap](
 | oscore-5 | §8 protect and verify; error responses 4.02, 4.01, 4.00 with Max-Age 0 | Done | `OscoreProtection` protect and unprotect, `OscoreError`; C.4–C.8 on both sides, `OscoreEndToEndTest.serverErrorsMapToRfcResponses`. | Max-Age 0 is tested with a stand-in security layer, not the real `OscoreServer`; an empty-payload response (§2) is rejected only by the AEAD. |
 | oscore-6 | §4.3 signaling messages over reliable transports | To do | Since `f0dc39d`, signaling runs in `ReliableMessaging` and never passes the security layer, so it always goes unprotected. | Protected signaling: Outer code POST or 2.04, every signaling option Class E, the first CSM unprotected; test a protected Ping/Pong. |
 | oscore-7 | §10 forwarding-proxy behaviour, §11 OSCORE over HTTP | To do | No proxy and no HTTP transport; the client's Proxy-Uri works (`OscoreEndToEndTest.proxyUriIsDecomposed`). | First a cross-test through libcoap as an OSCORE-unaware proxy (testing-cicd-x1); §11 needs an HTTP transport, or a recorded deferral. |
-| oscore-8 | Appendix B.1.1 sequence-number persistence, B.1.2 Echo recovery, B.2 re-derivation | Partial | `SequenceNumberStore.kt` (`OscorePartsTest.sequenceNumbersSurviveRestarts`); B.1.2 in `OscoreEndToEndTest.rebootedServerChallengesWithEcho` and against libcoap in both roles. B.2 is deferred in rfc-compliance.md. | When `store()` throws, the in-memory limit has already moved, so numbers can be reused after a reboot (nonce reuse). No durable store ships; B.1.3 is undocumented. Next: store before advancing (WP-A1), then B.2 against libcoap. |
+| oscore-8 | Appendix B.1.1 sequence-number persistence, B.1.2 Echo recovery, B.2 re-derivation | Partial | `SequenceNumberStore.kt`, `FreshnessPolicy.kt`, `SecurityContext.derive` with no default store (WP-A1). `SequenceNumberPersistenceTest`: a recording store and AEAD show every Partial IV durable before its nonce is used, and failing, cancelled or always-failing writes hand out nothing. `FreshnessPolicyTest` for each policy; B.1.2 in `OscoreEndToEndTest.restartedServerChallengesWithEcho` and `aReplayBetweenChallengeAndAnswerDoesNotRevokeTheEcho`, and against libcoap in both roles. B.2 is deferred in rfc-compliance.md. | No durable store ships, by design: recipes per runtime in kcoap-oscore/README.md (kmp-x3). B.1.3 is undocumented. Next: B.2 against libcoap. |
 | oscore-9 | Appendix C vectors byte for byte | Done | `Rfc8613VectorsTest` (8): keys, IVs, nonces, AAD and every protected message of C.1–C.8, on every target. | Add C.5 to `serverVerifiesTheVectorRequests`. |
 | oscore-10 | Inner Block-wise and Observe through the stack | Done | `FullStackTest.edhocThenOscoreThroughClientAndServer` (3000-byte Block1 and Block2, Observe, lossy network), `MessageSecurityTest`, `StackOscoreInteropTest`. | Not tested with real OSCORE: Observe with Block2, cancellation, re-registration, reordering; an unprotected error can end an observation (§8.4.2). |
 | oscore-11 | Interop with libcoap in both roles | Done | `LibcoapOscoreInteropTest` (raw messages) and `StackOscoreInteropTest` (through the stack: B.1.2 Echo, Block1/Block2, Observe), kcoap as client and as server against libcoap v4.3.5b. Changed from Partial: the CI interop job ran all 4 with none skipped at `a5f0123` and `f0dc39d`. | Not cross-tested: the OSCORE test spec, ID Context, other AEADs, error paths (testing-cicd-x1). [interop/README.md](../interop/README.md) claims a replay case the test does not assert. |
@@ -208,7 +212,7 @@ and [architecture.md](architecture.md#browsers).
 | kmp-9 | Transports: UDP, TCP, TLS, WebSocket, DTLS per runtime; in-memory network for tests | Partial | `KtorUdpTransport`, `KtorTcpTransport`, `KtorWebSocketConnector`, `KtorWebSocketListener`; testkit `InMemoryNetwork` and `InMemoryConnections` (`f0dc39d`). | No TLS for `coaps+tcp` (coap-core-x9), no DTLS (coap-core-21); the ktor transport tests run on the JVM only; no multicast or Network.framework adapter. |
 | kmp-x1 | More native targets: linuxArm64, iosX64, macosX64, mingwX64 | To do | Only linuxX64 and the arm64 Apple targets. | linuxArm64 is planned (E5); x64 Apple targets are not planned and mingwX64 is deferred ([target-architecture.md](target-architecture.md) §5). |
 | kmp-x2 | A per-platform matrix of algorithms and EDHOC suites, generated from capability probes | Partial | README lists what WebCrypto lacks, by hand. | A capability report per target in CI (WP-C2) and `docs/platforms.md` (WP-C3). |
-| kmp-x3 | Durable stores per platform: sequence numbers, OSCORE contexts, EDHOC credentials | To do | Only in-memory implementations. | The plan (§3.9) chooses recipes per runtime over store modules; write them with the durability rule. |
+| kmp-x3 | Durable stores per platform: sequence numbers, OSCORE contexts, EDHOC credentials | Partial | Changed from To do: [kcoap-oscore/README.md](../kcoap-oscore/README.md) "Writing a durable store" has `SequenceNumberStore` recipes for the JVM and Android, iOS and macOS, Linux, browsers and Node.js, each durable before `store()` returns, as the plan (§3.9) chooses over store modules (WP-A1). | No recipes yet for OSCORE contexts (`MutableSecurityContextRepository`) or EDHOC credentials; the recipes are not compiled or tested. |
 | kmp-x4 | Real devices: iPhone (iosArm64), Android emulators across API levels, ARM devices | To do | The iOS simulator runs in CI; no device or emulator runs. | Add after kmp-4; an emulator matrix in CI and a manual device pass per release. |
 | kmp-x5 | Node.js socket adapters (dgram UDP, net/tls TCP) | Deferred | Ruled out in [target-architecture.md](target-architecture.md) §3.10; the WebSocket client runs on Node. | Revisit on demand. |
 | kmp-x6 | Footprint and dependency policy: static OpenSSL on Linux and its updates, Bouncy Castle on Android, JS/Wasm bundle size, R8 rules | To do | None written. | A browser bundle budget is planned in WP-P1; the rest needs a short policy in docs. |
@@ -231,7 +235,7 @@ Docs: [architecture.md](architecture.md), [code-style.md](code-style.md), [loggi
 | architecture-x3 | A KDoc gate: Dokka `reportUndocumented` and `failOnWarning` | Partial | Dokka runs in CI (docs job), so the reference cannot break unnoticed. | Turn on the gate after architecture-4 documents the missing declarations. |
 | architecture-x4 | Project documents: LICENSE, SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, a versioning and stability policy | Partial | [CHANGELOG.md](../CHANGELOG.md) with semantic versioning and migration notes (`05aa66c`). | No LICENSE (blocks Maven Central), SECURITY.md or CONTRIBUTING.md. |
 | architecture-x5 | Metrics: counters for retransmissions, OSCORE replays, EDHOC failures; adapters and a guide | Partial | Hooks `EndpointEventListener` and `MessageInterceptor`. | No counters, no Micrometer or OpenTelemetry adapter, no guide. |
-| architecture-x6 | Thread-safety contracts on public types, and stress tests on multi-threaded dispatchers | To do | Every test runs on one thread (`runTest`); `InMemorySequenceNumberStore` is unsynchronized. | Planned in WP-S1 (stress helper on `Dispatchers.Default`, JVM and linuxX64). |
+| architecture-x6 | Thread-safety contracts on public types, and stress tests on multi-threaded dispatchers | Partial | Changed from To do: `EphemeralSequenceNumberStore` is Mutex-guarded and states its contract, and `EphemeralSequenceNumberStoreTest` stresses it on `Dispatchers.Default` with parallel contexts (WP-A1). Every other test runs on one thread (`runTest`). | The other public types need contracts and stress tests: WP-S1 (shared stress helper on `Dispatchers.Default`, JVM and linuxX64), which `EphemeralSequenceNumberStoreTest` should then use instead of its local one. |
 | architecture-x7 | One source of truth, or a check, for protocol status across README, rfc-compliance.md, roadmap.md, CHANGELOG.md and module READMEs | To do | They disagree today ([Notes](#notes)). | Fix the entries, then a script that compares the status tables. |
 
 ## Tests, cross-tests, CI/CD
@@ -272,7 +276,7 @@ Files: [testing.md](testing.md), [interop/README.md](../interop/README.md), [scr
   RFC 8032 and RFC 9529 trace tests verify the signature there instead of comparing bytes.
 - Stale or conflicting docs: rfc-compliance.md marks RFC 8949 §4.2 and RFC 9052/9053 as todo while
   roadmap.md says CBOR and COSE are done; README calls libedhoc interop "in progress" and the WebSocket
-  transport "being built"; kcoap-oscore/README.md calls libcoap interop "planned"; interop/README.md
+  transport "being built"; interop/README.md
   claims a replay-error case the test does not assert; CipherSuite.kt and kcoap-edhoc/README.md say no
   backend has Ed448, though cryptography-kotlin 0.6.0 and Bouncy Castle do;
   CHANGELOG.md lists Hop-Limit as added, though only the option is registered (coap-core-17).
@@ -303,8 +307,8 @@ In the order that most moves kcoap toward its goals.
    - Companions: Observe Content-Format and 4.06 (coap-core-11), If-None-Match on Block1
      (coap-core-12), FETCH key and Content-Format (coap-core-14), server Echo and amplification
      (coap-core-16), extended tokens decision (coap-core-19).
-   - OSCORE: Outer Block and nested OSCORE (oscore-2), exhausted sender context (oscore-4), the
-     sequence-number store defect (oscore-8), signaling (oscore-6), proxies and HTTP (oscore-7).
+   - OSCORE: Outer Block and nested OSCORE (oscore-2), exhausted sender context (oscore-4),
+     signaling (oscore-6), proxies and HTTP (oscore-7).
    - EDHOC: the Initiator's C_R = C_I abort and C_I selection (edhoc-6, edhoc-oscore-5), the error
      message after a failed message_2 (edhoc-oscore-2), the combined-request fallback and Outer Block1
      (edhoc-oscore-4), the reverse flow (edhoc-oscore-3), suite 25 (edhoc-2), CWT credentials

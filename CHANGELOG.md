@@ -21,3 +21,33 @@ adds its entry and migration note below.
 - Targets: JVM, iOS, macOS, Linux native, JS and Wasm, with capability-based crypto selection.
 - Live interop tests against libcoap (CoAP, OSCORE, TCP, WebSockets) and libedhoc (both roles, PQ).
 - One-command test suites (`scripts/test`) and CI/CD (tests on Linux and macOS, tag-driven releases).
+
+### Changed (breaking)
+
+OSCORE safe persistence and secret hygiene (WP-A1):
+
+- `SecurityContext.derive` has no default `sequenceStore`. Pass a durable `SequenceNumberStore` for a
+  provisioned Master Secret (recipes per runtime in `kcoap-oscore/README.md`), or
+  `EphemeralSequenceNumberStore()` only for keys that are new in this process run.
+- `InMemorySequenceNumberStore` is renamed `EphemeralSequenceNumberStore`, which is now thread safe.
+- `derive(requireFreshnessProof: Boolean = false)` is replaced by `freshness: FreshnessPolicy = AUTO`.
+  For a restored context, drop `requireFreshnessProof = true`: `AUTO` requires the Echo proof for it.
+  Use `REQUIRE_PROOF` to require it always. Under `AUTO`, a context with a store other than the
+  ephemeral one challenges its first request after every start; pass `ASSUME_FRESH`, the old default,
+  only when no request under these keys can have been accepted before.
+- `SecurityContext.parameters` is internal. Read `context.name` and `context.aeadAlgorithm` instead of
+  `context.parameters.name` and `context.parameters.aeadAlgorithm`.
+- `SecurityContextParameters.masterSecret` and `masterSalt` are functions that return copies: change
+  `parameters.masterSecret` to `parameters.masterSecret()`, and wipe the copy when done with it.
+- `OscoreClient` and `OscoreServer` name their `LoggerFactory` parameter `loggerFactory`: change the
+  named argument `loggers =` to `loggerFactory =`.
+
+### Security
+
+- OSCORE: a `SequenceNumberStore.store()` that throws or is cancelled no longer lets the Sender
+  Sequence Number advance past the durable limit, which could reuse nonces after a restart (RFC 8613
+  Appendix B.1.1).
+- OSCORE: a freshness challenge repeats its Echo value until a request returns it, so a replayed
+  request can no longer revoke the value the client is about to send back (Appendix B.1.2).
+- OSCORE and EDHOC: derivation copies of the Master Secret, Salt, PRK and exporter outputs are wiped,
+  also when derivation fails.
