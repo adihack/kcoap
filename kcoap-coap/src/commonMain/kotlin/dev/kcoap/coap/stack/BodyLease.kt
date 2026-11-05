@@ -55,8 +55,8 @@ internal class BodyLease(
         when (state) {
             State.HELD, State.EXPIRED -> Unit
             State.FAILED -> failure?.let { throw CoapException(it.message ?: "Body lease failed", it.reason, it.cause) }
-            State.CREATED, State.QUEUED -> throw IllegalStateException("The body lease towards $peer is not granted yet")
-            State.RELEASED -> throw IllegalStateException("The body lease towards $peer was released: its body has ended")
+            State.CREATED, State.QUEUED -> throw IllegalStateException("The body lease to $peer is not granted yet")
+            State.RELEASED -> throw IllegalStateException("The body lease to $peer was released: its body ended")
         }
     }
 

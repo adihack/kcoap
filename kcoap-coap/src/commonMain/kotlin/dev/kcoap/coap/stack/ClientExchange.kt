@@ -117,9 +117,8 @@ internal class ClientExchange(
         if (unrecognized.isNotEmpty()) {
             val numbers = unrecognized.joinToString { it.number.toString() }
             log.warn { "Rejected a response ${inner.code} with unrecognized critical options $numbers" }
-            return Inspection.Rejected(
-                CoapException("Response with unrecognized critical options $numbers", CoapException.Reason.BAD_RESPONSE),
-            )
+            val message = "Response with unrecognized critical options $numbers"
+            return Inspection.Rejected(CoapException(message, CoapException.Reason.BAD_RESPONSE))
         }
         return Inspection.Accepted(inner)
     }

@@ -125,7 +125,8 @@ internal class ClientObservation(
         var echoed = false
         while (true) {
             val current = client.endpoint.openExchange(
-                peer, request, confirmable, client.config.security, ResponseMode.Stream, recognizedOptions = client.recognizedOptions,
+                peer, request, confirmable, client.config.security, ResponseMode.Stream,
+                recognizedOptions = client.recognizedOptions,
             )
             exchange = current
             val first = client.endpoint.awaitResponse(current, client.requestTimeout)

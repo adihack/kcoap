@@ -21,7 +21,10 @@ internal sealed interface ExchangeEvent {
         override fun toString(): String = "Reset(${exchange.key.token})"
     }
 
-    /** A Confirmable request went unacknowledged through MAX_RETRANSMIT retransmissions (§4.2). The exchange has ended. */
+    /**
+     * A Confirmable request went unacknowledged through MAX_RETRANSMIT retransmissions (§4.2). The exchange
+     * has ended.
+     */
     class TimedOut(override val exchange: ClientExchange) : ExchangeEvent {
         override fun toString(): String = "TimedOut(${exchange.key.token})"
     }

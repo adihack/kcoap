@@ -131,11 +131,7 @@ internal class UdpMessaging(
         }
         val transmission = Transmission(peer, message, encodeForSending(peer, message), owner, slotHold)
         val existing = windows[peer]
-        if (transmission.holdsSlot && existing != null && existing.outstanding + existing.queue.size >= maxPerPeer) {
-            // RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue.
-            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
-            throw CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
-        }
+        if (transmission.holdsSlot && existing.isFull()) throw beyondLimit(peer)
         outbound[MessageKey(peer, message.messageId)] = transmission
         if (transmission.holdsSlot) {
             val window = existing ?: PeerWindow().also { windows[peer] = it }
@@ -209,11 +205,11 @@ internal class UdpMessaging(
      */
     fun lease(now: Duration, peer: Endpoint, bodyBytes: Int, nonTimeoutRandom: Duration? = null): BodyLease {
         require(bodyBytes >= 0) { "A body cannot have a negative size: $bodyBytes" }
-        val existing = windows[peer]
-        if (existing != null && existing.outstanding + existing.queue.size >= maxPerPeer) {
-            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
-            throw CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        require(nonTimeoutRandom == null || !nonTimeoutRandom.isNegative()) {
+            "NON_TIMEOUT_RANDOM cannot be negative: $nonTimeoutRandom"
         }
+        val existing = windows[peer]
+        if (existing.isFull()) throw beyondLimit(peer)
         val drawn = nonTimeoutRandom ?: timing.drawNonTimeoutRandom(random)
         val atProbingRate = (bodyBytes.toDouble() / parameters.probingRate).seconds
         val lease = BodyLease(peer, minOf(atProbingRate, timing.nonProbingWait(drawn)), drawn)
@@ -249,6 +245,19 @@ internal class UdpMessaging(
             BodyLease.State.CREATED, BodyLease.State.EXPIRED -> lease.state = BodyLease.State.RELEASED
             BodyLease.State.RELEASED, BodyLease.State.FAILED -> Unit
         }
+    }
+
+    /** Whether a peer with this window has [maxPerPeer] slot holders outstanding or queued already. */
+    private fun PeerWindow?.isFull(): Boolean = this != null && outstanding + queue.size >= maxPerPeer
+
+    /**
+     * RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue. Reports
+     * the limit and returns the refusal to throw.
+     */
+    private fun beyondLimit(peer: Endpoint): CoapException {
+        val limit = EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER
+        effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, limit))
+        return CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
     }
 
     private fun grant(now: Duration, lease: BodyLease) {

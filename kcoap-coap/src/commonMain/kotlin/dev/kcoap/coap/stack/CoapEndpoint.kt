@@ -349,7 +349,12 @@ public class CoapEndpoint private constructor(
      * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
      * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.
      */
-    private fun register(peer: Endpoint, token: ByteArray?, mode: ResponseMode, recognizedOptions: Set<Int>): ClientExchange? {
+    private fun register(
+        peer: Endpoint,
+        token: ByteArray?,
+        mode: ResponseMode,
+        recognizedOptions: Set<Int>,
+    ): ClientExchange? {
         val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
         if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
@@ -889,7 +894,8 @@ public class CoapEndpoint private constructor(
                 exchange.accept(inspection.response)
             }
             is ClientExchange.Inspection.Rejected -> {
-                withMessaging { reject(from, message.messageId, inspection.cause.message ?: "unrecognized critical option") }
+                val reason = inspection.cause.message ?: "unrecognized critical option"
+                withMessaging { reject(from, message.messageId, reason) }
                 exchange.refuse(inspection.cause)
             }
             ClientExchange.Inspection.Unverified -> withMessaging { acknowledge(from, message.messageId) }

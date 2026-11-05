@@ -909,6 +909,7 @@ class UdpMessagingTest {
         val events = messaging.takeEffects().filterIsInstance<MessagingEffect.Event>().map { it.event }
         assertEquals(2, events.count { it is EndpointEvent.LimitReached })
         assertFailsWith<IllegalArgumentException> { messaging.lease(Duration.ZERO, otherPeer, -1) }
+        assertFailsWith<IllegalArgumentException> { messaging.lease(Duration.ZERO, otherPeer, 1, nonTimeoutRandom = (-1).seconds) }
     }
 
     @Test
