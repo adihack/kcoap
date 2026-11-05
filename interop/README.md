@@ -267,9 +267,21 @@ server over real UDP (ktor-network):
   kcoap against kcoap takes these bodies (`OscoreQBlockEndToEndTest`), also the notification bodies of a
   protected observation, which no libcoap run can cover for the same reason.
 
+`kcoap-oscore/src/jvmTest/.../ReliableOscoreInteropTest.kt` runs the same exchanges on connections (RFC
+8323), since OSCORE sits above the link the endpoint picks for the scheme (ADR 0005), both ways over
+`coap+tcp` and `coap+ws`:
+
+- `CoapClient` with `OscoreClient`, `KtorTcpConnector` and `KtorWebSocketConnector` →
+  `coap-server -p <port> -w <ws port> -E -d 5 -X 1152`: GET `/time` after the B.1.2 challenge, PUT and GET of
+  a dynamic resource, Observe of `/time`, on each transport.
+- `coap-client -E` (with `-X 1152` over WebSockets) → `CoapServer` with `OscoreServer` (requiring freshness)
+  on `KtorTcpListener` and `KtorWebSocketListener`: GET, Block2 download and Block1 upload in 64-byte inner
+  blocks, Observe with `-s 3`.
+
 ```bash
 docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
 ./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
+./gradlew :kcoap-oscore:jvmTest --tests '*ReliableOscoreInteropTest*'
 ```
 
 ### EDHOC against libedhoc

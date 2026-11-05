@@ -807,6 +807,10 @@ public class QBlockServerConfig(
 - The Q-Block cores take `link.capabilities.hasMessageTypes`.
 - `ExchangeConformanceTest` adds Q-Block1 and Q-Block2 on both links.
 - Accept: the Q-Block suites pass with only construction lines changed.
+- Done in B1: `DatagramLink` owns the leases (a connection peer's lease is granted at once without a
+  connection); an exchange's delivery outcomes (ACK, Reset, timeout) reach the inbox from the datagram link
+  only; `BodyMode.of(type, capabilities)` gives the Q-Block client and server their body mode; the Q-Block
+  suites pass unchanged, and `ExchangeConformanceTest` runs Q-Block1 and Q-Block2 on both links.
 
 **SRV-2: server hardening.**
 - Caps with tests for `DeduplicationCache`, `MessageIdAllocator`, `ObservationRegistry` and the exchange map, against spoofed CON floods.

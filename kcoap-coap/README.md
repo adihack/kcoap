@@ -11,7 +11,7 @@ CoAP over UDP and over reliable transports (TCP, WebSockets; RFC 8323). Common K
 | `dev.kcoap.coap` (signaling) | `SignalingOptions`: the RFC 8323 §5.2 signaling option registry, per signaling code |
 | `dev.kcoap.coap.codec` | `UdpMessageCodec` (RFC 7252 §3), `ReliableMessageCodec` and `ReliableStreamDecoder` (RFC 8323 §3.2, §4.2) |
 | `dev.kcoap.coap.security` | The message-security SPI OSCORE implements (`kcoap-oscore`) |
-| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`; internally the sans-IO `UdpMessaging` state machine and the exchange layer |
+| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`; internally the exchange layer, the `PeerLink` seam with `DatagramLink` (on the sans-IO `UdpMessaging`) and `ConnectionLink` (on the sans-IO `ReliableMessaging`) |
 | `dev.kcoap.coap.server` | `CoapServer`, `CoapResource`, `ObservableResource`, `RequestContext`, `ResourceAttributes`, the `ResourceBuilder` DSL |
 | `dev.kcoap.coap.client` | `CoapClient`, `CoapClientConfig`, `EndpointResolver`, `ObserveCancellation` |
 
@@ -29,6 +29,14 @@ More in `docs/guide-client-server.md`.
 
 The stack follows RFC 8613 Figure 1: application, then request/response (tokens, Observe, Block-wise),
 then message security (OSCORE through the SPI), then messaging, then the transport.
+
+- **One endpoint, a link per peer** ([ADR 0005](../docs/adr/0005-peer-link-seam.md)): `CoapEndpoint`
+  runs one exchange layer over a `DatagramTransport`, `Connector`s and `ConnectionListener`s in any
+  combination, through an internal link per peer chosen by the kind of `Endpoint`, so Block-wise, Observe,
+  Q-Block, Echo, the access policy and message security are the same code on every transport. What differs
+  is what a link can do (Resets, message types, ordering) and its message size. A peer the endpoint has no
+  transport for fails with `CoapException.Reason.TRANSPORT_UNAVAILABLE`. `ExchangeConformanceTest` runs one
+  suite over both kinds of link.
 
 - **Messaging, RFC 7252 §4** (`UdpMessaging`, sans-IO): Message IDs not reused towards a peer within
   EXCHANGE_LIFETIME; retransmission with exponential back-off from a random initial timeout inside
@@ -81,7 +89,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Block-wise, RFC 7959**: client Block1 uploads following the server's preferred size and the 4.13
   hints, Block2 downloads with ETag checks and restarts, early negotiation, Size1/Size2; server atomic
   Block1 assembly with 2.31 / 4.08 / 4.13 + Size1, Block2 from a cached representation with an ETag, also
-  for notifications (§2.6); block sizes from the transport's `maxDatagramSize`. RFC 9175 Request-Tags for
+  for notifications (§2.6); block sizes from the link's limits: the transport's `maxDatagramSize` over
+  datagrams, the peer's Max-Message-Size on a connection. RFC 9175 Request-Tags for
   concurrent Block1 operations, and server state keyed by them.
 - **RFC 9175 Echo**: a 4.01 with Echo is answered once with the Echo value, under message security only a
   verified one; the security layer can answer with a challenge instead of the resource (RFC 8613 Appendix
