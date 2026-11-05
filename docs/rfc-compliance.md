@@ -17,7 +17,7 @@ vectors where they exist and by interop runs against independent implementations
 | RFC 8392 | CWT / CCS credentials | partial (CCS done, CWT todo) | RFC 9529 trace 2 |
 | RFC 9360 | x5chain / x5t | done (as EDHOC ID_CRED_x) | RFC 9529 trace 1 |
 | RFC 9053 §7.1.1 | EC2 COSE_Key with y as a sign bit | done | RFC 9529 §3.4 PK_R, the SEC 2 P-384 base point |
-| SEC 1 v2 §2.3.4 | P-256 / P-384 point decompression (`Sec1`), in common code before any backend | done | SEC 2 base points and their multiples, RFC 9529 §3 points; Bouncy Castle differential |
+| SEC 1 v2 §2.3.4 | P-256 / P-384 point decompression (`Sec1`), in common code before any backend | done | SEC 2 base points and their multiples, RFC 9529 §3 points; Bouncy Castle differential; EDHOC on a backend that refuses compressed points (`UncompressedPointsTest`) |
 | RFC 5280 §4.1, RFC 5480, RFC 8410, RFC 7250 §3 | Certificate and SubjectPublicKeyInfo parsing (`x509`): subject public key and common name | partial (parsing only; path validation todo) | RFC 9529 §2 certificates; fuzzing |
 | RFC 3279 §2.2.3, RFC 8422 §5.4 | ECDSA signatures between raw `r \|\| s` and DER (`EcdsaSignatureCodec`) | done | JDK differential (DER and IEEE P1363), fuzzing |
 
