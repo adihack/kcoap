@@ -207,6 +207,39 @@ class PostQuantumTest {
         assertFailsWith<IllegalStateException> { decapsulationKey.encoded() }
     }
 
+    /**
+     * API-10 and RFC 9528 §9.8: the KEM Responder destroys the encapsulation the backend handed over, whose
+     * array holds K, once it has G_XY, and also when the encapsulation has the wrong size.
+     */
+    @Test
+    fun theResponderDestroysTheEncapsulation() = runTest {
+        for (isWrongSize in listOf(false, true)) {
+            val handedOut = mutableListOf<KemEncapsulation>()
+            val recording = object : FakePostQuantumBackend() {
+                override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation {
+                    val encapsulation = if (isWrongSize) {
+                        KemEncapsulation(ByteArray(767), ByteArray(32) { 1 })
+                    } else {
+                        super.encapsulate(algorithm, publicKey)
+                    }
+                    return encapsulation.also { handedOut += it }
+                }
+            }
+            val (initiatorConfig, responderConfig) = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, suite)
+            val responder = EdhocResponder(responderConfig, recording)
+            // The capability probe of ML-KEM-512 encapsulates too, and destroys its own result.
+            responder.processMessage1(EdhocInitiator(initiatorConfig, backend).createMessage1())
+            val probes = handedOut.size
+            if (isWrongSize) {
+                assertFailsWith<EdhocException> { responder.createMessage2() }
+            } else {
+                responder.createMessage2()
+            }
+            val encapsulation = handedOut.drop(probes).single()
+            assertFailsWith<IllegalStateException>("wrong size: $isWrongSize") { encapsulation.sharedSecret() }
+        }
+    }
+
     @Test
     fun akpCredentialsCarryMlDsaKeys() {
         val types = listOf(
