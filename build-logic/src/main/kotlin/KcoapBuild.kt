@@ -37,6 +37,12 @@ enum class KcoapTargets {
     JVM,
 }
 
+/**
+ * kcoap's plumbing between its own modules (`dev.kcoap.common.InternalKcoapApi`). Every kcoap module
+ * opts in; applications would have to opt in explicitly.
+ */
+const val INTERNAL_API_MARKER: String = "dev.kcoap.common.InternalKcoapApi"
+
 /** Settings shared by every kcoap library module: targets, explicit API, JVM level, test setup. */
 fun Project.configureKcoapLibrary(targets: KcoapTargets) {
     group = providers.gradleProperty("kcoap.group").get()
@@ -77,6 +83,11 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
             wasmJs { webEnvironments() }
         }
 
+        // kcoap's modules share helpers marked @InternalKcoapApi (byte builders, option codecs); only
+        // applications must opt in to them.
+        sourceSets.configureEach {
+            languageSettings.optIn(INTERNAL_API_MARKER)
+        }
         sourceSets.getByName("commonTest").dependencies {
             implementation(kotlin("test"))
             implementation(libs.findLibrary("kotlinx-coroutines-test").get())

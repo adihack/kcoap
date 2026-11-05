@@ -3,13 +3,16 @@ package dev.kcoap.coap.codec
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.OptionSet
 import dev.kcoap.common.ByteArrayBuilder
+import dev.kcoap.common.InternalKcoapApi
 
 /**
  * The option and payload part shared by every CoAP framing (RFC 7252 §3.1, RFC 8323 §3.2): delta-encoded
  * options, then an optional 0xFF marker followed by a non-empty payload.
  *
- * Public because OSCORE encodes its plaintext and Class I options with the same rules (RFC 8613 §5.3).
+ * Shared with kcoap-oscore, which encodes its plaintext and Class I options with the same rules
+ * (RFC 8613 §5.3); not for applications.
  */
+@InternalKcoapApi
 public object OptionCodec {
     private const val PAYLOAD_MARKER = 0xFF
 
@@ -34,6 +37,7 @@ public object OptionCodec {
     }
 
     /** Parsed options and the payload that followed them. */
+    @InternalKcoapApi
     public class Parsed(public val options: OptionSet, public val payload: ByteArray)
 
     /** Reads options and payload from `bytes[start, end)`; [fail] builds the exception to throw. */

@@ -1,6 +1,7 @@
 package dev.kcoap.common
 
 /** A growable byte buffer for encoders. Methods chain; [toByteArray] returns a copy of what was written. */
+@InternalKcoapApi
 public class ByteArrayBuilder(initialCapacity: Int = 64) {
     private var buffer = ByteArray(maxOf(initialCapacity, 1))
 
