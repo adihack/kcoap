@@ -722,6 +722,42 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low.
 - **Accept:** all three samples build in CI; the bundle stays within a budget committed in the repository; minSdk is recorded in docs/platforms.md.
 
+**WP-SEC1: EDHOC server session safety**
+
+- **Findings:** SEC-6 (1); CLR-6; SEC-9; SEC-7 (1, the EDHOC and software-key parts); SEC-10 (1, docs).
+- **Scope:**
+  - kcoap-edhoc-oscore: an internal `PendingSessions` that reserves C_R atomically, binds each pending
+    handshake to the peer that sent message_1, and expires entries by an injected `TimeSource`; a bound on
+    pending handshakes per peer and in total.
+  - kcoap-edhoc: one internal factory for peer-authentication failures that sends a generic error and keeps
+    the detail in the exception; `EdhocSession` and `SoftwarePrivateKey` throw after `destroy()`.
+  - `CertificateValidator` KDoc and docs/architecture.md: what is trusted with and without a validator.
+- **API changes:** calls on a destroyed session or key throw `IllegalStateException`.
+- **Depends on:** A2 (shares kcoap-edhoc). Runs before A3, which then owns kcoap-edhoc-oscore.
+- **Accept:**
+  - Two concurrent handshakes never get the same C_R (stress test on real threads, failing without the lock).
+  - A message_3 from another peer cannot take or abort a pending handshake.
+  - Pending handshakes expire, and the bounds refuse new ones with an `EndpointEvent`-style report.
+  - The wire error for every peer-authentication failure is the same.
+
+**WP-SEC2: Fail-closed message security**
+
+- **Findings:** SEC-3; SEC-4.
+- **Scope:**
+  - kcoap-coap server: an `AccessPolicy` on resources with the built-ins `Public`, `MessageSecurityRequired`
+    and `Authenticated`, and a server-wide default; the policy sees the authenticated identity.
+  - kcoap-coap client and the `ClientMessageSecurity` SPI: response verification is reported as verified or
+    unverified; the client acts on an Echo retry or any other decision only for verified responses, and never
+    falls back to plaintext silently.
+  - kcoap-oscore: implements the changed SPI.
+- **API changes:** the SPI result type; the resource policy.
+- **Depends on:** QB-6 (kcoap-coap ownership) and QB-5 (kcoap-oscore). Lands before B1.
+- **Accept:**
+  - An unprotected request to a resource that requires message security gets 4.01 and never reaches the
+    handler.
+  - An unprotected 4.01 with Echo does not make the client resend under OSCORE unless it was verified.
+  - libcoap OSCORE interop stays green.
+
 ### 4.4 Roadmap features (not refactors)
 
 | Feature | Notes |
@@ -748,6 +784,8 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 | Errors/observability in other modules | The package that owns those files |
 | Crypto | A4 / A5 |
 | Build | C1 |
+| SEC-6, SEC-7, SEC-9, SEC-10, CLR-6 (EDHOC server) | SEC1 |
+| SEC-3, SEC-4 (message security) | SEC2 |
 
 ---
 
