@@ -8,6 +8,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -66,7 +67,7 @@ class EdhocOscoreTest {
         val verified = OscoreServer(contexts).unprotectRequest(protected.message, peer)!!
         assertEquals(listOf("temp"), verified.message.options.uriPath)
         val response = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("21") })
-        assertEquals("21", protected.unprotectResponse(response).payloadAsText())
+        assertEquals("21", protected.verified(response).payloadAsText())
     }
 
     @Test
@@ -115,7 +116,7 @@ class EdhocOscoreTest {
         assertEquals(listOf("lights"), verified.message.options.uriPath)
         assertFalse(verified.message.options.edhoc, "the EDHOC option is consumed")
         val response = verified.protectResponse(CoapMessage.response(verified.message, CoapCode.CONTENT) { payload("on") })
-        assertEquals("on", first.unprotectResponse(response).payloadAsText())
+        assertEquals("on", first.verified(response).payloadAsText())
 
         // From now on plain OSCORE.
         assertFalse(security.isMessage3Pending())
@@ -136,7 +137,7 @@ class EdhocOscoreTest {
         val fixed = object : dev.kcoap.coap.security.ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
                 override val message = oscoreRequest
-                override suspend fun unprotectResponse(response: CoapMessage) = response
+                override suspend fun unprotectResponse(response: CoapMessage) = ResponseVerification.Verified(response)
             }
         }
         val combined = CombinedRequestSecurity(fixed, "52d5535f3147e85f1cfacd9e78abf9e0a81bbf".hexToBytes())

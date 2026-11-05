@@ -35,22 +35,28 @@ public interface ProtectedRequest {
     public val message: CoapMessage
 
     /**
-     * Verifies and decrypts a response to this request. Called once per response, so also for every
-     * Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
+     * Verifies and decrypts a response to this request, and says whether it verified. Called once per response,
+     * so also for every Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
      * `QBlockClientConfig.withMessageSecurity` lets protected requests use Q-Block, possibly from different
-     * coroutines (see [ClientMessageSecurity]). The stack trusts what this returns: a response returned
-     * without verification, such as an unprotected error, is acted on like a verified one, and in a Q-Block
-     * body for the whole body (a 4.08 has blocks sent again, a 4.02 turns Q-Block off for the peer).
+     * coroutines (see [ClientMessageSecurity]).
+     *
+     * The stack acts only on [ResponseVerification.Verified]: an Echo retry, a block-wise or Q-Block step, a
+     * Q-Block capability, an Observe registration or its end. A [ResponseVerification.Unverified] response, an
+     * error that came without message security (RFC 8613 §8.2), ends a request that has no verified response
+     * yet with `CoapException.Reason.UNVERIFIED_RESPONSE` and is dropped by an established observation, so a
+     * party on the path cannot make the client send a request again, which would run a non-idempotent request
+     * twice under a fresh Partial IV.
      *
      * Ordering and replay protection of the notifications of a protected observation are this layer's job
-     * (RFC 8613 §4.1.3.5.2, §7.4.1): the stack does not order them again, so what this returns must be fresher
-     * than every notification before it or, for a registration carrying Q-Block, a block of the freshest
-     * notification body, whose blocks may arrive in any order (RFC 9177 §4.5). kcoap-oscore's `OscoreClient`
-     * does both.
+     * (RFC 8613 §4.1.3.5.2, §7.4.1): the stack does not order them again, so what this returns as verified must
+     * be fresher than every notification before it or, for a registration carrying Q-Block, a block of the
+     * freshest notification body, whose blocks may arrive in any order (RFC 9177 §4.5). kcoap-oscore's
+     * `OscoreClient` does both.
      *
-     * @throws MessageSecurityException when the response does not verify; the stack drops it.
+     * @throws MessageSecurityException when the response is to be dropped: a protected response that does not
+     *   verify, a replay, or an unprotected response that is not an error (RFC 8613 §8.4).
      */
-    public suspend fun unprotectResponse(response: CoapMessage): CoapMessage
+    public suspend fun unprotectResponse(response: CoapMessage): ResponseVerification
 }
 
 public interface ServerMessageSecurity {

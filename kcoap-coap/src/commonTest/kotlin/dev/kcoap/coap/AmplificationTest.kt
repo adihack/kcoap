@@ -4,6 +4,7 @@ import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
@@ -359,7 +360,7 @@ class AmplificationTest {
         override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
             override val message = request.toBuilder().options { oscore(ByteArray(0)) }.build()
 
-            override suspend fun unprotectResponse(response: CoapMessage): CoapMessage = response
+            override suspend fun unprotectResponse(response: CoapMessage) = ResponseVerification.Verified(response)
         }
     }
 

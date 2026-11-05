@@ -76,6 +76,10 @@ import kotlinx.coroutines.withContext
  * **Echo.** A 4.01 with Echo to the request of a download, or to a Continue or a request for missing blocks,
  * has that request sent again once with the Echo value, which every later message of the body carries too.
  *
+ * **Unverified answers.** Under message security, everything above happens for verified responses only. An
+ * error that came without message security ([ExchangeEvent.Unverified], RFC 8613 §8.2) steers nothing: a body
+ * ends with [CoapException.Reason.UNVERIFIED_RESPONSE], and an established observation ignores it (ADR 0008).
+ *
  * **Silence.** A Non-confirmable download whose request gets no response at all is sent again on the
  * NON_RECEIVE_TIMEOUT ladder, at most NON_MAX_RETRANSMIT times, if its method may be repeated (GET, FETCH,
  * PUT, DELETE, iPATCH); POST and PATCH, or the end of the ladder, fail with
@@ -620,6 +624,7 @@ internal class QBlockClient(private val client: CoapClient) {
                     }
                     if (message.code != CoapCode.UNAUTHORIZED || message.options.echo == null) answered = true
                 }
+                is ExchangeEvent.Unverified -> onUnverified(event.message)
                 is ExchangeEvent.Acknowledged -> {
                     answered = true
                     if (sender != null && sequence != null) uploadActions(sender.onAcknowledged(now, sequence))
@@ -647,6 +652,23 @@ internal class QBlockClient(private val client: CoapClient) {
                 // The endpoint forgot the peer's capability already if its session ended or its connection closed.
                 is ExchangeEvent.Failed -> throw event.cause
             }
+        }
+
+        /**
+         * An error without message security answered a request of a protected body ([ExchangeEvent.Unverified]):
+         * nothing of the body changes for it (ADR 0008), so no block is sent again for a 4.08, no Echo value is
+         * taken, and a 4.02 neither falls back nor tells [QBlockSupport] that the peer rejects Q-Block. An
+         * established observation ignores it, as it ignores a notification that fails verification; any other
+         * body ends with [CoapException.Reason.UNVERIFIED_RESPONSE], which carries it, instead of waiting for its
+         * timeout.
+         */
+        private fun onUnverified(message: CoapMessage) {
+            if (isObserving) {
+                logger.warn { "Dropped an unverified ${message.code} to a protected observation" }
+                return
+            }
+            logger.debug { "Q-Block transfer ended with an unverified ${message.code}" }
+            throw ClientExchange.unverified(message, "sent without message security")
         }
 
         private suspend fun onUploadEvent(sender: QBlock1Sender, sequence: Int, message: CoapMessage) {

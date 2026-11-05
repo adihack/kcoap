@@ -1,6 +1,10 @@
 package dev.kcoap.oscore
 
+import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.crypto.CryptoBackend
+import kotlin.test.assertIs
 
 /**
  * Derives a context whose keys are new in this test, the case [EphemeralSequenceNumberStore] is for, so
@@ -24,3 +28,10 @@ internal suspend fun restoredContext(
     val store = EphemeralSequenceNumberStore().apply { store(parameters.name, persisted) }
     return SecurityContext.derive(parameters, crypto, store)
 }
+
+/**
+ * The response [response] verified to ([ProtectedRequest.unprotectResponse]), failing the test when it was handed
+ * on unverified; a response that fails verification throws [dev.kcoap.coap.security.MessageSecurityException].
+ */
+internal suspend fun ProtectedRequest.verified(response: CoapMessage): CoapMessage =
+    assertIs<ResponseVerification.Verified>(unprotectResponse(response), "verified").message

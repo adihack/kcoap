@@ -6,6 +6,7 @@ import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
@@ -126,11 +127,11 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * `QBlockServerConfig.withMessageSecurity` of kcoap-coap); otherwise protected bodies use Inner Block1 and
  * Block2 (RFC 7959; RFC 8613 §4.1.3.4.1), one response per block.
  *
- * **Unprotected responses** are not authenticated. The unprotected 4.xx and 5.xx errors of OSCORE and of
- * intermediaries (§8.2) are passed on to a request that takes one response. To a request carrying an Inner
- * Q-Block option only 4.00, 4.01 and 5.xx are, without Echo or a block option: those end the body, whereas an
- * unprotected 4.08, 4.13, 4.02, Echo challenge or block would steer it from outside OSCORE (RFC 9177 §11), so
- * they are dropped like a response that fails verification ([UnprotectedResponses]).
+ * **Unprotected responses** are not authenticated ([UnprotectedResponses]). The unprotected 4.xx and 5.xx
+ * errors of OSCORE and of intermediaries (§8.2) are handed on as [ResponseVerification.Unverified], to every
+ * request alike, and the stack acts on nothing in them: it ends a request that has no verified response yet,
+ * and an established observation ignores them (ADR 0008). Any other unprotected response is dropped like one
+ * that fails verification.
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
@@ -180,14 +181,17 @@ public class OscoreClient(
          */
         private var freshestBody: ByteArray? = null
 
-        override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
+        override suspend fun unprotectResponse(response: CoapMessage): ResponseVerification {
             if (response.options.oscore == null) {
-                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: only those that
-                // can do no more than end the request are passed on (UnprotectedResponses).
-                val rejection = UnprotectedResponses.rejection(response, takesSeveral = binding.allowsSeveralResponses)
-                    ?: return response
-                log.warn { "Dropped a response: $rejection" }
-                throw MessageSecurityException(rejection)
+                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: the stack is told so
+                // and acts on nothing in them (UnprotectedResponses).
+                val unverified = UnprotectedResponses.classify(response)
+                if (unverified == null) {
+                    log.warn { "Dropped an unprotected ${response.code} to an OSCORE request" }
+                    throw MessageSecurityException("Unprotected ${response.code} to an OSCORE request")
+                }
+                log.debug { "Unverified ${response.code}: ${unverified.reason}" }
+                return unverified
             }
             val (decrypted, piv) = try {
                 OscoreProtection.unprotectResponse(binding, response)
@@ -195,7 +199,7 @@ public class OscoreClient(
                 log.warn { "Dropped a response: ${e.message}" }
                 throw e.toMessageSecurityException()
             }
-            return lock.withLock { checkFreshness(decrypted, piv) }
+            return ResponseVerification.Verified(lock.withLock { checkFreshness(decrypted, piv) })
         }
 
         /**

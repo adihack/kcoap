@@ -4,9 +4,11 @@ import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.OptionSet
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.common.toHex
 import dev.kcoap.log.Logger
 import dev.kcoap.transport.Endpoint
@@ -28,6 +30,12 @@ import kotlinx.coroutines.channels.ChannelResult
  * (RFC 7252 §5.4.1). A response that fails verification is dropped (RFC 8613 §8.4 step 8) and does not end
  * the exchange; one with an unrecognized critical option is rejected and ends it with
  * [CoapException.Reason.BAD_RESPONSE].
+ *
+ * A response the security layer hands on as [ResponseVerification.Unverified], an error without message
+ * security (RFC 8613 §8.2), is never handed on as a response, so nothing above acts on it (ADR 0008): it ends
+ * a [ResponseMode.Single] exchange, and a [ResponseMode.Stream] one that has no verified response yet, with
+ * [CoapException.Reason.UNVERIFIED_RESPONSE]; an observation that has its verified registration response drops
+ * it; an inbox exchange reports it as [ExchangeEvent.Unverified] for the Q-Block layer to decide.
  */
 internal class ClientExchange(
     private val endpoint: CoapEndpoint,
@@ -57,6 +65,10 @@ internal class ClientExchange(
     @Volatile
     var isOpen: Boolean = true
         private set
+
+    /** Whether a verified response was handed on: from then on a [ResponseMode.Stream] exchange drops unverified ones. */
+    @Volatile
+    private var hasVerifiedResponse = false
 
     /** Where [ResponseMode.Single] and [ResponseMode.Stream] hand on responses; an inbox exchange has none. */
     private val responses: Channel<CoapMessage>? = when (mode) {
@@ -89,18 +101,27 @@ internal class ClientExchange(
 
     /** What [inspect] found, which decides how the endpoint answers the response at the messaging layer. */
     sealed interface Inspection {
-        /** Verified, with every critical option recognized: acknowledge it, then [accept] it. */
+        /**
+         * Verified, or the answer to a request sent without message security, with every critical option
+         * recognized: acknowledge it, then [accept] it.
+         */
         class Accepted(val response: CoapMessage) : Inspection
 
         /** Verified, with a critical option the caller does not recognize: reject it, then [refuse] it. */
         class Rejected(val cause: CoapException) : Inspection
 
         /**
+         * The security layer handed it on unverified ([ResponseVerification.Unverified]): acknowledge it, then
+         * [acceptUnverified] it, which acts on nothing in it.
+         */
+        class Unverified(val response: CoapMessage, val reason: String) : Inspection
+
+        /**
          * It failed verification (RFC 8613 §8.4) and is dropped, and the exchange goes on. It is still
          * acknowledged: the ACK says only that the message arrived, and a Reset would cancel an observation,
          * which RFC 8613 §8.4.2 says an error in one notification does not do.
          */
-        data object Unverified : Inspection
+        data object Dropped : Inspection
     }
 
     /**
@@ -112,11 +133,15 @@ internal class ClientExchange(
         val inner = if (security == null) {
             outer
         } else {
-            try {
+            val verification = try {
                 security.unprotectResponse(outer)
             } catch (e: MessageSecurityException) {
                 log.warn(e) { "Dropped a response that failed verification: ${e.message}" }
-                return Inspection.Unverified
+                return Inspection.Dropped
+            }
+            when (verification) {
+                is ResponseVerification.Verified -> verification.message
+                is ResponseVerification.Unverified -> return Inspection.Unverified(verification.message, verification.reason)
             }
         }
         val unrecognized = unrecognizedCritical(inner.options, recognizedOptions)
@@ -137,7 +162,8 @@ internal class ClientExchange(
         when (val inspection = inspect(outer)) {
             is Inspection.Accepted -> accept(inspection.response)
             is Inspection.Rejected -> refuse(inspection.cause)
-            Inspection.Unverified -> Unit
+            is Inspection.Unverified -> acceptUnverified(inspection.response, inspection.reason)
+            Inspection.Dropped -> Unit
         }
     }
 
@@ -150,6 +176,7 @@ internal class ClientExchange(
         settleRequest()
         if (!isOpen) return
         log.debug { "Response ${response.code}" }
+        hasVerifiedResponse = true
         when (mode) {
             ResponseMode.Single -> {
                 close()
@@ -158,6 +185,27 @@ internal class ClientExchange(
             }
             ResponseMode.Stream -> responses?.trySend(response)
             is ResponseMode.Inbox -> report(mode.inbox, ExchangeEvent.Response(this, response))
+        }
+    }
+
+    /**
+     * Takes an [Inspection.Unverified] response without acting on it (ADR 0008). An observation that has its
+     * verified registration response drops it: a server sends no unprotected notifications, and an error of
+     * OSCORE belongs to the verification of a request (RFC 8613 §8.2), so it ends neither the observation nor
+     * reaches its collectors. An exchange still waiting for its response ends with
+     * [CoapException.Reason.UNVERIFIED_RESPONSE], which carries it, and so stops retransmitting its request;
+     * the caller then gets a distinct failure instead of waiting for its timeout. An inbox exchange reports it.
+     */
+    suspend fun acceptUnverified(response: CoapMessage, reason: String) {
+        if (!isOpen) return
+        when {
+            mode is ResponseMode.Inbox -> report(mode.inbox, ExchangeEvent.Unverified(this, response))
+            mode == ResponseMode.Stream && hasVerifiedResponse -> log.warn { "Dropped an unverified ${response.code} to an observation: $reason" }
+            else -> {
+                log.warn { "Unverified ${response.code} to a protected request: $reason" }
+                settleRequest()
+                fail(unverified(response, reason))
+            }
         }
     }
 
@@ -215,6 +263,13 @@ internal class ClientExchange(
     override fun toString(): String = "ClientExchange($peer, token=${key.token}, mode=$mode)"
 
     companion object {
+        /** The failure of a request whose only answer was [response], unverified for [reason]. */
+        fun unverified(response: CoapMessage, reason: String): CoapException = CoapException(
+            "Unverified ${response.code} to a protected request: $reason",
+            CoapException.Reason.UNVERIFIED_RESPONSE,
+            response = CoapResponse.of(response),
+        )
+
         /** Notifications waiting for a slow collector; the oldest are dropped (RFC 7641 §3.3.1 allows skipping states). */
         private const val OBSERVATION_BUFFER = 64
 

@@ -27,7 +27,9 @@ import kotlinx.coroutines.withContext
  *
  * Notifications are ordered by §3.4 and stale ones dropped; with message security, ordering and replay
  * protection are the security layer's job (RFC 8613 §4.1.3.5.2), whose verified notifications are all
- * passed on. On a reliable transport, which delivers in order, the Observe value MUST be ignored and every
+ * passed on. An unverified response, an error without message security (RFC 8613 §8.2), fails a registration
+ * that has no verified answer yet with [CoapException.Reason.UNVERIFIED_RESPONSE] and is dropped afterwards, so
+ * it never ends an observation or has the registration sent again with its Echo value (ADR 0008). On a reliable transport, which delivers in order, the Observe value MUST be ignored and every
  * notification is passed on (RFC 8323 §7.1). Large notifications are completed with Block2 requests
  * (RFC 7959 §2.6). A response without Observe, or a non-2.xx one, ends the observation (§3.2).
  *
@@ -180,7 +182,10 @@ internal class ClientObservation(
         }
     }
 
-    /** Sends the registration, repeating it once with Echo after a 4.01 challenge (RFC 9175 §2.3). */
+    /**
+     * Sends the registration, repeating it once with Echo after a 4.01 challenge (RFC 9175 §2.3), under message
+     * security only after a verified one: an unverified answer fails the exchange before it gets here.
+     */
     private suspend fun register(): Pair<ClientExchange, CoapMessage> {
         var request = registration
         var echoed = false

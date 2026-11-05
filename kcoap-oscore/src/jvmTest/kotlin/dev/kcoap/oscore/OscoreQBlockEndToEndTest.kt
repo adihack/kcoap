@@ -36,6 +36,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration.Companion.milliseconds
@@ -103,6 +104,7 @@ class OscoreQBlockEndToEndTest {
         val observed: Observed,
         val inner: MutableList<CoapMessage>,
         val verified: MutableList<CoapMessage>,
+        val unverified: MutableList<CoapMessage>,
         val rejected: MutableList<String>,
         val wire: MutableList<Wire>,
         val events: MutableList<EndpointEvent>,
@@ -168,7 +170,7 @@ class OscoreQBlockEndToEndTest {
         )
         return Setup(
             network, coapServer, serverTransport, coapClient, clientTransport, stored, observed,
-            recording.requests, recording.responses, recording.rejected, wire, events,
+            recording.requests, recording.responses, recording.unverified, recording.rejected, wire, events,
         )
     }
 
@@ -541,7 +543,11 @@ class OscoreQBlockEndToEndTest {
             isTarget = { _, _ -> setup.inner.any { it.options.path == "/big" } },
         )
 
-        assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
+        // ADR 0008: the forged 4.02 is unverified, so it ends the GET as a distinct failure, not a timeout, and
+        // steers nothing: no fallback to RFC 7959, the capability stays.
+        val failure = assertFailsWith<CoapException> { setup.client.get(setup.uri("/big")) { nonConfirmable() } }
+        assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, failure.reason)
+        assertEquals(CoapCode.BAD_OPTION, failure.response?.code)
         assertContentEquals(big, setup.client.get(setup.uri("/big")) { nonConfirmable() }.payload)
 
         assertTrue(setup.events.none { it is EndpointEvent.QBlockFallback }, "the capability stayed SUPPORTED")
@@ -549,7 +555,8 @@ class OscoreQBlockEndToEndTest {
         assertEquals(1, setup.inner.count { it.options.path == "/.well-known/core" }, "one probe for both GETs")
         val gets = setup.inner.filter { it.options.path == "/big" }
         assertTrue(gets.all { it.options.qBlock2 != null }, "both GETs went in Q-Block2")
-        assertEquals(listOf("Unprotected 4.02 Bad Option to a Q-Block request"), setup.rejected.toList())
+        assertEquals(listOf(CoapCode.BAD_OPTION), setup.unverified.map { it.code })
+        assertEquals(emptyList(), setup.rejected.toList())
         setup.close()
     }
 
@@ -572,14 +579,92 @@ class OscoreQBlockEndToEndTest {
             isTarget = { _, index -> index == 9 },
         )
 
-        val put = setup.client.put(setup.uri("/store"), big) { nonConfirmable() }
+        // ADR 0008: the forged 4.08 is unverified; the upload ends with it instead of sending blocks again.
+        val failure = assertFailsWith<CoapException> { setup.client.put(setup.uri("/store"), big) { nonConfirmable() } }
 
-        assertEquals(CoapCode.CHANGED, put.code)
-        assertContentEquals(big, setup.stored.single())
+        assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, failure.reason)
+        assertEquals(CoapCode.REQUEST_ENTITY_INCOMPLETE, failure.response?.code)
         val sent = setup.inner.mapNotNull { it.options.qBlock1?.number }
-        assertEquals((0L until 47L).toList(), sent, "every block once, in order")
-        assertEquals(listOf("Unprotected 4.08 Request Entity Incomplete to a Q-Block request"), setup.rejected.toList())
+        assertEquals(sent.distinct(), sent, "no block sent twice")
+        assertEquals((0L until sent.size).toList(), sent, "in order")
+        assertEquals(listOf(CoapCode.REQUEST_ENTITY_INCOMPLETE), setup.unverified.map { it.code })
+        assertEquals(emptyList(), setup.rejected.toList())
         assertTrue(setup.events.none { it is EndpointEvent.QBlockRecovery }, "no recovery was asked for")
+        setup.close()
+    }
+
+    /** An unprotected 4.01 with Echo on [token], as anyone on the path can send (it is an OSCORE error's shape). */
+    private fun forged401(token: ByteArray): CoapMessage = CoapMessage.build {
+        type = CoapMessageType.NON
+        code = CoapCode.UNAUTHORIZED
+        messageId = 0x4244
+        this.token = token
+        options { echo("0102030405060708".hexToBytes()) }
+    }
+
+    /**
+     * ADR 0008, the attack of SEC-4: an unprotected 4.01 with Echo answers a protected POST before the server's
+     * protected 2.04 does. Were it acted on, the POST would go again under a fresh Partial IV, which OSCORE's replay
+     * protection cannot catch, and run twice. It is unverified, so the POST ends with it and runs once.
+     */
+    @Test
+    fun adr0008AForged401WithEchoDoesNotMakeAProtectedPostRunTwice() = runTest {
+        for (confirmable in listOf(true, false)) {
+            val setup = setup(client = QBlockClientConfig())
+            setup.inject(forged = ::forged401, isTarget = { _, index -> index == 0 })
+
+            val failure = assertFailsWith<CoapException> {
+                setup.client.post(setup.uri("/store"), "10 EUR".encodeToByteArray()) { if (!confirmable) nonConfirmable() }
+            }
+            delay(10.seconds)
+
+            assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, failure.reason, "confirmable=$confirmable")
+            assertEquals(CoapCode.UNAUTHORIZED, failure.response?.code)
+            assertEquals(1, setup.inner.count { it.code == CoapCode.POST }, "confirmable=$confirmable: one POST")
+            assertTrue(setup.inner.none { it.options.echo != null }, "the Echo value was never taken")
+            assertEquals(1, setup.stored.size, "confirmable=$confirmable: the server ran it once")
+            setup.close()
+        }
+    }
+
+    @Test
+    fun adr0008AForged401WithEchoToAProtectedQBlockUploadHasNothingSentAgain() = runTest {
+        val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true))
+        setup.inject(forged = ::forged401, isTarget = { _, index -> index == 3 })
+
+        val failure = assertFailsWith<CoapException> { setup.client.put(setup.uri("/store"), body(3000, 1)) { nonConfirmable() } }
+
+        assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, failure.reason)
+        assertTrue(setup.inner.none { it.options.echo != null }, "no block went again with the Echo value")
+        val sent = setup.inner.mapNotNull { it.options.qBlock1?.number }
+        assertEquals(sent.distinct(), sent, "no block sent twice")
+        setup.close()
+    }
+
+    @Test
+    fun adr0008AForgedUnprotectedErrorDoesNotEndAProtectedObservation() = runTest {
+        val setup = setup(client = QBlockClientConfig())
+        val (observation, received) = observe(setup)
+        delay(10.seconds)
+        val token = setup.wire.mapNotNull { it.message }.first { it.code.isRequest && it.options.oscore != null }.token
+
+        // RFC 7641 §3.2: a 4.04 without Observe would end the observation, if it were verified.
+        val forged = CoapMessage.build {
+            type = CoapMessageType.NON
+            code = CoapCode.NOT_FOUND
+            messageId = 0x4245
+            this.token = token
+        }
+        setup.clientTransport.inject(DatagramEvent.Received(setup.serverTransport.localEndpoint, UdpMessageCodec.encode(forged)))
+        delay(10.seconds)
+        setup.observed.change()
+        delay(10.seconds)
+
+        assertEquals((0..1).map { Observed.body(it).toList() }, received.map { it.payload.toList() }, "the next notification arrived")
+        assertTrue(observation.isActive, "the observation goes on")
+        assertEquals(1, setup.observed.observerCount)
+        assertEquals(listOf(CoapCode.NOT_FOUND), setup.unverified.map { it.code })
+        observation.cancel()
         setup.close()
     }
 

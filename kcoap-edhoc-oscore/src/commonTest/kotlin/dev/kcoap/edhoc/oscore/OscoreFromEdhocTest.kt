@@ -156,7 +156,7 @@ class OscoreFromEdhocTest {
         assertTrue(resumedAt > usedBefore.max(), "$resumedAt is above every Partial IV used before the restart")
         val challenged = restartedServer.unprotectRequest(first.message, peer)!!
         val challenge = assertNotNull(challenged.challenge, "the restarted server requires the Echo proof (B.1.2)")
-        val echo = first.unprotectResponse(challenged.protectResponse(challenge)).options.echo!!
+        val echo = first.verified(challenged.protectResponse(challenge)).options.echo!!
 
         val answer = resumedClient.protectRequest(request().toBuilder().options { echo(echo) }.build(), peer)!!
         assertNull(restartedServer.unprotectRequest(answer.message, peer)!!.challenge, "the Echo proves freshness")

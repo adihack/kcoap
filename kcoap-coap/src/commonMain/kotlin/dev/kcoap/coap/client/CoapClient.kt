@@ -38,7 +38,16 @@ import kotlinx.coroutines.withContext
  * supports it), separate responses are awaited (RFC 7252 §5.2.2), a 4.01 with Echo is answered
  * once with that Echo value (RFC 9175 §2.3), and message security protects each message
  * ([CoapClientConfig.security]). Error codes are returned as responses; a request that gets no response
- * at all throws [CoapException]. Cancelling the calling coroutine cancels the exchange. Once the endpoint
+ * at all throws [CoapException].
+ *
+ * Under message security the client acts only on responses it verified (ADR 0008). A protected request answered
+ * only by an error that came without message security, such as OSCORE's unprotected 4.01 (RFC 8613 §8.2), is
+ * not repeated for its Echo option nor continued block-wise: it throws [CoapException] with
+ * [CoapException.Reason.UNVERIFIED_RESPONSE], whose [CoapException.response] is that error. A security layer
+ * that cannot protect a request it should, such as kcoap-oscore's without a context for the peer, fails it
+ * with its `MessageSecurityException` before anything is sent.
+ *
+ * Cancelling the calling coroutine cancels the exchange. Once the endpoint
  * is closed, by [close], by its scope or by a failed transport, every call throws [CoapException] with
  * [CoapEndpoint.closeCause]'s reason, and every [observe] flow fails with it.
  *
@@ -244,7 +253,9 @@ public class CoapClient private constructor(
      * Observes [request]'s target (RFC 7641): the flow registers when collected, emits the first response
      * and every fresher notification, and completes after a response that ends the observation (one
      * without Observe, or an error code, which is emitted last). It fails with [CoapException] when the
-     * registration gets no response or a Reset.
+     * registration gets no response or a Reset, or, under message security, only a response that could not be
+     * verified ([CoapException.Reason.UNVERIFIED_RESPONSE]). Once established, the observation ignores such
+     * responses: they neither end it nor reach the collectors (ADR 0008).
      *
      * Collectors of the same target share one registration (RFC 7641 §3.1); when the last one stops, the
      * observation is cancelled as [CoapClientConfig.observeCancellation] says. A slow collector misses
@@ -341,7 +352,9 @@ public class CoapClient private constructor(
 
     /**
      * One request and its response, without block-wise processing: the exchange layer, message security,
-     * and the Echo retry of RFC 9175 §2.3.
+     * and the Echo retry of RFC 9175 §2.3. Under message security the response is a verified one: an unverified
+     * answer ends the exchange with [CoapException.Reason.UNVERIFIED_RESPONSE] before anything here sees it, so
+     * neither the Echo retry nor the block-wise decisions of the callers act on it (ADR 0008).
      */
     internal suspend fun exchange(
         peer: Endpoint,

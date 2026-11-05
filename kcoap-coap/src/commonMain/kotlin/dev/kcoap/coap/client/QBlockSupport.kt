@@ -30,7 +30,8 @@ import kotlinx.coroutines.withContext
  *   [Capability.SUPPORTED].
  * - Any other answer means [Capability.UNSUPPORTED]: 4.02 (Bad Option, §4.1), even one that repeats the
  *   Q-Block2 option it rejects, as libcoap's does; a Reset; a Block2 answer; or anything else.
- * - No answer leaves it [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
+ * - No answer, or under message security only an answer that could not be verified, leaves it
+ *   [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
  *   min(1 minute, [QBlockClientConfig.capabilityLifetime]).
  *
  * The answer is kept for [QBlockClientConfig.capabilityLifetime] in the endpoint's [QBlockCapabilities], which
@@ -143,6 +144,8 @@ internal class QBlockSupport(
                 CoapException.Reason.BAD_RESPONSE -> Capability.UNSUPPORTED to "The Q-Block probe's answer was rejected: ${e.message}"
                 CoapException.Reason.TRANSMISSION_TIMEOUT, CoapException.Reason.RESPONSE_TIMEOUT ->
                     Capability.UNKNOWN to "The Q-Block probe got no answer"
+                // ADR 0008: an answer message security could not verify says nothing about the server.
+                CoapException.Reason.UNVERIFIED_RESPONSE -> Capability.UNKNOWN to "The Q-Block probe got no verified answer"
                 else -> throw e
             }
         }

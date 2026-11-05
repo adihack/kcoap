@@ -2,15 +2,21 @@ package dev.kcoap.coap
 
 /**
  * A CoAP exchange that could not complete because of the peer, the network or the endpoint itself: no
- * acknowledgement, a Reset, a DTLS session that ended, a response that violates the protocol, or an
- * endpoint that is closed or whose transport failed. [reason] says which.
+ * acknowledgement, a Reset, a DTLS session that ended, a response that violates the protocol or could not be
+ * verified, or an endpoint that is closed or whose transport failed. [reason] says which.
  *
- * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses.
+ * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses. The exception is a
+ * protected request answered only by an error that message security could not verify, which ends with
+ * [Reason.UNVERIFIED_RESPONSE] and carries that error as [response].
+ *
+ * @property response the response the exchange ended with without acting on it: for
+ *   [Reason.UNVERIFIED_RESPONSE], the unverified response as it came; null for every other reason.
  */
 public class CoapException(
     message: String,
     public val reason: Reason,
     cause: Throwable? = null,
+    public val response: CoapResponse? = null,
 ) : Exception(message, cause) {
 
     /** Why the exchange failed. */
@@ -58,5 +64,16 @@ public class CoapException(
          * application.
          */
         CONNECTION_CLOSED,
+
+        /**
+         * A request protected by message security got, before any verified response, a response the security
+         * layer could not verify: an error without message security, such as OSCORE's unprotected 4.01 or 4.02
+         * (RFC 8613 §8.2), which anyone who saw the token can send ([CoapException.response] holds it). The
+         * client acted on nothing in it: it did not repeat the request with an Echo value, continue a body or
+         * change what it knows about the server (ADR 0008). The request may have been processed or not, so
+         * repeating a request that is not idempotent may run it twice; a server that lost its security context
+         * answers this way too, and running the key establishment again, such as EDHOC, is the usual remedy.
+         */
+        UNVERIFIED_RESPONSE,
     }
 }
