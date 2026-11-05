@@ -135,10 +135,15 @@ Build governance (WP-C1):
 ### Fixed
 
 - The client answers a separate response only after verifying it and checking its critical options (RFC
-  7252 §5.4.1): a Confirmable separate response, or a notification, with a critical option the client
-  does not recognize gets a Reset instead of an ACK, which also ends an observation on the server; the
-  request still fails with `BAD_RESPONSE`. A response that fails verification is still acknowledged and
-  dropped, but no longer ends the request's retransmission or frees its NSTART slot (QB-2, coap-core-4).
+  7252 §5.4.1), however long verification takes; the Empty ACK timer for slow requests no longer
+  acknowledges a response first. A Confirmable separate response, or a notification, with a critical
+  option the client does not recognize gets a Reset instead of an ACK; the request still fails with
+  `BAD_RESPONSE`. A Non-confirmable response or notification with one, which got no answer before, now
+  gets a Reset too (RFC 7252 §4.3 MAY). Over UDP that Reset ends an observation on the server (RFC 7641
+  §3.6); over TCP and WebSockets, which have no Reset, the client deregisters with Observe 1 instead
+  (RFC 8323 §7.4), after a rejected registration response as well. A response that fails verification is
+  still acknowledged and dropped, but no longer ends a Confirmable request's retransmission or frees a
+  Non-confirmable request's NSTART slot (QB-2, coap-core-4).
 - Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
   build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
   `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).

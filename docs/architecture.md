@@ -99,8 +99,10 @@ first request, whichever of a server and a client sharing the endpoint is create
 response verification (OSCORE) runs on the receive loop, before the response is queued, so a forged
 notification cannot push out a genuine one; message-security backends should be fast or offload their
 own work. A separate response is acknowledged or reset only after that verification and the check of
-its critical options (RFC 7252 §5.4.1): one with an unknown critical option gets a Reset; one that fails
-verification is acknowledged and dropped, since a Reset would cancel an observation (RFC 8613 §8.4.2).
+its critical options (RFC 7252 §5.4.1), and no timer answers it meanwhile: one with an unknown critical
+option gets a Reset; one that fails verification is acknowledged and dropped, since a Reset would cancel
+an observation (RFC 8613 §8.4.2). A connection has no Reset, so there the client deregisters an
+observation whose notification it rejected (RFC 8323 §7.4).
 
 **Exchanges with several responses.** An exchange hands on responses in one of three modes: `Single`
 ends it with the first response, `Stream` keeps an observation open, and `Inbox` reports responses,
