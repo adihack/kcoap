@@ -15,7 +15,6 @@ import dev.kcoap.crypto.HashAlgorithm.SHA_384
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
-import dev.kcoap.crypto.supports
 
 /**
  * The EDHOC key exchange algorithm of a cipher suite (RFC 9528 §3.6).

@@ -34,10 +34,13 @@ asking the provider, never by checking the platform:
 | ECDH or ECDSA from a compressed point (EDHOC sends x only) | — | always expanded in common code first: `y = sqrt(x^3 - 3x + b)` with the parity of the prefix |
 | An AEAD, curve or key size | used | `UnsupportedAlgorithmException`: ChaCha20/Poly1305 on WebCrypto, 192-bit AES in Chromium, X25519 or Ed25519 in browsers that predate them |
 
-`supports(...)` in `kcoap-crypto` asks a backend in advance, the same way for every platform and every
-backend; `CipherSuite.isSupportedBy(backend)` in `kcoap-edhoc` builds on it. Every other failure of the
-platform leaves as an exception, also on WebCrypto, whose rejections are not Kotlin exceptions, so
-protocol code turns them into protocol errors.
+The `supports` members of `CryptoBackend` ask in advance, the same way for every platform and every
+backend ([ADR 0001](../docs/adr/0001-crypto-capabilities.md)). This backend probes each algorithm once
+per instance, by running it on throwaway keys, and memoizes the answer, so later questions cost a lookup
+however many callers ask at once; that also absorbs the differences between browsers.
+`CipherSuite.isSupportedBy(crypto, method)` in `kcoap-edhoc` builds on them, and EDHOC offers and accepts
+only the suites they allow. Every other failure of the platform leaves as an exception, also on
+WebCrypto, whose rejections are not Kotlin exceptions, so protocol code turns them into protocol errors.
 
 ChaCha20/Poly1305, X25519 and Ed25519 have no common-code fallback: they process secret keys, and
 constant-time arithmetic is not something Kotlin/JS can promise. Point decompression only sees public
@@ -53,6 +56,7 @@ values.
 | `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, unusable peer keys |
 | `EcPointDecompressionTest` | the SEC 2 base points, fresh platform keys of both parities, off-curve and out-of-range x |
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
+| `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |
 
 All but the last run on every target: JVM, Linux native, Apple native (on macOS), and Node.js as

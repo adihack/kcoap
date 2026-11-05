@@ -41,22 +41,15 @@ class BackendDefaultsTest {
         assertFailsWith<UnsupportedAlgorithmException> { minimal.decapsulate(key, ByteArray(1088)) }
     }
 
-    /** The capability checks ask the backend, so they report exactly what it implements. */
+    /** The default capability answers ask the backend, so a minimal one reports only the symmetric primitives. */
     @Test
     fun capabilitiesFollowWhatTheBackendImplements() = runTest {
         assertTrue(minimal.supports(AeadAlgorithm.AES_CCM_16_64_128))
         assertFalse(minimal.supports(AeadAlgorithm.A128GCM))
+        assertTrue(minimal.supports(HashAlgorithm.SHA_256))
         assertFalse(minimal.supports(KeyType.X25519))
         assertFalse(minimal.supports(SignatureAlgorithm.EDDSA))
-
-        val signing = object : CryptoBackend by minimal {
-            override suspend fun generateKeyPair(type: KeyType) = KeyPair(ByteArray(type.publicKeyLength), SoftwarePrivateKey(type, ByteArray(32)))
-            override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
-                if (algorithm == SignatureAlgorithm.EDDSA) ByteArray(64) else throw UnsupportedAlgorithmException(algorithm.name)
-        }
-        assertTrue(signing.supports(KeyType.P256))
-        assertTrue(signing.supports(SignatureAlgorithm.EDDSA))
-        assertFalse(signing.supports(SignatureAlgorithm.ES256), "a key pair alone does not make the signature algorithm")
+        assertFalse(minimal.supports(KemAlgorithm.ML_KEM_512))
     }
 
     @Test

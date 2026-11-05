@@ -11,6 +11,25 @@ package dev.kcoap.crypto
  * Only the symmetric primitives are required. Asymmetric operations default to throwing
  * [UnsupportedAlgorithmException], so an OSCORE-only deployment can use a minimal backend. Backends
  * override what they support; see `DefaultCryptoBackend` and `BouncyCastleCryptoBackend`.
+ *
+ * ## Capabilities
+ *
+ * Platforms differ in what their cryptography offers (WebCrypto has no ChaCha20/Poly1305, a secure
+ * element may have only P-256), so protocol code asks before it commits: the `supports` members say
+ * whether an operation would run, and EDHOC offers only the cipher suites they allow. The contract
+ * (docs/adr/0001-crypto-capabilities.md): `supports(x)` is false exactly when the operations on `x`
+ * would throw [UnsupportedAlgorithmException]. Other failures, such as malformed input, are not a
+ * missing capability.
+ *
+ * The defaults find out by trying: they run each operation once on throwaway keys and count only
+ * [UnsupportedAlgorithmException] as a no. That costs key pairs, so a software backend memoizes the
+ * answers per instance, and a hardware or secure-element backend overrides the members with static
+ * answers, because a probe there could create a persistent key or prompt for a biometric. Callers ask
+ * freely (EDHOC asks for every session), and an answer must not change during the backend's lifetime.
+ *
+ * A decorator (`CryptoBackend by delegate`) forwards `supports` to its delegate, so one that adds
+ * algorithms, as `BouncyCastleCryptoBackend` adds ML-KEM and ML-DSA, must also override the matching
+ * `supports` members.
  */
 public interface CryptoBackend {
     public suspend fun randomBytes(size: Int): ByteArray
@@ -77,6 +96,38 @@ public interface CryptoBackend {
 
     public suspend fun decapsulate(privateKey: PrivateKey, ciphertext: ByteArray): ByteArray =
         throw UnsupportedAlgorithmException(privateKey.type.name)
+
+    /**
+     * Whether [aead] runs [algorithm]. The default asks by building it under an all-zero key and
+     * encrypting an empty message.
+     */
+    public suspend fun supports(algorithm: AeadAlgorithm): Boolean = Probe.aead(this, algorithm)
+
+    /**
+     * Whether this backend generates and uses key pairs of [type]: [generateKeyPair], and for the
+     * Diffie-Hellman types (X25519, X448, P-256, P-384) also [keyAgreement]. Signing is asked for separately,
+     * with `supports(SignatureAlgorithm)`. The default asks by generating a key pair and, for a
+     * Diffie-Hellman type, agreeing on a secret with the pair's own public key.
+     */
+    public suspend fun supports(type: KeyType): Boolean = Probe.keyType(this, type)
+
+    /**
+     * Whether this backend [sign]s and [verify]s with [algorithm]. The default asks by generating a key
+     * pair, signing an empty message and verifying the signature.
+     */
+    public suspend fun supports(algorithm: SignatureAlgorithm): Boolean = Probe.signature(this, algorithm)
+
+    /**
+     * Whether this backend [encapsulate]s and [decapsulate]s with [algorithm] (FIPS 203). The default asks
+     * by generating a key pair, encapsulating to it and decapsulating the ciphertext.
+     */
+    public suspend fun supports(algorithm: KemAlgorithm): Boolean = Probe.kem(this, algorithm)
+
+    /**
+     * Whether this backend computes the [digest] of [algorithm], and for a SHA-2 hash also its [hmac],
+     * which HKDF (RFC 5869) needs. The default asks by hashing and authenticating an empty message.
+     */
+    public suspend fun supports(algorithm: HashAlgorithm): Boolean = Probe.hash(this, algorithm)
 }
 
 /** Forward AES block permutation. CCM, CTR and CBC-MAC only ever need the encrypt direction. */
@@ -98,4 +149,12 @@ public interface Aead {
 
 public class AeadAuthenticationException : Exception("AEAD authentication failed")
 
-public class UnsupportedAlgorithmException(algorithm: String) : Exception("Unsupported algorithm: $algorithm")
+/**
+ * The backend does not provide [algorithm] where it runs. A backend reports a missing capability this
+ * way and no other, and the `supports` members of [CryptoBackend] answer false exactly where an
+ * operation would throw it.
+ */
+public class UnsupportedAlgorithmException(
+    /** The missing algorithm, key type or curve, as the backend names it. */
+    public val algorithm: String,
+) : Exception("Unsupported algorithm: $algorithm")

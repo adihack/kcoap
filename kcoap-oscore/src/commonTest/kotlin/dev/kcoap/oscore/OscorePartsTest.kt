@@ -9,7 +9,6 @@ import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
-import dev.kcoap.crypto.supports
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals

@@ -6,6 +6,7 @@ import dev.kcoap.crypto.AeadAuthenticationException
 import dev.kcoap.crypto.AesBlockCipher
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
+import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
@@ -13,7 +14,6 @@ import dev.kcoap.crypto.Shake256
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.UnsupportedAlgorithmException
-import dev.kcoap.crypto.supports
 import dev.whyoleg.cryptography.BinarySize.Companion.bits
 import dev.whyoleg.cryptography.CryptographyAlgorithm
 import dev.whyoleg.cryptography.CryptographyAlgorithmId
@@ -51,16 +51,48 @@ import dev.whyoleg.cryptography.operations.SignatureVerifier
  *   ([EcPointDecompression]), so ECDH from an x-only EDHOC key works whether or not the platform
  *   accepts compressed points.
  * - What the platform lacks is reported as [UnsupportedAlgorithmException] when it is asked for, and
- *   `supports(...)` asks in advance: ChaCha20/Poly1305 on WebCrypto, 192-bit AES keys in Chromium,
- *   X25519 and Ed25519 in browsers that predate them.
+ *   the `supports` members ask in advance: ChaCha20/Poly1305 on WebCrypto, 192-bit AES keys in
+ *   Chromium, X25519 and Ed25519 in browsers that predate them.
  * - Other platform failures leave as exceptions, also where the platform's own are not Kotlin
  *   exceptions (WebCrypto), so protocol code can turn them into protocol errors.
+ *
+ * The `supports` members probe once per instance and memoize the answer (docs/adr/0001-crypto-capabilities.md):
+ * the first question about an algorithm runs its operations on throwaway keys, and every later one is a
+ * lookup, however many callers ask at once. Probes call this backend's own operations, so a subclass that
+ * overrides an operation is asked about its own; those operations must not ask `supports` in turn.
  *
  * Private keys are [SoftwarePrivateKey]s holding raw key material in memory.
  */
 public open class DefaultCryptoBackend(
     private val provider: CryptographyProvider = CryptographyProvider.Default,
 ) : CryptoBackend {
+    private val capabilities = CapabilityMemo()
+
+    /** Probed once per instance: an AEAD built under a zero key encrypts an empty message. */
+    override suspend fun supports(algorithm: AeadAlgorithm): Boolean =
+        capabilities.answer(algorithm) { probe(algorithm) }
+
+    /** Probed once per instance: a generated key pair, and key agreement for the Diffie-Hellman types. */
+    override suspend fun supports(type: KeyType): Boolean = capabilities.answer(type) { probe(type) }
+
+    /** Probed once per instance: a generated key pair signs and verifies an empty message. */
+    override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
+        capabilities.answer(algorithm) { probe(algorithm) }
+
+    /** Probed once per instance; this backend has no KEM, so the answer is false unless a subclass adds one. */
+    override suspend fun supports(algorithm: KemAlgorithm): Boolean =
+        capabilities.answer(algorithm) { probe(algorithm) }
+
+    /** Probed once per instance: the digest, and the HMAC of a SHA-2 hash. */
+    override suspend fun supports(algorithm: HashAlgorithm): Boolean =
+        capabilities.answer(algorithm) { probe(algorithm) }
+
+    // The interface's probes, which call this instance's operations.
+    private suspend fun probe(algorithm: AeadAlgorithm): Boolean = super.supports(algorithm)
+    private suspend fun probe(type: KeyType): Boolean = super.supports(type)
+    private suspend fun probe(algorithm: SignatureAlgorithm): Boolean = super.supports(algorithm)
+    private suspend fun probe(algorithm: KemAlgorithm): Boolean = super.supports(algorithm)
+    private suspend fun probe(algorithm: HashAlgorithm): Boolean = super.supports(algorithm)
 
     override suspend fun randomBytes(size: Int): ByteArray = CryptographySystem.getDefaultRandom().nextBytes(size)
 
@@ -103,7 +135,10 @@ public open class DefaultCryptoBackend(
         return PlatformAead(algorithm.name, cipher, tagLength = algorithm.tagLength, nonceLength = algorithm.nonceLength)
     }
 
-    override suspend fun generateKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
+    override suspend fun generateKeyPair(type: KeyType): KeyPair = platformKeyPair(type)
+
+    /** [generateKeyPair] on the provider, which no subclass replaces. */
+    private suspend fun platformKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
         when (type) {
             KeyType.X25519, KeyType.X448 -> {
                 val pair = platform(XDH).keyPairGenerator(type.xdhCurve()).generateKey()
@@ -215,16 +250,32 @@ public open class DefaultCryptoBackend(
     /**
      * Runs [block], a platform call on keys of [type] given by the caller or a peer. When it fails, the
      * cause is either the input or the platform not handling [type] at all (X25519 in a browser that
-     * predates it), and only the second makes [supports] false: that becomes
-     * [UnsupportedAlgorithmException], the first an exception about the input ([platformCall]).
+     * predates it): the second becomes [UnsupportedAlgorithmException], the first an exception about the
+     * input ([platformCall]).
      */
     private suspend inline fun <T> withKeysOf(type: KeyType, algorithm: String, block: () -> T): T = try {
         block()
     } catch (e: Throwable) {
         if (e is UnsupportedAlgorithmException || !isPlatformFailure(e)) throw e
-        if (!supports(type)) throw UnsupportedAlgorithmException(algorithm)
+        if (!generatesKeysOf(type)) throw UnsupportedAlgorithmException(algorithm)
         throw asException(e, algorithm)
     }
+
+    /**
+     * Whether the provider generates key pairs of [type], asked once. Not `supports(type)`: that probes
+     * key agreement too, which would come back here when it fails.
+     */
+    private suspend fun generatesKeysOf(type: KeyType): Boolean = capabilities.answer(KeyGeneration(type)) {
+        try {
+            platformKeyPair(type).privateKey.softwareKey().destroy()
+            true
+        } catch (_: UnsupportedAlgorithmException) {
+            false
+        }
+    }
+
+    /** The memo's question for [generatesKeysOf], apart from `supports(type)`. */
+    private data class KeyGeneration(val type: KeyType)
 
     /**
      * The provider's implementation of [id], or [UnsupportedAlgorithmException] when the platform has

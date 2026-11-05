@@ -1,40 +1,68 @@
 package dev.kcoap.crypto
 
-// Capability checks: whether a backend runs an algorithm on the platform it is running on.
-//
-// Platforms differ in what their cryptography offers (WebCrypto has no ChaCha20/Poly1305, older browsers
-// no X25519, a secure element perhaps only P-256), and a CryptoBackend reports what it cannot do with
-// UnsupportedAlgorithmException when the algorithm is asked for. These checks ask in exactly that way,
-// so they mean the same on every platform and for every backend, and they cost one key or key pair.
-// Configuration uses them to offer only what works, such as the EDHOC cipher suites a browser can run.
+import dev.kcoap.common.wipe
+import kotlin.coroutines.cancellation.CancellationException
 
-/** Whether this backend provides [algorithm], asked for as an AEAD under an all-zero key. */
-public suspend fun CryptoBackend.supports(algorithm: AeadAlgorithm): Boolean = isSupported {
-    aead(algorithm, ByteArray(algorithm.keyLength))
-}
+/**
+ * The default answers of the `supports` members of [CryptoBackend]: each probe runs the operations once
+ * on throwaway keys and inputs, and answers no exactly when one of them throws
+ * [UnsupportedAlgorithmException] (docs/adr/0001-crypto-capabilities.md).
+ *
+ * Any other failure means the algorithm is there: an operation that rejects a probe's input, or a device
+ * that is busy, fails the same way when it is used for real, and that failure is not a missing
+ * capability. Cancellation propagates. Probes cost key pairs, so backends memoize or override them.
+ */
+internal object Probe {
+    private val diffieHellmanTypes: Set<KeyType> = EcdhCurve.entries.map { it.keyType }.toSet()
 
-/** Whether this backend generates (and so works with) key pairs of [type]. */
-public suspend fun CryptoBackend.supports(type: KeyType): Boolean = isSupported {
-    destroy(generateKeyPair(type))
-}
-
-/** Whether this backend signs with [algorithm]: it generates a key pair and signs an empty message. */
-public suspend fun CryptoBackend.supports(algorithm: SignatureAlgorithm): Boolean = isSupported {
-    val pair = generateKeyPair(algorithm.keyType)
-    try {
-        sign(algorithm, pair.privateKey, ByteArray(0))
-    } finally {
-        destroy(pair)
+    suspend fun aead(crypto: CryptoBackend, algorithm: AeadAlgorithm): Boolean = answer {
+        crypto.aead(algorithm, ByteArray(algorithm.keyLength))
+            .encrypt(ByteArray(algorithm.nonceLength), ByteArray(0), ByteArray(0))
     }
-}
 
-private inline fun isSupported(probe: () -> Unit): Boolean = try {
-    probe()
-    true
-} catch (_: UnsupportedAlgorithmException) {
-    false
-}
+    suspend fun keyType(crypto: CryptoBackend, type: KeyType): Boolean = answer {
+        withKeyPair(crypto, type) { pair ->
+            if (type in diffieHellmanTypes) crypto.keyAgreement(pair.privateKey, pair.publicKey).wipe()
+        }
+    }
 
-private fun destroy(pair: KeyPair) {
-    (pair.privateKey as? SoftwarePrivateKey)?.destroy()
+    suspend fun signature(crypto: CryptoBackend, algorithm: SignatureAlgorithm): Boolean = answer {
+        withKeyPair(crypto, algorithm.keyType) { pair ->
+            val signature = crypto.sign(algorithm, pair.privateKey, ByteArray(0))
+            crypto.verify(algorithm, pair.publicKey, ByteArray(0), signature)
+        }
+    }
+
+    suspend fun kem(crypto: CryptoBackend, algorithm: KemAlgorithm): Boolean = answer {
+        withKeyPair(crypto, algorithm.keyType) { pair ->
+            val encapsulation = crypto.encapsulate(algorithm, pair.publicKey)
+            encapsulation.sharedSecret.wipe()
+            crypto.decapsulate(pair.privateKey, encapsulation.ciphertext).wipe()
+        }
+    }
+
+    suspend fun hash(crypto: CryptoBackend, algorithm: HashAlgorithm): Boolean = answer {
+        crypto.digest(algorithm, ByteArray(0))
+        if (!algorithm.isXof) crypto.hmac(algorithm, ByteArray(algorithm.outputLength), ByteArray(0))
+    }
+
+    private inline fun answer(probe: () -> Unit): Boolean = try {
+        probe()
+        true
+    } catch (_: UnsupportedAlgorithmException) {
+        false
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        true
+    }
+
+    private suspend inline fun withKeyPair(crypto: CryptoBackend, type: KeyType, use: (KeyPair) -> Unit) {
+        val pair = crypto.generateKeyPair(type)
+        try {
+            use(pair)
+        } finally {
+            (pair.privateKey as? SoftwarePrivateKey)?.destroy()
+        }
+    }
 }
