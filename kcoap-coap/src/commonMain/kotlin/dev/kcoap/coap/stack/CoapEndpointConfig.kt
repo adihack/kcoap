@@ -45,8 +45,8 @@ import kotlin.time.TimeSource
  *   state and without an answer that would go to a possibly spoofed source (§11.3); duplicates of
  *   remembered messages are still answered. The default takes about 200 new messages a second.
  * @property maxConcurrentRequests the most request handlers running at once, over every transport.
- *   Beyond it a Confirmable request is answered with a piggybacked 5.03 Service Unavailable with Max-Age
- *   (RFC 7252 §5.9.3.4), no larger than the request, so it amplifies nothing (§11.3), and duplicates of it
+ *   Beyond it a Confirmable request is answered with a piggybacked 5.03 Service Unavailable with a Max-Age
+ *   of 2 seconds, when to try again (RFC 7252 §5.9.3.4), no larger than the request, so it amplifies nothing (§11.3), and duplicates of it
  *   get the same answer from the deduplication cache; a Non-confirmable request is dropped; a request on a
  *   connection gets the 5.03. Requests never queue, and the receive loop never waits for a free handler.
  * @property maxExchangesPerPeer the most exchanges in progress with one peer: requests of this endpoint
