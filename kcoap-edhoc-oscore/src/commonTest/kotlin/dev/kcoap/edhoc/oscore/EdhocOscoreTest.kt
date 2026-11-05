@@ -402,6 +402,7 @@ class EdhocOscoreTest {
             "f5" to "no message_1 after true",
             "18" to "no CBOR item for a connection identifier",
             "1818" to "connection identifiers as integers are -24..23",
+            "3818" to "connection identifiers as integers are -24..23",
             "f6" to "a connection identifier is an integer or a byte string",
             "41" to "no CBOR item for a connection identifier",
             "4100" to "no EDHOC message after the connection identifier",
@@ -467,6 +468,13 @@ class EdhocOscoreTest {
             if (++calls == 2) EdhocOverCoap.errorResponse(EdhocError.unspecified("no").encode()) else edhoc.handle(request.payload, peer)
         }
         assertFailsWith<EdhocPeerErrorException> { failing.run() }
+
+        // A server error with an EDHOC error message, such as a full server's 5.00 (Appendix A.2.3), is EDHOC's too.
+        val full = EdhocClientHandshake(peers.initiatorConfig(), crypto, server) {
+            EdhocOverCoap.errorResponse(EdhocError.unspecified("Too many pending EDHOC sessions").encode(), isServerError = true)
+        }
+        val refused = assertFailsWith<EdhocPeerErrorException> { full.run() }
+        assertEquals("Too many pending EDHOC sessions", refused.error.diagnostic)
 
         // A message_3 answered with neither a 2.04 nor an EDHOC error is a transfer failure, message_4 or not.
         val notEdhoc = EdhocClientHandshake(peers.initiatorConfig(), crypto, server) { request ->
