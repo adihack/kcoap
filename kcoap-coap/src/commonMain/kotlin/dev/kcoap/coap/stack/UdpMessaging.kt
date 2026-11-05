@@ -61,6 +61,12 @@ internal class UdpMessaging(
     private val timed = LinkedHashSet<Transmission>()
     private val windows = HashMap<Endpoint, PeerWindow>()
 
+    /** The deadline [nextDeadline] last returned, which the timer loop waits for; null while it waits for none. */
+    private var armedDeadline: Duration? = null
+
+    /** Whether a call since [takeWakeup] added a deadline earlier than [armedDeadline]. */
+    private var wakeupNeeded = false
+
     private class PeerWindow {
         var outstanding = 0
         val queue = ArrayDeque<Transmission>()
@@ -73,11 +79,29 @@ internal class UdpMessaging(
         return taken
     }
 
+    /**
+     * Whether the timer loop must recompute its wait, then clears it: true only when a call since the last
+     * one added a deadline earlier than the one [nextDeadline] last returned. A deadline that goes away or
+     * moves later needs no wakeup, since the loop recomputes after every wait, so most calls, such as a
+     * datagram that adds only a deduplication lifetime, leave the timers alone however many transmissions
+     * are outstanding.
+     */
+    fun takeWakeup(): Boolean = wakeupNeeded.also { wakeupNeeded = false }
+
+    /** Notes a deadline a call added, for [takeWakeup]. */
+    private fun schedule(deadline: Duration) {
+        val armed = armedDeadline
+        if (armed == null || deadline < armed) {
+            armedDeadline = deadline
+            wakeupNeeded = true
+        }
+    }
+
     // ---------------------------------------------------------------- sending
 
     /** A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4). */
     fun allocateMessageId(peer: Endpoint, now: Duration): Int =
-        messageIds.allocate(peer, now, now + parameters.exchangeLifetime)
+        messageIds.allocate(peer, now, now + parameters.exchangeLifetime).also { schedule(now + parameters.exchangeLifetime) }
 
     /**
      * Sends a Confirmable or Non-confirmable [message] whose Message ID came from [allocateMessageId]. A
@@ -292,11 +316,12 @@ internal class UdpMessaging(
         received[key]?.let { return onDuplicate(it) }
         if (!received.hasRoom(now)) return dropForLimit(from, message)
         val entry = received.add(key, CoapMessageType.CON, now)
+        schedule(entry.expiresAt)
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
             message.isEmpty -> sendReset(entry, "CoAP ping")
             message.isRequest || message.isResponse -> {
-                entry.ackDeadline = separateResponseDelay?.let { now + it }
+                entry.ackDeadline = separateResponseDelay?.let { now + it }?.also(::schedule)
                 received.pending += entry
                 effects += if (message.isRequest) {
                     MessagingEffect.DeliverRequest(from, message)
@@ -319,7 +344,7 @@ internal class UdpMessaging(
             return
         }
         if (!received.hasRoom(now)) return dropForLimit(from, message)
-        received.add(key, CoapMessageType.NON, now)
+        schedule(received.add(key, CoapMessageType.NON, now).expiresAt)
         effects += if (message.isRequest) {
             MessagingEffect.DeliverRequest(from, message)
         } else {
@@ -359,6 +384,7 @@ internal class UdpMessaging(
         consider(received.nextExpiry())
         consider(messageIds.nextExpiry())
         consider(nonConfirmableExpiries.firstOrNull()?.second)
+        armedDeadline = next
         return next
     }
 
@@ -397,6 +423,7 @@ internal class UdpMessaging(
         transmission.retransmissions++
         transmission.timeout *= 2
         transmission.deadline = now + transmission.timeout
+        schedule(transmission.deadline)
         val replacement = transmission.replacement
         if (replacement != null) {
             // RFC 7641 §4.5.2 step 4: new Message ID, counter and timeout retained.
@@ -489,15 +516,19 @@ internal class UdpMessaging(
         transmission.firstSentAt = now
         val messageId = transmission.message.messageId
         messageIds.extend(peer, messageId, now + parameters.exchangeLifetime)
+        schedule(now + parameters.exchangeLifetime)
         if (transmission.isConfirmable) {
             transmission.timeout = initialTimeout()
             transmission.deadline = now + transmission.timeout
             timed += transmission
+            schedule(transmission.deadline)
         } else {
             nonConfirmableExpiries.addLast(MessageKey(peer, messageId) to now + parameters.nonLifetime)
+            schedule(now + parameters.nonLifetime)
             transmission.slotHold?.let {
                 transmission.deadline = now + it
                 timed += transmission
+                schedule(transmission.deadline)
             }
         }
         transmission.bytes?.let { transmit(peer, transmission.message, it, transmission) }

@@ -663,17 +663,20 @@ public class CoapEndpoint private constructor(
      */
     private suspend fun <T> withMessaging(signal: Boolean = true, block: UdpMessaging.(now: Duration) -> T): T {
         var effects: List<MessagingEffect> = emptyList()
+        var wakeup = false
         val result = try {
             lock.withLock {
                 try {
                     messaging.block(now())
                 } finally {
                     effects = messaging.takeEffects()
+                    wakeup = messaging.takeWakeup()
                 }
             }
         } finally {
             if (effects.isNotEmpty()) withContext(NonCancellable) { execute(effects) }
-            if (signal) wakeups.trySend(Unit)
+            // Only a deadline earlier than the one the timer loop waits for wakes it (CLR-4).
+            if (signal && wakeup) wakeups.trySend(Unit)
         }
         return result
     }
@@ -912,8 +915,9 @@ public class CoapEndpoint private constructor(
 
     /**
      * Fires the messaging layer's timers. It waits with the dispatcher's delays for deadlines read on the
-     * time source, so the two must be one clock ([clockCheck] warns when they are not). A wakeup means the
-     * state changed: the next deadline is recomputed, and the timers run only once one is due.
+     * time source, so the two must be one clock ([clockCheck] warns when they are not). A wakeup means a
+     * call added a deadline earlier than the one it waits for ([UdpMessaging.takeWakeup]): the next deadline
+     * is recomputed, and the timers run only once one is due.
      */
     private suspend fun timerLoop() {
         while (true) {

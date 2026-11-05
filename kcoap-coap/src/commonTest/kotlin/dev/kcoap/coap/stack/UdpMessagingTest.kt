@@ -703,6 +703,35 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun theTimersAreWokenOnlyWhenACallBringsTheNextDeadlineForward() {
+        val messaging = messaging(separateResponseDelay = 1.seconds)
+        assertNull(messaging.nextDeadline(), "the timer loop waits for nothing")
+        val transmission = messaging.sendConfirmable(Duration.ZERO)
+        messaging.takeEffects()
+        assertTrue(messaging.takeWakeup(), "the first deadline wakes the timers")
+        assertEquals(params.ackTimeout, messaging.nextDeadline())
+
+        // Datagrams whose deadlines all lie later, here their deduplication lifetimes, leave the timers alone,
+        // however many transmissions are outstanding.
+        messaging.receive(500.milliseconds, request(CoapMessageType.NON, 7))
+        messaging.receive(500.milliseconds, response(CoapMessageType.ACK, 99))
+        messaging.takeEffects()
+        assertFalse(messaging.takeWakeup())
+
+        // A Confirmable request due for its Empty ACK before the retransmission wakes them.
+        messaging.receive(600.milliseconds, request(CoapMessageType.CON, 8))
+        messaging.takeEffects()
+        assertTrue(messaging.takeWakeup())
+        assertEquals(1600.milliseconds, messaging.nextDeadline())
+
+        // A deadline that goes away needs no wakeup: the loop recomputes after its wait anyway.
+        messaging.receive(700.milliseconds, response(CoapMessageType.ACK, transmission.message.messageId))
+        messaging.takeEffects()
+        assertFalse(messaging.takeWakeup())
+        assertFalse(messaging.takeWakeup(), "taking it clears it")
+    }
+
+    @Test
     fun aTransmissionTheTransportRefusedFailsAtOnceAndFreesItsSlot() {
         val messaging = messaging()
         val refused = messaging.sendConfirmable(Duration.ZERO)
