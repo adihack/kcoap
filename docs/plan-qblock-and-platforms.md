@@ -628,7 +628,7 @@ public class QBlockServerConfig(
   After the merge with QB-3: `KT/QBlockEndToEndTest.kt` (6) runs the client against the server on the
   in-memory network: NON and CON bodies both ways, an upload answered in Q-Block2, the Echo before the
   first burst, and 10 seeds at 10 % loss each way with no state left on either side. The full soak of
-  `QBlockTest` (20 seeds, 30 % loss, 20 KiB, connections) is still to come.
+  `QBlockTest` (20 seeds, 30 % loss, 20 KiB, connections) came with QB-6.
 
 **QB-5: OSCORE with Q-Block**
 - **Scope:**
@@ -652,6 +652,34 @@ public class QBlockServerConfig(
   - With a resource that changes every 1 s and a 24-block body, the client still receives complete bodies: no starvation.
   - A Reset to any block removes the observer.
   - A Q-Block1 FETCH registration uses the token of the 2.05.
+- **Status: done**, except the OSCORE notifications of `OscoreQBlockTest`, which follow QB-5 (it runs in
+  parallel in kcoap-oscore). Server: `CoapServer.respondTo` adds the observer of a registration that carried
+  Q-Block2, or of a FETCH uploaded in Q-Block1 (on the token of the block that completed it), and
+  `QBlockServer.notify` sends each notification as a `ServedBody` whose blocks go to a `NotificationBody`
+  (the observation's token, all of one message type) instead of a request: `QBlockTarget` is now the sender's
+  `R`. A block carries the body's Observe value when its target does (a notification, the registration, a
+  Continue's set on it), never on a request for missing blocks. `ServerObservation` keeps its latest `body`
+  as the one outstanding notification until it is settled (every block out, Confirmable ones acknowledged,
+  Non-confirmable ones at least `nonConfirmableNotificationInterval` old, holding a `BodyLease` meanwhile);
+  changes fold into the next body, which ends whatever the older one still had queued. A Reset, a failure
+  or a timeout of any block removes the observer; removing the observer stops its body. Notification bodies
+  are not checked against the amplification factor; under `ALL_RESPONSES` a Q-Block2 registration is
+  challenged as a plain one is. Client: `QBlockClient.observe` runs the registration as a download or
+  upload whose first response with Observe, on a request of the registration, names the observation's token;
+  once the first body is whole every other token and the lease go, and each later body gets a
+  `QBlock2Receiver` of its own (mode from its blocks' type), ordered by `NotificationOrder` once, on its first
+  block, emitted once; a body without Observe is taken only in answer to a request for the body in progress.
+  A Non-confirmable body's follow-ups share one lease. A Q-Block1 registration ends by forgetting its token.
+  Found on the way: the reader of a connection delivered a whole burst of requests before any handler ran on
+  a dispatcher of one thread, so a 320-block upload from kcoap's client met `maxConcurrentRequests` (5.03);
+  the reader now yields after each read (`ConnectionDriver`). Deviations from the figures, allowed by the
+  RFC: kcoap's client sends the last block of a FETCH again at NON_RECEIVE_TIMEOUT, the moment the server's
+  4.08 of Figure 13 goes out; the server answers on the request that completed an upload (Figure 14 uses
+  the last one received). The POST part of the soak runs at 10 % loss: a POST does not repeat its last
+  block, so at 30 % each way about a fifth of the runs fail cleanly. Tests: `QBlockObserveTest` (23),
+  Observe rules in `QBlockServerTest`, `QBlockTest` (5 soaks, 200 runs), `QBlockReliableTest` (+5),
+  `KcoapClientAgainstLibcoapQBlockTest.k6…` and `LibcoapClientAgainstKcoapQBlockTest.l6…`. libcoap leaves
+  Observe out of the blocks after a Continue (K6) and writes no `-o` file for an observation (L6).
 
 **QB-7: interop soak, documentation, compliance**
 - **Scope:**

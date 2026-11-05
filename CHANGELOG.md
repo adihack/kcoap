@@ -115,6 +115,24 @@ adds its entry and migration note below.
   callers of the constructor recompile. Tested against
   libcoap's `coap-server -L 7` (K1–K5, K7–K10, K12, with 300-block uploads over UDP and TCP) and soaked at
   10 % and 30 % loss.
+- Observe with Q-Block (RFC 9177 §4.5; QB-6), where both sides have Q-Block on: an observation registers
+  with Q-Block2, or uploads a FETCH body that needs blocks in Q-Block1, and every notification is a Q-Block2
+  body with an ETag of its own and the Observe value on every block, on the registration's token (for a
+  Q-Block1 registration the token of the block that completed it, Figure 14). `CoapClient.observe` emits each
+  body once, whole; bodies are ordered by their Observe value (RFC 7641 §3.4), and late blocks of a body
+  that was delivered, given up or superseded are ignored. The server keeps a body the one outstanding
+  notification until every block went out (and, Non-confirmable, for at least
+  `nonConfirmableNotificationInterval`, with one NSTART slot towards the client), folds changes meanwhile
+  into the next body, so a resource that changes faster than its bodies go out still delivers whole ones,
+  and removes the observer on a Reset to any block or an unacknowledged Confirmable one. A cancelled
+  observation registered with Q-Block1 forgets its token instead of deregistering, since its body sent again
+  would need a new Request-Tag. Behaviour changes for those who turned Q-Block on: a server with
+  `QBlockServerConfig.isEnabled` now adds an observer for a registration carrying Q-Block2, which QB-3
+  served as a plain request, and a client with `QBlockClientConfig.mode` other than `OFF` now observes with
+  Q-Block, where QB-4 kept observations on RFC 7959. No API change. Tested end to end on Figures 7 to 15
+  (`QBlockObserveTest`) and against libcoap both ways (K6, L6). The kcoap-to-kcoap soak of the plan
+  (`QBlockTest`: 20 seeds, 10 % and 30 % loss, 3000 B and 20 KiB, PUT, GET and POST) and bodies of 320 blocks
+  and notifications over connections (`QBlockReliableTest`) came with it.
 - `kcoap-testkit`: `RebindingTransport`, a client whose source address changes at a chosen datagram, as
   behind a NAT that rebinds (QB-4).
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
@@ -303,6 +321,10 @@ Build governance (WP-C1):
   (RFC 8323 §7.4), after a rejected registration response as well. A response that fails verification is
   still acknowledged and dropped, but no longer ends a Confirmable request's retransmission or frees a
   Non-confirmable request's NSTART slot (QB-2, coap-core-4).
+- A connection's reader delivered every request of a burst before any of their handlers ran on a
+  dispatcher of one thread, so a peer that writes many requests back to back, as kcoap's Q-Block client does
+  with the blocks of a body on TCP (RFC 9177 Appendix B), ran the endpoint into `maxConcurrentRequests` and
+  got 5.03 for a block of a 320-block upload. The reader now yields after each read (QB-6).
 - Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
   build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
   `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).

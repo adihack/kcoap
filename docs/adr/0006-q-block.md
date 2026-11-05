@@ -89,6 +89,19 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   Block1 and Block2.
 - **Amplification.** A server bursting to an unauthenticated, unverified peer first verifies its address
   with Echo (RFC 9175 §2.4), for Q-Block bursts only.
+- **Observe** (QB-6). A notification is a Q-Block2 body with a new ETag and the Observe value on every
+  block, also those sent for a Continue, never those answering a request for missing blocks (§4.5). A
+  body is the observation's one outstanding notification until every block went out (Confirmable ones
+  acknowledged) and, Non-confirmable, for at least `nonConfirmableNotificationInterval`, holding one NSTART
+  slot; changes meanwhile fold into the next body, and no body is cut short by a newer one, so a resource
+  that changes faster than its bodies go out does not starve the client. A newer body ends what an older
+  one still had to send. Every block is a notification: a Reset to any of them, or an unacknowledged
+  Confirmable one, removes the observer. Notification bodies are not checked against the amplification
+  factor (the registration was). The client gives each body a receiver of its own, in the mode of its
+  blocks' message type, orders bodies once, on the first block of a new ETag, and takes a body without
+  Observe only in answer to its own request for the body in progress, since an older answer could be
+  staler than the bodies since. A Q-Block1 FETCH registration keeps the token of the 2.05 and ends by
+  forgetting it, because a deregistration would send the body again under a new Request-Tag.
 - **Strict towards libcoap's client.** A Q-Block2 follow-up that carries `Q-Block1 0/M` without payload
   gets 4.00; the deviation is pinned as an `upstream…` test.
 
