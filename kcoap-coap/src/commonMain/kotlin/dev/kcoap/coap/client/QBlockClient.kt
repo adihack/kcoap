@@ -43,9 +43,10 @@ import kotlinx.coroutines.withContext
  *
  * **Choosing the mechanism** (§4.1). RFC 7959 ([BlockwiseClient]) carries the request when Q-Block is off,
  * when the peer is on a reliable transport and [QBlockClientConfig.onReliableTransports] is off, when message
- * security is configured and [QBlockClientConfig.withMessageSecurity] is off, when the request carries
- * No-Response (its combination with Q-Block1 is undefined), Observe, or a Block or Q-Block option of its own,
- * and when [QBlockSupport] does not know the peer to support Q-Block.
+ * security is configured (whatever [QBlockClientConfig.withMessageSecurity] says, until OSCORE takes several
+ * responses to one request), when the request carries No-Response (its combination with Q-Block1 is
+ * undefined), Observe, or a Block or Q-Block option of its own, and when [QBlockSupport] does not know the
+ * peer to support Q-Block.
  *
  * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.blockSize], goes in
  * Q-Block1 blocks of one size for the whole body, each a new request on a new token with Size1, the body's
@@ -88,6 +89,12 @@ internal class QBlockClient(private val client: CoapClient) {
     /** The next Request-Tag, as an unsigned 4-byte counter that starts at a random value (RFC 9177 §4.3). */
     private val nextTag = AtomicInt(endpoint.config.random.nextInt())
 
+    init {
+        if (config.withMessageSecurity && client.config.security != null) {
+            log.warn { "QBlockClientConfig.withMessageSecurity has no effect yet: protected requests use RFC 7959" }
+        }
+    }
+
     /**
      * Sends [request] with Q-Block and returns its whole response, or returns null when RFC 7959 must carry
      * it: Q-Block does not apply to it or to [peer], or the peer rejected it without processing it.
@@ -118,7 +125,8 @@ internal class QBlockClient(private val client: CoapClient) {
         val options = request.options
         return when {
             reliable && !config.onReliableTransports -> "Q-Block is off on reliable transports"
-            client.config.security != null && !config.withMessageSecurity -> "Q-Block is off with message security"
+            // OSCORE takes one response per request (RFC 8613 §7.4), so withMessageSecurity cannot take effect yet.
+            client.config.security != null -> "Q-Block is not available with message security yet"
             options.noResponse != null -> "the request carries No-Response"
             options.observe != null -> "the request carries Observe"
             OWN_BLOCK_OPTIONS.any { it in options } -> "the request carries block options of its own"

@@ -42,10 +42,11 @@ public enum class QBlockMode {
  * @property onReliableTransports whether Q-Block is used over TCP and WebSockets (RFC 8323), where it only
  *   sends blocks back to back (RFC 9177 Appendix B); off by default, since BERT does the same with fewer
  *   messages.
- * @property withMessageSecurity whether Q-Block is used when the client protects its requests
- *   ([CoapClientConfig.security]). Several responses to one request fall outside OSCORE's single-response
- *   replay model (RFC 8613 §7.4), so by default a client with message security uses RFC 7959 for every
- *   request.
+ * @property withMessageSecurity whether Q-Block is to be used when the client protects its requests
+ *   ([CoapClientConfig.security]). **Not functional yet**: several responses to one request fall outside
+ *   OSCORE's single-response replay model (RFC 8613 §7.4), and until kcoap's OSCORE layer accepts them with a
+ *   replay window per request, a client with message security uses RFC 7959 for every request whatever this
+ *   says, and logs a warning once when it is set.
  * @property missingBlockMBit whether a request for missing blocks asks for the missing tail of a
  *   MAX_PAYLOADS set with one Q-Block2 option with M set (RFC 9177 §4.4), instead of one option per block.
  */

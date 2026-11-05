@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
@@ -427,7 +428,7 @@ class QBlockSupportTest {
     }
 
     @Test
-    fun messageSecurityTurnsQBlockOffUnlessAllowed() = runTest {
+    fun messageSecurityTurnsQBlockOffEvenWhenAllowedUntilOscoreTakesSeveralResponses() = runTest {
         val passThrough = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
         }
@@ -435,12 +436,13 @@ class QBlockSupportTest {
         off.server.resources["/small"] = body(40)
         off.client.get(off.server.uri("/small"))
         assertTrue(off.requests().none { it.hasQBlock() })
+        assertFalse(QBlockClientConfig().withMessageSecurity)
 
-        val on = scripted(QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true), security = passThrough)
-        on.server.resources["/small"] = body(40)
-        on.client.get(on.server.uri("/small"))
-        assertEquals(Capability.SUPPORTED, on.client.known(on.server.address, isProtected = true))
-        assertNull(on.client.known(on.server.address, isProtected = false), "known per protection")
+        val on = scripted(QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true), security = passThrough)
+        on.server.resources["/big"] = body(300)
+        assertContentEquals(body(300), on.client.get(on.server.uri("/big")) { nonConfirmable() }.payload)
+        assertTrue(on.requests().none { it.hasQBlock() }, "withMessageSecurity has no effect yet")
+        assertEquals(0, on.client.qBlock!!.support.size())
     }
 
     @Test
