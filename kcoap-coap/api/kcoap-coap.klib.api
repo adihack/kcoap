@@ -238,6 +238,7 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
             enum entry CONNECTIONS // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.CONNECTIONS|null[0]
             enum entry DEDUPLICATION_ENTRIES // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES|null[0]
             enum entry EXCHANGES_PER_PEER // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER|null[0]
+            enum entry HELD_BACK_RESPONSES // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.HELD_BACK_RESPONSES|null[0]
             enum entry OBSERVERS // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.OBSERVERS|null[0]
             enum entry OBSERVERS_PER_PEER // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.OBSERVERS_PER_PEER|null[0]
             enum entry OBSERVERS_PER_RESOURCE // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE|null[0]

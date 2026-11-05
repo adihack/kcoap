@@ -940,6 +940,7 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/
 	public static final field CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field DEDUPLICATION_ENTRIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field EXCHANGES_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field HELD_BACK_RESPONSES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS_PER_RESOURCE Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;

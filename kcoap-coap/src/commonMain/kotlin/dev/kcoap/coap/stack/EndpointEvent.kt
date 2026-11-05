@@ -157,6 +157,13 @@ public sealed interface EndpointEvent {
              * [peer], was dropped for a new one; that Echo value no longer verifies the address.
              */
             ADDRESS_CHALLENGES,
+
+            /**
+             * `CoapServerConfig.maxConcurrentTransfers`: the response held back longest, that of a POST or
+             * PATCH from [peer] kept for its repeat with Echo, was dropped for a new one (RFC 9175 §2.4
+             * item 3). When that repeat comes, the request runs again.
+             */
+            HELD_BACK_RESPONSES,
         }
 
         override fun toString(): String = "LimitReached(peer=$peer, limit=$limit)"

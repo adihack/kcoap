@@ -171,6 +171,17 @@ class AddressVerificationTest {
     }
 
     @Test
+    fun rfc9175Section2_4EveryRequestOfOneAddressKeepsItsOwnHeldBackResponse() = runTest {
+        val verification = verification()
+        val echo = verification.challenge(a, 0.seconds, AddressVerification.Withheld(post("first"), CoapResponse.content("1")))
+        verification.challenge(a, 1.seconds, AddressVerification.Withheld(post("second"), CoapResponse.content("2")))
+
+        assertEquals("2", verification.takeWithheld(a, post("second", echo), 2.seconds)?.payloadAsText())
+        assertEquals("1", verification.takeWithheld(a, post("first", echo), 2.seconds)?.payloadAsText(), "the second did not replace it")
+        assertTrue(limits(Limit.HELD_BACK_RESPONSES).isEmpty())
+    }
+
+    @Test
     fun heldBackResponsesExpireAndAreBoundedByMaxConcurrentTransfers() = runTest {
         val verification = verification(
             CoapServerConfig(amplification = AmplificationPolicy.ALL_RESPONSES, maxConcurrentTransfers = 1),
@@ -179,9 +190,11 @@ class AddressVerificationTest {
         verification.challenge(a, 0.seconds, AddressVerification.Withheld(post("a"), CoapResponse.content("a")))
         verification.challenge(b, 0.seconds, AddressVerification.Withheld(post("b"), CoapResponse.content("b")))
         assertNull(verification.takeWithheld(a, post("a"), 1.seconds), "made room for b")
+        assertEquals(listOf(a), limits(Limit.HELD_BACK_RESPONSES), "the eviction is reported with the address that lost its response")
 
         verification.challenge(a, 20.seconds, AddressVerification.Withheld(post("a"), CoapResponse.content("a")))
         assertNull(verification.takeWithheld(a, post("a"), 30.seconds), "expired with its challenge")
+        assertEquals(listOf(a), limits(Limit.HELD_BACK_RESPONSES), "an expiry is not an eviction")
     }
 
     @Test

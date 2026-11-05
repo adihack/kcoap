@@ -2,8 +2,6 @@ package dev.kcoap.coap.server
 
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
-import dev.kcoap.coap.CoapOption
-import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
@@ -31,7 +29,8 @@ import kotlinx.coroutines.sync.withLock
  * Everything is bounded: [CoapServerConfig.maxVerifiedAddresses] verified addresses, which expire
  * [CoapServerConfig.verifiedAddressLifetime] after their verification, and as many outstanding challenges;
  * [CoapServerConfig.maxConcurrentTransfers] responses held back for the repeat of a request that must not
- * run twice. An eviction for room is reported as [EndpointEvent.LimitReached].
+ * run twice ([HeldBackResponses], one per request, for as long as a challenge). Every eviction for room is
+ * reported as [EndpointEvent.LimitReached].
  *
  * Safe for concurrent use: one [Mutex], never held across a suspension; [report] runs after it.
  */
@@ -44,20 +43,10 @@ internal class AddressVerification(
     private val lock = Mutex()
     private val verified = ExpiringCache<Endpoint, Unit>(config.maxVerifiedAddresses, config.verifiedAddressLifetime)
     private val challenges = ExpiringCache<Endpoint, ByteArray>(config.maxVerifiedAddresses, challengeLifetime)
-    private val withheld = ExpiringCache<Endpoint, Withheld>(config.maxConcurrentTransfers, challengeLifetime)
+    private val withheld = HeldBackResponses(config.maxConcurrentTransfers, challengeLifetime)
 
-    /** A response held back from a request that must not run twice, for that request's repeat with Echo. */
-    class Withheld(request: CoapMessage, val response: CoapResponse) {
-        private val code = request.code
-        private val options = request.options.withoutEcho()
-        private val payload = request.payload
-
-        /** Whether [request] repeats the request this answers: the same method, options and payload, Echo aside. */
-        fun answers(request: CoapMessage): Boolean =
-            request.code == code && request.options.withoutEcho() == options && request.payload.contentEquals(payload)
-
-        private fun Iterable<CoapOption>.withoutEcho(): List<CoapOption> = filter { it.number != CoapOptions.ECHO.number }
-    }
+    /** [response], held back from [request], which must not run twice, for that request's repeat with Echo. */
+    class Withheld(val request: CoapMessage, val response: CoapResponse)
 
     /** Whether [CoapServerConfig.amplification] covers a response, or with [isBurst] a Q-Block2 burst. */
     fun appliesTo(isBurst: Boolean): Boolean = when (config.amplification) {
@@ -97,26 +86,24 @@ internal class AddressVerification(
     /**
      * The Echo value for a 4.01 to [peer], whose address is not verified: the one outstanding for it, or a new
      * one. [response], when set, is kept for the repeat of a request that must not run twice. Reports the
-     * held-back response, and a challenge evicted for room.
+     * held-back response, and a challenge or held-back response evicted for room.
      */
     suspend fun challenge(peer: Endpoint, now: Duration, response: Withheld? = null): ByteArray {
-        var evicted: Endpoint? = null
+        var evictedChallenge: Endpoint? = null
+        var evictedResponse: Endpoint? = null
         val echo = lock.withLock {
-            response?.let { withheld.put(peer, it, now) }
-            challenges.peek(peer, now) ?: randomBytes(ECHO_LENGTH).also { evicted = challenges.put(peer, it, now) }
+            response?.let { evictedResponse = withheld.put(HeldBackResponses.Key(peer, it.request), it.response, now) }
+            challenges.peek(peer, now) ?: randomBytes(ECHO_LENGTH).also { evictedChallenge = challenges.put(peer, it, now) }
         }
         report(EndpointEvent.LimitReached(peer, Limit.AMPLIFICATION_FACTOR))
-        evicted?.let { report(EndpointEvent.LimitReached(it, Limit.ADDRESS_CHALLENGES)) }
+        evictedChallenge?.let { report(EndpointEvent.LimitReached(it, Limit.ADDRESS_CHALLENGES)) }
+        evictedResponse?.let { report(EndpointEvent.LimitReached(it, Limit.HELD_BACK_RESPONSES)) }
         return echo.copyOf()
     }
 
     /** The response held back for [request] from [peer], if this is its repeat; it is handed out once. */
-    suspend fun takeWithheld(peer: Endpoint, request: CoapMessage, now: Duration): CoapResponse? = lock.withLock {
-        val kept = withheld.peek(peer, now) ?: return@withLock null
-        if (!kept.answers(request)) return@withLock null
-        withheld.remove(peer)
-        kept.response
-    }
+    suspend fun takeWithheld(peer: Endpoint, request: CoapMessage, now: Duration): CoapResponse? =
+        lock.withLock { withheld.take(HeldBackResponses.Key(peer, request), now) }
 
     /** How many addresses are verified and challenged, for tests. */
     suspend fun sizes(): Pair<Int, Int> = lock.withLock { verified.size to challenges.size }

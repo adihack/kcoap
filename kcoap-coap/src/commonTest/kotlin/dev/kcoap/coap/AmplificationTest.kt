@@ -220,6 +220,85 @@ class AmplificationTest {
         assertEquals(2, puts)
     }
 
+    @Test
+    fun rfc9175Section2_4ConcurrentPostsOfOneClientEachRunTheirHandlerOnce() = runTest {
+        val fixture = StackFixture(this)
+        val runs = mutableMapOf<String, Int>()
+        val server = fixture.server(all) {
+            for (name in listOf("a", "b")) {
+                resource(name) {
+                    post {
+                        runs[name] = (runs[name] ?: 0) + 1
+                        CoapResponse(CoapCode.CREATED, payload = "$name: $large".encodeToByteArray())
+                    }
+                }
+            }
+        }
+        val client = fixture.client()
+
+        val a = async { client.post(fixture.uri(server, "/a"), "1".encodeToByteArray()) }
+        val b = async { client.post(fixture.uri(server, "/b"), "2".encodeToByteArray()) }
+
+        assertEquals("a: $large", a.await().payloadAsText())
+        assertEquals("b: $large", b.await().payloadAsText())
+        assertEquals(mapOf("a" to 1, "b" to 1), runs, "RFC 7252 §5.1: neither POST takes effect twice")
+        assertEquals(2, fixture.sentBy(server.endpoint).count { it.code == CoapCode.UNAUTHORIZED }, "both were challenged")
+    }
+
+    @Test
+    fun rfc9175Section2_4EveryPostChallengedBeforeAnyRepeatKeepsItsOwnResponse() = runTest {
+        val fixture = StackFixture(this)
+        var runs = 0
+        val server = fixture.server(all) {
+            resource("orders") {
+                post {
+                    runs++
+                    CoapResponse(CoapCode.CREATED, payload = "order $runs for ${payloadAsText()}: $large".encodeToByteArray())
+                }
+            }
+        }
+        val peer = fixture.transport()
+        fun post(messageId: Int, token: Byte, body: String, echo: ByteArray? = null) =
+            request("orders", messageId, token, CoapCode.POST, echo = echo).toBuilder().apply { payload = body.encodeToByteArray() }.build()
+
+        // Three POSTs, two of them identical, are all challenged before the client repeats any of them.
+        val echo = assertNotNull(answerTo(peer, server, fixture, post(1, 1, "x"))?.options?.echo)
+        assertContentEquals(echo, answerTo(peer, server, fixture, post(2, 2, "y"))?.options?.echo)
+        assertContentEquals(echo, answerTo(peer, server, fixture, post(3, 3, "x"))?.options?.echo)
+        assertEquals(3, runs)
+
+        val repeats = listOf(post(4, 4, "y", echo), post(5, 5, "x", echo), post(6, 6, "x", echo))
+            .map { assertNotNull(answerTo(peer, server, fixture, it)).payloadAsText().substringBefore(':') }
+        assertEquals(listOf("order 2 for y", "order 1 for x", "order 3 for x"), repeats, "each repeat gets a response of its own")
+        assertEquals(3, runs, "no handler ran again")
+        assertTrue(fixture.limits(Limit.HELD_BACK_RESPONSES).isEmpty())
+    }
+
+    @Test
+    fun aHeldBackResponseEvictedForRoomIsReported() = runTest {
+        val fixture = StackFixture(this)
+        var runs = 0
+        val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.ALL_RESPONSES, maxConcurrentTransfers = 1)) {
+            resource("orders") {
+                post {
+                    runs++
+                    CoapResponse(CoapCode.CREATED, payload = large.encodeToByteArray())
+                }
+            }
+        }
+        val victim = fixture.transport()
+        val spoofed = fixture.transport()
+        val post = request("orders", 1, 1, CoapCode.POST)
+
+        val echo = assertNotNull(answerTo(victim, server, fixture, post)?.options?.echo)
+        assertEquals(CoapCode.UNAUTHORIZED, answerTo(spoofed, server, fixture, request("orders", 2, 2, CoapCode.POST))?.code)
+        assertEquals(listOf<Endpoint>(victim.localEndpoint), fixture.limits(Limit.HELD_BACK_RESPONSES))
+
+        // The victim's repeat finds nothing kept, so its POST runs again; the event above is the trace of it.
+        assertEquals(CoapCode.CREATED, answerTo(victim, server, fixture, request("orders", 3, 3, CoapCode.POST, echo = echo))?.code)
+        assertEquals(3, runs)
+    }
+
     private object Recipient : SecurityIdentity {
         override val description: String get() = "toy recipient"
     }
