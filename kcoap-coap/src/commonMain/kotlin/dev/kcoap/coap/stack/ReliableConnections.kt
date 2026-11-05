@@ -66,7 +66,8 @@ internal class ReliableConnections(
      *
      * @throws IllegalArgumentException when no connector serves the peer's scheme.
      * @throws CoapException with [CoapException.Reason.CONNECTION_CLOSED] when the connection cannot be
-     *   opened, or the peer asked not to reconnect yet (Hold-Off, §5.5).
+     *   opened, or the peer asked not to reconnect yet (Hold-Off, §5.5); like [CoapEndpoint.closeCause]
+     *   once the endpoint is closed.
      */
     suspend fun connectionFor(peer: Endpoint): ConnectionDriver = find(peer, reserve = false)
 
@@ -82,7 +83,8 @@ internal class ReliableConnections(
         val scheme = schemeOf(peer)
         while (true) {
             val step = lock.withLock {
-                if (isClosed) throw CoapException("Endpoint closed", CoapException.Reason.CLOSED)
+                // The endpoint's own state is set first in its terminal transition, so no attempt starts after it.
+                if (isClosed || endpoint.isClosed) throw endpoint.closedError()
                 connecting[peer]?.let { attempt ->
                     if (reserve) attempt.reservations++
                     return@withLock Step.Join(attempt)
@@ -197,8 +199,7 @@ internal class ReliableConnections(
                     val cause = when {
                         error is CoapException -> error
                         // Cancelled itself, by the closing endpoint; a timeout of the attempt is a failure to connect.
-                        error is CancellationException && !isActive ->
-                            CoapException("Endpoint closed", CoapException.Reason.CLOSED, error)
+                        error is CancellationException && !isActive -> endpoint.closedError()
                         else -> CoapException("Cannot connect to $peer: ${error.message}", CoapException.Reason.CONNECTION_CLOSED, error)
                     }
                     log.debug { cause.message ?: "Cannot connect to $peer" }
@@ -207,7 +208,7 @@ internal class ReliableConnections(
             )
         }
         // A launch into a closing endpoint may never run its body; its callers must not wait forever.
-        job.invokeOnCompletion { attempt.result.completeExceptionally(CoapException("Endpoint closed", CoapException.Reason.CLOSED, it)) }
+        job.invokeOnCompletion { attempt.result.completeExceptionally(endpoint.closedError()) }
         return attempt
     }
 
@@ -223,7 +224,7 @@ internal class ReliableConnections(
                     val registered = lock.withLock { (!isClosed).also { if (it) drivers[peer] = created } }
                     if (!registered) {
                         connection.close()
-                        throw CoapException("Endpoint closed", CoapException.Reason.CLOSED)
+                        throw endpoint.closedError()
                     }
                     onEvent(EndpointEvent.ConnectionOpened(peer, isInitiator = true))
                     log.debug { "Connected to $peer" }
@@ -299,7 +300,7 @@ internal class ReliableConnections(
             isClosed = true
             drivers.values.toList() to connecting.values.toList()
         }
-        val closed = CoapException("Endpoint closed", CoapException.Reason.CLOSED)
+        val closed = endpoint.closedError()
         attempts.forEach { it.result.completeExceptionally(closed) }
         for (listener in listeners) runCatching { listener.close() }
         for (driver in open) {

@@ -126,6 +126,24 @@ class EndpointLifecycleTest {
     }
 
     @Test
+    fun aReliableRequestAfterTheDatagramTransportFailedFailsLikeTheCloseCauseAndOpensNothing() = runTest {
+        val fixture = StackFixture(this)
+        val connections = ReliableFixture(this)
+        connections.server { resource("r") { get { CoapResponse.content("ok") } } }
+        val transport = fixture.transport()
+        val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig(), transport, listOf(connections.connections.connector))
+        endpoint.attach()
+        runCurrent()
+        transport.close()
+        runCurrent()
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, endpoint.closeCause?.reason)
+
+        val error = assertFailsWith<CoapException> { CoapClient(endpoint).get(connections.uri("/r")) }
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, error.reason)
+        assertTrue(connections.connections.connections().isEmpty(), "no connection attempt after the terminal transition")
+    }
+
+    @Test
     fun aRequestQueuedBeforeTheServerExistsIsServed() = runTest {
         requestQueuedBeforeTheServer(clientFirst = false)
     }
