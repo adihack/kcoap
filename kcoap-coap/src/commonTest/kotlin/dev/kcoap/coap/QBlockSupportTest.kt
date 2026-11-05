@@ -144,6 +144,32 @@ class QBlockSupportTest {
         assertNull(setup.client.known(setup.server.address), "the next request probes again")
     }
 
+    @Test
+    fun rfc7252Section5_4_1A402AfterEmptyAcksIsTheAnswerAndTheCapabilityStays() = runTest {
+        val setup = scripted()
+        setup.server.script = { from, request ->
+            // Every block before the last was acknowledged; the handler rejects an option of the request.
+            val last = request.options.qBlock1?.more == false
+            if (last) {
+                send(from, CoapMessage.response(request, CoapCode.BAD_OPTION) {
+                    type = CoapMessageType.ACK
+                    messageId = request.messageId
+                })
+            }
+            last
+        }
+
+        val response = setup.client.put(setup.server.uri("/store"), body(200))
+
+        assertEquals(CoapCode.BAD_OPTION, response.code)
+        val blocks = setup.requests().filter { it.options.qBlock1 != null }
+        assertEquals(4, blocks.size)
+        assertTrue(setup.requests().none { it.options.block1 != null }, "nothing sent again with RFC 7959")
+        assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
+        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Fallback })
+        setup.assertNothingLeft()
+    }
+
     // ---------------------------------------------------------------- the probe
 
     @Test

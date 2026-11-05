@@ -35,10 +35,11 @@ public enum class QBlockMode {
  * @property mode whether Q-Block is used, and how the client finds out that a server supports it.
  * @property probePath the resource the [QBlockMode.PROBE] probe asks for, with Q-Block2 0/0/16: block 0 of 16
  *   bytes and nothing more, the probe libcoap sends.
- * @property capabilityLifetime how long a probe's answer is remembered per server. A probe that got no answer
- *   is repeated after at most a minute; a server's DTLS session ending or its connection closing forgets the
- *   answer at once, and so do a 4.02 or a Reset to a Q-Block message and a Non-confirmable body that got no
- *   response at all.
+ * @property capabilityLifetime how long a probe's answer is remembered per server, by the endpoint for all its
+ *   clients. A probe that got no answer is repeated after at most a minute; a server's DTLS session ending or
+ *   its connection closing forgets the answer at once, and so do a 4.02 or a Reset that answers a Q-Block body
+ *   before anything else, a Reset to a Q-Block1 block, and a Non-confirmable body that got no response at
+ *   all.
  * @property onReliableTransports whether Q-Block is used over TCP and WebSockets (RFC 8323), where it only
  *   sends blocks back to back (RFC 9177 Appendix B); off by default, since BERT does the same with fewer
  *   messages.

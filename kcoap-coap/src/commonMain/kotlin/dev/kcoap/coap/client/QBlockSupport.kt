@@ -35,10 +35,10 @@ import kotlinx.coroutines.withContext
  * The answer is kept for [QBlockClientConfig.capabilityLifetime] in the endpoint's [QBlockCapabilities], which
  * all clients of the endpoint share, and which the endpoint clears for a server whose DTLS session ends or
  * whose connection closes. It is forgotten too ([invalidate]) when a Non-confirmable body to the server got no
- * response at all, and ([rejected]) when the server answers a Q-Block message with 4.02 or a Reset. In
- * [QBlockMode.ASSUME_SUPPORTED] nothing is probed and every server counts as supported, except that a 4.02 or
- * a Reset to a Q-Block message marks the server as not supporting it for the lifetime, since that mode has no
- * probe to ask again.
+ * response at all, and ([rejected]) when the server answers a Q-Block body with 4.02 before anything else, or
+ * a Q-Block1 block with a Reset. In [QBlockMode.ASSUME_SUPPORTED] nothing is probed and every server counts
+ * as supported, except that such a rejection marks the server as not supporting it for the lifetime, since
+ * that mode has no probe to ask again.
  *
  * Safe to use from any coroutine.
  */

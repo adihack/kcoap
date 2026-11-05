@@ -67,14 +67,20 @@ import kotlinx.coroutines.withContext
  *
  * **Fallback.** A 4.02 or a Reset that answers a body before anything else did shows a server that does not
  * take Q-Block after all; such a request was not processed (RFC 7252 §5.4.1), so it is sent again with
- * RFC 7959 ([send] returns null), and [QBlockSupport.rejected] is told.
+ * RFC 7959 ([send] returns null), and [QBlockSupport.rejected] is told. Anything else counts first: an Empty
+ * ACK, a 2.31, a 4.08 or a block shows that the server took Q-Block, so a later 4.02 rejected some other
+ * option and is the answer. A 4.01 with Echo (RFC 9175 §2.3) does not count.
+ *
+ * **Echo.** A 4.01 with Echo to the request of a download, or to a Continue or a request for missing blocks,
+ * has that request sent again once with the Echo value, which every later message of the body carries too.
  *
  * **Silence.** A Non-confirmable download whose request gets no response at all is sent again on the
  * NON_RECEIVE_TIMEOUT ladder, at most NON_MAX_RETRANSMIT times, if its method may be repeated (GET, FETCH,
  * PUT, DELETE, iPATCH); POST and PATCH, or the end of the ladder, fail with
- * [CoapException.Reason.RESPONSE_TIMEOUT]. A Non-confirmable body that never got a response forgets the
- * peer's capability and leaves its lease to expire, so the next body waits as PROBING_RATE asks (§7.2).
- * Otherwise a body that hears nothing for [CoapClient.requestTimeout] fails the same way.
+ * [CoapException.Reason.RESPONSE_TIMEOUT]. The request sent again with Echo starts that ladder anew. A
+ * Non-confirmable body that never got a response forgets the peer's capability and leaves its lease to
+ * expire, so the next body waits as PROBING_RATE asks (§7.2). Otherwise a body that hears nothing for
+ * [CoapClient.requestTimeout] fails the same way.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class QBlockClient(private val client: CoapClient) {
@@ -150,8 +156,18 @@ internal class QBlockClient(private val client: CoapClient) {
         class Rfc7959(val first: CoapMessage, val followUps: CoapMessage) : Outcome
     }
 
-    /** A request of a body: its exchange, the upload's sequence number for a block, and the generation of the upload. */
-    private class Sent(val exchange: ClientExchange, val sequence: Int?, val generation: Int)
+    /**
+     * A request of a body: its exchange, the upload's sequence number for a block, the generation of the
+     * upload, and for a Continue or a request for missing blocks its Q-Block2 options ([blocks]) and whether
+     * it repeats one that a 4.01 with Echo answered ([isEchoRetry]).
+     */
+    private class Sent(
+        val exchange: ClientExchange,
+        val sequence: Int?,
+        val generation: Int,
+        val blocks: List<BlockOption>? = null,
+        val isEchoRetry: Boolean = false,
+    )
 
     /**
      * One request and its body or bodies, from the first message to the end: an upload (Q-Block1), a
@@ -188,7 +204,11 @@ internal class QBlockClient(private val client: CoapClient) {
         /** The Echo value a 4.01 asked for (RFC 9175 §2.3), sent on every later message. */
         private var echo: ByteArray? = null
 
-        private var responses = 0
+        /**
+         * Whether the server answered any request of the body: a response other than a 4.01 with Echo, or an
+         * Empty ACK. Until then a 4.02 or a Reset rejects Q-Block, and a Non-confirmable download is sent again.
+         */
+        private var answered = false
         private var lastActivity = endpoint.now()
 
         // Upload (Q-Block1).
@@ -383,8 +403,8 @@ internal class QBlockClient(private val client: CoapClient) {
             )
         }
 
-        /** A response that is not part of an upload in progress. */
-        private suspend fun onDownloadResponse(message: CoapMessage) {
+        /** A response, on the request [origin], that is not part of an upload in progress. */
+        private suspend fun onDownloadResponse(origin: Sent, message: CoapMessage) {
             val violation = QBlockCheck.response(message, limits.allowsBert)
             if (violation != null) {
                 if (hasBlock) return logger.debug { "Dropped a response: $violation" }
@@ -392,16 +412,27 @@ internal class QBlockClient(private val client: CoapClient) {
             }
             val block = message.options.qBlock2
             if (block != null) return onBlock(message)
+            val echoValue = message.options.echo
+            val isChallenge = message.code == CoapCode.UNAUTHORIZED && echoValue != null && client.config.echoRetry
             if (hasBlock) {
                 // A request for blocks was answered with something else than a block.
                 if (message.code.isSuccess) return logger.debug { "Dropped a ${message.code} without Q-Block2" }
+                val blocks = origin.blocks
+                if (isChallenge && blocks != null && !origin.isEchoRetry) {
+                    // RFC 9175 §2.3: a server that checks addresses challenges a client whose address changed.
+                    logger.debug { "4.01 with Echo to a request for blocks; repeating it with the Echo value" }
+                    echo = echoValue
+                    sendFollowUp(blocks, isEchoRetry = true)
+                    return
+                }
                 fail(CoapException.Reason.BLOCKWISE_FAILED, "A request for blocks was answered with ${message.code}")
             }
-            val echoValue = message.options.echo
             val original = original
-            if (message.code == CoapCode.UNAUTHORIZED && echoValue != null && client.config.echoRetry && echo == null && original != null) {
+            if (isChallenge && echo == null && original != null) {
                 logger.debug { "4.01 with Echo; repeating the request with it" }
                 echo = echoValue
+                // The repeat gets the whole ladder of a request without answer (§7.2).
+                originalResends = 0
                 sendOriginal(original)
                 return
             }
@@ -452,7 +483,7 @@ internal class QBlockClient(private val client: CoapClient) {
          * A Continue or a request for missing blocks (§4.4): the request without Observe, ETag, payload (but
          * a FETCH's) or Q-Block1, with one Q-Block2 option per entry of [blocks].
          */
-        private suspend fun sendFollowUp(blocks: List<BlockOption>) {
+        private suspend fun sendFollowUp(blocks: List<BlockOption>, isEchoRetry: Boolean = false) {
             val message = followUpBase.toBuilder().options {
                 remove(CoapOptions.OBSERVE.number)
                 remove(CoapOptions.ETAG.number)
@@ -461,7 +492,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 remove(CoapOptions.SIZE1.number)
                 blocks.forEach { addQBlock2(it) }
             }.build()
-            val exchange = open(message.withEcho(), sequence = null)
+            val exchange = open(message.withEcho(), sequence = null, blocks = blocks, isEchoRetry = isEchoRetry)
             followUps.addLast(exchange)
             while (followUps.size > MAX_OPEN_FOLLOW_UPS) release(followUps.removeFirst().key.token)
         }
@@ -476,15 +507,18 @@ internal class QBlockClient(private val client: CoapClient) {
             val sequence = origin.sequence?.takeIf { sender != null }
             when (event) {
                 is ExchangeEvent.Response -> {
-                    responses++
                     val message = event.message
-                    if (sender != null && sequence != null) onUploadEvent(sender, sequence, message) else onDownloadResponse(message)
+                    if (sender != null && sequence != null) onUploadEvent(sender, sequence, message) else onDownloadResponse(origin, message)
+                    if (message.code != CoapCode.UNAUTHORIZED || message.options.echo == null) answered = true
                 }
-                is ExchangeEvent.Acknowledged -> if (sender != null && sequence != null) uploadActions(sender.onAcknowledged(now, sequence))
+                is ExchangeEvent.Acknowledged -> {
+                    answered = true
+                    if (sender != null && sequence != null) uploadActions(sender.onAcknowledged(now, sequence))
+                }
                 is ExchangeEvent.Reset -> {
                     sent.remove(event.exchange.key.token)
                     when {
-                        responses == 0 -> outcome = Outcome.Fallback("${event.exchange.request?.code} was answered with a Reset")
+                        !answered -> outcome = Outcome.Fallback("${event.exchange.request?.code} was answered with a Reset")
                         sender != null && sequence != null -> {
                             support.rejected(peer, isProtected, "A Q-Block1 block was answered with a Reset")
                             uploadActions(sender.onReset(now, sequence))
@@ -535,7 +569,7 @@ internal class QBlockClient(private val client: CoapClient) {
          * ladder (124 s by default) for POST and PATCH, as an upload does after its last block.
          */
         private fun unansweredDeadline(): Duration? {
-            if (responses > 0 || original == null || mode != BodyMode.NON) return null
+            if (answered || original == null || mode != BodyMode.NON) return null
             return originalSentAt + if (method in REPEATABLE) timing.receiveWait(originalResends) else timing.receiveLadder
         }
 
@@ -567,14 +601,19 @@ internal class QBlockClient(private val client: CoapClient) {
 
         // ---------------------------------------------------------------- helpers
 
-        private suspend fun open(message: CoapMessage, sequence: Int?): ClientExchange {
+        private suspend fun open(
+            message: CoapMessage,
+            sequence: Int?,
+            blocks: List<BlockOption>? = null,
+            isEchoRetry: Boolean = false,
+        ): ClientExchange {
             val lease = lease
             val exchange = endpoint.openExchange(
                 peer, message, confirmable, client.config.security, ResponseMode.Inbox(inbox),
                 pacing = if (lease != null) Pacing.Body(lease) else Pacing.PerMessage,
                 recognizedOptions = RECOGNIZED_OPTIONS,
             )
-            sent[exchange.key.token] = Sent(exchange, sequence, generation)
+            sent[exchange.key.token] = Sent(exchange, sequence, generation, blocks, isEchoRetry)
             lastActivity = endpoint.now()
             return exchange
         }
@@ -588,17 +627,14 @@ internal class QBlockClient(private val client: CoapClient) {
         private fun nonTimeoutRandom(): Duration = lease?.nonTimeoutRandom ?: timing.drawNonTimeoutRandom(endpoint.config.random)
 
         /**
-         * Whether [message] is a 4.02 to a Q-Block message: before any other response the request falls back
-         * to RFC 7959; later it is the answer, and the peer's capability is forgotten either way (§4.1).
+         * Whether [message] is a 4.02 that rejects Q-Block (§4.1): one before the server answered anything of
+         * the body, so the request falls back to RFC 7959. Once the server took part of the body, a 4.02
+         * rejected another option (RFC 7252 §5.4.1) and is the answer; the peer's capability stays.
          */
-        private suspend fun isRejection(message: CoapMessage): Boolean {
-            if (message.code != CoapCode.BAD_OPTION) return false
-            if (responses <= 1) {
-                outcome = Outcome.Fallback("A Q-Block request was answered with 4.02")
-                return true
-            }
-            support.rejected(peer, isProtected, "A Q-Block request was answered with 4.02")
-            return false
+        private fun isRejection(message: CoapMessage): Boolean {
+            if (message.code != CoapCode.BAD_OPTION || answered) return false
+            outcome = Outcome.Fallback("A Q-Block request was answered with 4.02")
+            return true
         }
 
         private fun done(message: CoapMessage) {
@@ -611,7 +647,7 @@ internal class QBlockClient(private val client: CoapClient) {
         }
 
         private suspend fun fail(reason: CoapException.Reason, diagnostic: String): Nothing {
-            if (reason == CoapException.Reason.RESPONSE_TIMEOUT && responses == 0 && mode == BodyMode.NON) {
+            if (reason == CoapException.Reason.RESPONSE_TIMEOUT && !answered && mode == BodyMode.NON) {
                 // §7.2: a body that never got a response probes no faster than PROBING_RATE, and the peer
                 // may no longer take Q-Block.
                 keepsLease = true

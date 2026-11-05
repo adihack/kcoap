@@ -622,6 +622,63 @@ class QBlockClientTest {
     }
 
     @Test
+    fun rfc9175Section2_3ALostRepeatOfAChallengedNonGetIsSentAgainOnTheLadder() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(300)
+        val echo = byteArrayOf(1, 2, 3, 4)
+        setup.server.script = { from, request ->
+            val challenge = request.options.path == "/big" && request.options.echo == null
+            if (challenge) send(from, nonResponse(request, CoapCode.UNAUTHORIZED) { echo(echo) })
+            challenge
+        }
+        var repeats = 0
+        setup.fixture.network.filter = { datagram ->
+            val message = datagram.message()
+            !(message != null && message.isRequest && message.options.echo != null && repeats++ == 0)
+        }
+
+        val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+
+        assertContentEquals(body(300), response.payload)
+        val withEcho = setup.fixture.traffic.filter { it.from == setup.clientAddress && it.message?.options?.echo != null }
+        assertEquals(2, withEcho.size, "the repeat, lost, and the repeat sent again")
+        assertEquals(4.seconds, withEcho[1].at - withEcho[0].at, "§7.2: NON_RECEIVE_TIMEOUT after the lost repeat")
+        assertContentEquals(echo, withEcho[1].message!!.options.echo)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc9175Section2_3AContinueChallengedWithEchoIsRepeatedWithItOnce() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(1500)
+        val echo = byteArrayOf(7, 7)
+        setup.server.script = { from, request ->
+            // The client's address changed, or its verification expired, in the middle of the body.
+            val challenge = request.options.qBlock2List.singleOrNull()?.number == 10L && request.options.echo == null
+            if (challenge) send(from, nonResponse(request, CoapCode.UNAUTHORIZED) { echo(echo) })
+            challenge
+        }
+
+        val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+
+        assertContentEquals(body(1500), response.payload)
+        val continues = setup.requests().filter { it.options.qBlock2List.singleOrNull()?.number == 10L }
+        assertEquals(listOf(null, "0707"), continues.map { it.options.echo?.toHex() })
+        setup.assertNothingLeft()
+
+        val stubborn = setup()
+        stubborn.server.resources["/big"] = body(1500)
+        stubborn.server.script = { from, request ->
+            val challenge = request.options.qBlock2List.singleOrNull()?.number == 10L
+            if (challenge) send(from, nonResponse(request, CoapCode.UNAUTHORIZED) { echo(echo) })
+            challenge
+        }
+        val failure = assertFailsWith<CoapException> { stubborn.client.get(stubborn.server.uri("/big")) { nonConfirmable() } }
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason, "a repeat challenged again fails")
+        assertEquals(2, stubborn.requests().count { it.options.qBlock2List.singleOrNull()?.number == 10L })
+    }
+
+    @Test
     fun withoutEchoRetryAnUploadChallengedWithEchoReturnsThe401() = runTest {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
@@ -657,7 +714,7 @@ class QBlockClientTest {
     }
 
     @Test
-    fun rfc9177Section4_1A402AfterTheBodyStartedIsReturnedAndForgetsTheProbe() = runTest {
+    fun rfc7252Section5_4_1A402AfterTheServerTookPartOfTheBodyIsTheAnswerAndKeepsTheCapability() = runTest {
         val setup = setup()
         setup.server.script = { from, request ->
             val reject = request.options.qBlock1?.number == 10L
@@ -667,8 +724,10 @@ class QBlockClientTest {
 
         val response = setup.client.put(setup.server.uri("/store"), body(15 * 64)) { nonConfirmable() }
 
-        assertEquals(CoapCode.BAD_OPTION, response.code)
-        assertEquals(null, setup.client.qBlock!!.support.known(setup.server.address, false))
+        assertEquals(CoapCode.BAD_OPTION, response.code, "after a 2.31 the 4.02 rejected some other option")
+        assertEquals(QBlockCapabilities.Capability.SUPPORTED, setup.client.qBlock!!.support.known(setup.server.address, false))
+        assertTrue(setup.requests().none { it.options.block1 != null }, "nothing sent again with RFC 7959")
+        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Fallback })
         setup.assertNothingLeft()
     }
 
