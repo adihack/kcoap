@@ -37,6 +37,25 @@ import kotlin.time.Duration.Companion.seconds
  *   without Observe until those observers end.
  * @property maxObserversPerResource the most observers of one resource, which bounds the notifications one
  *   change sends at once and keeps one resource from taking the whole of [maxObservers].
+ * @property amplification which responses wait until the client's address is verified (RFC 9175 §2.4
+ *   item 3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a
+ *   4.01 Unauthorized with an Echo option instead, piggybacked or Non-confirmable, never as a separate
+ *   Confirmable response, whose retransmissions would amplify again. Each such answer is reported as
+ *   [dev.kcoap.coap.stack.EndpointEvent.LimitReached] with `AMPLIFICATION_FACTOR`. The response to a POST
+ *   or PATCH, which must not take effect twice, is kept for the repeat with the Echo value, which gets it
+ *   without running the handler again; [maxConcurrentTransfers] bounds how many are kept.
+ * @property amplificationFactor the largest response, as a multiple of the size of its request, that goes to
+ *   an address not yet verified (RFC 9175 §2.4 item 3 takes 3 from QUIC, RFC 9000 §8, as acceptable for
+ *   unconstrained applications). Sizes are those of the CoAP messages, header, token and options included.
+ * @property maxVerifiedAddresses the most client addresses the server remembers as verified, and,
+ *   separately, the most Echo challenges it keeps outstanding. Verified addresses come only from clients
+ *   that received an Echo value, so they fill slowly; challenges can come from spoofed requests, so the
+ *   oldest gives way to a new one. Either eviction is reported as
+ *   [dev.kcoap.coap.stack.EndpointEvent.LimitReached] (`VERIFIED_ADDRESSES`, `ADDRESS_CHALLENGES`); the
+ *   address is challenged again when it next needs to be verified.
+ * @property verifiedAddressLifetime how long an address stays verified after it returned an Echo value,
+ *   not extended by use: a NAT may hand the address to another host, and a spoofer must not keep it
+ *   verified by sending in its name. RFC 9175 sets no lifetime; it needs the check once per endpoint.
  */
 public class CoapServerConfig(
     public val security: ServerMessageSecurity? = null,
@@ -50,6 +69,10 @@ public class CoapServerConfig(
     public val maxObservers: Int = DEFAULT_MAX_OBSERVERS,
     public val maxObserversPerResource: Int = DEFAULT_MAX_OBSERVERS_PER_RESOURCE,
     public val maxObserversPerPeer: Int = DEFAULT_MAX_OBSERVERS_PER_PEER,
+    public val amplification: AmplificationPolicy = AmplificationPolicy.Q_BLOCK_BURSTS,
+    public val amplificationFactor: Int = DEFAULT_AMPLIFICATION_FACTOR,
+    public val maxVerifiedAddresses: Int = DEFAULT_MAX_VERIFIED_ADDRESSES,
+    public val verifiedAddressLifetime: Duration = DEFAULT_VERIFIED_ADDRESS_LIFETIME,
 ) {
     init {
         require(maxBlockSize in 16..1024 && maxBlockSize and (maxBlockSize - 1) == 0) {
@@ -63,6 +86,9 @@ public class CoapServerConfig(
         require(maxObservers > 0) { "At least one observer must be allowed: $maxObservers" }
         require(maxObserversPerResource > 0) { "At least one observer per resource must be allowed: $maxObserversPerResource" }
         require(maxObserversPerPeer > 0) { "At least one observer per peer must be allowed: $maxObserversPerPeer" }
+        require(amplificationFactor >= 1) { "The amplification factor must be at least 1: $amplificationFactor" }
+        require(maxVerifiedAddresses > 0) { "At least one verified address must be kept: $maxVerifiedAddresses" }
+        require(verifiedAddressLifetime.isPositive()) { "Verified address lifetime must be positive: $verifiedAddressLifetime" }
     }
 
     public companion object {
@@ -74,8 +100,18 @@ public class CoapServerConfig(
 
         /** See [maxObserversPerPeer]. */
         public const val DEFAULT_MAX_OBSERVERS_PER_PEER: Int = 32
+
+        /** See [amplificationFactor]: 3, as RFC 9175 §2.4 item 3 suggests. */
+        public const val DEFAULT_AMPLIFICATION_FACTOR: Int = 3
+
+        /** See [maxVerifiedAddresses]. */
+        public const val DEFAULT_MAX_VERIFIED_ADDRESSES: Int = 10_000
+
+        /** See [verifiedAddressLifetime]: one hour. */
+        public val DEFAULT_VERIFIED_ADDRESS_LIFETIME: Duration = 1.hours
     }
 
     override fun toString(): String =
-        "CoapServerConfig(security=${security != null}, maxBlockSize=$maxBlockSize, maxBodySize=$maxBodySize)"
+        "CoapServerConfig(security=${security != null}, maxBlockSize=$maxBlockSize, maxBodySize=$maxBodySize, " +
+            "amplification=$amplification)"
 }

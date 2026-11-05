@@ -139,6 +139,24 @@ public sealed interface EndpointEvent {
 
             /** [ReliableTransportConfig.maxConnections]: an accepted connection was closed. */
             CONNECTIONS,
+
+            /**
+             * `CoapServerConfig.amplificationFactor`: a response to an address not yet verified was held back,
+             * and a 4.01 Unauthorized with Echo went to that address instead (RFC 9175 §2.4 item 3).
+             */
+            AMPLIFICATION_FACTOR,
+
+            /**
+             * `CoapServerConfig.maxVerifiedAddresses`: [peer], the address verified longest ago, was forgotten
+             * to make room for a newly verified one; it is challenged again when it next needs to be verified.
+             */
+            VERIFIED_ADDRESSES,
+
+            /**
+             * `CoapServerConfig.maxVerifiedAddresses`: the oldest outstanding Echo challenge, the one sent to
+             * [peer], was dropped for a new one; that Echo value no longer verifies the address.
+             */
+            ADDRESS_CHALLENGES,
         }
 
         override fun toString(): String = "LimitReached(peer=$peer, limit=$limit)"

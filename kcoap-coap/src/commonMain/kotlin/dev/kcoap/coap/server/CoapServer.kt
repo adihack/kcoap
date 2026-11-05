@@ -7,6 +7,7 @@ import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.OptionSet
+import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
@@ -20,7 +21,9 @@ import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
+import dev.kcoap.transport.PeerIdentity
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -38,7 +41,10 @@ import kotlinx.coroutines.SupervisorJob
  * 3. Block1 bodies are assembled (RFC 7959 §2.5) and Observe registrations recorded (RFC 7641 §4.1);
  * 4. the resource's handler runs; large responses go out in Block2 blocks (RFC 7959 §2.4);
  * 5. the response is protected with the request's security context and sent, piggybacked when it is
- *    ready in time, otherwise separately (RFC 7252 §5.2). No-Response (RFC 7967) suppresses it.
+ *    ready in time, otherwise separately (RFC 7252 §5.2). No-Response (RFC 7967) suppresses it. A
+ *    response that [CoapServerConfig.amplification] holds back from a client whose address is not yet
+ *    verified is replaced by a 4.01 Unauthorized with an Echo option, piggybacked or Non-confirmable
+ *    (RFC 9175 §2.4 item 3, §2.6).
  *
  * The pipeline is one failure boundary: whatever throws in it, a resource handler, the security layer, an
  * application callback behind it (a context repository, a sequence-number store) or the sending, the
@@ -99,6 +105,7 @@ public class CoapServer private constructor(
     private val rootResource = DslResource("")
     internal val observations = ObservationRegistry(this)
     private val blockwise = BlockwiseServer(config, endpoint.parameters.exchangeLifetime)
+    internal val addressVerification = AddressVerification(config, endpoint.parameters.exchangeLifetime, endpoint::report)
     private val reserve = if (config.security != null) config.securityReserve else 0
 
     /** The parent of this server's request coroutines, so [close] stops them on a shared endpoint too. */
@@ -160,7 +167,8 @@ public class CoapServer private constructor(
 
     // ---------------------------------------------------------------- the request pipeline
 
-    private class Reply(val response: CoapResponse, val observation: ServerObservation? = null)
+    /** What answers a request; [isChallenge] marks a 4.01 with Echo that verifies the client's address. */
+    private class Reply(val response: CoapResponse, val observation: ServerObservation? = null, val isChallenge: Boolean = false)
 
     private suspend fun process(inbound: InboundRequest) {
         val security = config.security
@@ -263,6 +271,12 @@ public class CoapServer private constructor(
             return Reply(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
         }
         val now = endpoint.now()
+        val checksAddress = checksAddress(inbound, unprotected)
+        val echo = options.echo
+        if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
+            // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.
+            addressVerification.takeWithheld(peer, request, now)?.let { return Reply(it) }
+        }
         val key = OperationKey(peer, unprotected?.identity, request.code.value, Blockwise.operationOptions(options))
 
         var effective = request
@@ -297,6 +311,12 @@ public class CoapServer private constructor(
         }
         val registering = observe == OBSERVE_REGISTER && isObserveMethod && observable != null &&
             observable.isObservable && (block2 == null || block2.number == 0L)
+        if (registering && checksAddress && config.amplification == AmplificationPolicy.ALL_RESPONSES &&
+            !addressVerification.verify(peer, echo, now)
+        ) {
+            // RFC 7641 §7: one registration has notifications sent to its address for as long as it lasts.
+            return challenge(peer, now)
+        }
 
         val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
         var response = acceptable(options, invoke(resource, context))
@@ -367,11 +387,21 @@ public class CoapServer private constructor(
             return
         }
         val message = response.toMessage(request.token)
+        if (!reply.isChallenge && checksAddress(inbound, unprotected) && mustVerifyAddress(inbound, request, message, isBurst = false)) {
+            val kept = if (AddressVerification.isRepeatSensitive(request.code)) AddressVerification.Withheld(request, response) else null
+            // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
+            reply.observation?.let { observations.remove(it, "address not verified") }
+            send(inbound, request, unprotected, challenge(inbound.peer, endpoint.now(), kept))
+            return
+        }
         val observation = reply.observation
+        // RFC 9175 §2.4 item 3: a challenge goes piggybacked or Non-confirmable, never as a separate Confirmable
+        // response, whose retransmissions would amplify towards the address it is meant to verify.
+        val separateType = if (reply.isChallenge) CoapMessageType.NON else CoapMessageType.CON
         val transmission = try {
             val outgoing = unprotected?.protectResponse(message) ?: message
             log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
-            inbound.respond(outgoing, owner = observation)
+            inbound.respond(outgoing, owner = observation, separateType = separateType)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -383,6 +413,43 @@ public class CoapServer private constructor(
             return
         }
         observation?.onRegistrationSent(transmission, transmission?.message?.type ?: CoapMessageType.ACK, endpoint.now())
+    }
+
+    // ---------------------------------------------------------------- address verification
+
+    /**
+     * Whether [inbound] comes from a client that only its address stands for, whose responses
+     * [CoapServerConfig.amplification] may hold back: RFC 9175 §2.6 speaks of unauthenticated clients, so
+     * neither message security ([unprotected]) nor channel security (DTLS) may have authenticated it, and it
+     * must have come in a datagram, since a connection's handshake already showed that the client receives
+     * at its address.
+     */
+    private fun checksAddress(inbound: InboundRequest, unprotected: UnprotectedRequest?): Boolean =
+        config.amplification != AmplificationPolicy.OFF && unprotected == null && inbound.connection == null &&
+            inbound.peerIdentity == PeerIdentity.None
+
+    /**
+     * Whether [response] to [request], [isBurst] when it stands for all the blocks of a Q-Block2 burst, is
+     * larger than [CoapServerConfig.amplificationFactor] allows towards an address that is not verified yet
+     * (RFC 9175 §2.4 item 3). The sizes are those of the messages on the wire.
+     */
+    private suspend fun mustVerifyAddress(inbound: InboundRequest, request: CoapMessage, response: CoapMessage, isBurst: Boolean): Boolean {
+        if (!addressVerification.appliesTo(isBurst)) return false
+        val requestSize = UdpMessageCodec.encode(inbound.message).size
+        val responseSize = UdpMessageCodec.encode(response).size
+        if (!addressVerification.exceedsLimit(requestSize, responseSize, isBurst)) return false
+        return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
+    }
+
+    /**
+     * RFC 9175 §2.4 item 3: a short 4.01 Unauthorized whose Echo value the client returns to show that it
+     * receives at its address, in place of the response, which [kept] holds for the repeat when the request
+     * must not run twice.
+     */
+    private suspend fun challenge(peer: Endpoint, now: Duration, kept: AddressVerification.Withheld? = null): Reply {
+        val echo = addressVerification.challenge(peer, now, kept)
+        log.debug { "Asked $peer to verify its address with Echo before a large response (RFC 9175 §2.4)" }
+        return Reply(CoapResponse(CoapCode.UNAUTHORIZED, OptionSet.build { echo(echo) }), isChallenge = true)
     }
 
     /** RFC 7967 §2.1: bit 2 suppresses 2.xx, bit 8 4.xx and bit 16 5.xx responses. */
