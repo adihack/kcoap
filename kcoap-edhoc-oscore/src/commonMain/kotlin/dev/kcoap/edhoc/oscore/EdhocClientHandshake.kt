@@ -45,7 +45,9 @@ import dev.kcoap.oscore.SequenceNumberStore
  * Every run fails with an [dev.kcoap.edhoc.EdhocException]: an [EdhocPeerErrorException] when the server
  * answered with an EDHOC error, an [EdhocTransferException] when it answered with something that is not
  * EDHOC, and the exception itself when a step of this side failed. Whatever [exchange] throws, such as
- * kcoap-coap's `CoapException` for a request that got no response, passes through as it is.
+ * kcoap-coap's `CoapException` for a request that got no response, passes through as it is. A run that fails or
+ * is cancelled at any step wipes what it holds (RFC 9528 §9.8): the Initiator's ephemeral key X while it waits
+ * for message_2, PRK_4e3m and the session's PRK_out and PRK_exporter once message_3 is out.
  *
  * @param server the scheme, host and port of the server; its path and query are not used.
  * @param path the EDHOC resource on [server], `.well-known/edhoc` (RFC 9528 §10.7) unless the server
@@ -76,47 +78,51 @@ public class EdhocClientHandshake(
     /** The EDHOC resource: [server] with [path] for its own. */
     private val resource = CoapUri(server.scheme, server.host, server.port, path.split('/').filter { it.isNotEmpty() })
 
+    /** Test hook: sees the Initiator of every run as it is created. */
+    internal var onInitiator: (EdhocInitiator) -> Unit = {}
+
     /** The sequential flow: message_1 to message_3 (and message_4 when [expectMessage4]). */
-    public suspend fun run(expectMessage4: Boolean = false): EdhocOscoreSession {
-        val initiator = EdhocInitiator(config, crypto, loggerFactory)
+    public suspend fun run(expectMessage4: Boolean = false): EdhocOscoreSession = wipingOnFailure { initiator ->
         exchangeMessages1And2(initiator)
         val (message3, session) = initiator.createMessage3()
-        return completeOrDestroy(session) {
-            val response = exchange(EdhocOverCoap.continuationRequest(resource, session.peerConnectionIdentifier, message3))
-            checkResponse(response, "message_3")
-            if (expectMessage4) {
-                initiator.processMessage4(response.payload)
-            } else if (response.code != CoapCode.CHANGED) {
-                // The server rejected message_3 with an EDHOC error message (RFC 9528 Appendix A.2.3).
-                throw EdhocPeerErrorException(EdhocError.decode(response.payload))
-            }
-            EdhocOscoreSession(session, deriveContext(session))
+        val response = exchange(EdhocOverCoap.continuationRequest(resource, session.peerConnectionIdentifier, message3))
+        checkResponse(response, "message_3")
+        if (expectMessage4) {
+            initiator.processMessage4(response.payload)
+        } else if (response.code != CoapCode.CHANGED) {
+            // The server rejected message_3 with an EDHOC error message (RFC 9528 Appendix A.2.3).
+            throw EdhocPeerErrorException(EdhocError.decode(response.payload))
         }
+        EdhocOscoreSession(session, deriveContext(session))
     }
 
     /**
      * The RFC 9668 flow: message_1 and message_2 are exchanged here; message_3 is held back and sent
      * with the first request protected by the returned [CombinedHandshake.security].
      */
-    public suspend fun runCombined(): CombinedHandshake {
-        val initiator = EdhocInitiator(config, crypto, loggerFactory)
+    public suspend fun runCombined(): CombinedHandshake = wipingOnFailure { initiator ->
         exchangeMessages1And2(initiator)
         val (message3, session) = initiator.createMessage3()
-        return completeOrDestroy(session) {
-            val context = deriveContext(session)
-            val security = CombinedRequestSecurity(OscoreClient(context, loggerFactory), message3)
-            CombinedHandshake(EdhocOscoreSession(session, context), security)
-        }
+        val context = deriveContext(session)
+        val security = CombinedRequestSecurity(OscoreClient(context, loggerFactory), message3)
+        CombinedHandshake(EdhocOscoreSession(session, context), security)
     }
 
-    /** Runs [block], which completes [session]; a session that does not complete is wiped (RFC 9528 §9.8). */
-    private inline fun <T> completeOrDestroy(session: EdhocSession, block: () -> T): T =
-        try {
-            block()
+    /**
+     * Runs [block] with a new Initiator. When it fails or is cancelled at any step, the Initiator is aborted,
+     * which wipes X or PRK_4e3m, whichever it holds, and its session is destroyed (RFC 9528 §9.8).
+     */
+    private inline fun <T> wipingOnFailure(block: (EdhocInitiator) -> T): T {
+        val initiator = EdhocInitiator(config, crypto, loggerFactory).also(onInitiator)
+        return try {
+            block(initiator)
         } catch (e: Throwable) {
-            session.destroy()
+            val session: EdhocSession? = initiator.session
+            initiator.abort(HANDSHAKE_FAILED)
+            session?.destroy()
             throw e
         }
+    }
 
     private suspend fun deriveContext(session: EdhocSession): SecurityContext =
         session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
@@ -149,6 +155,8 @@ public class EdhocClientHandshake(
     public companion object {
         /** One retry per suite the server can name is plenty; more means the peers cannot agree. */
         private const val MAX_NEGOTIATION_ROUNDS = 4
+
+        private const val HANDSHAKE_FAILED = "Handshake failed"
 
         /**
          * A handshake that [client] carries to the EDHOC resource [path] of [server] (scheme, host and port;

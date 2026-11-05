@@ -22,6 +22,7 @@ import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.edhoc.CipherSuite
 import dev.kcoap.edhoc.ConnectionIdentifier
@@ -29,7 +30,10 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocException
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocPeerErrorException
+import dev.kcoap.edhoc.EdhocPhase
 import dev.kcoap.edhoc.EdhocRole
+import dev.kcoap.edhoc.EdhocSession
+import dev.kcoap.edhoc.EphemeralKeySource
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
 import dev.kcoap.log.LoggerFactory
@@ -42,7 +46,12 @@ import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SecurityContextParameters
+import dev.kcoap.oscore.SequenceNumberStore
 import dev.kcoap.transport.Endpoint
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -533,6 +542,80 @@ class EdhocOscoreTest {
         assertEquals("Cipher suite negotiation did not converge", endless.message)
         assertNull(endless.response, "no single response to blame")
         assertEquals(4, rounds)
+    }
+
+    /**
+     * RFC 9528 §9.8: a handshake that fails or is cancelled at any step leaves no secret on the client. Waiting for
+     * message_2, the Initiator holds its ephemeral key X; after message_3, PRK_4e3m, and the session holds PRK_out
+     * and PRK_exporter. The session of a failed run never reaches the caller, so the test takes it from the
+     * Initiator while the run is still going.
+     */
+    @Test
+    fun aFailedHandshakeWipesTheInitiatorAndItsSession() = runTest {
+        val peers = Peers.create(crypto)
+        val edhoc = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository())
+        val keys = mutableListOf<SoftwarePrivateKey>()
+        val recording = EphemeralKeySource { backend, type ->
+            backend.generateKeyPair(type).also { keys += it.privateKey as SoftwarePrivateKey }
+        }
+        val initiators = mutableListOf<EdhocInitiator>()
+        fun handshake(sequenceStore: SequenceNumberStore? = null, exchange: suspend (CoapRequest) -> CoapResponse) =
+            EdhocClientHandshake(peers.initiatorConfig(ephemeralKeys = recording), crypto, server, sequenceStore = sequenceStore, exchange = exchange)
+                .also { it.onInitiator = { initiator -> initiators += initiator } }
+        fun assertWiped(case: String) {
+            assertEquals(EdhocPhase.ABORTED, initiators.last().phase, case)
+            assertFailsWith<IllegalStateException>("$case: X is wiped") { keys.last().encoded() }
+        }
+
+        // Waiting for message_2: the exchange fails, as a request that gets no response does; the server has no
+        // EDHOC resource; the run is cancelled.
+        assertFailsWith<IllegalStateException> { handshake { throw IllegalStateException("No response") }.run() }
+        assertWiped("the exchange failed")
+        assertFailsWith<EdhocTransferException> { handshake { CoapResponse.error(CoapCode.NOT_FOUND) }.runCombined() }
+        assertWiped("4.04")
+        val waiting = CompletableDeferred<Unit>()
+        val cancelled = launch {
+            handshake {
+                waiting.complete(Unit)
+                awaitCancellation()
+            }.run()
+        }
+        waiting.await()
+        cancelled.cancelAndJoin()
+        assertWiped("cancelled")
+
+        // After message_3: the server rejects it, or the sequence number store fails as the context is derived.
+        val sessions = mutableListOf<EdhocSession>()
+        var calls = 0
+        val rejected = handshake { request ->
+            if (++calls == 2) {
+                sessions += initiators.last().session!!
+                EdhocOverCoap.errorResponse(EdhocError.unspecified("no").encode())
+            } else {
+                edhoc.handle(request.payload, peer)
+            }
+        }
+        assertFailsWith<EdhocPeerErrorException> { rejected.run() }
+        assertWiped("message_3 rejected")
+        val failingStore = object : SequenceNumberStore {
+            override suspend fun load(contextName: String): Long? {
+                sessions += initiators.last().session!!
+                throw IllegalStateException("The store is unavailable")
+            }
+
+            override suspend fun store(contextName: String, limit: Long) = Unit
+        }
+        assertFailsWith<IllegalStateException> { handshake(failingStore) { edhoc.handle(it.payload, peer) }.runCombined() }
+        assertWiped("the store failed")
+        assertEquals(2, sessions.size)
+        for (session in sessions) {
+            assertFailsWith<IllegalStateException>("PRK_out and PRK_exporter are wiped") { session.oscoreMasterSecret() }
+        }
+
+        // A run that succeeds hands its session over intact.
+        val session = handshake { edhoc.handle(it.payload, peer) }.run()
+        assertEquals(EdhocPhase.COMPLETED, initiators.last().phase)
+        assertEquals(16, session.edhoc.oscoreMasterSecret().size)
     }
 
     @Test
