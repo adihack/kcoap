@@ -370,6 +370,7 @@ final class dev.kcoap.edhoc/EdhocResponderConfig { // dev.kcoap.edhoc/EdhocRespo
     final val methods // dev.kcoap.edhoc/EdhocResponderConfig.methods|{}methods[0]
         final fun <get-methods>(): kotlin.collections/Set<dev.kcoap.edhoc/EdhocMethod> // dev.kcoap.edhoc/EdhocResponderConfig.methods.<get-methods>|<get-methods>(){}[0]
 
+    final fun withConnectionIdentifiers(dev.kcoap.edhoc/ConnectionIdentifierProvider): dev.kcoap.edhoc/EdhocResponderConfig // dev.kcoap.edhoc/EdhocResponderConfig.withConnectionIdentifiers|withConnectionIdentifiers(dev.kcoap.edhoc.ConnectionIdentifierProvider){}[0]
     final suspend fun supportedBy(dev.kcoap.crypto/CryptoBackend): dev.kcoap.edhoc/EdhocResponderConfig // dev.kcoap.edhoc/EdhocResponderConfig.supportedBy|supportedBy(dev.kcoap.crypto.CryptoBackend){}[0]
 }
 

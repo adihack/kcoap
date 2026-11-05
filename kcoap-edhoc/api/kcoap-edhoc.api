@@ -320,6 +320,7 @@ public final class dev/kcoap/edhoc/EdhocResponderConfig {
 	public final fun getEphemeralKeys ()Ldev/kcoap/edhoc/EphemeralKeySource;
 	public final fun getMethods ()Ljava/util/Set;
 	public final fun supportedBy (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun withConnectionIdentifiers (Ldev/kcoap/edhoc/ConnectionIdentifierProvider;)Ldev/kcoap/edhoc/EdhocResponderConfig;
 }
 
 public final class dev/kcoap/edhoc/EdhocRole : java/lang/Enum {
