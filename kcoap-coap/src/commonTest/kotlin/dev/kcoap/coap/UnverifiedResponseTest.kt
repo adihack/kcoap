@@ -96,6 +96,16 @@ class UnverifiedResponseTest {
     }
 
     @Test
+    fun responseVerificationsShowTheirCodeAndReason() {
+        val response = CoapMessage.response(CoapMessage.request(CoapCode.GET) {}, CoapCode.UNAUTHORIZED)
+        assertEquals("Verified(4.01 Unauthorized)", ResponseVerification.Verified(response).toString())
+        val unverified = ResponseVerification.Unverified(response, "sent without OSCORE")
+        assertEquals("Unverified(4.01 Unauthorized: sent without OSCORE)", unverified.toString())
+        assertEquals("sent without OSCORE", unverified.reason)
+        assertEquals(response, unverified.message)
+    }
+
+    @Test
     fun adr0008AForgedUnprotected401WithEchoToAConfirmablePostIsNotRepeated() = runTest {
         val s = setup()
         val pending = async { runCatching { s.client.post(s.peer.uri("/pay"), "10 EUR".encodeToByteArray()) } }

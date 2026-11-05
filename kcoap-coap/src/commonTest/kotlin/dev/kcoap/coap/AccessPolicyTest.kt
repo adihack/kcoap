@@ -10,6 +10,7 @@ import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
+import dev.kcoap.coap.server.ResourceAttributes
 import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
@@ -146,8 +147,10 @@ class AccessPolicyTest {
     @Test
     fun adr0008APolicyGovernsItsSubtreeAndAChildMayOpenItself() = runTest {
         val f = fixture(CoapServerConfig()) {
+            assertNull(access, "the root inherits the server's default")
             resource("api") {
                 access = AccessPolicy.MessageSecurityRequired
+                assertEquals(AccessPolicy.MessageSecurityRequired, access)
                 get { CoapResponse.content("api") }
                 resource("config") { put { CoapResponse.changed() } }
                 resource("health") {
@@ -305,6 +308,10 @@ class AccessPolicyTest {
                 access = AccessPolicy { it.securityIdentity == Kid(7) }
                 get { CoapResponse.content("named") }
             }
+            resource("marked") {
+                attributes = ResourceAttributes(extra = listOf(LinkFormat.OSCORE to null))
+                get { CoapResponse.content("marked") }
+            }
         }
         suspend fun discover(kid: Int?): String {
             val answer = f.ask(request(f.peer, ".well-known/core", kid = kid))
@@ -314,8 +321,8 @@ class AccessPolicyTest {
 
         assertEquals("</open>", discover(kid = null))
         // RFC 8613 §9: osc marks a target reachable with OSCORE only.
-        assertEquals("</open>,</secret>;osc", discover(kid = 1))
-        assertEquals("</open>,</secret>;osc,</named>", discover(kid = 7))
+        assertEquals("</open>,</secret>;osc,</marked>;osc", discover(kid = 1))
+        assertEquals("</open>,</secret>;osc,</named>,</marked>;osc", discover(kid = 7), "osc is never added twice")
     }
 
     @Test
