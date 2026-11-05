@@ -11,7 +11,9 @@ import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
+import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
@@ -35,6 +37,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -48,7 +52,7 @@ import org.junit.jupiter.api.TestInstance
 
 /**
  * libcoap's `coap-client -L 7` (Q-Block on, RFC 9177) against a kcoap server with Q-Block on, over real UDP,
- * TCP and WebSockets: the cases L1 to L5, L7, L8, L10 and L12 of docs/plan-qblock-and-platforms.md §1.5.
+ * TCP and WebSockets: the cases L1 to L8, L10 and L12 of docs/plan-qblock-and-platforms.md §1.5.
  * Every case compares the bytes of the body, since libcoap's client can exit 0 with a truncated one. Loss on
  * kcoap's side comes from a [DroppingTransport], on libcoap's side from its `-l`. Skipped when docker or the
  * `kcoap/libcoap` image is missing.
@@ -91,7 +95,24 @@ class LibcoapClientAgainstKcoapQBlockTest {
 
     private fun endpointConfig() = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it })
 
+    /** `/obs`: 1500 bytes for its [version], which [change] turns and notifies (L6). */
+    private class Changing : ObservableResource("obs") {
+        @Volatile
+        var version = 0
+
+        override val notificationType: CoapMessageType get() = CoapMessageType.NON
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse =
+            CoapResponse.content(ByteArray(1500) { ('a' + (it + version) % 26).code.toByte() }, ContentFormat.TEXT_PLAIN)
+
+        fun change() {
+            version++
+            notifyObservers()
+        }
+    }
+
     private fun dev.kcoap.coap.server.ResourceBuilder.routes() {
+        add(Changing())
         resource("big") { get { CoapResponse.content(big, ContentFormat.TEXT_PLAIN) } }
         resource("store") {
             get { CoapResponse.content(stored, ContentFormat.TEXT_PLAIN) }
@@ -331,6 +352,52 @@ class LibcoapClientAgainstKcoapQBlockTest {
         val block45 = received.first { it.message.options.qBlock1?.number == 45L }
         val wait = incomplete.at - block45.at
         assertTrue(wait in 3900.milliseconds..5.seconds, "NON_RECEIVE_TIMEOUT after the last block that came: $wait")
+    }
+
+    // ---------------------------------------------------------------- L6: Observe
+
+    /**
+     * L6: libcoap observes kcoap's `/obs`, 1500 bytes that change every 3 s, with Q-Block2 (`-s 10`): every
+     * block of every body carries Observe and one ETag of its own body, the Continues continue on the
+     * registration's token, and libcoap's deregistration with Observe 1 removes the observer.
+     */
+    @Test
+    fun l6NotificationBodiesCarryObserveOnEveryBlockAndContinueOnTheRegistrationToken() {
+        val obs = open.root.child("obs") as Changing
+        val changes = scope.launch {
+            repeat(4) {
+                delay(3.seconds)
+                obs.change()
+            }
+        }
+        val result = client("-L", "7", "-N", "-b", "64", "-v", "7", "-s", "10", "-B", "15", "$uri/obs")
+        runBlocking { changes.cancelAndJoin() }
+
+        assertEquals(0, result.exitCode, "$result")
+        val registration = receivedMessages().first { it.options.path == "/obs" && it.options.observe == 0L }
+        // libcoap deregisters on the registration's token, and that GET's answer, the last body, has no Observe.
+        val onRegistration = blocksSent().filter { it.hasToken(registration.token) }
+        val all = onRegistration.groupBy { it.options.etags.single().toList() }.values.toList()
+        val bodies = all.dropLast(1)
+        assertTrue(all.last().none { CoapOptions.OBSERVE.number in it.options }, "the deregistration's answer: $result")
+        assertTrue(bodies.size >= 3, "a body per change: ${bodies.size} $result")
+        assertTrue(bodies.flatten().all { it.options.observe != null }, "RFC 9177 §4.5: Observe on every block of a notification")
+        val observes = bodies.map { body -> body.map { it.options.observe!! }.distinct().single() }
+        assertEquals(observes.sorted(), observes, "one Observe value per body, rising")
+        assertTrue(bodies.all { body -> body.map { it.options.qBlock2!!.number }.toSet() == (0L..23L).toSet() }, "every body whole")
+        val continues = receivedMessages().filter { it.options.path == "/obs" && it.options.qBlock2?.let { block -> block.more && block.number > 0 } == true }
+        assertTrue(continues.isNotEmpty() && continues.all { CoapOptions.OBSERVE.number !in it.options }, "$result")
+        assertTrue(continues.none { continued -> sentMessages().any { it.hasToken(continued.token) } }, "nothing on a Continue's own token")
+        val deregistration = receivedMessages().firstOrNull { it.options.path == "/obs" && it.options.observe == 1L }
+        assertNotNull(deregistration, "$result")
+        assertTrue(sentMessages().any { it.hasToken(deregistration.token) && CoapOptions.OBSERVE.number !in it.options }, "answered")
+        assertEquals(0, obs.observerCount)
+        // libcoap writes no -o file for an observation; its log shows every block of every notification arrived.
+        val got = result.wire.filter { line ->
+            !line.isSent && line.code == "2.05" && " Observe:" in line.line && line.option("Q-Block2").singleOrNull()?.endsWith("/64") == true
+        }.groupBy { it.option("ETag").single() }
+        assertEquals(bodies.size, got.size, "$result")
+        assertTrue(got.values.all { blocks -> blocks.mapNotNull { it.number("Q-Block2") }.toSet() == (0L..23L).toSet() }, "$result")
     }
 
     // ---------------------------------------------------------------- L7: Confirmable

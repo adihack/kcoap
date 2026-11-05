@@ -5,6 +5,7 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
+import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
@@ -22,6 +23,8 @@ import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorTcpConnector
 import dev.kcoap.transport.ktor.KtorUdpTransport
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
+import java.io.File
+import java.nio.file.Files
 import java.util.Collections
 import kotlin.random.Random
 import kotlin.test.assertContentEquals
@@ -35,6 +38,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,7 +52,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 
 /**
- * The kcoap client with Q-Block (RFC 9177) against libcoap's `coap-server -L 7` (cases K1–K5, K7–K10 and K12
+ * The kcoap client with Q-Block (RFC 9177) against libcoap's `coap-server -L 7` (cases K1–K10 and K12
  * of docs/plan-qblock-and-platforms.md §1.5), over real UDP, TCP and WebSockets. Every case starts a server
  * of its own, since libcoap's `-l` loss list counts every datagram the server sends, and compares body
  * bytes. Loss on the kcoap side comes from [LossyTransport]. Skipped when docker or the image is missing.
@@ -414,6 +418,59 @@ class KcoapClientAgainstLibcoapQBlockTest {
             assertEquals(listOf(probeAnswer.tokenHex), withQBlock.map { it.message.tokenHex }.distinct(), "only the probe and its 4.02")
             assertTrue(requests("/example_data").any { it.message.options.block1 != null })
             assertTrue(received().any { it.message.options.block2 != null })
+        }
+    }
+
+    // ---------------------------------------------------------------- K6
+
+    /**
+     * K6: kcoap observes libcoap's `/example_data` with Q-Block (`coap-server -L 7 -N`, Non-confirmable
+     * notifications), and libcoap's own client PUTs 3000 bytes there, which notifies. Both bodies arrive whole,
+     * each emitted once, with Continues for their later sets; cancelling the observation deregisters with
+     * Observe 1 on its token (RFC 7641 §3.6).
+     */
+    @Test
+    fun k6NotificationBodiesArriveWholeOncePerBodyAndTheObservationDeregistersOnItsToken() = withServer("-L", "7", "-N", "-v", "7") { server ->
+        val directory = Files.createTempDirectory("kcoap-k6").toFile()
+        val upload = body(3000, 6)
+        File(directory, "big3000.txt").writeBytes(upload)
+        try {
+            withClient { client ->
+                val received = Channel<CoapResponse>(Channel.UNLIMITED)
+                val observation = scope.launch {
+                    client.observe("${server.uri}/example_data") { nonConfirmable() }.collect { received.send(it) }
+                }
+                val first = withTimeout(10.seconds) { received.receive() }
+                assertContentEquals(exampleData, first.payload)
+
+                val put = Libcoap.client("-L", "7", "-N", "-b", "64", "-m", "put", "-f", "/data/big3000.txt", "${server.uri}/example_data", mount = directory)
+                assertEquals(0, put.exitCode, "$put")
+                val second = withTimeout(20.seconds) { received.receive() }
+                assertContentEquals(upload, second.payload)
+                delay(3.seconds)
+                assertTrue(received.isEmpty, "exactly one emission per body")
+
+                observation.cancel()
+                delay(2.seconds)
+                val requests = requests("/example_data").map { it.message }
+                val registration = requests.first()
+                assertEquals(0L, registration.options.observe)
+                assertEquals(listOf("0/M/64"), registration.qBlock2)
+                val bodies = blocks().map { it.message }.filter { it.hasToken(registration.token) }.groupBy { it.options.etags.single().toList() }
+                assertEquals(listOf(1500L, 3000L), bodies.values.map { body -> body.first().options.size2 }, "two bodies, one ETag each")
+                assertEquals(listOf((0L..23L).toList(), (0L..46L).toList()), bodies.values.map { body -> body.map { it.options.qBlock2!!.number }.sorted() })
+                val continues = requests.filter { request -> request.options.qBlock2List.singleOrNull()?.let { it.more && it.number > 0 } == true }
+                assertEquals(listOf(10L, 20L, 10L, 20L, 30L, 40L), continues.map { it.options.qBlock2!!.number }, "Continues at 10 to 40")
+                assertTrue(continues.all { it.options.observe == null })
+                // libcoap leaves Observe out of the blocks it sends after a Continue; the client takes them by ETag.
+                assertTrue(bodies.values.flatten().any { it.options.observe == null }, "upstream: blocks without Observe")
+                val deregistration = requests.last()
+                assertEquals(1L, deregistration.options.observe, "RFC 7641 §3.6: GET with Observe 1")
+                assertEquals(registration.tokenHex, deregistration.tokenHex, "on the observation's token")
+                assertNoMessageMixesBlockAndQBlock()
+            }
+        } finally {
+            directory.deleteRecursively()
         }
     }
 
