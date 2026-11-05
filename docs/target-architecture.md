@@ -404,6 +404,11 @@ The table goes into docs/architecture.md.
 - the macOS CI job (`scripts/test apple`) green on the PR;
 - after C1, `checkKotlinAbi` green with the dump diff reviewed.
 
+> **Amendment (Q-Block).** Q-Block (RFC 9177) is scheduled before B1 so that B1 carries it onto PeerLink:
+> `kcoap-coap/**` ownership is S1 → C1 (annotation) → QB-2 → SRV-1 → QB-3 → QB-4 → QB-6 → B1 → B2 → …,
+> and `kcoap-oscore/**` is A1 → QB-5 → A3 → B1. The Q-Block packages are in
+> [plan-qblock-and-platforms.md](plan-qblock-and-platforms.md).
+
 ### 4.2 Schedule
 
 ```
