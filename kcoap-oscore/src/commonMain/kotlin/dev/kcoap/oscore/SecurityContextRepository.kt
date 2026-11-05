@@ -20,8 +20,10 @@ public fun interface SecurityContextRepository {
  * **Bound it.** Contexts from EDHOC accumulate: every completed handshake adds one, nothing in kcoap removes
  * them, and every client the server's EDHOC configuration trusts can run handshakes. A production server
  * supplies an implementation with a bound, which evicts, say, the context found least recently once it is full.
- * Eviction costs the client only a new handshake: its next request gets the unprotected 4.01 "Security context
- * not found" (RFC 8613 §8.2), and it runs EDHOC again.
+ * Eviction costs the client only a new handshake, but its next request gets one of two unprotected errors
+ * (RFC 8613 §8.2): 4.01 "Security context not found" while its Recipient ID is free, or 4.00 "Decryption
+ * failed" once `EdhocServer` has given that Recipient ID, a C_R it may choose again, to another client. From a
+ * server that may have evicted its context, a client takes either answer as "run EDHOC again".
  *
  * **Persisting contexts** is safe only for contexts whose Sender Sequence Numbers a durable [SequenceNumberStore]
  * has held from their first derivation, as [SecurityContext.derive] describes; a repository that keeps them

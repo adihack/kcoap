@@ -30,7 +30,11 @@ CoapServer(transport, scope, CoapServerConfig(security = security)) {
 (kcoap-oscore), usually the one its `OscoreServer` finds contexts in. Those contexts accumulate, one per
 handshake, and nothing removes them: `InMemoryContextRepository` has no bound, so a production server
 supplies a repository with one (evicting the context found least recently, say). An evicted client gets
-OSCORE's unprotected 4.01 "Security context not found" and runs EDHOC again. `CombinedRequestServer`
+OSCORE's unprotected 4.01 "Security context not found", or 4.00 "Decryption failed" once its old C_R went to
+another client, and takes either as the signal to run EDHOC again. A session is established all or nothing:
+when the repository, the sequence number store or the `EdhocSessionListener` throws, or the handler is
+cancelled, the context is removed again, the session wiped, and the client gets "EDHOC failed" in a 5.00
+(RFC 9528 Appendix A.2.3). `CombinedRequestServer`
 decorates any `ServerMessageSecurity` that verifies against those contexts, such as `OscoreServer` or a
 decorator of it.
 
@@ -105,7 +109,9 @@ client.get("coap://192.0.2.1/lights")
 `{ edhocServer.handle(it.payload, peer) }`, fits as well. `runCombined()` returns a `CombinedHandshake`,
 which destructures into the session and the protection. A handshake fails with an `EdhocException`:
 `EdhocPeerErrorException` when the server sent an EDHOC error, `EdhocTransferException` (with the
-`response`) when it answered with something that is not EDHOC.
+`response`) when it answered with something that is not EDHOC. A run that fails or is cancelled at any step
+wipes what it holds (RFC 9528 §9.8): the ephemeral key X while it waits for message_2, PRK_4e3m and the
+session's PRK_out and PRK_exporter after message_3.
 
 `PeerSecurity` holds one protection per server, keyed by the transport endpoint the client's requests go
 to; `install(client, uri, protection)` finds that endpoint with the client's own resolver. A request to a
@@ -123,13 +129,17 @@ runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the fir
 - Complete handshakes over the CoAP framing, sequential and combined, with and without message_4,
   cipher suite negotiation across the transfer and its limit, and every error path of RFC 9668 §3.3.1 and
   RFC 9528 Appendix A.2.3: each malformed request payload as an `EdhocException` with a generic diagnostic on
-  the wire, responses that are not EDHOC as `EdhocTransferException` (`EdhocOscoreTest`).
+  the wire and only the type of the offending CBOR item in its message, logged with the payload as a length,
+  responses that are not EDHOC as `EdhocTransferException` (`EdhocOscoreTest`). A client run that fails while
+  waiting for message_2 (the exchange throws, a 4.04, cancellation) or after message_3 (rejected, a sequence
+  number store failing) aborts its Initiator, wipes X and destroys its session
+  (`EdhocOscoreTest.aFailedHandshakeWipesTheInitiatorAndItsSession`).
 - The glue on its SPIs: `EdhocServer` on any `MutableSecurityContextRepository` (it checks C_R with `find`
   and adds with `addIfAbsent`), `CombinedRequestServer` around any `ServerMessageSecurity` (and a 4.00 when
   that layer does not take the rebuilt request), a handshake to a resource at another path, the crypto
   backend asked once per configuration by both sides, not per session; through the stack,
-  `PeerSecurity.install(client, uri, protection)` resolving the endpoint the client's requests go to
-  (`FullStackTest`).
+  `PeerSecurity.install(client, uri, protection)` resolving the endpoint the client's requests go to, also with
+  a resolver of the client's own for a name (`FullStackTest`).
 - OSCORE contexts derived on both sides interoperate. The OSCORE values themselves come from the
   EDHOC exporter, checked against RFC 9529 in `kcoap-edhoc`.
 - Pending sessions (`EdhocServerSessionsTest`): C_R collisions with a session composing message_2 and
@@ -139,7 +149,10 @@ runs EDHOC as it is: its Q-Block probe is not sent before `install`, and the fir
   alone and run no cryptography; the bounds refuse before any cryptography, and a full server evicts the
   oldest session past its grace period; sessions expire on a `TestTimeSource`; a handler cancelled while
   message_2 is composed or message_3 processed gives back its C_R and place; dropped sessions have their
-  ephemeral keys wiped; a second server on the same repository never replaces a context.
+  ephemeral keys wiped; a second server on the same repository never replaces a context. Establishing is all
+  or nothing: a repository that throws (before or after adding), a handler cancelled while it adds, a listener
+  or a sequence number store that throws, each leave no context behind, no pending session and an unrun
+  listener, and get "EDHOC failed" in a 5.00, also through `CombinedRequestServer`.
 
 Not yet: the reverse message flow (A.2.2), Block-wise of the combined request beyond the first-block
 rule, and live interop of the combined flow (planned with libedhoc and aiocoap).
