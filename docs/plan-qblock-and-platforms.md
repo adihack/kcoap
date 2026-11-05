@@ -766,7 +766,7 @@ public class QBlockServerConfig(
   protected (a resolver that leaves a registration unprotected no longer skips the ordering). The server
   needed nothing. Tests: `OscoreQBlockTest` (+7: bodies in any order for Q-Block2 and Q-Block1 FETCH
   registrations, replays, an older body, a stale whole body, an older notification of one message, the
-  window edge, the strict order without Q-Block), `OscoreQBlockEndToEndTest` (+3, one turned around: protected
+  window edge, the strict order without Q-Block), `OscoreQBlockEndToEndTest` (one turned around and two more: protected
   notification bodies; 5 seeds at 10 % loss with 20–50 ms of latency, every body whole, in order and once,
   no genuine block refused, where the strict rule delivered 2 of 7; a held-back older body and a replayed
   newer one never delivered), `QBlockObserveTest` (turned around; the stale-body case also with security that
