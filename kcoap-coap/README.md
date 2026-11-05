@@ -1,13 +1,14 @@
 # kcoap-coap
 
 CoAP itself: the message model and codecs, and the endpoint stack with client and server APIs for
-CoAP over UDP. Common Kotlin, no I/O of its own: transports plug in through `kcoap-transport`.
+CoAP over UDP and over reliable transports (TCP, WebSockets; RFC 8323). Common Kotlin, no I/O of its own: transports plug in through `kcoap-transport`.
 
 ## Packages
 
 | Package | What |
 |---|---|
 | `dev.kcoap.coap` | `CoapMessage`, `CoapCode`, `OptionSet` and the option registry, `BlockOption`, `CoapUri`, `CoapRequest`, `CoapResponse`, `CoapException`, `LinkFormat` / `WebLink` (RFC 6690) |
+| `dev.kcoap.coap` (signaling) | `SignalingOptions`: the RFC 8323 §5.2 signaling option registry, per signaling code |
 | `dev.kcoap.coap.codec` | `UdpMessageCodec` (RFC 7252 §3), `ReliableMessageCodec` and `ReliableStreamDecoder` (RFC 8323 §3.2, §4.2) |
 | `dev.kcoap.coap.security` | The message-security SPI OSCORE implements (`kcoap-oscore`) |
 | `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`; internally the sans-IO `UdpMessaging` state machine and the exchange layer |
@@ -61,14 +62,31 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   answer with a challenge instead of the resource (RFC 8613 Appendix B.1.2).
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
 
+- **CoAP over reliable transports, RFC 8323** (`ReliableMessaging`, sans-IO, one per connection, and
+  the connection management around it): CSM first from both sides, the peer's required first and
+  within `csmTimeout`, Max-Message-Size and Block-Wise-Transfer cumulative (§3.3, §5.3);
+  Max-Message-Size enforced both ways; Ping/Pong with the Ping's token and Custody (§5.4); Release on
+  idle client connections and at shutdown, draining and Hold-Off when received (§5.5); Abort with
+  Bad-CSM-Option for missing or invalid CSMs, format errors, oversize messages and unknown critical
+  signaling options (§5.2, §5.6); keep-alive pings; requests both ways, 5.01 without a server (§3.3);
+  connection loss fails exchanges and removes observers (§3.4, §7.4); BERT in both directions (§6);
+  Observe without message types, values ignored on receipt, explicit deregistration (§7). Clients
+  connect on demand through `Connector`s, one connection per peer; servers accept from
+  `ConnectionListener`s. Settings in `ReliableTransportConfig`.
+
 ## Not yet
 
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
-RFC 8323 reliable transports (codec only), multicast, proxying and caching, Hop-Limit, client
+TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
 and amplification mitigation (RFC 9175 §2.4), Q-Block (RFC 9177).
 
 ## Verified by
+
+- RFC 8323 §3.2 Figure 5 and §5.7 Figures 11 and 12 byte for byte; `ReliableMessagingTest` and
+  `SignalTest` per section without sockets or clocks; `ReliableTransportTest` end to end over
+  `kcoap-testkit`'s in-memory connections on virtual time; `ReliableLoopbackTest` over real TCP and
+  WebSocket sockets; libcoap in both directions over `coap+tcp` and `coap+ws` (`interop/README.md`).
 
 - RFC 8613 Appendix C messages through the UDP codec, and the RFC 7252, 7641, 7959, 6690, 9175 rules
   as unit tests named after their sections, on virtual time over `kcoap-testkit`'s simulated network,

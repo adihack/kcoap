@@ -1,9 +1,9 @@
 # Architecture
 
-Status: **built for UDP**. The CoAP endpoint with client and server APIs, OSCORE, EDHOC (including the
-post-quantum suite), the EDHOC→OSCORE glue, the crypto backends and the UDP transport exist and are
-cross-tested; DTLS, TCP and WebSocket transports and the browser target are designed here and come
-later. This records how kcoap stays one protocol core while running in mobile apps, browsers and
+Status: **built for UDP, TCP and WebSockets**. The CoAP endpoint with client and server APIs, OSCORE,
+EDHOC (including the post-quantum suite), the EDHOC→OSCORE glue, the crypto backends, the UDP transport
+and CoAP over TCP and WebSockets (RFC 8323) exist and are cross-tested; DTLS, TLS for `coaps+tcp` and the
+browser target are designed here and come later. This records how kcoap stays one protocol core while running in mobile apps, browsers and
 server applications. The RFC checklist is in `rfc-compliance.md`.
 
 ## Module dependencies
@@ -12,7 +12,8 @@ server applications. The RFC checklist is in `rfc-compliance.md`.
 kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default ── kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
               │                └─ kcoap-cose ─┐
               ├─ kcoap-cbor ──────────────────┤
-              ├─ kcoap-transport ─┬─ kcoap-transport-ktor
+              ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP)
+              │                   ├─ kcoap-transport-ktor-websocket ── kcoap-transport-ktor-websocket-server
               │                   ├─ kcoap-testkit
               │                   └─ kcoap-dtls
               └─ kcoap-coap ── kcoap-oscore ──┬── kcoap-edhoc-oscore
@@ -124,6 +125,46 @@ rejections, session ends and observer changes. Logging follows `code-style.md` u
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; the JVM tests also run against libcoap over real UDP (`interop/README.md`).
 
+### Over reliable transports (RFC 8323)
+
+The same `CoapEndpoint` runs connections next to (or instead of) its datagram transport, all in common
+code, sans-IO where the protocol rules are:
+
+```
+CoapClient / CoapServer       unchanged; the URI scheme picks the transport
+Block-wise, Observe           sizes from the peer's Max-Message-Size, BERT; Observe values ignored (§7.1)
+Exchanges                     CoapEndpoint: matching by (Endpoint, token) and by connection
+Message security              unchanged; signaling stays unprotected below it
+ReliableConnections           per endpoint: connect on demand through Connectors, one per peer, idle
+                              release, Hold-Off; accept from ConnectionListeners
+ConnectionDriver              per connection: reader, ordered writer, timers, one lock, back-pressure
+ReliableMessaging             per connection, sans-IO: CSM, Ping/Pong/Custody, Release, Abort, framing
+Transport                     Connection SPI: ByteStreamConnection (TCP) | MessageConnection (WebSocket)
+```
+
+- **One messaging layer per connection.** Tokens, Custody bookkeeping and Release draining are per
+  connection (§3.3). The endpoint keeps at most one connection per peer `Endpoint`; a released one takes
+  no new requests, and a new one opens only once it is gone, which the release timeout bounds. Every
+  exchange and every server observation remembers its connection, so responses and notifications go
+  back on it and a closed connection fails exactly what was on it (§3.4, §7.4).
+- **CSM first.** Each side sends its CSM at once, without waiting for the peer's (§3.3). The peer's CSM
+  must be its first message (Empty excepted, §3.4), within `csmTimeout`, or the connection is aborted.
+  A client sends its first request after the peer's CSM, so block sizes follow the peer's
+  Max-Message-Size from the start; §3.3 would allow sending earlier, at the cost of guessing 1152.
+- **Writes in state-machine order.** The state machine's writes go into the connection's queue while
+  its lock is held, and one writer drains it. Concurrent senders therefore never reorder the wire, and
+  the reader is never blocked by a slow peer. Requests and responses wait while 256 KiB are queued;
+  signaling never waits.
+- **Notifications in freshness order.** On an in-order transport the client ignores Observe values, so
+  the server holds back a notification until the registration response is out.
+- **BERT** (§6) is used only when both CSMs indicate it, and never when a block size is configured.
+  The final BERT block carries at most 1024 bytes, because libcoap 4.3.5 rejects longer ones.
+- **Adapters are thin.** The TCP and WebSocket adapters only move bytes and frames: ktor-network
+  sockets, the ktor client for WebSockets (any engine, browsers included), and the ktor server for
+  WebSocket servers, in a module of its own so a browser client never pulls in ktor-server. No public
+  API is platform-specific; `CoapClient`/`CoapServer` with `coap+tcp://` and `coap+ws://` URIs are the
+  same on every target. `kcoap-testkit`'s `InMemoryConnections` drives the same code on virtual time.
+
 ## Three transport shapes
 
 The RFCs define three ways to carry CoAP, and the transport interface follows them:
@@ -144,19 +185,30 @@ public interface DatagramTransport {
     public suspend fun close()
 }
 
-public interface ByteStreamConnection {               // TCP, TLS
+public sealed interface Connection {                  // one per RFC 8323 connection
     public val remote: Endpoint
     public val peerIdentity: PeerIdentity
-    public suspend fun read(into: ByteArray, offset: Int, length: Int): Int
-    public suspend fun write(bytes: ByteArray)
     public suspend fun close()
 }
 
-public interface MessageConnection {                  // WebSocket
-    public val remote: Endpoint
-    public val peerIdentity: PeerIdentity
+public interface ByteStreamConnection : Connection {  // TCP, TLS
+    public suspend fun read(into: ByteArray, offset: Int, length: Int): Int
+    public suspend fun write(bytes: ByteArray)
+}
+
+public interface MessageConnection : Connection {     // WebSocket
     public suspend fun send(message: ByteArray)
     public suspend fun receive(): ByteArray?
+}
+
+public interface Connector {                          // opens connections for coap+tcp, coap+ws, ...
+    public val schemes: Set<CoapScheme>
+    public suspend fun connect(peer: Endpoint): Connection
+}
+
+public interface ConnectionListener {                 // a TCP server socket, a WebSocket endpoint
+    public val scheme: CoapScheme
+    public suspend fun accept(): Connection?
     public suspend fun close()
 }
 
@@ -165,7 +217,9 @@ public sealed interface PeerIdentity                 // None, PreSharedKey, RawP
 ```
 
 On reliable transports one messaging-layer instance serves one connection, so tokens are scoped to
-the connection and `Endpoint.Tcp` / `Endpoint.WebSocket` only describe the peer.
+the connection and `Endpoint.Tcp` / `Endpoint.WebSocket` only describe the peer. `Endpoint.Tcp` records
+TLS (`coaps+tcp` and `coap+tcp` are distinct origins, RFC 8323 §8); for a connection this side opens, a
+host name stays a name, which the connector resolves and TLS checks the certificate against.
 
 Everything above the messaging layer sees exchanges, never sockets. A URI scheme registry maps `coap`,
 `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws` and `coaps+ws` to a transport factory.
@@ -329,6 +383,11 @@ and BERT for larger blocks. Schemes: `coap+tcp` (5683), `coaps+tcp` (5684, ALPN 
 | Browser (JS / Wasm) | **no** | **no** | **no** | Ktor client (JS) | `fetch` |
 | Node.js | `dgram` | kcoap | `net` / `tls` | Ktor client | `fetch` |
 
+Built so far: UDP and TCP on ktor-network (`kcoap-transport-ktor`) for the JVM, Apple and Linux; the
+WebSocket client on the ktor client (`kcoap-transport-ktor-websocket`), which takes any engine, so the
+browser needs no other adapter; and the WebSocket server on the ktor server
+(`kcoap-transport-ktor-websocket-server`). TLS for TCP is the open item.
+
 Multicast needs native APIs: NIO `join()` on the JVM, Network.framework plus Apple's multicast
 entitlement on iOS. iOS also needs the Local Network permission for LAN peers.
 
@@ -384,13 +443,15 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | Module | Scope | State |
 |---|---|---|
 | `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, security interfaces | interfaces |
-| `kcoap-coap` | Message model, codecs, the UDP endpoint with client and server, block-wise, Observe | UDP done |
+| `kcoap-coap` | Message model, codecs, the endpoint with client and server over UDP and RFC 8323 connections, block-wise and BERT, Observe | UDP, TCP and WebSocket done |
 | `kcoap-oscore` | RFC 8613 behind the message-security SPI | done |
 | `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
 | `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
-| `kcoap-testkit` | In-memory datagram network with fault injection, for tests | done |
+| `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders; engine last |
-| `kcoap-transport-ktor` | UDP, TCP, WebSocket and HTTP on all targets except browser UDP/TCP | UDP done; TCP, WebSocket, HTTP planned |
+| `kcoap-transport-ktor` | UDP and TCP on ktor-network | UDP and TCP done; TLS for `coaps+tcp` planned |
+| `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine (browsers included) | done |
+| `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone CIO or mounted in an application | done |
 | `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
 | `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
 | `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |

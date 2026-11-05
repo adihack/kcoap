@@ -30,7 +30,17 @@ vectors where they exist and by interop runs against independent implementations
 | RFC 7967 | No-Response | done (server) | `RequestResponseTest`, `EdgeCaseTest` |
 | RFC 9175 | Echo, Request-Tag, token processing (needed by OSCORE Appendix B.1.2) | partial: client Echo retry, Request-Tag for concurrent Block1 and server keying, DTLS token sequences; server freshness checks and amplification mitigation todo | `MessageSecurityTest`, `BlockwiseTest`, `EdgeCaseTest` |
 | RFC 8768 | Hop-Limit | todo | |
-| RFC 8323 | CoAP over TCP/TLS/WebSockets: framing, CSM, Ping/Pong, Release/Abort, BERT | partial (framing codec) | codec tests |
+| RFC 8323 §3.2, §4.2 | Framing: Len/TKL with extended length over TCP, one binary frame with Len 0 over WebSockets, fragmented frames reassembled | done | §3.2 Figure 5 and §5.7 Figures 11/12 byte for byte, `ReliableMessageCodecTest`, libcoap |
+| RFC 8323 §3.3, §4.3, §5.3 | CSM first from both sides, without waiting for the peer's; peer's CSM required first (Empty excepted, §3.4), within a timeout, else Abort; Max-Message-Size (base 1152) and Block-Wise-Transfer, cumulative; clients wait for the CSM before the first request | done | `ReliableMessagingTest`, `ReliableTransportTest`, libcoap both ways |
+| RFC 8323 §5.2 | Signaling option numbers per code, own registry (`SignalingOptions`); unknown critical options abort, elective ones ignored | done | `SignalTest`, `ReliableMessagingTest` |
+| RFC 8323 §5.3.1 | Max-Message-Size enforced on receipt (Abort, before buffering) and on sending (`MESSAGE_TOO_LARGE`); block sizes from the peer's value | done | unit and end-to-end tests, libcoap `-X` |
+| RFC 8323 §5.4 | Ping/Pong with the Ping's token, Custody: the Pong waits until requests before the Ping are answered; `CoapEndpoint.ping(peer, custody)`; keep-alive pings | done | unit tests, libcoap (its Pongs carry no token; matched to the oldest Ping) |
+| RFC 8323 §5.5 | Release: sent on idle client connections and at shutdown; received, no new requests, drain of requests before it and of own requests, then close; Hold-Off honoured; Alternative-Address reported, not followed (§10.1) | done | `ReliableMessagingTest`, `ReliableTransportTest` |
+| RFC 8323 §5.6 | Abort with diagnostic and Bad-CSM-Option: missing or invalid CSM, format errors, oversize messages, unknown critical signaling options; received, the connection closes | done | unit and end-to-end tests |
+| RFC 8323 §3.3, §3.4, §7.4 | Requests both ways on a connection, 5.01 without a server; per-connection tokens; connection loss fails exchanges and removes observers | done | `ReliableTransportTest` |
+| RFC 8323 §6 | BERT: SZX 7 in both directions, Block1 and Block2, numbering in 1024-byte units, only when both CSMs indicate it; plain SZX in answer switches to plain blocks | done | §6 Figures 13/14 shapes in `ReliableTransportTest`, libcoap both ways over TCP |
+| RFC 8323 §7 | Observe: no message types, Observe values ignored on receipt (§7.1), registration response before any notification, explicit deregistration (§7.4) | done | `ReliableTransportTest`, libcoap `/time` and `coap-client -s` |
+| RFC 8323 §4.1, §8 | WebSocket subprotocol `coap` at `/.well-known/coap`, required both ways; `coap+tcp`, `coaps+tcp`, `coap+ws`, `coaps+ws` URIs and default ports | done (`coaps+ws` on the ktor engine's TLS, not cross-tested) | `KtorWebSocketTransportTest`, libcoap |
 | RFC 9177 | Q-Block | optional (Q-Block options get 4.02, so peers fall back to RFC 7959) | |
 
 Hop-Limit and OSCORE: RFC 8768 gives it no OSCORE class, so under the published RFCs it is Class E
@@ -54,7 +64,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | RFC 7925 | DTLS 1.2 IoT profile: resumption, SNI and `max_fragment_length` (RFC 6066), `cached_info` (RFC 7924), no renegotiation, 9 s timer | partial (`DtlsConfig` defaults) |
 | RFC 7627 | Extended master secret (SHOULD in RFC 7925) | todo |
 | RFC 9146 | DTLS 1.2 Connection ID | partial (endpoint semantics, record overhead) |
-| RFC 8323 §9 | TLS for `coaps+tcp` / `coaps+ws`, ALPN `coap`; same three modes via RFC 7925 | partial (`StreamSecurity`, `CoapScheme.ALPN`) |
+| RFC 8323 §9 | TLS for `coaps+tcp` / `coaps+ws`, ALPN `coap`; same three modes via RFC 7925 | partial: `coaps+ws` through the ktor client engine's TLS (`wss`); `coaps+tcp` has its seam (`Endpoint.Tcp(usesTls)`, `Connector`, `StreamSecurity`, `CoapScheme.ALPN`) but no TLS connector yet |
 | RFC 9147 | DTLS 1.3 | later |
 
 ## OSCORE (RFC 8613)

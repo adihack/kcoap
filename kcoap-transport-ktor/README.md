@@ -12,6 +12,10 @@ builds: JVM (and so Android) and Apple. Browsers have no UDP; they reach devices
   - `maxDatagramSize` defaults to 1152 bytes, RFC 7252 §4.6's message size for an unknown path; the
     CoAP layer derives block sizes from it. Larger datagrams are still received.
 
+- `KtorTcpConnector` and `KtorTcpListener`: `coap+tcp` (RFC 8323) connections, opened on demand by
+  the CoAP client and accepted by the server; accepted peers are `Endpoint.Tcp` in `IpLiteral` form.
+  The adapter only moves bytes; framing, CSM and signaling are common code in `kcoap-coap`.
+
 ```kotlin
 val transport = KtorUdpTransport.bind(port = 5683)
 val server = CoapServer(transport, scope) { resource("hello") { get { CoapResponse.content("Hello") } } }
@@ -24,8 +28,15 @@ the JVM and iOS; a JVM-only `DatagramChannel` transport would need a second one 
 without trouble on the JVM. Apple builds compile against the same common API but are only verified on
 macOS CI.
 
-Planned here: TCP (`coap+tcp`, RFC 8323) and WebSocket client transports, and multicast, which needs
-platform APIs (`docs/architecture.md`, "Platform adapters").
+```kotlin
+val server = CoapServer(listOf(KtorTcpListener.bind(port = 5683)), scope) { ... }
+val client = CoapClient(listOf(KtorTcpConnector()), scope)
+client.get("coap+tcp://127.0.0.1/hello")
+```
 
-Verified by `KtorUdpTransportTest` (real sockets on IPv4 and IPv6 loopback) and by the libcoap
-interop tests in `kcoap-coap/src/jvmTest`.
+WebSockets are in `kcoap-transport-ktor-websocket`. Planned here: TLS for `coaps+tcp` (with ALPN
+`coap`, RFC 8323 §8.2), and multicast, which needs platform APIs (`docs/architecture.md`, "Platform
+adapters").
+
+Verified by `KtorUdpTransportTest` and `KtorTcpTransportTest` (real sockets on IPv4 and IPv6
+loopback) and by the libcoap interop tests in `kcoap-coap/src/jvmTest`, over UDP and TCP.

@@ -9,8 +9,8 @@ differences are caught separately by running the RFC vectors on every target in 
 
 ## CoAP against libcoap (running)
 
-The CoAP endpoint is cross-tested with libcoap v4.3.5b over real UDP on the host network, in both
-directions. The tests live in `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/interop/`, are tagged
+The CoAP endpoint is cross-tested with libcoap v4.3.5b over real UDP, TCP and WebSockets on the host
+network, in both directions. The tests live in `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/interop/`, are tagged
 `interop`, and skip (JUnit assumption) when `docker info` fails or the image is missing.
 
 ```bash
@@ -22,6 +22,47 @@ docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
 |---|---|---|
 | `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
 | `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05 |
+
+### Over TCP and WebSockets (RFC 8323)
+
+The same image (built with `--enable-tcp --enable-websockets`) serves `coap+tcp` on the `-p` port and
+`coap+ws` on the `-w` port. kcoap's side runs `KtorTcpConnector`/`KtorTcpListener` and
+`KtorWebSocketConnector`/`KtorWebSocketListener` on real loopback sockets.
+
+```bash
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*Reliable*'
+```
+
+| Test class | Peer | What runs, over `coap+tcp` and `coap+ws` each |
+|---|---|---|
+| `KcoapClientAgainstLibcoapReliableTest` | `coap-server -p <port> -w <ws port> -d 10 -X 1152 -v 4` | CSM exchange (kcoap's first; libcoap's Max-Message-Size 1152 and Block-Wise-Transfer); GET of `/`; PUT/GET of `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte upload in 1024-byte Block1 blocks and its download in one message (kcoap announces 8704); Observe of `/time` with deregistration (GET with Observe 1, same token); Ping and Ping with Custody |
+| | `coap-server -p <port> -d 10 -X 4352 -v 4` (TCP) | a 20000-byte BERT upload in 4 KiB blocks (numbers 0, 4, 8, 12, 16, 19) answered with BERT 2.31s, and the download in BERT blocks |
+| `LibcoapClientAgainstKcoapReliableTest` | `coap-client -B 10 -v 6 -w ...` | GET of `/hello`; PUT with `-e`, GET, DELETE; `-m put -f` of 20000 bytes, which libcoap sends in BERT blocks to kcoap's 8704 (the last one several KiB); a 20000-byte download with `-X 4352` in BERT blocks, and with `-X 1152` over WebSockets in 1024-byte blocks; Observe with `-s 3` |
+
+Commands as the tests run them, for manual checks:
+
+```bash
+interop/libcoap/coap.sh coap-server -p 5683 -w 8080 -d 10 -X 1152 -v 7
+interop/libcoap/coap.sh coap-client -v 6 -w coap+tcp://127.0.0.1:5683/time
+interop/libcoap/coap.sh coap-client -v 6 -w -X 1152 -s 3 coap+ws://127.0.0.1:8080/time
+interop/libcoap/coap.sh coap-client -v 6 -m put -f /data/large.txt coap+tcp://127.0.0.1:5683/store
+```
+
+What the runs showed about libcoap v4.3.5b (kcoap follows RFC 8323 and works around the first two):
+
+- **Pong without the token.** libcoap answers every Ping with an empty token (and always with Custody),
+  although §5.4 requires the identical token. kcoap matches a Pong with an empty token to its oldest
+  outstanding Ping; Pongs come in order on a reliable transport.
+- **Final BERT blocks of more than 1024 bytes are rejected** with 4.08 "Too many missing blocks":
+  libcoap records the total at the first 1024-byte block of a final BERT block, then refuses the rest.
+  §6 allows "a multiple (possibly 0) of 1024 bytes plus a partial block". kcoap therefore cuts the block
+  before the last 1024-byte boundary, so its final BERT block carries at most 1024 bytes. That costs
+  one message at most, and both blocks are valid BERT.
+- **WebSocket frames above 1472 bytes kill the server.** libcoap reads WebSocket frames into a 1472-byte
+  buffer whatever Max-Message-Size its CSM announces, logs "packet size bigger than provided data space",
+  and then aborts with "stack smashing detected". The WebSocket tests therefore run libcoap with
+  `-X 1152`. kcoap sends what the peer's CSM allows, as RFC 8323 §5.3.1 says, so a default libcoap
+  WebSocket peer (8 MiB announced) should be given a smaller `-X` until this is fixed upstream.
 
 `interop/libcoap/coap.sh` runs any libcoap example program the way the tests do, for manual checks:
 
