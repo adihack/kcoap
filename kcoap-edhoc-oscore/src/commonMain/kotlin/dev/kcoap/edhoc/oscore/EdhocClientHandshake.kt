@@ -22,8 +22,8 @@ import dev.kcoap.oscore.SequenceNumberStore
 /**
  * The client (EDHOC Initiator) side of EDHOC over CoAP, forward message flow (RFC 9528 Appendix A.2.1).
  *
- * It speaks the application model of kcoap-coap and is independent of the endpoint: [exchange] sends one
- * [CoapRequest] to the EDHOC resource [path] of [server] and returns its [CoapResponse], so a
+ * It speaks the application model of kcoap-coap-message and is independent of the endpoint: [exchange] sends
+ * one [CoapRequest] to the EDHOC resource [path] of [server] and returns its [CoapResponse], so a
  * [CoapClient] (`client::request`, which [over] wires), another carrier or a test double can carry it.
  *
  * ```

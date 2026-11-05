@@ -20,7 +20,8 @@ it, and its ABI follows ktor-network's.
 
 - `KtorTcpConnector` and `KtorTcpListener`: `coap+tcp` (RFC 8323) connections, opened on demand by
   the CoAP client and accepted by the server; accepted peers are `Endpoint.Tcp` in `IpLiteral` form.
-  The adapter only moves bytes; framing, CSM and signaling are common code in `kcoap-coap`.
+  The adapter only moves bytes; framing is common code in `kcoap-coap-message`, CSM and signaling in
+  `kcoap-coap`.
 
 ```kotlin
 val transport = KtorUdpTransport.bind(port = 5683)

@@ -29,8 +29,8 @@ An application that wants another engine passes its own `HttpClient`.
 - `KtorWebSocketConnection`: any ktor `WebSocketSession` as a `MessageConnection`. One CoAP message per
   binary frame (§4.2), fragmented frames reassembled, and a text frame closes the WebSocket with 1003.
 
-The adapter only moves frames; Len 0 framing, the CSM, signaling, block-wise and Observe are common code
-in `kcoap-coap`.
+The adapter only moves frames; Len 0 framing is common code in `kcoap-coap-message`, and the CSM, signaling,
+block-wise and Observe are in `kcoap-coap`.
 
 ```kotlin
 val client = CoapClient(listOf(KtorWebSocketConnector()), scope)
