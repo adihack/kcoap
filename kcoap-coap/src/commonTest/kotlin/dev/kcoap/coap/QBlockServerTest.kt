@@ -1,5 +1,6 @@
 package dev.kcoap.coap
 
+import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
@@ -827,6 +828,43 @@ class QBlockServerTest {
         f.peer.send(get(f.peer, block(0, true)) { echo(echo) })
         assertEquals((0L..9L).toList(), f.peer.drain().numbers())
         assertEquals(1, f.events.count { it is EndpointEvent.LimitReached && it.limit == Limit.AMPLIFICATION_FACTOR })
+    }
+
+    @Test
+    fun rfc9175Section2_4LaterSetsCountWithTheFirstAgainstTheRequestUntilAContinueAsks() = runTest {
+        // 124 bytes padded with Uri-Query ask for 16-byte blocks of 35 bytes: set 0 (350) fits 3 × 124, set 1 not too.
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn))
+        val pad: OptionSet.Builder.() -> Unit = { uriQuery("p=" + "x".repeat(107)) }
+        val request = f.peer.send(get(f.peer, block(0, true, 16), options = pad))
+        val requestSize = UdpMessageCodec.encode(request).size
+        assertEquals(124, requestSize)
+
+        assertEquals((0L..9L).toList(), f.peer.drain().numbers(), "set 0 stays within the factor")
+        assertEquals(emptyList(), f.peer.drain(30.seconds), "set 1 would take the request beyond it: no set by itself")
+        val sent = f.serverSent().sumOf { UdpMessageCodec.encode(checkNotNull(it.message)).size }
+        assertTrue(sent <= 3 * requestSize, "$sent bytes for a request of $requestSize")
+
+        val proceed = f.peer.send(get(f.peer, block(10, true, 16), options = pad))
+        val set = f.peer.drain()
+        assertEquals((10L..19L).toList(), set.numbers(), "a Continue is a request of its own, within the factor too")
+        assertTrue(set.all { it.hasToken(request.token) } && UdpMessageCodec.encode(proceed).size == requestSize)
+        assertEquals(emptyList(), f.peer.drain(30.seconds), "and the sets still wait for the client")
+        assertTrue(f.events.none { it is EndpointEvent.LimitReached }, "nothing was challenged")
+    }
+
+    @Test
+    fun rfc9175Section2_4ASeparateConfirmableBlockCountsWithItsRetransmissions() = runTest {
+        // Block 0 piggybacked and block 1 Confirmable, 35 bytes each, fit 3 × 40; with block 1's four
+        // retransmissions to an address that never acknowledges (RFC 7252 §4.2) they do not.
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn))
+        val request = f.peer.send(get(f.peer, block(0, true, 16), type = CoapMessageType.CON) { uriQuery("p=" + "x".repeat(23)) })
+        assertEquals(40, UdpMessageCodec.encode(request).size)
+
+        val answer = f.peer.drain().single()
+        assertEquals(CoapCode.UNAUTHORIZED, answer.code)
+        assertEquals(CoapMessageType.ACK, answer.type)
+        assertNotNull(answer.options.echo)
+        assertEquals(emptyList(), f.peer.drain(60.seconds), "no block, and nothing retransmitted")
     }
 
     @Test

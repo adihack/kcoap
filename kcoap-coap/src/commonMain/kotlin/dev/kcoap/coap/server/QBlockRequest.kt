@@ -18,5 +18,11 @@ internal class QBlockRequest(
 ) {
     val token: ByteArray get() = request.token
 
+    /**
+     * The bytes sent in answer to this request so far, retransmissions counted, against the amplification
+     * limit (RFC 9175 §2.4 item 3), which covers all responses to one request. Guarded by [QBlockServer]'s lock.
+     */
+    var sentBytes: Long = 0
+
     override fun toString(): String = "QBlockRequest(${inbound.peer}, ${request.tokenHex})"
 }

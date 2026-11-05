@@ -491,11 +491,23 @@ public class CoapServer private constructor(
         unprotected: UnprotectedRequest?,
         responses: List<CoapMessage>,
         isBurst: Boolean,
+    ): Boolean = mustVerifyAddress(inbound, request, unprotected, isBurst) { responses.sumOf { UdpMessageCodec.encode(it).size.toLong() } }
+
+    /**
+     * [mustVerifyAddress] for answers counted by their sender: [responseSize] gives every byte sent and about
+     * to be sent in answer to [request], all Q-Block2 sets and retransmissions included (§2.4 item 3: "the
+     * total size of the response(s) to that request"), and runs only when the check applies.
+     */
+    internal suspend fun mustVerifyAddress(
+        inbound: InboundRequest,
+        request: CoapMessage,
+        unprotected: UnprotectedRequest?,
+        isBurst: Boolean,
+        responseSize: () -> Long,
     ): Boolean {
         if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst)) return false
         val requestSize = UdpMessageCodec.encode(inbound.message).size
-        val responseSize = responses.sumOf { UdpMessageCodec.encode(it).size }
-        if (!addressVerification.exceedsLimit(requestSize, responseSize, isBurst)) return false
+        if (!addressVerification.exceedsLimit(requestSize, responseSize(), isBurst)) return false
         return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
     }
 

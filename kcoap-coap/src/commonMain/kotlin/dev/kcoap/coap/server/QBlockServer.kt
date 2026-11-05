@@ -3,10 +3,12 @@ package dev.kcoap.coap.server
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.OptionSet
+import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.BodyMode
@@ -74,7 +76,10 @@ import kotlinx.coroutines.sync.withLock
  *   payload next to a later Q-Block2 block gets 4.00.
  * - **Amplification** (RFC 9175 §2.4 item 3). Before a burst to a client whose address
  *   [CoapServer.mustVerifyAddress] wants verified, the request gets a 4.01 with Echo instead; libcoap's probe,
- *   a single 16-byte block, stays within the factor.
+ *   a single 16-byte block, stays within the factor. What counts is everything sent in answer to one
+ *   request: its first set and every later set on the timer, a separate Confirmable block with all its
+ *   retransmissions. Sets that would take it beyond the factor stop; a Continue is a request of its own and
+ *   is checked, or challenged, for its set.
  * - **Teardown** ([forget], [close]). A peer's session or connection ending drops its bodies and timers.
  *
  * Bodies are bounded by [QBlockServerConfig]; every body with a deadline has one timer coroutine, and one more
@@ -518,13 +523,18 @@ internal class QBlockServer(
     /**
      * Sends the blocks of [reply], the answer to [trigger], unless they are a burst that must wait for the
      * client's address to be verified (RFC 9175 §2.4 item 3): then nothing goes out, a new body is forgotten,
-     * and the returned 4.01 with Echo goes instead.
+     * and the returned 4.01 with Echo goes instead. A burst counts against [trigger] alone, also a Continue's,
+     * which is a request of its own; blocks on [trigger]'s own request are recorded there for its later sets.
      */
     suspend fun send(trigger: QBlockRequest, reply: Reply.Body): Reply? {
         val body = reply.body
         val blocks = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockRequest>>()
-        val burst = blocks.map { body.block(it.num, it.more, it.ref.token) }
-        if (burst.isNotEmpty() && server.mustVerifyAddress(trigger.inbound, trigger.request, trigger.unprotected, burst, isBurst = true)) {
+        var bytes = 0L
+        val mustVerify = blocks.isNotEmpty() &&
+            server.mustVerifyAddress(trigger.inbound, trigger.request, trigger.unprotected, isBurst = true) {
+                wireBytes(body, blocks).also { bytes = it }
+            }
+        if (mustVerify) {
             if (reply.isNew) {
                 lock.withLock {
                     if (served.peek(body.key, endpoint.now()) === body) served.remove(body.key)
@@ -538,6 +548,9 @@ internal class QBlockServer(
             }
             return server.challenge(trigger.inbound.peer, endpoint.now(), kept)
         }
+        // One reply's blocks all go on one request: the trigger's own, or the original one of a Continue.
+        val own = blocks.firstOrNull()?.ref?.takeIf { it.inbound === trigger.inbound }
+        if (own != null && bytes > 0) lock.withLock { own.sentBytes += bytes }
         execute(body, reply.actions)
         // A request the body did not answer, such as a Continue whose set went out before, gets no response.
         if (!trigger.inbound.isAnswered) trigger.inbound.finishWithoutResponse()
@@ -588,21 +601,45 @@ internal class QBlockServer(
             keepAlive(body, now)
             body.sender.onTimer(now).also { schedule(body) }
         }
-        // Each later set is a burst of its own towards the address of the request it answers.
+        // A later set adds to what the request it answers has had, which must stay within the factor until the
+        // address is verified (RFC 9175 §2.4 item 3); beyond, the sets stop, and a Continue is a request of its own.
         val blocks = actions.filterIsInstance<QBlockAction.SendBlock<QBlockRequest>>()
         val ref = blocks.firstOrNull()?.ref
         if (ref != null) {
-            val burst = blocks.map { body.block(it.num, it.more, it.ref.token) }
-            if (server.mustVerifyAddress(ref.inbound, ref.request, ref.unprotected, burst, isBurst = true)) {
-                log.debug { "Stopped $body: its next set would go to an address not verified yet" }
+            val before = lock.withLock { ref.sentBytes }
+            var bytes = 0L
+            val mustVerify = server.mustVerifyAddress(ref.inbound, ref.request, ref.unprotected, isBurst = true) {
+                bytes = wireBytes(body, blocks)
+                before + bytes
+            }
+            if (mustVerify) {
+                log.debug { "Stopped $body: its next set would take ${ref.inbound.peer} beyond the amplification factor" }
                 lock.withLock {
                     body.sender.onReset(endpoint.now())
                     schedule(body)
                 }
                 return
             }
+            if (bytes > 0) lock.withLock { ref.sentBytes += bytes }
         }
         execute(body, actions)
+    }
+
+    /**
+     * The bytes [blocks] of [body] put on the wire, for the amplification limit, which counts every byte sent
+     * to an address, as QUIC does (RFC 9175 §2.4 item 3, RFC 9000 §8.1): a block that goes as a separate
+     * Confirmable response counts with the MAX_RETRANSMIT retransmissions an address that never acknowledges
+     * gets. Only the first block on a Confirmable request not answered yet is piggybacked.
+     */
+    private fun wireBytes(body: ServedBody, blocks: List<QBlockAction.SendBlock<QBlockRequest>>): Long {
+        val piggybacked = HashSet<InboundRequest>()
+        val copies = 1L + endpoint.parameters.maxRetransmit
+        return blocks.sumOf { action ->
+            val inbound = action.ref.inbound
+            val size = UdpMessageCodec.encode(body.block(action.num, action.more, action.ref.token)).size.toLong()
+            val isConfirmable = inbound.connection == null && inbound.message.type == CoapMessageType.CON
+            if (isConfirmable && (inbound.isAnswered || !piggybacked.add(inbound))) size * copies else size
+        }
     }
 
     /** Under [lock]: a body that is still sending stays cached as long. */
