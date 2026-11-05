@@ -1,7 +1,8 @@
 # Architecture decision records
 
-Each record states one decision, why it was made and what it costs. A record is never edited after it is
-accepted; a later record supersedes it. New records take the next number.
+Each record states one decision, why it was made and what it costs. An accepted record's decision is never
+changed; a later record supersedes it. An "As built" section may be appended to record how it was
+implemented. New records take the next number.
 
 | ADR | Decision | Status |
 |---|---|---|

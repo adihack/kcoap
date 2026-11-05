@@ -1,0 +1,40 @@
+# Checks that every commit of a pull request is signed off by its author (Developer Certificate of
+# Origin 1.1, CONTRIBUTING.md).
+#
+# It runs on pull_request_target, so this workflow, scripts/check-dco and .github/dco-baseline all come
+# from the base branch, never from the pull request: a pull request cannot change the check that
+# judges it. The job checks out the base, fetches the pull request's commits only as data, and runs no
+# code from them; its token can only read. The SHAs reach the scripts through environment variables,
+# never through expressions inside a script.
+#
+# A pull request into a branch that does not have this workflow yet, such as the one that adds it, is
+# not checked.
+name: DCO
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Sign-off on every commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the pull request's commits
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git fetch --no-tags origin "$HEAD_SHA"
+      - name: Test the sign-off check
+        run: scripts/check-dco-test
+      - name: Check the pull request's commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-dco "$BASE_SHA" "$HEAD_SHA"

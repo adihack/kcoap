@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose a new feature or a change in behaviour.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the idea. If an RFC requirement is missing, the RFC compliance form fits better. A large change, such as a new module or a change to the public API, is agreed in an issue first, and an architectural decision is recorded as an ADR ([CONTRIBUTING.md](https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md#before-you-start)).
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched the existing issues, and this is not proposed yet.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CoAP messaging, client or server
+        - Block-wise, Q-Block or Observe
+        - OSCORE
+        - EDHOC
+        - Cryptography and backends
+        - Transports
+        - Platforms and targets
+        - Build, tests or documentation
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you cannot do today, or what is harder than it should be, and why it matters to you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: What kcoap should do. An API sketch helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways to solve it, and workarounds you use today.
+  - type: input
+    id: references
+    attributes:
+      label: Specifications
+      description: RFCs, drafts or other implementations that describe the feature.
+      placeholder: RFC 8613 Appendix B.2
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to implement this myself.

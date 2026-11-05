@@ -1,0 +1,125 @@
+name: Interop report
+description: kcoap and another CoAP, OSCORE or EDHOC implementation do not work together.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Every implementation kcoap is tested against finds mistakes that tests against kcoap itself cannot. Logs or captures from **both sides** help most.
+
+        If the problem could let an attacker read, forge or replay messages, do not report it here: follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Existing issues
+      options:
+        - label: I searched the existing issues, and this problem is not reported yet.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: kcoap version
+      description: The released version, or the commit of `main` you built.
+      placeholder: 0.1.0, or main at 1a2b3c4
+    validations:
+      required: true
+  - type: input
+    id: peer
+    attributes:
+      label: Peer implementation and version
+      description: The other implementation, its exact version or commit, and how it was built or configured.
+      placeholder: libcoap v4.3.5b built with OpenSSL
+    validations:
+      required: true
+  - type: dropdown
+    id: kcoap-role
+    attributes:
+      label: The role kcoap plays
+      description: Choose every role that applies.
+      multiple: true
+      options:
+        - CoAP client
+        - CoAP server
+        - EDHOC Initiator
+        - EDHOC Responder
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - UDP
+        - TCP
+        - WebSocket
+    validations:
+      required: true
+  - type: dropdown
+    id: security
+    attributes:
+      label: Security
+      options:
+        - No security (plain CoAP)
+        - OSCORE with a provisioned security context
+        - EDHOC, then OSCORE
+        - EDHOC and OSCORE in one combined request (RFC 9668)
+        - EDHOC alone
+    validations:
+      required: true
+  - type: input
+    id: security-details
+    attributes:
+      label: Security parameters
+      description: For OSCORE the AEAD and HKDF algorithms; for EDHOC the method, the cipher suite and the credential type. Never keys.
+      placeholder: EDHOC method 3, cipher suite 2, CCS credentials by kid
+  - type: dropdown
+    id: platform
+    attributes:
+      label: kcoap's platform
+      options:
+        - JVM
+        - Android
+        - iOS
+        - macOS
+        - Linux native
+        - Browser
+        - Node.js
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: What was exchanged
+      description: The requests, resources and options involved, and the commands or code that ran each side.
+      placeholder: |
+        Peer:  coap-server -p 5683 -v 7
+        kcoap: client.observe("coap://127.0.0.1:5683/time")
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: The behaviour you expected, with the RFC section if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: What each side did or reported, such as an error code, a timeout or a rejected message.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and captures
+      description: |
+        Logs of both sides, in a code block (three backticks before and after). Attach a packet capture as a .zip file by dragging it here. Remove private keys, OSCORE Master Secrets and Salts, and EDHOC secrets first.
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Secrets
+      options:
+        - label: The logs and captures above contain no private keys, master secrets or other secrets.
+          required: true

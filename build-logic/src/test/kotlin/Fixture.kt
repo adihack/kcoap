@@ -16,6 +16,8 @@ class Fixture(private val directory: File, vararg plugins: String) {
             """
             kcoap.group=dev.kcoap.fixture
             kcoap.version=1.0.0
+            kcoap.license.name=Apache-2.0
+            kcoap.license.url=https://www.apache.org/licenses/LICENSE-2.0.txt
             kotlin.native.ignoreDisabledTargets=true
             org.gradle.jvmargs=-Xmx1g -XX:MaxMetaspaceSize=512m
             # One small daemon for the whole test run, gone two minutes after the last fixture build.

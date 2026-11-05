@@ -1,6 +1,10 @@
 import org.junit.jupiter.api.io.TempDir
+import org.w3c.dom.Document
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.xpath.XPathFactory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -9,6 +13,9 @@ import kotlin.test.assertTrue
  * gradle.properties, and the release workflow overrides the version with `-Pkcoap.version`. Every module
  * was once published as `kcoap:<module>:unspecified`, because the coordinates were read from the project
  * before the tier plugin had set its group and version.
+ *
+ * Every POM names the license, the website, the maintainer, the issue tracker and the repository, which
+ * Maven Central requires (the license, the developer and the SCM) or users look for.
  */
 class PublishingPluginTest {
     @TempDir
@@ -30,6 +37,47 @@ class PublishingPluginTest {
 
         assertEquals("dev.kcoap.fixture:fixture:2.0.0", publications.getValue("kotlinMultiplatform"))
         assertTrue(publications.values.all { it.endsWith(":2.0.0") }, "$publications")
+    }
+
+    @Test
+    fun everyPomNamesTheLicenseTheWebsiteTheMaintainerAndTheIssueTracker() {
+        val fixture = Fixture(directory, "kcoap.kmp-library")
+
+        fixture.runner("generatePomFileForKotlinMultiplatformPublication", "generatePomFileForJvmPublication").build()
+
+        for (publication in listOf("kotlinMultiplatform", "jvm")) {
+            val file = directory.resolve("build/publications/$publication/pom-default.xml")
+            val pom = parse(file)
+            assertEquals("https://kcoap.dev", pom.text("/project/url"), publication)
+            assertEquals("1", pom.text("count(/project/licenses/license)"), publication)
+            assertEquals("Apache-2.0", pom.text("/project/licenses/license/name"), publication)
+            assertEquals("https://www.apache.org/licenses/LICENSE-2.0.txt", pom.text("/project/licenses/license/url"), publication)
+            assertEquals("repo", pom.text("/project/licenses/license/distribution"), publication)
+            assertEquals("1", pom.text("count(/project/developers/developer)"), publication)
+            assertEquals("adihack", pom.text("/project/developers/developer/id"), publication)
+            assertEquals("Adrian Sołtys", pom.text("/project/developers/developer/name"), publication)
+            assertEquals("adrian.soltys@seelso.net", pom.text("/project/developers/developer/email"), publication)
+            assertEquals("https://github.com/adihack", pom.text("/project/developers/developer/url"), publication)
+            assertEquals("maintainer", pom.text("/project/developers/developer/roles/role"), publication)
+            assertEquals("GitHub Issues", pom.text("/project/issueManagement/system"), publication)
+            assertEquals("https://github.com/adihack/kcoap/issues", pom.text("/project/issueManagement/url"), publication)
+            assertEquals("https://github.com/adihack/kcoap", pom.text("/project/scm/url"), publication)
+            // The maintainer's name keeps its "ł": the POM is UTF-8 and says so.
+            val bytes = file.readBytes()
+            assertContains(String(bytes, Charsets.US_ASCII).lineSequence().first(), "encoding=\"UTF-8\"")
+            assertTrue(bytes.containsSequence("Adrian Sołtys".toByteArray(Charsets.UTF_8)), publication)
+        }
+    }
+
+    @Test
+    fun aModuleWithoutALicenseFailsInsteadOfPublishingWithoutOne() {
+        val fixture = Fixture(directory, "kcoap.kmp-library")
+        val properties = directory.resolve("gradle.properties")
+        properties.writeText(properties.readLines().filterNot { it.startsWith("kcoap.license.") }.joinToString("\n"))
+
+        val result = fixture.runner("help").buildAndFail()
+
+        assertContains(result.output, "kcoap.license.name is not set")
     }
 
     /**
@@ -55,4 +103,11 @@ class PublishingPluginTest {
             .associate { it.removePrefix("publication ").substringBefore('=') to it.substringAfter('=') }
             .also { assertTrue(it.isNotEmpty(), output) }
     }
+
+    private fun parse(file: File): Document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+
+    private fun Document.text(xpath: String): String = XPathFactory.newInstance().newXPath().evaluate(xpath, this)
+
+    private fun ByteArray.containsSequence(sequence: ByteArray): Boolean =
+        (0..size - sequence.size).any { start -> sequence.indices.all { this[start + it] == sequence[it] } }
 }

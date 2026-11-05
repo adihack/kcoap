@@ -7,10 +7,13 @@
 //
 // Coordinates come from gradle.properties (kcoap.group, kcoap.version); the release workflow sets the
 // version from the tag. Signing is enabled when a key is provided (ORG_GRADLE_PROJECT_signingInMemoryKey).
+// The POM names the license (kcoap.license.name, kcoap.license.url), the website, the maintainer, the issue
+// tracker and the repository (KcoapProject.kt); the API reference carries the copyright footer.
 
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.SourcesJar
+import org.jetbrains.dokka.gradle.engine.plugins.DokkaHtmlPluginParameters
 
 plugins {
     id("com.vanniktech.maven.publish")
@@ -18,6 +21,13 @@ plugins {
 }
 
 val repository = providers.gradleProperty("kcoap.repository").getOrElse("adihack/kcoap")
+
+// Maven Central rejects a POM without a license, so a module never publishes without one.
+fun requiredProperty(name: String): String =
+    providers.gradleProperty(name).orNull ?: error("$name is not set: every kcoap POM names the license (gradle.properties)")
+
+val licenseName = requiredProperty("kcoap.license.name")
+val licenseUrl = requiredProperty("kcoap.license.url")
 
 mavenPublishing {
     configure(KotlinMultiplatform(javadocJar = JavadocJar.Empty(), sourcesJar = SourcesJar.Sources()))
@@ -32,24 +42,27 @@ mavenPublishing {
     pom {
         name.set(project.name)
         description.set(provider { project.description ?: "kcoap: CoAP, OSCORE and EDHOC for Kotlin Multiplatform (${project.name})" })
-        url.set("https://github.com/$repository")
+        url.set(KcoapProject.WEBSITE)
         inceptionYear.set("2026")
-        // Maven Central requires a license; set kcoap.license.name and kcoap.license.url once one is chosen.
-        val licenseName = providers.gradleProperty("kcoap.license.name")
-        if (licenseName.isPresent) {
-            licenses {
-                license {
-                    name.set(licenseName)
-                    url.set(providers.gradleProperty("kcoap.license.url"))
-                }
+        licenses {
+            license {
+                name.set(licenseName)
+                url.set(licenseUrl)
+                distribution.set("repo")
             }
         }
         developers {
             developer {
-                id.set("adihack")
-                name.set("Adrian Soltys")
-                url.set("https://github.com/adihack")
+                id.set(KcoapProject.MAINTAINER_ID)
+                name.set(KcoapProject.MAINTAINER_NAME)
+                email.set(KcoapProject.MAINTAINER_EMAIL)
+                url.set(KcoapProject.MAINTAINER_URL)
+                roles.add("maintainer")
             }
+        }
+        issueManagement {
+            system.set("GitHub Issues")
+            url.set("https://github.com/$repository/issues")
         }
         scm {
             url.set("https://github.com/$repository")
@@ -80,6 +93,9 @@ val writeModuleDoc = tasks.register<WriteDokkaModuleDoc>("writeModuleDoc") {
 
 dokka {
     moduleName.set(project.name)
+    pluginsConfiguration.withType<DokkaHtmlPluginParameters>().configureEach {
+        footerMessage.set(KcoapProject.DOKKA_FOOTER)
+    }
     dokkaSourceSets.configureEach {
         includes.from(writeModuleDoc.flatMap { it.output })
         sourceLink {
