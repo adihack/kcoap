@@ -23,6 +23,17 @@ public final class dev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion {
 	public static synthetic fun over$default (Ldev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion;Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/oscore/SequenceNumberStore;ILjava/lang/Object;)Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;
 }
 
+public final class dev/kcoap/edhoc/oscore/EdhocIdentity : dev/kcoap/coap/security/SecurityIdentity {
+	public fun <init> (Ldev/kcoap/oscore/OscoreIdentity;Ldev/kcoap/edhoc/AuthenticationCredential;Ldev/kcoap/edhoc/CredentialIdentifier;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getDescription ()Ljava/lang/String;
+	public final fun getOscore ()Ldev/kcoap/oscore/OscoreIdentity;
+	public final fun getPeerCredential ()Ldev/kcoap/edhoc/AuthenticationCredential;
+	public final fun getPeerCredentialIdentifier ()Ldev/kcoap/edhoc/CredentialIdentifier;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class dev/kcoap/edhoc/oscore/EdhocOscoreSession {
 	public fun <init> (Ldev/kcoap/edhoc/EdhocSession;Ldev/kcoap/oscore/SecurityContext;)V
 	public final fun getEdhoc ()Ldev/kcoap/edhoc/EdhocSession;
@@ -61,6 +72,7 @@ public final class dev/kcoap/edhoc/oscore/EdhocOverCoap$ServerRequest$NewSession
 public final class dev/kcoap/edhoc/oscore/EdhocResource : dev/kcoap/coap/server/CoapResource {
 	public fun <init> (Ldev/kcoap/edhoc/oscore/EdhocServer;Ljava/lang/String;)V
 	public synthetic fun <init> (Ldev/kcoap/edhoc/oscore/EdhocServer;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getAccess ()Ldev/kcoap/coap/server/AccessPolicy;
 	public fun getAttributes ()Ldev/kcoap/coap/server/ResourceAttributes;
 	public fun handlePost (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -141,8 +153,8 @@ public final class dev/kcoap/edhoc/oscore/OscoreFromEdhocKt {
 
 public final class dev/kcoap/edhoc/oscore/PeerSecurity : dev/kcoap/coap/security/ClientMessageSecurity {
 	public fun <init> ()V
-	public fun <init> (Ljava/util/Set;)V
-	public synthetic fun <init> (Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/Set;Z)V
+	public synthetic fun <init> (Ljava/util/Set;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun install (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun isProtected (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun protectRequest (Ldev/kcoap/coap/CoapMessage;Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

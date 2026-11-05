@@ -67,7 +67,7 @@ final class dev.kcoap.oscore/InMemoryContextRepository : dev.kcoap.oscore/Securi
 }
 
 final class dev.kcoap.oscore/OscoreClient : dev.kcoap.coap.security/ClientMessageSecurity { // dev.kcoap.oscore/OscoreClient|null[0]
-    constructor <init>(dev.kcoap.oscore/ClientContextResolver, dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.oscore/OscoreClient.<init>|<init>(dev.kcoap.oscore.ClientContextResolver;dev.kcoap.log.LoggerFactory){}[0]
+    constructor <init>(dev.kcoap.oscore/ClientContextResolver, dev.kcoap.log/LoggerFactory = ..., kotlin/Boolean = ...) // dev.kcoap.oscore/OscoreClient.<init>|<init>(dev.kcoap.oscore.ClientContextResolver;dev.kcoap.log.LoggerFactory;kotlin.Boolean){}[0]
     constructor <init>(dev.kcoap.oscore/SecurityContext, dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.oscore/OscoreClient.<init>|<init>(dev.kcoap.oscore.SecurityContext;dev.kcoap.log.LoggerFactory){}[0]
 
     final suspend fun protectRequest(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap.security/ProtectedRequest? // dev.kcoap.oscore/OscoreClient.protectRequest|protectRequest(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
@@ -126,6 +126,8 @@ final class dev.kcoap.oscore/SecurityContext { // dev.kcoap.oscore/SecurityConte
         final fun <get-aeadAlgorithm>(): dev.kcoap.crypto/AeadAlgorithm // dev.kcoap.oscore/SecurityContext.aeadAlgorithm.<get-aeadAlgorithm>|<get-aeadAlgorithm>(){}[0]
     final val idContext // dev.kcoap.oscore/SecurityContext.idContext|{}idContext[0]
         final fun <get-idContext>(): kotlin/ByteArray? // dev.kcoap.oscore/SecurityContext.idContext.<get-idContext>|<get-idContext>(){}[0]
+    final val identity // dev.kcoap.oscore/SecurityContext.identity|{}identity[0]
+        final fun <get-identity>(): dev.kcoap.coap.security/SecurityIdentity // dev.kcoap.oscore/SecurityContext.identity.<get-identity>|<get-identity>(){}[0]
     final val name // dev.kcoap.oscore/SecurityContext.name|{}name[0]
         final fun <get-name>(): kotlin/String // dev.kcoap.oscore/SecurityContext.name.<get-name>|<get-name>(){}[0]
     final val recipientId // dev.kcoap.oscore/SecurityContext.recipientId|{}recipientId[0]
@@ -140,7 +142,7 @@ final class dev.kcoap.oscore/SecurityContext { // dev.kcoap.oscore/SecurityConte
         final const val MAX_SEQUENCE_NUMBER // dev.kcoap.oscore/SecurityContext.Companion.MAX_SEQUENCE_NUMBER|{}MAX_SEQUENCE_NUMBER[0]
             final fun <get-MAX_SEQUENCE_NUMBER>(): kotlin/Long // dev.kcoap.oscore/SecurityContext.Companion.MAX_SEQUENCE_NUMBER.<get-MAX_SEQUENCE_NUMBER>|<get-MAX_SEQUENCE_NUMBER>(){}[0]
 
-        final suspend fun derive(dev.kcoap.oscore/SecurityContextParameters, dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/SequenceNumberStore, kotlin/Long = ..., dev.kcoap.oscore/FreshnessPolicy = ...): dev.kcoap.oscore/SecurityContext // dev.kcoap.oscore/SecurityContext.Companion.derive|derive(dev.kcoap.oscore.SecurityContextParameters;dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.SequenceNumberStore;kotlin.Long;dev.kcoap.oscore.FreshnessPolicy){}[0]
+        final suspend fun derive(dev.kcoap.oscore/SecurityContextParameters, dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/SequenceNumberStore, kotlin/Long = ..., dev.kcoap.oscore/FreshnessPolicy = ..., dev.kcoap.coap.security/SecurityIdentity? = ...): dev.kcoap.oscore/SecurityContext // dev.kcoap.oscore/SecurityContext.Companion.derive|derive(dev.kcoap.oscore.SecurityContextParameters;dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.SequenceNumberStore;kotlin.Long;dev.kcoap.oscore.FreshnessPolicy;dev.kcoap.coap.security.SecurityIdentity?){}[0]
     }
 }
 

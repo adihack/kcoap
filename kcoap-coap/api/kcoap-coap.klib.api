@@ -97,6 +97,31 @@ abstract fun interface dev.kcoap.coap.client/EndpointResolver { // dev.kcoap.coa
     }
 }
 
+abstract fun interface dev.kcoap.coap.server/AccessPolicy { // dev.kcoap.coap.server/AccessPolicy|null[0]
+    abstract suspend fun permits(dev.kcoap.coap.server/AccessRequest): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.permits|permits(dev.kcoap.coap.server.AccessRequest){}[0]
+
+    final object Authenticated : dev.kcoap.coap.server/AccessPolicy { // dev.kcoap.coap.server/AccessPolicy.Authenticated|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.Authenticated.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.coap.server/AccessPolicy.Authenticated.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessPolicy.Authenticated.toString|toString(){}[0]
+        final suspend fun permits(dev.kcoap.coap.server/AccessRequest): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.Authenticated.permits|permits(dev.kcoap.coap.server.AccessRequest){}[0]
+    }
+
+    final object MessageSecurityRequired : dev.kcoap.coap.server/AccessPolicy { // dev.kcoap.coap.server/AccessPolicy.MessageSecurityRequired|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.MessageSecurityRequired.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.coap.server/AccessPolicy.MessageSecurityRequired.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessPolicy.MessageSecurityRequired.toString|toString(){}[0]
+        final suspend fun permits(dev.kcoap.coap.server/AccessRequest): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.MessageSecurityRequired.permits|permits(dev.kcoap.coap.server.AccessRequest){}[0]
+    }
+
+    final object Public : dev.kcoap.coap.server/AccessPolicy { // dev.kcoap.coap.server/AccessPolicy.Public|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.Public.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.coap.server/AccessPolicy.Public.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessPolicy.Public.toString|toString(){}[0]
+        final suspend fun permits(dev.kcoap.coap.server/AccessRequest): kotlin/Boolean // dev.kcoap.coap.server/AccessPolicy.Public.permits|permits(dev.kcoap.coap.server.AccessRequest){}[0]
+    }
+}
+
 abstract fun interface dev.kcoap.coap.stack/EndpointEventListener { // dev.kcoap.coap.stack/EndpointEventListener|null[0]
     abstract fun onEvent(dev.kcoap.coap.stack/EndpointEvent) // dev.kcoap.coap.stack/EndpointEventListener.onEvent|onEvent(dev.kcoap.coap.stack.EndpointEvent){}[0]
 
@@ -129,7 +154,7 @@ abstract interface dev.kcoap.coap.security/ProtectedRequest { // dev.kcoap.coap.
     abstract val message // dev.kcoap.coap.security/ProtectedRequest.message|{}message[0]
         abstract fun <get-message>(): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.security/ProtectedRequest.message.<get-message>|<get-message>(){}[0]
 
-    abstract suspend fun unprotectResponse(dev.kcoap.coap/CoapMessage): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.security/ProtectedRequest.unprotectResponse|unprotectResponse(dev.kcoap.coap.CoapMessage){}[0]
+    abstract suspend fun unprotectResponse(dev.kcoap.coap/CoapMessage): dev.kcoap.coap.security/ResponseVerification // dev.kcoap.coap.security/ProtectedRequest.unprotectResponse|unprotectResponse(dev.kcoap.coap.CoapMessage){}[0]
 }
 
 abstract interface dev.kcoap.coap.security/SecurityIdentity { // dev.kcoap.coap.security/SecurityIdentity|null[0]
@@ -422,6 +447,8 @@ abstract class dev.kcoap.coap.server/CoapResource { // dev.kcoap.coap.server/Coa
         final fun <get-parent>(): dev.kcoap.coap.server/CoapResource? // dev.kcoap.coap.server/CoapResource.parent.<get-parent>|<get-parent>(){}[0]
     final val path // dev.kcoap.coap.server/CoapResource.path|{}path[0]
         final fun <get-path>(): kotlin/String // dev.kcoap.coap.server/CoapResource.path.<get-path>|<get-path>(){}[0]
+    open val access // dev.kcoap.coap.server/CoapResource.access|{}access[0]
+        open fun <get-access>(): dev.kcoap.coap.server/AccessPolicy? // dev.kcoap.coap.server/CoapResource.access.<get-access>|<get-access>(){}[0]
     open val attributes // dev.kcoap.coap.server/CoapResource.attributes|{}attributes[0]
         open fun <get-attributes>(): dev.kcoap.coap.server/ResourceAttributes // dev.kcoap.coap.server/CoapResource.attributes.<get-attributes>|<get-attributes>(){}[0]
     open val isDiscoverable // dev.kcoap.coap.server/CoapResource.isDiscoverable|{}isDiscoverable[0]
@@ -595,6 +622,25 @@ final class dev.kcoap.coap.security/MessageSecurityException : kotlin/Exception 
         final fun <get-responseCode>(): dev.kcoap.coap/CoapCode // dev.kcoap.coap.security/MessageSecurityException.responseCode.<get-responseCode>|<get-responseCode>(){}[0]
 }
 
+final class dev.kcoap.coap.server/AccessRequest { // dev.kcoap.coap.server/AccessRequest|null[0]
+    constructor <init>(dev.kcoap.coap/CoapCode, kotlin.collections/List<kotlin/String>, dev.kcoap.coap.server/CoapResource?, dev.kcoap.transport/Endpoint, dev.kcoap.coap.security/SecurityIdentity?, dev.kcoap.transport/PeerIdentity) // dev.kcoap.coap.server/AccessRequest.<init>|<init>(dev.kcoap.coap.CoapCode;kotlin.collections.List<kotlin.String>;dev.kcoap.coap.server.CoapResource?;dev.kcoap.transport.Endpoint;dev.kcoap.coap.security.SecurityIdentity?;dev.kcoap.transport.PeerIdentity){}[0]
+
+    final val method // dev.kcoap.coap.server/AccessRequest.method|{}method[0]
+        final fun <get-method>(): dev.kcoap.coap/CoapCode // dev.kcoap.coap.server/AccessRequest.method.<get-method>|<get-method>(){}[0]
+    final val path // dev.kcoap.coap.server/AccessRequest.path|{}path[0]
+        final fun <get-path>(): kotlin.collections/List<kotlin/String> // dev.kcoap.coap.server/AccessRequest.path.<get-path>|<get-path>(){}[0]
+    final val peer // dev.kcoap.coap.server/AccessRequest.peer|{}peer[0]
+        final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.server/AccessRequest.peer.<get-peer>|<get-peer>(){}[0]
+    final val peerIdentity // dev.kcoap.coap.server/AccessRequest.peerIdentity|{}peerIdentity[0]
+        final fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.coap.server/AccessRequest.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    final val resource // dev.kcoap.coap.server/AccessRequest.resource|{}resource[0]
+        final fun <get-resource>(): dev.kcoap.coap.server/CoapResource? // dev.kcoap.coap.server/AccessRequest.resource.<get-resource>|<get-resource>(){}[0]
+    final val securityIdentity // dev.kcoap.coap.server/AccessRequest.securityIdentity|{}securityIdentity[0]
+        final fun <get-securityIdentity>(): dev.kcoap.coap.security/SecurityIdentity? // dev.kcoap.coap.server/AccessRequest.securityIdentity.<get-securityIdentity>|<get-securityIdentity>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessRequest.toString|toString(){}[0]
+}
+
 final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServer|null[0]
     constructor <init>(dev.kcoap.coap.stack/CoapEndpoint, dev.kcoap.coap.server/CoapServerConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.coap.stack.CoapEndpoint;dev.kcoap.coap.server.CoapServerConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
     constructor <init>(dev.kcoap.transport/DatagramTransport, kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.server/CoapServerConfig = ..., dev.kcoap.coap.stack/CoapEndpointConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.transport.DatagramTransport;kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.server.CoapServerConfig;dev.kcoap.coap.stack.CoapEndpointConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
@@ -613,7 +659,7 @@ final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServ
 }
 
 final class dev.kcoap.coap.server/CoapServerConfig { // dev.kcoap.coap.server/CoapServerConfig|null[0]
-    constructor <init>(dev.kcoap.coap.security/ServerMessageSecurity? = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., dev.kcoap.coap.server/AmplificationPolicy = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., dev.kcoap.coap.server/QBlockServerConfig = ...) // dev.kcoap.coap.server/CoapServerConfig.<init>|<init>(dev.kcoap.coap.security.ServerMessageSecurity?;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;dev.kcoap.coap.server.AmplificationPolicy;kotlin.Int;kotlin.Int;kotlin.time.Duration;dev.kcoap.coap.server.QBlockServerConfig){}[0]
+    constructor <init>(dev.kcoap.coap.security/ServerMessageSecurity? = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., dev.kcoap.coap.server/AmplificationPolicy = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., dev.kcoap.coap.server/QBlockServerConfig = ..., dev.kcoap.coap.server/AccessPolicy = ...) // dev.kcoap.coap.server/CoapServerConfig.<init>|<init>(dev.kcoap.coap.security.ServerMessageSecurity?;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;dev.kcoap.coap.server.AmplificationPolicy;kotlin.Int;kotlin.Int;kotlin.time.Duration;dev.kcoap.coap.server.QBlockServerConfig;dev.kcoap.coap.server.AccessPolicy){}[0]
 
     final val amplification // dev.kcoap.coap.server/CoapServerConfig.amplification|{}amplification[0]
         final fun <get-amplification>(): dev.kcoap.coap.server/AmplificationPolicy // dev.kcoap.coap.server/CoapServerConfig.amplification.<get-amplification>|<get-amplification>(){}[0]
@@ -621,6 +667,8 @@ final class dev.kcoap.coap.server/CoapServerConfig { // dev.kcoap.coap.server/Co
         final fun <get-amplificationFactor>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.amplificationFactor.<get-amplificationFactor>|<get-amplificationFactor>(){}[0]
     final val confirmableNotificationInterval // dev.kcoap.coap.server/CoapServerConfig.confirmableNotificationInterval|{}confirmableNotificationInterval[0]
         final fun <get-confirmableNotificationInterval>(): kotlin.time/Duration // dev.kcoap.coap.server/CoapServerConfig.confirmableNotificationInterval.<get-confirmableNotificationInterval>|<get-confirmableNotificationInterval>(){}[0]
+    final val defaultAccess // dev.kcoap.coap.server/CoapServerConfig.defaultAccess|{}defaultAccess[0]
+        final fun <get-defaultAccess>(): dev.kcoap.coap.server/AccessPolicy // dev.kcoap.coap.server/CoapServerConfig.defaultAccess.<get-defaultAccess>|<get-defaultAccess>(){}[0]
     final val maxBlockSize // dev.kcoap.coap.server/CoapServerConfig.maxBlockSize|{}maxBlockSize[0]
         final fun <get-maxBlockSize>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.maxBlockSize.<get-maxBlockSize>|<get-maxBlockSize>(){}[0]
     final val maxBodySize // dev.kcoap.coap.server/CoapServerConfig.maxBodySize|{}maxBodySize[0]
@@ -749,6 +797,9 @@ final class dev.kcoap.coap.server/ResourceAttributes { // dev.kcoap.coap.server/
 }
 
 final class dev.kcoap.coap.server/ResourceBuilder { // dev.kcoap.coap.server/ResourceBuilder|null[0]
+    final var access // dev.kcoap.coap.server/ResourceBuilder.access|{}access[0]
+        final fun <get-access>(): dev.kcoap.coap.server/AccessPolicy? // dev.kcoap.coap.server/ResourceBuilder.access.<get-access>|<get-access>(){}[0]
+        final fun <set-access>(dev.kcoap.coap.server/AccessPolicy?) // dev.kcoap.coap.server/ResourceBuilder.access.<set-access>|<set-access>(dev.kcoap.coap.server.AccessPolicy?){}[0]
     final var attributes // dev.kcoap.coap.server/ResourceBuilder.attributes|{}attributes[0]
         final fun <get-attributes>(): dev.kcoap.coap.server/ResourceAttributes // dev.kcoap.coap.server/ResourceBuilder.attributes.<get-attributes>|<get-attributes>(){}[0]
         final fun <set-attributes>(dev.kcoap.coap.server/ResourceAttributes) // dev.kcoap.coap.server/ResourceBuilder.attributes.<set-attributes>|<set-attributes>(dev.kcoap.coap.server.ResourceAttributes){}[0]
@@ -956,10 +1007,12 @@ final class dev.kcoap.coap/BlockOption { // dev.kcoap.coap/BlockOption|null[0]
 }
 
 final class dev.kcoap.coap/CoapException : kotlin/Exception { // dev.kcoap.coap/CoapException|null[0]
-    constructor <init>(kotlin/String, dev.kcoap.coap/CoapException.Reason, kotlin/Throwable? = ...) // dev.kcoap.coap/CoapException.<init>|<init>(kotlin.String;dev.kcoap.coap.CoapException.Reason;kotlin.Throwable?){}[0]
+    constructor <init>(kotlin/String, dev.kcoap.coap/CoapException.Reason, kotlin/Throwable? = ..., dev.kcoap.coap/CoapResponse? = ...) // dev.kcoap.coap/CoapException.<init>|<init>(kotlin.String;dev.kcoap.coap.CoapException.Reason;kotlin.Throwable?;dev.kcoap.coap.CoapResponse?){}[0]
 
     final val reason // dev.kcoap.coap/CoapException.reason|{}reason[0]
         final fun <get-reason>(): dev.kcoap.coap/CoapException.Reason // dev.kcoap.coap/CoapException.reason.<get-reason>|<get-reason>(){}[0]
+    final val response // dev.kcoap.coap/CoapException.response|{}response[0]
+        final fun <get-response>(): dev.kcoap.coap/CoapResponse? // dev.kcoap.coap/CoapException.response.<get-response>|<get-response>(){}[0]
 
     final enum class Reason : kotlin/Enum<dev.kcoap.coap/CoapException.Reason> { // dev.kcoap.coap/CoapException.Reason|null[0]
         enum entry BAD_RESPONSE // dev.kcoap.coap/CoapException.Reason.BAD_RESPONSE|null[0]
@@ -973,6 +1026,7 @@ final class dev.kcoap.coap/CoapException : kotlin/Exception { // dev.kcoap.coap/
         enum entry SESSION_ENDED // dev.kcoap.coap/CoapException.Reason.SESSION_ENDED|null[0]
         enum entry TRANSMISSION_TIMEOUT // dev.kcoap.coap/CoapException.Reason.TRANSMISSION_TIMEOUT|null[0]
         enum entry TRANSPORT_FAILED // dev.kcoap.coap/CoapException.Reason.TRANSPORT_FAILED|null[0]
+        enum entry UNVERIFIED_RESPONSE // dev.kcoap.coap/CoapException.Reason.UNVERIFIED_RESPONSE|null[0]
 
         final val entries // dev.kcoap.coap/CoapException.Reason.entries|#static{}entries[0]
             final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap/CoapException.Reason> // dev.kcoap.coap/CoapException.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -1507,6 +1561,31 @@ final value class dev.kcoap.coap/CoapCode { // dev.kcoap.coap/CoapCode|null[0]
     }
 }
 
+sealed class dev.kcoap.coap.security/ResponseVerification { // dev.kcoap.coap.security/ResponseVerification|null[0]
+    abstract val message // dev.kcoap.coap.security/ResponseVerification.message|{}message[0]
+        abstract fun <get-message>(): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.security/ResponseVerification.message.<get-message>|<get-message>(){}[0]
+
+    final class Unverified : dev.kcoap.coap.security/ResponseVerification { // dev.kcoap.coap.security/ResponseVerification.Unverified|null[0]
+        constructor <init>(dev.kcoap.coap/CoapMessage, kotlin/String) // dev.kcoap.coap.security/ResponseVerification.Unverified.<init>|<init>(dev.kcoap.coap.CoapMessage;kotlin.String){}[0]
+
+        final val message // dev.kcoap.coap.security/ResponseVerification.Unverified.message|{}message[0]
+            final fun <get-message>(): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.security/ResponseVerification.Unverified.message.<get-message>|<get-message>(){}[0]
+        final val reason // dev.kcoap.coap.security/ResponseVerification.Unverified.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.security/ResponseVerification.Unverified.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.security/ResponseVerification.Unverified.toString|toString(){}[0]
+    }
+
+    final class Verified : dev.kcoap.coap.security/ResponseVerification { // dev.kcoap.coap.security/ResponseVerification.Verified|null[0]
+        constructor <init>(dev.kcoap.coap/CoapMessage) // dev.kcoap.coap.security/ResponseVerification.Verified.<init>|<init>(dev.kcoap.coap.CoapMessage){}[0]
+
+        final val message // dev.kcoap.coap.security/ResponseVerification.Verified.message|{}message[0]
+            final fun <get-message>(): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.security/ResponseVerification.Verified.message.<get-message>|<get-message>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.security/ResponseVerification.Verified.toString|toString(){}[0]
+    }
+}
+
 final object dev.kcoap.coap.codec/UdpMessageCodec : dev.kcoap.coap.codec/MessageCodec { // dev.kcoap.coap.codec/UdpMessageCodec|null[0]
     final fun decode(kotlin/ByteArray): dev.kcoap.coap/CoapMessage // dev.kcoap.coap.codec/UdpMessageCodec.decode|decode(kotlin.ByteArray){}[0]
     final fun encode(dev.kcoap.coap/CoapMessage): kotlin/ByteArray // dev.kcoap.coap.codec/UdpMessageCodec.encode|encode(dev.kcoap.coap.CoapMessage){}[0]
@@ -1608,6 +1687,8 @@ final object dev.kcoap.coap/LinkFormat { // dev.kcoap.coap/LinkFormat|null[0]
         final fun <get-INTERFACE>(): kotlin/String // dev.kcoap.coap/LinkFormat.INTERFACE.<get-INTERFACE>|<get-INTERFACE>(){}[0]
     final const val OBSERVABLE // dev.kcoap.coap/LinkFormat.OBSERVABLE|{}OBSERVABLE[0]
         final fun <get-OBSERVABLE>(): kotlin/String // dev.kcoap.coap/LinkFormat.OBSERVABLE.<get-OBSERVABLE>|<get-OBSERVABLE>(){}[0]
+    final const val OSCORE // dev.kcoap.coap/LinkFormat.OSCORE|{}OSCORE[0]
+        final fun <get-OSCORE>(): kotlin/String // dev.kcoap.coap/LinkFormat.OSCORE.<get-OSCORE>|<get-OSCORE>(){}[0]
     final const val RESOURCE_TYPE // dev.kcoap.coap/LinkFormat.RESOURCE_TYPE|{}RESOURCE_TYPE[0]
         final fun <get-RESOURCE_TYPE>(): kotlin/String // dev.kcoap.coap/LinkFormat.RESOURCE_TYPE.<get-RESOURCE_TYPE>|<get-RESOURCE_TYPE>(){}[0]
     final const val SIZE // dev.kcoap.coap/LinkFormat.SIZE|{}SIZE[0]

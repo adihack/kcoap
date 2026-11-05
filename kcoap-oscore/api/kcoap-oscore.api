@@ -27,8 +27,8 @@ public final class dev/kcoap/oscore/InMemoryContextRepository : dev/kcoap/oscore
 }
 
 public final class dev/kcoap/oscore/OscoreClient : dev/kcoap/coap/security/ClientMessageSecurity {
-	public fun <init> (Ldev/kcoap/oscore/ClientContextResolver;Ldev/kcoap/log/LoggerFactory;)V
-	public synthetic fun <init> (Ldev/kcoap/oscore/ClientContextResolver;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ldev/kcoap/oscore/ClientContextResolver;Ldev/kcoap/log/LoggerFactory;Z)V
+	public synthetic fun <init> (Ldev/kcoap/oscore/ClientContextResolver;Ldev/kcoap/log/LoggerFactory;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (Ldev/kcoap/oscore/SecurityContext;Ldev/kcoap/log/LoggerFactory;)V
 	public synthetic fun <init> (Ldev/kcoap/oscore/SecurityContext;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun protectRequest (Ldev/kcoap/coap/CoapMessage;Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -91,6 +91,7 @@ public final class dev/kcoap/oscore/SecurityContext {
 	public static final field MAX_SEQUENCE_NUMBER J
 	public final fun getAeadAlgorithm ()Ldev/kcoap/crypto/AeadAlgorithm;
 	public final fun getIdContext ()[B
+	public final fun getIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
 	public final fun getName ()Ljava/lang/String;
 	public final fun getRecipientId ()[B
 	public final fun getSenderId ()[B
@@ -99,8 +100,8 @@ public final class dev/kcoap/oscore/SecurityContext {
 }
 
 public final class dev/kcoap/oscore/SecurityContext$Companion {
-	public final fun derive (Ldev/kcoap/oscore/SecurityContextParameters;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/SequenceNumberStore;JLdev/kcoap/oscore/FreshnessPolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun derive$default (Ldev/kcoap/oscore/SecurityContext$Companion;Ldev/kcoap/oscore/SecurityContextParameters;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/SequenceNumberStore;JLdev/kcoap/oscore/FreshnessPolicy;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun derive (Ldev/kcoap/oscore/SecurityContextParameters;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/SequenceNumberStore;JLdev/kcoap/oscore/FreshnessPolicy;Ldev/kcoap/coap/security/SecurityIdentity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun derive$default (Ldev/kcoap/oscore/SecurityContext$Companion;Ldev/kcoap/oscore/SecurityContextParameters;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/SequenceNumberStore;JLdev/kcoap/oscore/FreshnessPolicy;Ldev/kcoap/coap/security/SecurityIdentity;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class dev/kcoap/oscore/SecurityContextParameters {
