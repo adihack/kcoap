@@ -7,10 +7,19 @@ import dev.kcoap.coap.CoapOptions
 
 /**
  * Why a request's Q-Block options are refused: answer with [code] and [diagnostic] (RFC 7252 §5.5.2), plus
- * Size1 = [size1] when the body is too large (RFC 7959 §2.9.3). A Non-confirmable request that would get
- * 4.02 is rejected with a Reset instead (RFC 7252 §5.4.1).
+ * Size1 = [size1] when the body is too large (RFC 7959 §2.9.3), in the request's message type.
+ *
+ * [resetIfNonConfirmable] marks the violations that make the option unrecognized (RFC 7252 §5.4.3, §5.4.5): a
+ * Non-confirmable request with one is rejected with a Reset instead (§5.4.1). Q-Block mixed with Block1 or
+ * Block2 is not one of them: RFC 9177 §4.1 rejects it with 4.02 whatever the type, so a Non-confirmable
+ * request gets a Non-confirmable 4.02.
  */
-internal class QBlockViolation(val code: CoapCode, val diagnostic: String, val size1: Long? = null) {
+internal class QBlockViolation(
+    val code: CoapCode,
+    val diagnostic: String,
+    val size1: Long? = null,
+    val resetIfNonConfirmable: Boolean = false,
+) {
     override fun toString(): String = "$code $diagnostic"
 }
 
@@ -26,13 +35,16 @@ internal object QBlockCheck {
     /**
      * Checks a request carrying Q-Block1 or Q-Block2; null when it may be processed.
      *
-     * - 4.02 (§4.1, RFC 7252 §5.4.3, §5.4.5): an option longer than 3 bytes; Q-Block1 more than once, since
-     *   only Q-Block2 may repeat; Q-Block mixed with Block1 or Block2 in one request.
+     * - 4.02, or a Reset for a Non-confirmable request (RFC 7252 §5.4.1, §5.4.3, §5.4.5): an option longer
+     *   than 3 bytes; Q-Block1 more than once, since only Q-Block2 may repeat.
+     * - 4.02 (§4.1): Q-Block mixed with Block1 or Block2 in one request.
      * - 4.00: SZX 7 where BERT is not in use (§4.2, RFC 7959 §2.2: reserved on UDP; RFC 8323 §6: only on a
-     *   connection whose CSMs both indicated BERT); Q-Block1 without Request-Tag or Size1 (§4.3); a payload
-     *   that does not fill the block although M is set (RFC 7959 §2.3); a block outside Size1 or a last block
-     *   that does not end at Size1 (§4.6); Q-Block2 options that are not strictly ascending or mix sizes, or
-     *   repeat next to Q-Block1 (§4.4, §4.7).
+     *   connection whose CSMs both indicated BERT); Q-Block1 without Request-Tag or Size1 (§4.3); a Size1 that
+     *   needs more than 2^20 blocks of the block size, which 20-bit block numbers cannot reach (RFC 7959
+     *   §2.2); a payload that does not fill the block although M is set (RFC 7959 §2.3), or one larger than
+     *   the block (RFC 7959 §2.2: only the last block may differ, by being smaller); a block outside Size1 or
+     *   a last block that does not end at Size1 (§4.6); Q-Block2 options that are not strictly ascending or
+     *   mix sizes, or repeat next to Q-Block1 (§4.4, §4.7).
      * - 4.13 with Size1: Size1 above [maxBodySize] (RFC 7959 §2.9.3, §7.1).
      */
     fun request(request: CoapMessage, allowsBert: Boolean, maxBodySize: Int): QBlockViolation? {
@@ -41,11 +53,11 @@ internal object QBlockCheck {
         val qBlock2Options = options.all(Q_BLOCK2)
         if (qBlock1Options.isEmpty() && qBlock2Options.isEmpty()) return null
         if ((qBlock1Options + qBlock2Options).any { it.length > MAX_LENGTH }) {
-            return badOption("A Q-Block option longer than $MAX_LENGTH bytes")
+            return unrecognized("A Q-Block option longer than $MAX_LENGTH bytes")
         }
-        if (qBlock1Options.size > 1) return badOption("Q-Block1 repeated")
+        if (qBlock1Options.size > 1) return unrecognized("Q-Block1 repeated")
         if (CoapOptions.BLOCK1.number in options || CoapOptions.BLOCK2.number in options) {
-            return badOption("Q-Block mixed with Block1 or Block2")
+            return QBlockViolation(CoapCode.BAD_OPTION, "Q-Block mixed with Block1 or Block2")
         }
         val qBlock1 = options.qBlock1
         val qBlock2List = options.qBlock2List
@@ -70,10 +82,15 @@ internal object QBlockCheck {
         if (size1 > maxBodySize) {
             return QBlockViolation(CoapCode.REQUEST_ENTITY_TOO_LARGE, "Body of $size1 bytes exceeds $maxBodySize", maxBodySize.toLong())
         }
+        if ((size1 + block.size - 1) / block.size > ReceivedBlocks.MAX_COUNT) {
+            return badRequest("Body of $size1 bytes needs more than 2^20 blocks of ${block.size}")
+        }
         val payload = request.payloadSize
         val offset = block.offset
         val fills = if (block.isBert) payload > 0 && payload % block.size == 0 else payload == block.size
         return when {
+            !block.isBert && payload > block.size ->
+                badRequest("Q-Block1 block ${block.number} carries more than ${block.size} bytes")
             block.more && !fills -> badRequest("Q-Block1 payload of $payload bytes does not fill block ${block.number}")
             block.more && offset + payload >= size1 -> badRequest("Q-Block1 block ${block.number} reaches beyond Size1 $size1")
             !block.more && offset + payload != size1 -> badRequest("Q-Block1 last block ${block.number} does not end at Size1 $size1")
@@ -100,7 +117,9 @@ internal object QBlockCheck {
         }
     }
 
-    private fun badOption(diagnostic: String) = QBlockViolation(CoapCode.BAD_OPTION, diagnostic)
+    /** RFC 7252 §5.4.3, §5.4.5: the option counts as unrecognized, and Q-Block1 and Q-Block2 are critical. */
+    private fun unrecognized(diagnostic: String) =
+        QBlockViolation(CoapCode.BAD_OPTION, diagnostic, resetIfNonConfirmable = true)
 
     private fun badRequest(diagnostic: String) = QBlockViolation(CoapCode.BAD_REQUEST, diagnostic)
 

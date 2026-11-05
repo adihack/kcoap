@@ -21,6 +21,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -103,22 +104,26 @@ class QBlockPartsTest {
     }
 
     @Test
-    fun rfc9177Section4_1RepeatingQBlock1Gets402() {
+    fun rfc7252Section5_4_5RepeatingQBlock1Gets402OrAReset() {
         val repeated = upload(0, 3000) { add(CoapOption.uint(CoapOptions.Q_BLOCK1.number, block(1, true).toUint())) }
         assertEquals(CoapCode.BAD_OPTION, check(repeated)?.code)
+        assertEquals(true, check(repeated)?.resetIfNonConfirmable, "§5.4.1: an unrecognized critical option in a NON")
     }
 
     @Test
     fun rfc9177Section4_1MixingQBlockWithBlockGets402() {
-        assertEquals(CoapCode.BAD_OPTION, check(upload(0, 3000) { block1(block(0, true)) })?.code)
+        val mixed = check(upload(0, 3000) { block1(block(0, true)) })
+        assertEquals(CoapCode.BAD_OPTION, mixed?.code)
+        assertEquals(false, mixed?.resetIfNonConfirmable, "§4.1: a 4.02 also for a Non-confirmable request")
         assertEquals(CoapCode.BAD_OPTION, check(get(qBlock2(0, true)).toBuilder().options { block2(block(0, true)) }.build())?.code)
     }
 
     @Test
-    fun rfc9177Section4_2AnOptionOfMoreThanThreeBytesGets402() {
+    fun rfc9177Section4_2AnOptionOfMoreThanThreeBytesGets402OrAReset() {
         val long = get(CoapOption(CoapOptions.Q_BLOCK2.number, byteArrayOf(0, 0, 0, 0x16)))
         assertEquals("A Q-Block option longer than 3 bytes", check(long)?.diagnostic)
         assertEquals(CoapCode.BAD_OPTION, check(long)?.code)
+        assertEquals(true, check(long)?.resetIfNonConfirmable, "RFC 7252 §5.4.3: treated as unrecognized")
     }
 
     @Test
@@ -143,6 +148,26 @@ class QBlockPartsTest {
     fun rfc7959Section2_3AFullBlockIsRequiredWhileMIsSet() {
         val short = upload(0, 3000).toBuilder().apply { payload = ByteArray(10) }.build()
         assertEquals(CoapCode.BAD_REQUEST, check(short)?.code)
+    }
+
+    @Test
+    fun rfc7959Section2_2ALastBlockMustNotBeLargerThanItsSize() {
+        // Size1 100 in 16-byte blocks: block 2 with M clear and 68 bytes would end at Size1, but cover 2 to 6.
+        val tooLong = upload(2, 100, size = 16).toBuilder().apply { payload = ByteArray(68) }
+            .options { qBlock1(block(2, false, 16)) }.build()
+        assertEquals("Q-Block1 block 2 carries more than 16 bytes", check(tooLong)?.diagnostic)
+        assertNull(check(upload(6, 100, size = 16)), "the real last block, 4 bytes")
+    }
+
+    @Test
+    fun rfc7959Section2_2ABodyOfMoreThan2To20BlocksGets400() {
+        val huge = upload(0, 32, size = 16).toBuilder().options { size1(20L shl 20) }.build()
+        val violation = check(huge, maxBodySize = 64 shl 20)
+        assertEquals(CoapCode.BAD_REQUEST, violation?.code)
+        assertEquals("Body of 20971520 bytes needs more than 2^20 blocks of 16", violation?.diagnostic)
+        val largest = upload(0, 32, size = 16).toBuilder().options { size1(16L shl 20) }.build()
+        assertNull(check(largest, maxBodySize = 64 shl 20), "exactly 2^20 blocks")
+        QBlock1Receiver<Int>(largest, BodyMode.NON, QBlockTiming(TransmissionParameters()), Duration.ZERO)
     }
 
     @Test
