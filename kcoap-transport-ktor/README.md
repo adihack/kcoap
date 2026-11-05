@@ -1,8 +1,14 @@
 # kcoap-transport-ktor
 
-Network transports on [ktor-network](https://ktor.io/docs/server-sockets.html) for the targets kcoap
-builds: JVM (and so Android) and Apple. Browsers have no UDP; they reach devices through a proxy (see
+Network transports on [ktor-network](https://ktor.io/docs/server-sockets.html) for the targets that have
+sockets (the SOCKETS tier): JVM (and so Android), Apple and Linux; not the web. Browsers have no UDP or
+TCP; they use `kcoap-transport-ktor-websocket` and reach devices through a proxy (see
 `docs/architecture.md`).
+
+This is the ktor adapter, so ktor's types are part of its API: `bind()` and the TCP connector take an
+optional `SelectorManager` from ktor-network, and every entry point an optional `LoggerFactory` from
+kcoap-common. The module exports both dependencies (`api`), so a caller can pass either without adding
+it, and its ABI follows ktor-network's.
 
 - `KtorUdpTransport`: a `DatagramTransport` for `coap` over UDP.
   - `KtorUdpTransport.bind(host, port, maxDatagramSize)` binds a socket; port 0 picks a free one.

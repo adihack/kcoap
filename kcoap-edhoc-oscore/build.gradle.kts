@@ -8,6 +8,12 @@ kotlin {
         commonMain.dependencies {
             api(project(":kcoap-edhoc"))
             api(project(":kcoap-oscore"))
+            // CoapClient and CoapMessage, CryptoBackend, Endpoint and LoggerFactory appear in the public API.
+            api(project(":kcoap-coap"))
+            api(project(":kcoap-crypto"))
+            api(project(":kcoap-transport"))
+            api(project(":kcoap-common"))
+            implementation(project(":kcoap-cbor"))
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
@@ -15,7 +21,8 @@ kotlin {
             implementation(project(":kcoap-testkit"))
         }
         jvmTest.dependencies {
-            // Real sockets for the libcoap and libedhoc interop tests, and real ML-KEM / ML-DSA.
+            // For WP-I1 (docs/target-architecture.md §4.3), which adds the first jvmTest here: the combined
+            // EDHOC + OSCORE flow end to end over real sockets, with real ML-KEM / ML-DSA.
             implementation(project(":kcoap-transport-ktor"))
             implementation(project(":kcoap-crypto-bc"))
         }

@@ -7,8 +7,9 @@ kotlin {
         commonMain.dependencies {
             api(project(":kcoap-transport"))
             api(libs.kotlinx.coroutines.core)
-            implementation(project(":kcoap-common"))
-            implementation(libs.ktor.network)
+            // LoggerFactory and ktor's SelectorManager appear in the public bind() and constructors.
+            api(project(":kcoap-common"))
+            api(libs.ktor.network)
         }
     }
 }
