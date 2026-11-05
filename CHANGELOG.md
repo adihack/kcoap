@@ -34,7 +34,9 @@ adds its entry and migration note below.
 - Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
   Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
   (QB-0). The Q-Block state machines exist but are not yet used by the client or server (QB-1, ADR 0006).
-  New public API:
+  The endpoint can carry several responses to one request into a per-body inbox, and holds one NSTART
+  slot per Non-confirmable body, released at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (QB-2; internal,
+  no API change). New public API:
   - `TransmissionParameters.maxPayloads` (10), `nonTimeout` (ACK_TIMEOUT), `nonReceiveTimeout`
     (2 × NON_TIMEOUT, at least NON_TIMEOUT × ACK_RANDOM_FACTOR + 1 s, which `init` enforces),
     `nonMaxRetransmit` (MAX_RETRANSMIT) and the derived `nonPartialTimeout` (247 s), RFC 9177 §7.2. They are
@@ -132,6 +134,11 @@ Build governance (WP-C1):
 
 ### Fixed
 
+- The client answers a separate response only after verifying it and checking its critical options (RFC
+  7252 §5.4.1): a Confirmable separate response, or a notification, with a critical option the client
+  does not recognize gets a Reset instead of an ACK, which also ends an observation on the server; the
+  request still fails with `BAD_RESPONSE`. A response that fails verification is still acknowledged and
+  dropped, but no longer ends the request's retransmission or frees its NSTART slot (QB-2, coap-core-4).
 - Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
   build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
   `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).

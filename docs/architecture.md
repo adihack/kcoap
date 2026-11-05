@@ -98,7 +98,17 @@ a server attaches or the first request or ping goes out, so a server's resources
 first request, whichever of a server and a client sharing the endpoint is created first. Client-side
 response verification (OSCORE) runs on the receive loop, before the response is queued, so a forged
 notification cannot push out a genuine one; message-security backends should be fast or offload their
-own work.
+own work. A separate response is acknowledged or reset only after that verification and the check of
+its critical options (RFC 7252 §5.4.1): one with an unknown critical option gets a Reset; one that fails
+verification is acknowledged and dropped, since a Reset would cancel an observation (RFC 8613 §8.4.2).
+
+**Exchanges with several responses.** An exchange hands on responses in one of three modes: `Single`
+ends it with the first response, `Stream` keeps an observation open, and `Inbox` reports responses,
+Resets, timeouts and failures to a bounded inbox that all requests of one Q-Block body share (RFC 9177
+§4.3, §4.4); an event that does not fit is counted as lost, so the receive loop never waits for a slow
+driver. A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
+released when the body ends or at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (§7.2); its blocks take no
+slot of their own. A Confirmable body takes a slot per block instead, so NSTART runs it in lock-step.
 
 **Concurrency rules.** Every stateful component follows them, and `ConcurrencyStressTest` checks them on
 real threads, on the JVM and Kotlin/Native, through `kcoap-testkit`'s `Stress` helper:
