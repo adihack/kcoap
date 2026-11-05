@@ -81,14 +81,15 @@ class EdhocOscoreTest {
     @Test
     fun cipherSuiteNegotiationOverCoap() = runTest {
         val peers = Peers.create(crypto)
-        val server = EdhocServer(peers.responderConfig(listOf(CipherSuite.SUITE_4)), crypto, InMemoryContextRepository())
+        // Suite 1 runs on every platform and takes the same Ed25519 credentials as suite 0.
+        val server = EdhocServer(peers.responderConfig(listOf(CipherSuite.SUITE_1)), crypto, InMemoryContextRepository())
         val requests = mutableListOf<CoapMessage>()
-        val handshake = EdhocClientHandshake(peers.initiatorConfig(listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_4)), crypto) {
+        val handshake = EdhocClientHandshake(peers.initiatorConfig(listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_1)), crypto) {
             requests += it
             server.handle(it)
         }
         val session = handshake.run()
-        assertEquals(CipherSuite.SUITE_4, session.edhoc.cipherSuite)
+        assertEquals(CipherSuite.SUITE_1, session.edhoc.cipherSuite)
         assertEquals(3, requests.size, "message_1, message_1 again, message_3")
     }
 

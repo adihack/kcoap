@@ -18,6 +18,7 @@ import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.testkit.InMemoryNetwork
 import dev.kcoap.testkit.LinkConditions
 import dev.kcoap.transport.Endpoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -34,7 +35,8 @@ import kotlin.test.assertTrue
  * resources, a CoAP client that runs EDHOC and then talks OSCORE, over a simulated network.
  */
 class FullStackTest {
-    private val crypto = DefaultCryptoBackend()
+    // Real cryptography under CoAP timers: on WebCrypto it must not let virtual time run.
+    private val crypto = InstantCrypto(DefaultCryptoBackend())
 
     @Test
     fun edhocThenOscoreThroughClientAndServer() = runTest {
@@ -109,7 +111,7 @@ class FullStackTest {
             assertEquals(3, received.size)
         }
         repeat(5) {
-            testScheduler.advanceTimeBy(1_000)
+            delay(1_000)
             counter.notifyObservers()
         }
         notifications.join()

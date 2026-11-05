@@ -29,7 +29,7 @@ class RoundTripTest {
     @Test
     fun everyMethodWithEverySuite() = runTest {
         var round = 0
-        for (suite in Fixtures.classicalSuites) {
+        for (suite in Fixtures.registeredSuitesRunBy(backend)) {
             for (method in EdhocMethod.entries) {
                 val shortIds = round % 2 == 0
                 val initiatorId = if (shortIds) ConnectionIdentifier.ofInt(-24) else cid("abcd")
@@ -210,14 +210,15 @@ class RoundTripTest {
 
     @Test
     fun sessionExporterAndKeyUpdate() = runTest {
-        val configs = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, CipherSuite.SUITE_4)
+        // Suite 24 runs on every platform and has a 32-byte application key, unlike the AES-128 suites.
+        val configs = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, CipherSuite.SUITE_24)
         val handshake = Fixtures.handshake(backend, configs)
         val initiator = handshake.initiatorSession
         val responder = handshake.responderSession
         val context = byteArrayOf(1, 2)
         assertContentEquals(initiator.exporter(40000, context, 42), responder.exporter(40000, context, 42))
         assertFalse(initiator.exporter(40000, context, 16).contentEquals(initiator.exporter(40001, context, 16)))
-        assertEquals(32, initiator.oscoreMasterSecret().size, "the key length of ChaCha20/Poly1305")
+        assertEquals(32, initiator.oscoreMasterSecret().size, "the key length of A256GCM")
         val before = initiator.prkOut()
         initiator.keyUpdate(byteArrayOf(9))
         responder.keyUpdate(byteArrayOf(9))
@@ -226,7 +227,7 @@ class RoundTripTest {
         assertFailsWith<IllegalArgumentException> { initiator.exporter(-1, ByteArray(0), 16) }
         assertFailsWith<IllegalArgumentException> { initiator.exporter(0, ByteArray(0), 0) }
         initiator.destroy()
-        assertContentEquals(ByteArray(32), initiator.prkOut())
+        assertContentEquals(ByteArray(48), initiator.prkOut(), "PRK_out has the length of SHA-384")
         assertNull(EdhocInitiator(configs.first, backend).session)
     }
 
