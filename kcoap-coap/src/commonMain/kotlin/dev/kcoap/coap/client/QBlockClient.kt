@@ -46,10 +46,8 @@ import kotlinx.coroutines.withContext
  * security is configured and [QBlockClientConfig.withMessageSecurity] is off (several responses to one
  * request fall outside OSCORE's single-response model, RFC 8613 §7.4), when the request carries No-Response
  * (its combination with Q-Block1 is undefined), Observe (outside [observe]), or a Block or Q-Block option of
- * its own, and when [QBlockSupport] does not know the peer to support Q-Block. An observation under message
- * security keeps RFC 7959 whatever [QBlockClientConfig.withMessageSecurity] says: OSCORE takes notifications
- * only with a Partial IV above every one before (RFC 8613 §7.4.1), so the blocks of a notification body that
- * arrive out of order would be dropped.
+ * its own, and when [QBlockSupport] does not know the peer to support Q-Block. Observations follow the same
+ * rules, under message security too.
  *
  * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.blockSize], goes in
  * Q-Block1 blocks of one size for the whole body, each a new request on a new token with Size1, the body's
@@ -95,7 +93,9 @@ import kotlinx.coroutines.withContext
  * message type of its blocks, and delivered once. A block with a new ETag starts a new body only if it is
  * fresher than every body before it ([Observer.isFresh], RFC 7641 §3.4), which supersedes the body in
  * progress, as a fresher notification of one message does; blocks of bodies delivered, given up or stale are
- * ignored. A block without Observe continues the body of its ETag (libcoap leaves Observe out after a
+ * ignored. On a protected exchange the security layer orders the notifications instead (RFC 8613
+ * §4.1.3.5.2): kcoap-oscore takes the blocks of the freshest body in any order and drops those of older ones,
+ * and every block carries its own Partial IV, so the Observe values it derives differ within a body. A block without Observe continues the body of its ETag (libcoap leaves Observe out after a
  * Continue) but starts a body only in answer to a request of the client's own. The Continues and requests for
  * missing blocks of a Non-confirmable notification body hold one lease until the body is delivered or given up
  * (§7.2), and their tokens are released with it; a body given up only waits for the next notification.
@@ -120,9 +120,10 @@ internal class QBlockClient(private val client: CoapClient) {
     interface Observer {
         /**
          * Whether a notification with Observe [value], the first block of a new body, is fresher than every one
-         * before it (RFC 7641 §3.4); the blocks of a stale body are ignored.
+         * before it (RFC 7641 §3.4); the blocks of a stale body are ignored. [isProtected] when it came on an
+         * exchange that message security protects, which orders notifications itself (RFC 8613 §4.1.3.5.2).
          */
-        fun isFresh(value: Long): Boolean
+        fun isFresh(value: Long, isProtected: Boolean): Boolean
 
         /**
          * The registration was answered with a notification on [token], which the observation keeps (RFC 7641
@@ -199,9 +200,6 @@ internal class QBlockClient(private val client: CoapClient) {
             reliable && !config.onReliableTransports -> "Q-Block is off on reliable transports"
             // OSCORE takes one response per request (RFC 8613 §7.4) unless the application opts in.
             client.config.security != null && !config.withMessageSecurity -> "Q-Block with message security is off"
-            // OSCORE drops a notification whose Partial IV is not above every one before (RFC 8613 §7.4.1), so
-            // the blocks of a notification body could not arrive out of order.
-            client.config.security != null && isObservation -> "Q-Block notification bodies are not taken under message security"
             options.noResponse != null -> "the request carries No-Response"
             options.observe != null && !isObservation -> "the request carries Observe"
             OWN_BLOCK_OPTIONS.any { it in options } -> "the request carries block options of its own"
@@ -236,7 +234,10 @@ internal class QBlockClient(private val client: CoapClient) {
         val generation: Int,
         val blocks: List<BlockOption>? = null,
         val isEchoRetry: Boolean = false,
-    )
+    ) {
+        /** Whether message security protects the request, and so verifies and orders what answers it. */
+        val isProtected: Boolean get() = exchange.protectedRequest != null
+    }
 
     /**
      * One request and its body or bodies, from the first message to the end: an upload (Q-Block1), a
@@ -811,7 +812,7 @@ internal class QBlockClient(private val client: CoapClient) {
             releaseLease()
             isObserving = true
             logger.debug { "Observing on token $token" }
-            (first.options.observe ?: registrationObserve)?.let { observer.isFresh(it) }
+            (first.options.observe ?: registrationObserve)?.let { observer.isFresh(it, kept.isProtected) }
             observer.onEstablished(kept.exchange.token, forgets)
             observer.onNotification(first)
         }
@@ -822,7 +823,7 @@ internal class QBlockClient(private val client: CoapClient) {
             val isFollowUp = origin.blocks != null
             QBlockCheck.response(message, limits.allowsBert)?.let { return logger.debug { "Dropped a notification: $it" } }
             val block = message.options.qBlock2
-            if (block != null) return onNotificationBlock(observer, origin.exchange.key.token.takeIf { isFollowUp }, message, block)
+            if (block != null) return onNotificationBlock(observer, origin, message, block)
             if (isFollowUp) return onFollowUpAnswer(origin, message)
             val observe = message.options.observe
             if (observe == null || !message.code.isSuccess) {
@@ -830,7 +831,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 outcome = Outcome.Done(response(message))
                 return
             }
-            if (!observer.isFresh(observe)) return
+            if (!observer.isFresh(observe, origin.isProtected)) return
             // RFC 7641 §3.4: fresher than the body in progress, which is given up, never to be emitted after this.
             notification?.let {
                 logger.debug { "A newer notification of one message supersedes the body in progress" }
@@ -858,11 +859,12 @@ internal class QBlockClient(private val client: CoapClient) {
          * ETag, or no ETag at all (libcoap's answer after it ran its handler again, which the receiver takes for a
          * changed representation). Otherwise it starts a new body, which supersedes the one in progress, when it
          * is fresher than every one before (RFC 7641 §3.4), or, without Observe, when it answers a request for
-         * blocks of the body in progress ([followUp], its token), which the server ran its handler again for: an
+         * blocks of the body in progress ([origin] being one), which the server ran its handler again for: an
          * answer to a request of an earlier body may be older than the bodies since. A body of one block needs no
          * assembly.
          */
-        private suspend fun onNotificationBlock(observer: Observer, followUp: String?, message: CoapMessage, block: BlockOption) {
+        private suspend fun onNotificationBlock(observer: Observer, origin: Sent, message: CoapMessage, block: BlockOption) {
+            val followUp = origin.exchange.key.token.takeIf { origin.blocks != null }
             val etag = message.options.etags.singleOrNull()
             val current = notification
             if (current != null && (etag == null || current.etag.contentEquals(etag))) {
@@ -875,7 +877,7 @@ internal class QBlockClient(private val client: CoapClient) {
             if (observe == null && (current == null || followUp !in current.requests)) {
                 return logger.debug { "Dropped a block of a new body without Observe" }
             }
-            if (observe != null && !observer.isFresh(observe)) {
+            if (observe != null && !observer.isFresh(observe, origin.isProtected)) {
                 etag?.let { finish(it) }
                 return logger.debug { "Dropped a stale notification $observe (RFC 7641 §3.4)" }
             }

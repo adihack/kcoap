@@ -56,9 +56,11 @@ public enum class QBlockMode {
  *   whole body (RFC 9177 §11); `OscoreClient` hands on only the 4.00, 4.01 and 5.xx that end it. The probe and
  *   the capability it finds are kept apart from those of unprotected requests. The server has to opt in too
  *   (`QBlockServerConfig.withMessageSecurity`), or it answers 4.02, or a Reset to a Non-confirmable request,
- *   and the request is sent again with RFC 7959. Observations under message security keep RFC 7959 either
- *   way: OSCORE takes notifications only with a Partial IV above every one before (RFC 8613 §7.4.1), which
- *   would drop the blocks of a notification body that arrive out of order (RFC 9177 §4.5).
+ *   and the request is sent again with RFC 7959. Observations take it too: every block of a notification body
+ *   is a notification with a Partial IV of its own (RFC 9177 §4.5, RFC 8613 §4.1.3.5.2), so the security layer
+ *   must take the blocks of the freshest body in any order while it still refuses replays (§7.4.1) and older
+ *   bodies, as `OscoreClient` does with a replay window per registration; the stack leaves the ordering of
+ *   protected notifications to it.
  * @property missingBlockMBit whether a request for missing blocks asks for the missing tail of a
  *   MAX_PAYLOADS set with one Q-Block2 option with M set (RFC 9177 §4.4), instead of one option per block.
  */

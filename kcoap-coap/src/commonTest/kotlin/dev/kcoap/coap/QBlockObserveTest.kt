@@ -933,12 +933,17 @@ class QBlockObserveTest {
         }
     }
 
-    private suspend fun TestScope.scripted(maxResponseBodySize: Int = 1 shl 20): Scripted {
+    /**
+     * The client against a scripted server. With [security] (which may leave requests unprotected) the client takes
+     * Q-Block with message security (`withMessageSecurity`).
+     */
+    private suspend fun TestScope.scripted(maxResponseBodySize: Int = 1 shl 20, security: ClientMessageSecurity? = null): Scripted {
         val fixture = StackFixture(this)
         lateinit var scripted: Scripted
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
+        val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = security != null)
         val client = fixture.client(
-            CoapClientConfig(blockSize = 64, maxResponseBodySize = maxResponseBodySize, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
+            CoapClientConfig(security = security, blockSize = 64, maxResponseBodySize = maxResponseBodySize, qBlock = qBlock),
             fixture.endpointConfig(parameters = parameters),
         )
         scripted = Scripted(fixture, server, client)
@@ -949,35 +954,48 @@ class QBlockObserveTest {
         return scripted
     }
 
+    /** Message security that protects nothing: its client takes `withMessageSecurity`, but every request goes plain. */
+    private val protectsNothing = object : ClientMessageSecurity {
+        override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
+    }
+
+    /**
+     * RFC 7641 §3.4 for notification bodies, and the same when the client has message security that leaves the
+     * registration unprotected: only a protected exchange leaves the order to the security layer (RFC 8613
+     * §4.1.3.5.2), so this one is still ordered by its Observe values.
+     */
     @Test
     fun rfc7641Section3_4AStaleBodyAndLateBlocksOfFinishedBodiesAreIgnored() = runTest {
-        val s = scripted()
-        s.observe(this)
-        val (peer, registration) = s.requests.receive()
-        val token = registration.token
-        val bodies = List(6) { body(128, it) }
-        suspend fun send(body: Int, num: Long, observe: Long?) = s.server.send(peer, s.block(token, num, bodies[body], body, observe))
+        for (security in listOf(null, protectsNothing)) {
+            val s = scripted(security = security)
+            s.observe(this)
+            val (peer, registration) = s.requests.receive()
+            assertEquals(BlockOption(0, true, 2), registration.options.qBlock2, "Q-Block2, with security $security")
+            val token = registration.token
+            val bodies = List(6) { body(128, it) }
+            suspend fun send(body: Int, num: Long, observe: Long?) = s.server.send(peer, s.block(token, num, bodies[body], body, observe))
 
-        send(0, 0, 5)
-        send(0, 1, 5)
-        send(1, 0, 7)
-        send(2, 0, 6)
-        send(2, 1, 6)
-        send(1, 1, 7)
-        send(0, 1, 5)
-        send(5, 0, null)
-        send(3, 0, 8)
-        send(4, 0, 9)
-        send(4, 1, 9)
-        send(3, 1, 8)
-        delay(1.seconds)
+            send(0, 0, 5)
+            send(0, 1, 5)
+            send(1, 0, 7)
+            send(2, 0, 6)
+            send(2, 1, 6)
+            send(1, 1, 7)
+            send(0, 1, 5)
+            send(5, 0, null)
+            send(3, 0, 8)
+            send(4, 0, 9)
+            send(4, 1, 9)
+            send(3, 1, 8)
+            delay(1.seconds)
 
-        assertEquals(
-            listOf(0, 1, 4).map { bodies[it].toList() },
-            s.received.map { it.payload.toList() },
-            "body 2 is older than body 1 (RFC 7641 §3.4); 0 and 3 are finished, 5 starts without Observe",
-        )
-        assertEquals(listOf(5L, 7L, 9L), s.received.map { it.options.observe })
+            assertEquals(
+                listOf(0, 1, 4).map { bodies[it].toList() },
+                s.received.map { it.payload.toList() },
+                "body 2 is older than body 1 (RFC 7641 §3.4); 0 and 3 are finished, 5 starts without Observe; security $security",
+            )
+            assertEquals(listOf(5L, 7L, 9L), s.received.map { it.options.observe })
+        }
     }
 
     /**
@@ -1149,39 +1167,41 @@ class QBlockObserveTest {
     }
 
     /**
-     * Under message security an observation keeps RFC 7959 even where `withMessageSecurity` lets the client's
-     * other bodies use Q-Block: OSCORE takes a notification only with a Partial IV above every one before
-     * (RFC 8613 §7.4.1), which would drop the blocks of a notification body that arrive out of order.
+     * Under message security with `withMessageSecurity`, an observation takes Q-Block2 notification bodies like the
+     * client's other bodies (RFC 9177 §4.5): the security layer takes the blocks of a notification body in any
+     * order (RFC 8613 §7.4.1 refuses only Partial IVs received before), which kcoap-oscore's
+     * `OscoreQBlockEndToEndTest` shows with OSCORE itself. Without `withMessageSecurity` it keeps RFC 7959.
      */
     @Test
-    fun rfc8613Section7_4_1AnObservationUnderMessageSecurityKeepsRfc7959() = runTest {
-        val fixture = StackFixture(this)
-        val resource = Resource("obs", CoapMessageType.NON) { body(3000, it) }
-        val server = fixture.server(
-            CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true)),
-        ) { add(resource) }
-        // Protects nothing, so the server sees plain requests, but the client counts as one with message security.
-        val security = object : ClientMessageSecurity {
-            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
+    fun rfc9177Section4_5AnObservationUnderMessageSecurityTakesQBlockBodiesWhereWithMessageSecurityIsOn() = runTest {
+        for (withMessageSecurity in listOf(true, false)) {
+            val fixture = StackFixture(this)
+            val resource = Resource("obs", CoapMessageType.NON) { body(3000, it) }
+            val server = fixture.server(
+                CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true)),
+            ) { add(resource) }
+            // Protects nothing, so the server sees plain requests, but the client counts as one with message security.
+            val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = withMessageSecurity)
+            val client = fixture.client(CoapClientConfig(security = protectsNothing, blockSize = 64, qBlock = qBlock))
+            val received = mutableListOf<CoapResponse>()
+            val observation = backgroundScope.launch {
+                client.observe(fixture.uri(server, "/obs")) { nonConfirmable() }.collect { received += it }
+            }
+            delay(10.seconds)
+            resource.change()
+            delay(10.seconds)
+
+            val case = "withMessageSecurity = $withMessageSecurity"
+            assertEquals(listOf(body(3000, 0), body(3000, 1)).map { it.toList() }, received.map { it.payload.toList() }, case)
+            val requests = fixture.sentBy(client.endpoint).filter { it.isRequest }
+            val registration = requests.first { it.options.observe == 0L }
+            assertEquals(withMessageSecurity, registration.options.qBlock2 != null, "$case: the registration asks for Q-Block2")
+            assertEquals(!withMessageSecurity, requests.any { it.options.block2 != null }, "$case: RFC 7959 completed the bodies")
+            val notifications = fixture.sentBy(server.endpoint).filter { it.options.observe != null && it.options.qBlock2 != null }
+            assertEquals(if (withMessageSecurity) 2 else 0, notifications.map { it.options.etags.single().toList() }.distinct().size, case)
+            assertEquals(1, resource.observerCount, case)
+            observation.cancel()
         }
-        val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-        val client = fixture.client(CoapClientConfig(security = security, blockSize = 64, qBlock = qBlock))
-        val received = mutableListOf<CoapResponse>()
-        backgroundScope.launch { client.observe(fixture.uri(server, "/obs")) { nonConfirmable() }.collect { received += it } }
-        delay(10.seconds)
-        resource.change()
-        delay(10.seconds)
-
-        assertEquals(listOf(body(3000, 0), body(3000, 1)).map { it.toList() }, received.map { it.payload.toList() })
-        val requests = fixture.sentBy(client.endpoint).filter { it.isRequest }
-        assertTrue(requests.none { it.options.qBlock1 != null || it.options.qBlock2 != null }, "no Q-Block option")
-        assertTrue(requests.any { it.options.block2 != null }, "RFC 7959 completed the notification bodies")
-        assertEquals(1, resource.observerCount)
-
-        val got = client.get(fixture.uri(server, "/obs")) { nonConfirmable() }
-        assertContentEquals(body(3000, 1), got.payload)
-        val get = fixture.sentBy(client.endpoint).filter { it.isRequest }.drop(requests.size)
-        assertTrue(get.first().options.qBlock2 != null, "withMessageSecurity still takes effect on other requests")
     }
 
     private fun seconds(value: Double): String {

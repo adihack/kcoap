@@ -1,5 +1,6 @@
 package dev.kcoap.oscore
 
+import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
@@ -36,8 +37,10 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -47,8 +50,9 @@ import kotlinx.coroutines.test.runTest
  * Q-Block (RFC 9177) under OSCORE (RFC 8613) between kcoap's client and server on the in-memory network and
  * virtual time: what each side's `withMessageSecurity` chooses, bodies both ways with their Q-Block options
  * inside OSCORE, a replayed block response, unprotected responses injected on a body's tokens, the protected
- * capability kept apart on a shared endpoint, a restarted server's freshness challenge, and 10 % loss over many
- * seeds. On the JVM only: elsewhere the crypto backend suspends on the platform (WebCrypto), and virtual time
+ * capability kept apart on a shared endpoint, a restarted server's freshness challenge, 10 % loss over many
+ * seeds, and protected observations whose notification bodies come in Q-Block2 (RFC 9177 §4.5), under loss and
+ * reordering and against replayed and stale bodies. On the JVM only: elsewhere the crypto backend suspends on the platform (WebCrypto), and virtual time
  * would run ahead of it. The rules themselves are tested on every target in [OscoreQBlockTest].
  */
 class OscoreQBlockEndToEndTest {
@@ -97,6 +101,7 @@ class OscoreQBlockEndToEndTest {
         val stored: MutableList<ByteArray>,
         val observed: Observed,
         val inner: MutableList<CoapMessage>,
+        val verified: MutableList<CoapMessage>,
         val rejected: MutableList<String>,
         val wire: MutableList<Wire>,
         val events: MutableList<EndpointEvent>,
@@ -159,7 +164,10 @@ class OscoreQBlockEndToEndTest {
             CoapEndpoint(clientTransport, backgroundScope, endpointConfig(2)),
             CoapClientConfig(security = recording, blockSize = 64, qBlock = client),
         )
-        return Setup(network, coapServer, serverTransport, coapClient, clientTransport, stored, observed, recording.requests, recording.rejected, wire, events)
+        return Setup(
+            network, coapServer, serverTransport, coapClient, clientTransport, stored, observed,
+            recording.requests, recording.responses, recording.rejected, wire, events,
+        )
     }
 
     /**
@@ -304,43 +312,157 @@ class OscoreQBlockEndToEndTest {
         setup.close()
     }
 
+    // ---------------------------------------------------------------- notification bodies (RFC 9177 §4.5)
+
+    /** Observes `/obs` Non-confirmably in the background; every notification goes to the returned list. */
+    private fun TestScope.observe(setup: Setup): Pair<Job, MutableList<CoapResponse>> {
+        val received = Collections.synchronizedList(mutableListOf<CoapResponse>())
+        val job = backgroundScope.launch { setup.client.observe(setup.uri("/obs")) { nonConfirmable() }.collect { received += it } }
+        return job to received
+    }
+
+    /** The verified notification blocks of each body, by ETag, in the order OSCORE took them. */
+    private fun Setup.notificationBlocks(): Map<List<Byte>, List<Long>> =
+        verified.toList().filter { it.options.observe != null && it.options.qBlock2 != null }
+            .groupBy({ it.options.etags.single().toList() }, { it.options.qBlock2!!.number })
+
     /**
-     * Sends [forged] to the client as if from the server, on the token of the client's request that [isTarget]
-     * picks among those on the wire, once. The token is visible on the wire, so anyone on the path can do this.
-     */
-    /**
-     * An observation keeps Inner Block2 (RFC 8613 §4.1.3.4.1) where both sides opt in to Q-Block: OSCORE takes a
-     * notification only with a Partial IV above every one before (§7.4.1), which would drop the blocks of a
-     * notification body that arrive out of order (RFC 9177 §4.5). The notifications arrive whole, and a GET of
-     * the same client still goes in Q-Block.
+     * RFC 9177 §4.5 under RFC 8613: where both sides opt in, a protected observation registers with Inner Q-Block2,
+     * and every notification comes as a Q-Block2 body inside OSCORE, each block a notification with a Partial IV of
+     * its own (§4.1.3.5.2). The bodies arrive whole, one emission each, OSCORE refuses none of their blocks, and no
+     * RFC 7959 Block option is used.
      */
     @Test
-    fun rfc8613Section7_4_1AProtectedObservationKeepsInnerBlock2WhenBothSidesOptIn() = runTest {
+    fun rfc9177Section4_5AProtectedObservationTakesQBlock2NotificationBodiesWhenBothSidesOptIn() = runTest {
         val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true))
-        val received = Collections.synchronizedList(mutableListOf<CoapResponse>())
-        val observation = backgroundScope.launch {
-            setup.client.observe(setup.uri("/obs")) { nonConfirmable() }.collect { received += it }
-        }
+        val (observation, received) = observe(setup)
+        delay(10.seconds)
+        setup.observed.change()
         delay(10.seconds)
         setup.observed.change()
         delay(10.seconds)
 
-        assertEquals(listOf(Observed.body(0), Observed.body(1)).map { it.toList() }, received.map { it.payload.toList() })
-        val registration = setup.inner.first { it.options.observe != null }
-        assertTrue(!registration.has(qBlockOptions), "the registration carries no Q-Block option")
-        assertTrue(setup.inner.none { it.has(qBlockOptions) }, "no Q-Block option inside OSCORE")
-        assertTrue(setup.inner.any { it.options.block2 != null }, "Inner Block2 completed the notifications")
-        assertEquals(1, setup.observed.observerCount)
+        assertEquals((0..2).map { Observed.body(it).toList() }, received.map { it.payload.toList() })
+        val registration = setup.inner.first { it.options.observe == 0L }
+        assertEquals(BlockOption(0, true, 2), registration.options.qBlock2, "the registration asks for Q-Block2 inside OSCORE")
+        assertTrue(setup.inner.none { it.has(blockOptions) }, "no RFC 7959 Block option")
+        val bodies = setup.notificationBlocks()
+        assertEquals(3, bodies.size, "three notification bodies")
+        assertTrue(bodies.values.all { it.toSet() == (0L..46L).toSet() }, "every block of every body came as a notification")
+        val pivs = setup.fromServer().filter { it.options.observe != null }.mapNotNull { OscoreOptionValue.decode(it.options.oscore!!).partialIv?.toList() }
+        assertEquals(pivs.distinct(), pivs, "every block took a Partial IV of its own")
         assertEquals(emptyList(), setup.rejected.toList(), "OSCORE took every notification")
-
-        val got = setup.client.get(setup.uri("/big")) { nonConfirmable() }
-        assertContentEquals(body(3000, 1), got.payload)
-        assertTrue(setup.inner.last().has(qBlockOptions), "the GET went in Q-Block")
+        assertEquals(1, setup.observed.observerCount)
         assertProtectedOnTheWire(setup)
         observation.cancel()
         setup.close()
     }
 
+    /**
+     * What kept protected observations on RFC 7959 until OSCORE took a notification body's blocks by a window per
+     * registration: 10 % loss each way and 20 to 50 ms of latency, which reorders the blocks of a set. Over
+     * [OBSERVE_SEEDS] runs every delivered notification is a whole body, once, in order, the latest state arrives,
+     * blocks did arrive out of order, and OSCORE refused no genuine block (before, about 130 per run).
+     */
+    @Test
+    fun rfc8613Section7_4_1ProtectedNotificationBodiesArriveWholeUnderLossAndReordering() = runTest(timeout = 5.minutes) {
+        var reordered = 0
+        var recoveries = 0
+        for (seed in 1..OBSERVE_SEEDS) {
+            val run = "seed $seed"
+            val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true), seed = seed)
+            val (observation, received) = observe(setup)
+            delay(5.seconds)
+            setup.network.conditions = LinkConditions(lossRate = 0.1, latency = 20.milliseconds, jitter = 30.milliseconds)
+            repeat(5) {
+                setup.observed.change()
+                delay(15.seconds)
+            }
+            setup.network.conditions = LinkConditions.Perfect
+            setup.observed.change()
+            delay(20.seconds)
+
+            val versions = (0..setup.observed.version).associateBy { Observed.body(it).toList() }
+            val delivered = received.map { versions[it.payload.toList()] ?: fail("$run: a notification that is no whole body") }
+            assertEquals(delivered.sorted(), delivered, "$run: in order")
+            val etags = received.map { it.options.etags.single().toList() }
+            assertEquals(etags.distinct(), etags, "$run: one emission per body")
+            assertEquals(setup.observed.version, delivered.last(), "$run: the latest state arrives")
+            assertTrue(delivered.size >= 4, "$run: ${delivered.size} bodies of ${setup.observed.version + 1} versions")
+            assertEquals(emptyList(), setup.rejected.toList(), "$run: OSCORE took every genuine block")
+            reordered += setup.notificationBlocks().values.count { it.zipWithNext().any { (a, b) -> b < a } }
+            recoveries += setup.events.count { it is EndpointEvent.QBlockRecovery }
+            observation.cancel()
+            setup.close()
+        }
+        assertTrue(reordered > 0, "blocks of a body arrived out of order")
+        assertTrue(recoveries > 0, "lost blocks were asked for")
+    }
+
+    /**
+     * A replayed or stale notification body never reaches the application (RFC 8613 §7.4.1, §4.1.3.5.2; RFC 7641
+     * §3.4): someone on the path holds back every block of the second body, records the third, then delivers the
+     * second after the third arrived, and sends the third again with fresh Message IDs, past deduplication. OSCORE
+     * refuses every one of those blocks, and the observation goes on.
+     */
+    @Test
+    fun rfc8613Section7_4_1AReplayedOrStaleNotificationBodyIsNeverDelivered() = runTest {
+        val setup = setup(client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true))
+        val heldBack = Collections.synchronizedList(mutableListOf<ByteArray>())
+        val recorded = Collections.synchronizedList(mutableListOf<ByteArray>())
+        var phase = 0
+        setup.network.filter = { datagram ->
+            // The Outer Observe option marks a notification (RFC 8613 §4.1.3.5.2); answers for missing blocks have none.
+            val isNotification = datagram.from == setup.serverTransport.localEndpoint &&
+                runCatching { UdpMessageCodec.decode(datagram.bytes) }.getOrNull()?.options?.observe != null
+            when {
+                isNotification && phase == 1 -> {
+                    heldBack += datagram.bytes.copyOf()
+                    false
+                }
+                isNotification && phase == 2 -> {
+                    recorded += datagram.bytes.copyOf()
+                    true
+                }
+                else -> true
+            }
+        }
+        val (observation, received) = observe(setup)
+        delay(10.seconds)
+        phase = 1
+        setup.observed.change()
+        delay(30.seconds)
+        phase = 2
+        setup.observed.change()
+        delay(30.seconds)
+        phase = 3
+        assertEquals(listOf(0, 2).map { Observed.body(it).toList() }, received.map { it.payload.toList() }, "the second body was held back")
+
+        fun inject(bytes: ByteArray, messageId: Int) {
+            val message = UdpMessageCodec.decode(bytes).toBuilder().apply { this.messageId = messageId }.build()
+            setup.clientTransport.inject(DatagramEvent.Received(setup.serverTransport.localEndpoint, UdpMessageCodec.encode(message)))
+        }
+        heldBack.forEachIndexed { index, bytes -> inject(bytes, 0x5000 + index) }
+        recorded.forEachIndexed { index, bytes -> inject(bytes, 0x6000 + index) }
+        delay(10.seconds)
+        setup.observed.change()
+        delay(10.seconds)
+
+        assertEquals(listOf(0, 2, 3).map { Observed.body(it).toList() }, received.map { it.payload.toList() }, "neither came through")
+        assertTrue(heldBack.size >= 47 && recorded.size >= 47, "a whole body each: ${heldBack.size} held back, ${recorded.size} recorded")
+        val expected = setOf("Replayed or stale notification", "Stale notification of an older body")
+        assertEquals(heldBack.size + recorded.size, setup.rejected.size, "every injected block was refused")
+        assertTrue(setup.rejected.all { it in expected }, "${setup.rejected}")
+        observation.cancel()
+        setup.close()
+    }
+
+    // ---------------------------------------------------------------- unprotected responses injected (RFC 9177 §11)
+
+    /**
+     * Sends [forged] to the client as if from the server, on the token of the client's request that [isTarget]
+     * picks among those on the wire, once. The token is visible on the wire, so anyone on the path can do this.
+     */
     private fun Setup.inject(forged: (token: ByteArray) -> CoapMessage, isTarget: (request: CoapMessage, index: Int) -> Boolean) {
         var requests = 0
         var injected = false
@@ -518,6 +640,9 @@ class OscoreQBlockEndToEndTest {
 
     private companion object {
         const val SEEDS = 10
+
+        /** Runs of the protected observation under loss and reordering, each with six changes. */
+        const val OBSERVE_SEEDS = 5
 
         /** The ways a run may fail cleanly under loss. */
         val CLEAN_FAILURES = setOf(
