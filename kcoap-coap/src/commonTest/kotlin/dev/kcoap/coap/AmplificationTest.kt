@@ -14,6 +14,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
+import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.Endpoint
@@ -133,6 +134,12 @@ class AmplificationTest {
                 }
             }
             resource("large") { get { CoapResponse.content(large) } }
+            resource("slowSmall") {
+                get {
+                    delay(5.seconds)
+                    CoapResponse.content("tiny")
+                }
+            }
         }
         val peer = fixture.transport()
 
@@ -148,10 +155,43 @@ class AmplificationTest {
         assertEquals(CoapCode.UNAUTHORIZED, toNon.code)
         assertEquals(CoapMessageType.NON, toNon.type)
 
+        // Within the factor, so not held back; but five Confirmable copies would be five times the factor.
+        val smallRequest = request("slowSmall", messageId = 3, token = 3)
+        assertEquals(CoapCode.EMPTY, answerTo(peer, server, fixture, smallRequest)?.code)
+        val small = assertNotNull(receive(peer))
+        assertEquals("tiny", small.payloadAsText())
+        assertTrue(size(small) <= 3 * size(smallRequest))
+        assertEquals(CoapMessageType.NON, small.type, "a separate response to an unverified address is Non-confirmable too")
+
+        // Once the address is verified, separate responses are Confirmable again.
+        val echo = assertNotNull(separate.options.echo)
+        assertEquals(CoapCode.EMPTY, answerTo(peer, server, fixture, request("slow", messageId = 4, token = 4, echo = echo))?.code)
+        val verified = assertNotNull(receive(peer))
+        assertEquals(CoapCode.CONTENT, verified.code)
+        assertEquals(CoapMessageType.CON, verified.type)
+
         delay(300.seconds)
-        val challenges = fixture.sentBy(server.endpoint).filter { it.code == CoapCode.UNAUTHORIZED }
-        assertEquals(2, challenges.size, "never retransmitted")
-        assertTrue(challenges.none { it.type == CoapMessageType.CON })
+        val toUnverified = fixture.sentBy(server.endpoint).filter { it.code == CoapCode.UNAUTHORIZED || it.payloadAsText() == "tiny" }
+        assertEquals(3, toUnverified.size, "never retransmitted")
+        assertTrue(toUnverified.none { it.type == CoapMessageType.CON })
+    }
+
+    @Test
+    fun rfc7252Section5_2_2AKcoapClientTakesANonConfirmableSeparateResponseToItsConfirmableRequest() = runTest {
+        val fixture = StackFixture(this)
+        val server = fixture.server(all) {
+            resource("slowSmall") {
+                get {
+                    delay(5.seconds)
+                    CoapResponse.content("tiny")
+                }
+            }
+        }
+        val client = fixture.client()
+
+        assertEquals("tiny", client.get(fixture.uri(server, "/slowSmall")).payloadAsText())
+        val response = fixture.sentBy(server.endpoint).single { it.code == CoapCode.CONTENT }
+        assertEquals(CoapMessageType.NON, response.type)
     }
 
     @Test
@@ -370,6 +410,26 @@ class AmplificationTest {
 
         assertEquals(CoapCode.CONTENT, answerTo(peer, server, fixture, request("large", 1, 1))?.code)
         assertTrue(fixture.limits(Limit.AMPLIFICATION_FACTOR).isEmpty())
+    }
+
+    @Test
+    fun theBurstGateAsksOnlyForTheAddressesOfUnauthenticatedDatagramClients() = runTest {
+        val fixture = StackFixture(this)
+        val server = fixture.server { resource("large") { get { CoapResponse.content(large) } } }
+        val peer = fixture.transport()
+        val request = request("large", 1, 1)
+        val inbound = InboundRequest(server.endpoint, peer.localEndpoint, request)
+        val burst = List(10) { CoapResponse.content(large).toMessage(request.token) }
+        val probeAnswer = listOf(CoapResponse(CoapCode.CONTENT, payload = ByteArray(16)).toMessage(request.token))
+        val authenticated = assertNotNull(ToySecurity.unprotectRequest(ToySecurity.protectRequest(request, peer.localEndpoint).message, peer.localEndpoint))
+
+        // QB-3 calls only this, with isBurst = true, under the default Q_BLOCK_BURSTS.
+        assertTrue(server.mustVerifyAddress(inbound, request, null, burst, isBurst = true))
+        assertFalse(server.mustVerifyAddress(inbound, request, authenticated, burst, isBurst = true), "RFC 9175 §2.6: OSCORE authenticated it")
+        assertFalse(server.mustVerifyAddress(inbound, request, null, probeAnswer, isBurst = true), "within the factor")
+        assertFalse(server.mustVerifyAddress(inbound, request, null, burst, isBurst = false), "single responses are not checked by default")
+        val session = Endpoint.Secure(SessionId(3), 0, peer.localEndpoint, PeerIdentity.PreSharedKey(byteArrayOf(1)))
+        assertFalse(server.mustVerifyAddress(InboundRequest(server.endpoint, session, request), request, null, burst, isBurst = true), "DTLS")
     }
 
     @Test

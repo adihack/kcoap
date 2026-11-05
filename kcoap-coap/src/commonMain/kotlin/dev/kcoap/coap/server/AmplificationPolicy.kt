@@ -26,7 +26,9 @@ public enum class AmplificationPolicy {
     /**
      * Every response a resource gives, block-wise blocks included, larger than the amplification factor
      * allows. An Observe registration is challenged whatever the size of its first response, since it
-     * makes the server send notifications to the address for as long as it lasts (RFC 7641 §7).
+     * makes the server send notifications to the address for as long as it lasts (RFC 7641 §7). A
+     * response within the factor that goes separately, after an Empty ACK, is Non-confirmable until the
+     * address is verified, since its retransmissions would multiply it (RFC 7252 §5.2.2).
      */
     ALL_RESPONSES,
 

@@ -44,7 +44,7 @@ import kotlinx.coroutines.SupervisorJob
  *    ready in time, otherwise separately (RFC 7252 §5.2). No-Response (RFC 7967) suppresses it. A
  *    response that [CoapServerConfig.amplification] holds back from a client whose address is not yet
  *    verified is replaced by a 4.01 Unauthorized with an Echo option, piggybacked or Non-confirmable
- *    (RFC 9175 §2.4 item 3, §2.6).
+ *    (RFC 9175 §2.4 item 3, §2.6); a separate response to such an address is Non-confirmable too.
  *
  * The pipeline is one failure boundary: whatever throws in it, a resource handler, the security layer, an
  * application callback behind it (a context repository, a sequence-number store) or the sending, the
@@ -387,9 +387,7 @@ public class CoapServer private constructor(
             return
         }
         val message = response.toMessage(request.token)
-        if (!reply.isChallenge && checksAddress(inbound, unprotected) && addressVerification.appliesTo(isBurst = false) &&
-            mustVerifyAddress(inbound, request, UdpMessageCodec.encode(message).size, isBurst = false)
-        ) {
+        if (!reply.isChallenge && mustVerifyAddress(inbound, request, unprotected, listOf(message), isBurst = false)) {
             val kept = if (AddressVerification.isRepeatSensitive(request.code)) AddressVerification.Withheld(request, response) else null
             // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
             reply.observation?.let { observations.remove(it, "address not verified") }
@@ -397,9 +395,7 @@ public class CoapServer private constructor(
             return
         }
         val observation = reply.observation
-        // RFC 9175 §2.4 item 3: a challenge goes piggybacked or Non-confirmable, never as a separate Confirmable
-        // response, whose retransmissions would amplify towards the address it is meant to verify.
-        val separateType = if (reply.isChallenge) CoapMessageType.NON else CoapMessageType.CON
+        val separateType = separateType(inbound, request, unprotected, reply)
         val transmission = try {
             val outgoing = unprotected?.protectResponse(message) ?: message
             log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
@@ -431,14 +427,44 @@ public class CoapServer private constructor(
             inbound.peerIdentity == PeerIdentity.None
 
     /**
-     * Whether [responseSize] bytes in answer to [request], with [isBurst] all the blocks of a Q-Block2 burst
-     * together, are more than [CoapServerConfig.amplificationFactor] allows towards an address that is not
-     * verified yet (RFC 9175 §2.4 item 3). Sizes are those of the messages on the wire.
+     * Whether [responses] in answer to [request], one response or with [isBurst] all the blocks of a
+     * Q-Block2 burst, must wait until the client's address is verified (RFC 9175 §2.4 item 3): the client is
+     * one whose address [checksAddress], [CoapServerConfig.amplification] covers the answer, its bytes on
+     * the wire are more than [CoapServerConfig.amplificationFactor] times the request's, and the address is
+     * not verified yet. When it says so, the caller sends [challenge] instead. Internal for the Q-Block2
+     * burst path of QB-3 and its tests.
      */
-    private suspend fun mustVerifyAddress(inbound: InboundRequest, request: CoapMessage, responseSize: Int, isBurst: Boolean): Boolean {
+    internal suspend fun mustVerifyAddress(
+        inbound: InboundRequest,
+        request: CoapMessage,
+        unprotected: UnprotectedRequest?,
+        responses: List<CoapMessage>,
+        isBurst: Boolean,
+    ): Boolean {
+        if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst)) return false
         val requestSize = UdpMessageCodec.encode(inbound.message).size
+        val responseSize = responses.sumOf { UdpMessageCodec.encode(it).size }
         if (!addressVerification.exceedsLimit(requestSize, responseSize, isBurst)) return false
         return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
+    }
+
+    /**
+     * The type of [reply] if it goes separately, after an Empty ACK (RFC 7252 §5.2.2): Confirmable, except
+     * towards an address [CoapServerConfig.amplification] checks and that is not verified yet. Those get
+     * every separate response Non-confirmable, the challenge included, since retransmissions to an address
+     * that never acknowledges would multiply what [CoapServerConfig.amplificationFactor] allows, which
+     * counts every byte sent there, as in QUIC (RFC 9175 §2.4 item 3, RFC 9000 §8.1).
+     */
+    private suspend fun separateType(
+        inbound: InboundRequest,
+        request: CoapMessage,
+        unprotected: UnprotectedRequest?,
+        reply: Reply,
+    ): CoapMessageType {
+        if (reply.isChallenge) return CoapMessageType.NON
+        if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst = false)) return CoapMessageType.CON
+        val verified = addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
+        return if (verified) CoapMessageType.CON else CoapMessageType.NON
     }
 
     /**
