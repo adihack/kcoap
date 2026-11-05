@@ -137,9 +137,9 @@ adds its entry and migration note below.
   gets a 4.01 with Echo first, whatever the size of its first response, since its notification bodies are
   bursts no request asks for (RFC 7641 §7, RFC 9175 §2.4); a FETCH uploaded in Q-Block1 gets it for each
   block until one carries the Echo value. Once the verification lapses (`verifiedAddressLifetime`), its
-  notification bodies go Confirmable. An observation under message security keeps RFC 7959 (Inner Block2)
-  also with `QBlockClientConfig.withMessageSecurity` on (QB-5, below), since OSCORE takes notifications only
-  in the order of their Partial IVs. No API change. Tested end to end on Figures 7 to 15
+  notification bodies go Confirmable. An observation under message security takes Q-Block only with
+  `QBlockClientConfig.withMessageSecurity` on, like other protected requests (QB-5 and QB-7, below). No API
+  change. Tested end to end on Figures 7 to 15
   (`QBlockObserveTest`) and against libcoap both ways (K6, L6). The kcoap-to-kcoap soak of the plan
   (`QBlockTest`: 20 seeds, 10 % and 30 % loss, 3000 B and 20 KiB, PUT, GET and POST) and bodies of 320 blocks
   and notifications over connections (`QBlockReliableTest`) came with it.
@@ -162,6 +162,21 @@ adds its entry and migration note below.
   (§7.4), which is why it is opt-in; it is tested kcoap against kcoap, at 10 % loss too. libcoap 4.3.5b
   protects, or verifies, only the first response to a request, so with `withMessageSecurity` its Q-Block2
   bodies break in both roles (pinned as `upstream…` tests); Q-Block1 uploads to its server work. No API change.
+- Protected observations with Q-Block notification bodies (RFC 9177 §4.5 under RFC 8613; QB-7): with
+  `withMessageSecurity` on both sides an observation now registers with Inner Q-Block2 and takes its
+  notifications as Q-Block2 bodies inside OSCORE, where before it kept Inner Block2. Every block of such a body
+  is a notification with a Partial IV of its own, so `OscoreClient` checks the notifications of a registration
+  that carries Inner Q-Block against a replay window of that registration (the context's `replayWindowSize`)
+  instead of taking only Partial IVs above the Notification Number: RFC 8613 §7.4.1 requires only that a
+  Partial IV received before is refused. Freshness stays by Partial IV (§4.1.3.5.2), per body: a notification
+  below the Notification Number passes only as a block of the body (its ETag) that holds the highest Partial
+  IV, so replayed blocks, blocks of an older body and older notifications of one message are still dropped.
+  A notification that verifies counts as received even when it is dropped as stale, so it is refused if it
+  comes again after its body became the freshest (§7.4.1). Registrations without Inner Q-Block keep the
+  strict order. A client with message security whose resolver
+  leaves a Q-Block registration unprotected orders its bodies by Observe value, as it does other unprotected
+  observations. At 10 % loss with 20 to 50 ms of latency every body arrives whole, where the strict rule
+  dropped about 130 blocks per run. No API change.
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
@@ -352,6 +367,10 @@ Build governance (WP-C1):
   dispatcher of one thread, so a peer that writes many requests back to back, as kcoap's Q-Block client does
   with the blocks of a body on TCP (RFC 9177 Appendix B), ran the endpoint into `maxConcurrentRequests` and
   got 5.03 for a block of a 320-block upload. The reader now yields after each read (QB-6).
+- `OscoreClient` passed on a registration's answer without a Partial IV that arrived after a later
+  notification, and the stack, which leaves the order of protected notifications to OSCORE, emitted the
+  older state last. That notification counts as the oldest (RFC 8613 §4.1.3.5.2) and is now dropped once a
+  notification with a Partial IV was taken (QB-7).
 - Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
   build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
   `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).

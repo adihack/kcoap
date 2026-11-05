@@ -49,9 +49,10 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   Q-Block1 uploads and Q-Block2 downloads in NON bursts of MAX_PAYLOADS with 2.31, Continue, 4.08 lists
   and requests for missing blocks, Confirmable bodies in lock-step, back to back on TCP and WebSockets
   (`onReliableTransports`); observations with a Q-Block2 notification body per change (§4.5); RFC 7959
-  for No-Response, protected requests (unless `withMessageSecurity`, which needs a security layer that
-  takes several responses to one request, as kcoap-oscore's does), protected observations and servers
-  that reject Q-Block.
+  for No-Response, protected requests and observations (unless `withMessageSecurity`, which needs a
+  security layer that takes several responses to one request and the blocks of a notification body in any
+  order, as kcoap-oscore's does) and servers that reject Q-Block. How to turn it on:
+  [guide](../docs/guide-client-server.md#q-block-rfc-9177).
 - **Q-Block server, RFC 9177** (off by default, `CoapServerConfig.qBlock`): Q-Block1 uploads assembled
   from NON bursts with a 2.31 per set and 4.08 lists of missing blocks, Confirmable ones block by block;
   responses to requests carrying Q-Block1 or Q-Block2 sent as Q-Block2 bodies in sets of MAX_PAYLOADS,
@@ -123,7 +124,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Observe with Q-Block (RFC 9177 §4.5) under OSCORE.
+(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
+(§8–9), which wait for multicast and proxying.
 
 ## Verified by
 
@@ -145,4 +147,9 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; `ConcurrencyStressTest` on real threads through
   `kcoap-testkit`'s `Stress`, on the JVM and Kotlin/Native: close racing requests and collectors, the
   observer registry, the connection pool, requests racing an idle Release.
+- Q-Block (RFC 9177): every figure of §10 and Appendices A–B as a script on virtual time
+  (`QBlockFiguresTest`), the server, the client and both together at 10 % and 30 % loss (`QBlockTest`),
+  Observe (`QBlockObserveTest`), Q-Block bodies on real threads (`QBlockStressTest`), and libcoap
+  4.3.5b in both roles with its deviations pinned, plus a soak of 20 runs with `-Pkcoap.soak=true` (not yet
+  scheduled in CI; [docs/testing.md](../docs/testing.md#nightly-soak)).
 - Line coverage 98% (`./gradlew :kcoap-coap:koverXmlReport`).

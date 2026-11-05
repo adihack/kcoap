@@ -1,8 +1,14 @@
 package dev.kcoap.coap
 
 import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.client.QBlockClientConfig
+import dev.kcoap.coap.client.QBlockMode
+import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
+import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
+import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceAttributes
 import dev.kcoap.coap.stack.CoapEndpoint
@@ -25,7 +31,9 @@ import java.net.ServerSocket
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -146,6 +154,33 @@ class GuideExamplesTest {
         ),
     )
 
+    suspend fun qBlockServer(scope: CoroutineScope, port: Int): CoapServer {
+        val big = ByteArray(20_000) { (it % 251).toByte() }
+        var stored = ByteArray(0)
+        val config = CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true)) // off by default
+        return CoapServer(KtorUdpTransport.bind("127.0.0.1", port), scope, config) {
+            resource("big") { get { CoapResponse.content(big, ContentFormat.OCTET_STREAM) } }
+            resource("upload") {
+                put {
+                    stored = payload
+                    CoapResponse.changed()
+                }
+                get { CoapResponse.content(stored, ContentFormat.OCTET_STREAM) }
+            }
+        }
+    }
+
+    suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
+        val qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) // OFF by default
+        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(qBlock = qBlock))
+        val server = "coap://127.0.0.1:$port"
+        // Non-confirmable requests get Non-confirmable bursts; Confirmable ones go block by block.
+        val body = client.get("$server/big") { nonConfirmable() }.payload
+        client.put("$server/upload", body) { nonConfirmable() }
+        println("${body.size} bytes down and up")
+        client.close()
+    }
+
     @Test
     fun overConnections() = runTest {
         val connections = InMemoryConnections()
@@ -204,6 +239,43 @@ class GuideExamplesTest {
             }
             assertEquals(listOf("Hello over Tcp", "Hello over WebSocket", "true"), output)
             assertEquals(66048, reliableConfig.reliable.maxMessageSize)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /**
+     * The Q-Block example over real UDP: the probe finds support, the body goes down and up in Non-confirmable
+     * bursts (after the server checked the client's address with Echo, the default policy), and the defaults
+     * are what the guide says: Q-Block off on both sides.
+     */
+    @Test
+    fun theQBlockExampleWorks() = runBlocking(Dispatchers.IO) {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            withTimeout(30.seconds) {
+                val port = freePort()
+                val server = qBlockServer(scope, port)
+                qBlockClient(scope, port)
+                val state = server.qBlock.state()
+                assertTrue(state.servedBodies >= 1, "the GET went down in Q-Block2: $state")
+                assertTrue(state.completedBodies >= 1, "the PUT went up in Q-Block1: $state")
+                val check = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope)
+                val stored = check.get("coap://127.0.0.1:$port/upload").payload
+                assertEquals((0 until 20_000).map { (it % 251).toByte() }, stored.toList(), "the upload arrived whole")
+                check.close()
+                server.close()
+            }
+            assertEquals(listOf("20000 bytes down and up"), output)
+            assertEquals(QBlockMode.OFF, QBlockClientConfig().mode, "the client's Q-Block is off by default")
+            assertEquals(false, QBlockServerConfig().isEnabled, "the server's Q-Block is off by default")
+            assertEquals(false, QBlockClientConfig().withMessageSecurity)
+            assertEquals(false, QBlockServerConfig().withMessageSecurity)
+            assertEquals(false, QBlockClientConfig().onReliableTransports)
+            assertEquals(true, QBlockServerConfig().onReliableTransports)
+            assertEquals(AmplificationPolicy.Q_BLOCK_BURSTS, CoapServerConfig().amplification)
+            assertEquals(10, TransmissionParameters().maxPayloads)
+            assertEquals(1.hours, QBlockClientConfig().capabilityLifetime)
         } finally {
             scope.cancel()
         }

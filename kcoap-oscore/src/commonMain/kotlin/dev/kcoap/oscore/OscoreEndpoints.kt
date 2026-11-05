@@ -94,9 +94,10 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * **Replay of responses** (§7.4). A response is bound to its request, and a request takes one response, so a
  * second response to the same request is rejected, with or without a Partial IV. Two kinds of request take
  * several:
- * - An Observe registration takes notifications: at most one without a Partial IV, the others with a Partial
- *   IV above the Notification Number (§7.4.1, §8.4.2). A response without an Inner Observe option is verified
- *   as a non-Observe response (§4.1.3.5.2), so it takes one of those, which ends the observation.
+ * - An Observe registration takes notifications: at most one without a Partial IV, which counts as the oldest
+ *   (§4.1.3.5.2), and the others with a Partial IV above the Notification Number (§7.4.1, §8.4.2). A response
+ *   without an Inner Observe option is verified as a non-Observe response (§4.1.3.5.2), so it takes one of
+ *   those, which ends the observation.
  * - A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177 §4) takes the responses of its body:
  *   the blocks of a Q-Block2 set and the sets that follow on its token, or a 2.31, 4.08s and the final
  *   response on the token of a Q-Block1 block (§4.3, §4.4, §10). At most one of them may reuse the request's
@@ -105,6 +106,20 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  *   seen. That is an RFC 6347 sliding window per request, like the server's per context, so the blocks of a
  *   set may arrive in any order. A replayed or too old block is dropped like a response that fails
  *   verification (§8.4 step 8), and its body asks for it again (RFC 9177 §4.4).
+ *
+ * **Notification bodies** (RFC 9177 §4.5). A registration that carries Inner Q-Block gets its notifications as
+ * Q-Block2 bodies, and every block of a body is a notification with a Partial IV of its own (§4.1.3.5.2), so a
+ * block overtaken by a later one arrives below the Notification Number. §7.4.1 requires only that a Partial IV
+ * received before is refused; refusing everything at or below the Notification Number is a rule it lets an
+ * application choose, and for such a registration it would drop every block that arrives out of order. Its
+ * notifications are therefore checked against the request's window, like the other responses of a Q-Block
+ * body, and freshness, which §4.1.3.5.2 takes from the highest Partial IV whatever the order of arrival, is
+ * decided per body: the blocks of one body carry one ETag (RFC 9177 §4.4) and one Observe value (§4.5), which
+ * makes them one notification. A notification below the Notification Number passes only as a block of the
+ * body whose block holds the highest Partial IV so far; a block of an older body, an older notification of one
+ * message, or one without a Partial IV once a later one came, is stale and dropped. So the stack gets only
+ * notifications that are the freshest or part of the freshest body, as [ProtectedRequest.unprotectResponse]
+ * asks. A registration without Inner Q-Block keeps the strict order.
  *
  * Several responses to one request fall outside RFC 8613's single-response model, so the CoAP stack uses
  * Q-Block under OSCORE only where both sides opt in (`QBlockClientConfig.withMessageSecurity` and
@@ -149,10 +164,21 @@ public class OscoreClient(
 
         /** How many responses that are not notifications were accepted. */
         private var responses = 0
+
+        /** The highest Partial IV of the notifications (§4.1.3.5.2, §7.4.1), -1 before the first one with one. */
         private var notificationNumber: Long = -1
 
-        /** The Partial IVs of the responses to a request that takes several, from the first such response on. */
+        /**
+         * The Partial IVs of the responses to a request that takes several, notifications included, from the
+         * first such response on.
+         */
         private var responseWindow: ReplayWindow? = null
+
+        /**
+         * For a registration carrying Inner Q-Block: the ETag of the notification body whose block holds the
+         * [notificationNumber], or null when that notification is not a Q-Block2 block (RFC 9177 §4.5).
+         */
+        private var freshestBody: ByteArray? = null
 
         override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
             if (response.options.oscore == null) {
@@ -197,27 +223,79 @@ public class OscoreClient(
                 if (usedRequestNonce) throw MessageSecurityException("Second response without a Partial IV")
                 return
             }
-            val window = responseWindow
-                ?: ReplayWindow(binding.context.parameters.replayWindowSize).also { responseWindow = it }
-            if (!window.accept(piv.readUnsigned())) throw MessageSecurityException("Replayed or too old response")
+            if (!window().accept(piv.readUnsigned())) throw MessageSecurityException("Replayed or too old response")
         }
 
-        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        private fun window(): ReplayWindow =
+            responseWindow ?: ReplayWindow(binding.context.parameters.replayWindowSize).also { responseWindow = it }
+
+        /**
+         * §8.4.2 and §7.4.1: one notification without a Partial IV at most, the oldest (§4.1.3.5.2), then strictly
+         * newer ones, as §7.4.1 lets an application require. A registration carrying Inner Q-Block takes the
+         * blocks of its freshest notification body in any order instead ([checkBodyNotification]).
+         */
         private fun checkNotification(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
             if (!binding.isObserveRegistration) throw MessageSecurityException("Notification for a request that did not register")
+            if (binding.allowsSeveralResponses) return checkBodyNotification(decrypted, piv)
             if (piv == null) {
-                if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
-                usedRequestNonce = true
+                takeRequestNonceForNotification(isOldest = notificationNumber < 0)
                 return withObserveValue(decrypted, 0)
             }
             val sequence = piv.readUnsigned()
             if (sequence <= notificationNumber) throw MessageSecurityException("Replayed or stale notification")
             notificationNumber = sequence
-            // §4.1.3.5.2: the client MAY set Observe from the low three bytes of the Partial IV, so the
-            // stack's ordering by Observe value matches OSCORE's ordering by Partial IV. Adding one keeps
-            // the notification without a Partial IV (value 0) the oldest, as the RFC requires.
-            return withObserveValue(decrypted, (sequence + 1) and 0xFFFFFF)
+            return withObserveValue(decrypted, observeValue(sequence))
         }
+
+        /**
+         * A notification to a registration that carried Inner Q-Block (RFC 9177 §4.5; see [OscoreClient]): its
+         * Partial IV must be new in the request's window (§7.4.1), and one below the Notification Number must
+         * belong to the freshest body, whose block holds the Notification Number (§4.1.3.5.2). The Partial IV is
+         * recorded as received before freshness is decided, so a stale notification sent again is a replay even
+         * once its body became the freshest ("MUST stop processing notifications with a Partial IV that has been
+         * previously received", §7.4.1).
+         */
+        private fun checkBodyNotification(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
+            val body = bodyOf(decrypted)
+            val ofFreshestBody = body != null && freshestBody?.contentEquals(body) == true
+            if (piv == null) {
+                takeRequestNonceForNotification(isOldest = notificationNumber < 0 || ofFreshestBody)
+                if (notificationNumber < 0) freshestBody = body
+                return withObserveValue(decrypted, 0)
+            }
+            val sequence = piv.readUnsigned()
+            if (!window().accept(sequence)) throw MessageSecurityException("Replayed or stale notification")
+            val isNewest = sequence > notificationNumber
+            if (!isNewest && !ofFreshestBody) throw MessageSecurityException("Stale notification of an older body")
+            if (isNewest) {
+                notificationNumber = sequence
+                freshestBody = body
+            }
+            return withObserveValue(decrypted, observeValue(sequence))
+        }
+
+        /**
+         * The notification without a Partial IV reuses the request's nonce, which serves one response (§8.3 step
+         * 3, §7.4.1), and counts as the oldest notification (§4.1.3.5.2): unless [isOldest] says it still can be,
+         * a later one came already and it is stale. Either way the nonce counts as received, so the notification
+         * is not taken when it comes again.
+         */
+        private fun takeRequestNonceForNotification(isOldest: Boolean) {
+            if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
+            usedRequestNonce = true
+            if (!isOldest) throw MessageSecurityException("Stale notification without a Partial IV")
+        }
+
+        /** The ETag of the Q-Block2 body that [message] is a block of (RFC 9177 §4.4), or null for any other message. */
+        private fun bodyOf(message: CoapMessage): ByteArray? =
+            if (message.options.qBlock2 == null) null else message.options.etags.singleOrNull()
+
+        /**
+         * §4.1.3.5.2: the client MAY set Observe from the low three bytes of the Partial IV, so the stack's
+         * ordering by Observe value matches OSCORE's ordering by Partial IV. Adding one keeps the notification
+         * without a Partial IV (value 0) the oldest, as the RFC requires.
+         */
+        private fun observeValue(sequence: Long): Long = (sequence + 1) and 0xFFFFFF
 
         private fun withObserveValue(message: CoapMessage, value: Long): CoapMessage =
             message.toBuilder().options { observe(value) }.build()

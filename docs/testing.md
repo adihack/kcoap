@@ -67,6 +67,38 @@ only those, and `all` (the default) runs both.
 ./gradlew koverVerify                  # fails below the coverage floor
 ```
 
+## Nightly soak
+
+The Q-Block (RFC 9177) cross-tests include two soaks with 10 % loss on both sides of the wire, libcoap's
+(`-l 10%`) and kcoap's (a lossy transport), that run 3 times in `scripts/test interop` and 20 times when the
+Gradle property `kcoap.soak` is `true`, which `kcoap-coap`'s build passes to the test JVM as a system property:
+
+| Soak | Test | Each run |
+|---|---|---|
+| L9 | `LibcoapClientAgainstKcoapQBlockTest.l9UploadsAndBodiesAt10PercentLossBothWays` | `coap-client -L 7 -N -b 64` PUTs 3000 bytes to a kcoap server and GETs 3000 bytes from it: the upload is stored whole or not at all; the download is whole, given up by libcoap, or ends with one block written, which counts as its pinned deviation only when every block reached libcoap and kcoap served one body (one ETag, every block on a token that asked for it), and as a failure otherwise; never bytes that are not the body's; afterwards the server holds no partial body |
+| K soak | `KcoapClientAgainstLibcoapQBlockTest.kSoakBodiesBothWaysAt10PercentLoss` | kcoap's client PUTs 3000 bytes to `coap-server -L 7` and GETs them back: the right body, a clean `CoapException`, or libcoap's plain 4.08 for three gaps; no exchange left |
+
+```bash
+scripts/test interop --tests '*QBlock*' -Pkcoap.soak=true                  # the Q-Block cross-tests, soaks 20 times
+./gradlew :kcoap-coap:jvmTest -Pkcoap.tests=interop -Pkcoap.soak=true \
+    --tests '*LibcoapClientAgainstKcoapQBlockTest.l9*' --tests '*kSoak*'    # the two soaks only
+```
+
+At 20 runs L9 takes about a quarter of an hour and the K soak about half an hour, mostly libcoap's timers
+(3 runs: about 2½ and 4 minutes). The first 20-run L9 completed 14 of 20 uploads and 10 of 20 downloads;
+8 downloads met libcoap's pinned deviation and 2 were given up by libcoap. Only at 20 runs do the soaks
+also assert how many complete (L9: half the uploads and half the downloads reach their end; K soak: a
+quarter of the uploads, since libcoap gives up those with three gaps, and half the downloads); 3 runs say
+too little for that. The
+kcoap-to-kcoap soaks run in every unit run on virtual time instead: `QBlockTest` (20 seeds at 10 % and 30 %
+loss, 3000 bytes and 20 KiB, both ways), `QBlockClientSoakTest`, and under OSCORE `OscoreQBlockEndToEndTest`
+(also protected notification bodies at 10 % loss with 20 to 50 ms of latency).
+
+The soak is not scheduled in CI yet: `ci.yml` cancels a run in progress when another starts on the same ref
+(`concurrency`), so a nightly run on `main` would be cut short by a merge, and a `schedule` trigger there would
+run every job nightly. It belongs in a workflow of its own (`schedule` plus `workflow_dispatch`, one job that
+runs the second command above), to be added by the next owner of the CI files (target-architecture.md §4.1).
+
 ## Build checks
 
 Three checks guard the build itself. `scripts/test unit` runs all three after the tests, in the same
@@ -170,4 +202,8 @@ Kotlin/Native and interleaves at suspension points on JS and Wasm:
   `testScheduler.timeSource`, because their dispatcher is a real one. Keep the iterations bounded (tens,
   not thousands) and wait for invariants with `withTimeoutOrNull(...) ?: fail(...)`.
 - `kcoap-coap`'s `ConcurrencyStressTest` shows the pattern: close racing requests, observe collectors,
-  observer churn against the bounds, the connection pool and connection setup.
+  observer churn against the bounds, the connection pool and connection setup. `QBlockStressTest` does the
+  same for Q-Block bodies: five bodies at once both ways (Non-confirmable and Confirmable, an upload answered
+  in Q-Block2) that arrive whole and leave no exchange or partial body, `close()` racing bodies, and
+  notification bodies of a resource changed from three coroutines at once, whole and in order. They run on
+  the thread pools of `jvmTest` and `linuxX64Test`, and on the event loop of the web targets.

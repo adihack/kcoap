@@ -31,4 +31,7 @@ tasks.withType<Test>().configureEach {
     // so a result from one environment must never be reused in another.
     inputs.property("libcoapImage", providers.environmentVariable("KCOAP_LIBCOAP_IMAGE").orElse("kcoap/libcoap:v4.3.5b"))
     outputs.cacheIf { false }
+    // -Pkcoap.soak=true makes the interop soaks (L9 and the K soak) run 20 times instead of 3: the nightly soak
+    // of docs/testing.md.
+    systemProperty("kcoap.soak", providers.gradleProperty("kcoap.soak").orElse("false").get())
 }

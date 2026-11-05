@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
@@ -52,7 +53,8 @@ import org.junit.jupiter.api.TestInstance
 
 /**
  * libcoap's `coap-client -L 7` (Q-Block on, RFC 9177) against a kcoap server with Q-Block on, over real UDP,
- * TCP and WebSockets: the cases L1 to L8, L10 and L12 of docs/plan-qblock-and-platforms.md §1.5.
+ * TCP and WebSockets: the cases L1 to L12 of docs/plan-qblock-and-platforms.md §1.5 (L11, under OSCORE, is in
+ * kcoap-oscore), with L6 also under the default amplification policy and L9 as a soak ([Soak]).
  * Every case compares the bytes of the body, since libcoap's client can exit 0 with a truncated one. Loss on
  * kcoap's side comes from a [DroppingTransport], on libcoap's side from its `-l`. Skipped when docker or the
  * `kcoap/libcoap` image is missing.
@@ -400,6 +402,45 @@ class LibcoapClientAgainstKcoapQBlockTest {
         assertTrue(got.values.all { blocks -> blocks.mapNotNull { it.number("Q-Block2") }.toSet() == (0L..23L).toSet() }, "$result")
     }
 
+    /**
+     * L6 under the default [AmplificationPolicy.Q_BLOCK_BURSTS] (L12 for an observation): a Q-Block registration
+     * from an address nothing verified gets a Non-confirmable 4.01 with Echo first, whatever the size of its
+     * first response, since its notification bodies are bursts no request asks for (RFC 9175 §2.4 item 3, RFC
+     * 7641 §7). libcoap repeats the registration with the Echo value (RFC 9175 §2.3), and every notification body
+     * then arrives whole, with Observe on every block.
+     */
+    @Test
+    fun l6UnderTheDefaultPolicyTheRegistrationIsRepeatedWithEchoAndTheBodiesFollow() {
+        val obs = verifying.root.child("obs") as Changing
+        val changes = scope.launch {
+            repeat(3) {
+                delay(3.seconds)
+                obs.change()
+            }
+        }
+        val result = client("-L", "7", "-N", "-b", "64", "-v", "7", "-s", "10", "-B", "15", "$verifyingUri/obs")
+        runBlocking { changes.cancelAndJoin() }
+
+        assertEquals(0, result.exitCode, "$result")
+        val challenge = sentMessages().first { it.code == CoapCode.UNAUTHORIZED }
+        assertEquals(CoapMessageType.NON, challenge.type, "Non-confirmable, never a separate Confirmable response")
+        val echo = assertNotNull(challenge.options.echo)
+        val registrations = receivedMessages().filter { it.options.path == "/obs" && it.options.observe == 0L }
+        assertTrue(challenge.hasToken(registrations.first().token), "the registration itself is challenged: $result")
+        val repeat = registrations.firstOrNull { it.options.echo?.contentEquals(echo) == true }
+        assertNotNull(repeat, "libcoap repeats the registration with the Echo value: $result")
+        assertEquals(BlockOption(0, true, 2), repeat.options.qBlock2, "and with Q-Block2")
+        val bodies = blocksSent().filter { it.hasToken(repeat.token) && it.options.observe != null }
+            .groupBy { it.options.etags.single().toList() }.values.toList()
+        assertTrue(bodies.size >= 3, "the registration's body and one per change: ${bodies.size} $result")
+        assertTrue(bodies.all { body -> body.map { it.options.qBlock2!!.number }.toSet() == (0L..23L).toSet() }, "every body whole")
+        assertTrue(bodies.flatten().none { it.code == CoapCode.UNAUTHORIZED })
+        val got = result.wire.filter { line ->
+            !line.isSent && line.code == "2.05" && " Observe:" in line.line && line.option("Q-Block2").singleOrNull()?.endsWith("/64") == true
+        }.groupBy { it.option("ETag").single() }
+        assertTrue(got.values.count { blocks -> blocks.mapNotNull { it.number("Q-Block2") }.toSet() == (0L..23L).toSet() } >= 3, "$result")
+    }
+
     // ---------------------------------------------------------------- L7: Confirmable
 
     /** L7: without `-N`, an Empty ACK per Q-Block1 block, the final response piggybacked; block 0 piggybacked, then CON blocks. */
@@ -494,6 +535,174 @@ class LibcoapClientAgainstKcoapQBlockTest {
         assertTrue("4.00 Q-Block1 payload of 0 bytes does not fill block 0" in result.stderr, "$result")
         val output = File(directory, "out.bin")
         assertTrue(!output.exists() || output.length() == 0L, "libcoap gives the body up: $result")
+    }
+
+    /** The Q-Block2 numbers of the 2.05 blocks of 64 bytes that reached libcoap, from its log at `-v 7`. */
+    private fun blocksArrived(result: Libcoap.Result): Set<Long> =
+        result.wire.filter { !it.isSent && it.code == "2.05" && it.option("Q-Block2").singleOrNull()?.endsWith("/64") == true }
+            .mapNotNull { it.number("Q-Block2") }.toSet()
+
+    /**
+     * kcoap's side of a Q-Block2 GET of `/big` by libcoap's client (RFC 9177 §4.4), from what kcoap received and
+     * sent since [received] was last cleared: one body, so one ETag and Size2 3000 on every block (§4.4, §4.6);
+     * every block on the token of a request for it: the original request's (its `0/M` Q-Block2) for the body's
+     * sets and for the sets libcoap's Continues ask for (Figure 8), and a request for missing blocks only for the
+     * blocks it lists, or with M those up to the end of the set (Figure 9). With [everyRequestAnswered], also that
+     * each such request got its blocks after it arrived, on its own token, or a Continue's set on the original
+     * one. Returns what does not hold, empty when all of it does, so a run can tell libcoap's deviation from a
+     * kcoap fault that looks the same from libcoap's side.
+     */
+    private fun servedBodyViolations(everyRequestAnswered: Boolean): List<String> {
+        val last = 46L
+        val requests = received.filter { it.message.isRequest && it.message.options.path == "/big" && it.message.options.qBlock2 != null }
+        val blocks = sentHere().filter { it.message.isResponse && it.message.code == CoapCode.CONTENT && it.message.options.qBlock2?.size == 64 }
+        fun isOriginal(request: CoapMessage) = request.options.qBlock2List.singleOrNull()?.let { it.number == 0L && it.more } == true
+        fun isContinue(option: BlockOption) = option.more && option.number > 0 && option.number % 10 == 0L
+        fun restOfSet(number: Long) = number..minOf(number - number % 10 + 9, last)
+        fun asked(request: CoapMessage): Set<Long> = request.options.qBlock2List.filterNot(::isContinue)
+            .flatMap { if (it.more) restOfSet(it.number).toList() else listOf(it.number) }.toSet()
+        val originals = requests.filter { isOriginal(it.message) }.map { it.message.tokenHex }.toSet()
+        val violations = mutableListOf<String>()
+
+        val etags = blocks.map { it.message.options.etags.map { etag -> etag.toList() } }.distinct()
+        if (etags.size != 1 || etags.single().size != 1) violations += "ETags of the blocks: $etags"
+        blocks.filter { it.message.options.size2 != big.size.toLong() }.forEach { violations += "block ${it.message.options.qBlock2} with Size2 ${it.message.options.size2}" }
+        for (block in blocks) {
+            val token = block.message.tokenHex
+            val number = block.message.options.qBlock2!!.number
+            val on = requests.filter { it.message.tokenHex == token }
+            when {
+                on.isEmpty() -> violations += "block $number on token '$token', which no request for /big carried"
+                token !in originals && on.none { number in asked(it.message) } -> violations += "block $number on token '$token', whose requests did not ask for it"
+            }
+        }
+        if (everyRequestAnswered) {
+            for (request in requests.filterNot { isOriginal(it.message) }) {
+                val token = request.message.tokenHex
+                val after = blocks.filter { it.at >= request.at }
+                val ownAnswers = after.filter { it.message.tokenHex == token }.map { it.message.options.qBlock2!!.number }.toSet()
+                val onOriginal = after.filter { it.message.tokenHex in originals }.map { it.message.options.qBlock2!!.number }.toSet()
+                (asked(request.message) - ownAnswers).takeIf { it.isNotEmpty() }?.let { violations += "request '$token' got no $it on its token" }
+                for (option in request.message.options.qBlock2List.filter(::isContinue)) {
+                    (restOfSet(option.number) - onOriginal).takeIf { it.isNotEmpty() }?.let { violations += "Continue '$token' ${option.number}: $it not sent" }
+                }
+                if (request.message.options.qBlock2List.all(::isContinue) && ownAnswers.isNotEmpty()) {
+                    violations += "Continue '$token' answered on its own token: $ownAnswers"
+                }
+            }
+        }
+        return violations
+    }
+
+    /**
+     * Pinned, found by L9: when the gaps of a body span two sets, libcoap 4.3.5's client loses the body although
+     * every block reaches it. kcoap loses the first copies of blocks 3, 11 and 14; libcoap asks for block 3 alone
+     * when block 10 arrives, sends Resets to blocks of set 1 on the original token, asks for the rest of set 1 with
+     * 11/M and for the later sets, gets every block 0 to 46, and then exits 0 having written one block of 64 bytes
+     * instead of the 3000-byte body. kcoap's side is checked too ([servedBodyViolations]): one body with one ETag
+     * and Size2 on every block, each request answered on its token from it, the Continues on the original one,
+     * as RFC 9177 §4.4 asks; so the pin holds only while the fault is libcoap's.
+     */
+    @Test
+    fun upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3() {
+        val lost = Collections.synchronizedSet(mutableSetOf<Long>())
+        loss.drop = { message, _ ->
+            val num = message.options.qBlock2?.number
+            message.isResponse && message.options.size2 == 3000L && num in setOf(3L, 11L, 14L) && lost.add(num!!)
+        }
+        val result = client("-L", "7", "-N", "-b", "64", "-v", "7", "-B", "30", "-o", "/data/out.bin", "$uri/big")
+
+        assertEquals(setOf(3L, 11L, 14L), lost.toSet())
+        assertEquals((0L..46L).toSet(), blocksArrived(result), "every block reached libcoap: $result")
+        val missing = receivedMessages().first { it.options.path == "/big" && it.options.qBlock2?.number == 3L }
+        assertEquals(listOf(BlockOption(3, false, 2)), missing.options.qBlock2List)
+        assertTrue(result.wire.any { it.isSent && it.type == "RST" }, "libcoap resets blocks of the body it still assembles: $result")
+        assertEquals(0, result.exitCode, "$result")
+        val written = File(directory, "out.bin").readBytes()
+        assertTrue(isOneBlock(written), "the deviation: one block of the body written for the body (${written.size} bytes)")
+        assertEquals(emptyList(), servedBodyViolations(everyRequestAnswered = true), "kcoap served one body as RFC 9177 §4.4 asks")
+        val requests = receivedMessages().filter { it.options.path == "/big" }
+        val elevenOn = requests.single { it.options.qBlock2List == listOf(BlockOption(11, true, 2)) }
+        assertEquals((11L..19L).toList(), blocksSent().filter { it.hasToken(elevenOn.token) }.map { it.options.qBlock2!!.number })
+    }
+
+    /** Whether [written] is one block of 64 bytes of `/big`, what libcoap writes for the body in the deviation above. */
+    private fun isOneBlock(written: ByteArray): Boolean =
+        written.size == 64 && (0 until 46).any { big.copyOfRange(it * 64, it * 64 + 64).contentEquals(written) }
+
+    // ---------------------------------------------------------------- L9: soak
+
+    /**
+     * L9: L4 and L2 with 10 % loss on both sides (`-l 10%` on libcoap's, a [DroppingTransport] on kcoap's), in
+     * [Soak.runs] runs each: 3 here, 20 in the nightly soak. Every upload stores the whole body or nothing, since
+     * kcoap hands only whole bodies to its handler. Every download gives libcoap the whole body, ends with libcoap
+     * giving up (an error or nothing written), or ends with one block written for the body; never does libcoap
+     * write bytes that are not the body's. Only a run in which that last happened although every block reached
+     * libcoap and kcoap served one body correctly ([servedBodyViolations]) is the deviation pinned in
+     * [upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3] and counts as reaching the end; any other is a
+     * failure. In the nightly soak most runs reach the end. Afterwards kcoap holds no partial body.
+     */
+    @Test
+    fun l9UploadsAndBodiesAt10PercentLossBothWays() {
+        val random = java.util.Random(9)
+        loss.drop = { _, _ -> synchronized(random) { random.nextDouble() < 0.1 } }
+        var uploads = 0
+        var downloads = 0
+        var libcoapLostTheBody = 0
+        val failures = mutableListOf<String>()
+        repeat(Soak.runs) { run ->
+            stored = ByteArray(0)
+            val upload = client(
+                "-L", "7", "-N", "-b", "64", "-v", "6", "-B", "90", "-l", "10%", "-m", "put", "-f", "/data/big3000.txt", "$uri/store",
+                timeoutSeconds = 150,
+            )
+            assertTrue(stored.isEmpty() || stored.contentEquals(big), "run $run: a partial upload reached the handler")
+            if (upload.exitCode == 0 && stored.contentEquals(big)) uploads++ else failures += "run $run upload: exit ${upload.exitCode}"
+
+            File(directory, "out.bin").delete()
+            sent.clear()
+            received.clear()
+            val download = client(
+                "-L", "7", "-N", "-b", "64", "-v", "7", "-B", "90", "-l", "10%", "-o", "/data/out.bin", "$uri/big",
+                timeoutSeconds = 150,
+            )
+            val file = File(directory, "out.bin")
+            val got = if (file.exists()) file.readBytes() else ByteArray(0)
+            when {
+                download.exitCode == 0 && got.contentEquals(big) -> downloads++
+                download.exitCode != 0 || got.isEmpty() -> {
+                    val requests = download.wire.filter { it.isSent && it.code == "GET" }.map { it.option("Q-Block2") }
+                    val missing = (0L..46L) - blocksArrived(download)
+                    failures += "run $run download: libcoap gave up (exit ${download.exitCode}, ${got.size} bytes; asked $requests; never got $missing)"
+                }
+                else -> {
+                    assertTrue(isOneBlock(got), "run $run: libcoap wrote ${got.size} bytes that are neither the body nor one of its blocks\n$download")
+                    val missing = (0L..46L) - blocksArrived(download)
+                    val kcoapSide = servedBodyViolations(everyRequestAnswered = false)
+                    if (missing.isEmpty() && kcoapSide.isEmpty()) {
+                        libcoapLostTheBody++
+                        failures += "run $run download: libcoap wrote one block for the body although every block arrived (pinned)"
+                    } else {
+                        failures += "run $run download: libcoap wrote one block for the body, not the pinned deviation " +
+                            "(never got $missing; kcoap: $kcoapSide)"
+                    }
+                }
+            }
+        }
+        println("L9, ${Soak.runs} runs: $uploads uploads and $downloads bodies complete; $failures")
+        assertTrue(loss.dropped.isNotEmpty(), "kcoap lost datagrams")
+        if (Soak.isNightly) {
+            // Over 20 runs (14 uploads and 18 downloads reached the end at the first nightly run); 3 runs say too little.
+            val reached = downloads + libcoapLostTheBody
+            assertTrue(uploads * 2 >= Soak.runs && reached * 2 >= Soak.runs, "most runs complete: $uploads uploads, $downloads bodies, $failures")
+        }
+        // An upload libcoap gave up is discarded at the end of the 4.08 ladder (124 s, RFC 9177 §7.2).
+        val drained = runBlocking {
+            withTimeoutOrNull(140.seconds) {
+                while (open.qBlock.state().partialBodies > 0) delay(500.milliseconds)
+            }
+        }
+        assertNotNull(drained, "no partial body is left: ${runBlocking { open.qBlock.state() }}")
     }
 
     // ---------------------------------------------------------------- L10: TCP and WebSockets

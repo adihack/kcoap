@@ -339,17 +339,17 @@ public class QBlockServerConfig(
 
 ### 1.6 Open risks
 - **OSCORE with several responses** falls outside RFC 8613's single-response replay model. The only evidence will be kcoap against itself: libcoap 4.3.5b breaks (rv/A, rv/A2). That is why it is off by default.
-- **libcoap deviations** limit what interop can test, and some require leniency:
-  - no Observe after a Continue;
-  - missing ETag and Size2 when it re-runs the handler;
-  - its client needs Q-Block1 in a 2.31;
-  - per-session stickiness, including across clients on the same source port (rv/E2);
-  - 4.00 instead of 4.02 for a Block2 + Q-Block2 mix;
-  - a 3-range limit on both roles;
-  - undefined behaviour for a descending missing-block list;
-  - only block 0 of a 2.01/2.04 body is sent;
+- **libcoap deviations** limit what interop can test, and some require leniency (QB-7 pinned them as `upstreamLibcoap…` tests where they can be reproduced; [interop/README.md](../interop/README.md) lists them):
+  - no Observe after a Continue (pinned, K6);
+  - missing ETag and Size2 when it re-runs the handler (pinned, K8);
+  - its client needs Q-Block1 in a 2.31 (not pinned: kcoap's server always sends it, so a test needs a server that leaves it out);
+  - per-session stickiness, including across clients on the same source port (rv/E2) (pinned: a Block2 request after a Q-Block body gets Q-Block2);
+  - 4.00 instead of 4.02 for a Block2 + Q-Block2 mix (pinned, a raw request);
+  - a 3-range limit on both roles (the server's pinned, K4);
+  - undefined behaviour for a descending missing-block list (not pinned: `add_block_send` sends a block number from uninitialized memory, so no outcome is stable, and the container may crash);
+  - only block 0 of a 2.01/2.04 body is sent (pinned, K9);
   - timings of 264 s and 8 s.
-- **Timing.** The interop tests run in real time, from about 4 s up to the 124 s ladder. Ladder tests stay unit tests; the long soak runs nightly.
+- **Timing.** The interop tests run in real time, from about 4 s up to the 124 s ladder. Ladder tests stay unit tests; the long soak runs 20 times with `-Pkcoap.soak=true` (not yet scheduled in CI).
 - **B1 (PeerLink)** has to move the new endpoint seams. `ExchangeConformanceTest` must cover Q-Block, or regressions slip through.
 - **Mobile.** Carrier-grade NAT can expire bindings (sometimes about 30 s) before the server's 28 s and 60 s 4.08s. Q-Block2 is safe because the client drives it; Q-Block1 relies on resending the last block, which is done for idempotent methods only.
 - **ETag replacement** removes 2.03 validation by application ETag on Q-Block2 responses.
@@ -742,8 +742,7 @@ public class QBlockServerConfig(
   `QBlockClient.rfc7959Reason` keeps observations under message security on RFC 7959 (Inner Block2), pinned
   by `QBlockObserveTest.rfc8613Section7_4_1AnObservationUnderMessageSecurityKeepsRfc7959` and
   `OscoreQBlockEndToEndTest.rfc8613Section7_4_1AProtectedObservationKeepsInnerBlock2WhenBothSidesOptIn`.
-  Still open: the OSCORE notifications of this package (a window per Q-Block2 registration in
-  `OscoreClient`, reordering in `OscoreQBlockTest`), which then lift that rule.
+  The OSCORE notifications of this package came with QB-7, which lifted that rule (below).
 
 **QB-7: interop soak, documentation, compliance**
 - **Scope:**
@@ -754,6 +753,48 @@ public class QBlockServerConfig(
   - `GuideExamplesTest` compiles the new section.
   - The docs match the configuration defaults.
   - Every libcoap deviation listed has a matching `upstream…` test.
+- **Status: done**, with the OSCORE notifications QB-6 left. Decision (ADR 0006, "Protected notification
+  bodies"): RFC 8613 §7.4.1 requires only that a notification whose Partial IV was received before is
+  refused, and makes "only above the Notification Number" a rule an application MAY choose; §4.1.3.5.2 takes
+  freshness from the highest Partial IV whatever the order of arrival; RFC 9177 §4.4 and §4.5 give the payloads
+  of one body one ETag and one Observe value. So `OscoreClient` checks the notifications of a registration with
+  Inner Q-Block against a window of that registration and decides freshness per body: below the Notification
+  Number only blocks of the freshest body (by ETag) pass; replays, older bodies, older notifications of one
+  message and a late notification without a Partial IV (the oldest) are dropped. Registrations without
+  Q-Block keep the strict order. `QBlockClient.rfc7959Reason` no longer keeps protected observations on RFC
+  7959, and the stack leaves the order of a notification to the security layer only when the exchange is
+  protected (a resolver that leaves a registration unprotected no longer skips the ordering). The server
+  needed nothing. Tests: `OscoreQBlockTest` (+7: bodies in any order for Q-Block2 and Q-Block1 FETCH
+  registrations, replays, an older body, a stale whole body, an older notification of one message, the
+  window edge, the strict order without Q-Block), `OscoreQBlockEndToEndTest` (one turned around and two more: protected
+  notification bodies; 5 seeds at 10 % loss with 20–50 ms of latency, every body whole, in order and once,
+  no genuine block refused, where the strict rule delivered 2 of 7; a held-back older body and a replayed
+  newer one never delivered), `QBlockObserveTest` (turned around; the stale-body case also with security that
+  leaves the registration unprotected).
+  The soak: L9 (`l9UploadsAndBodiesAt10PercentLossBothWays`) and the K soak
+  (`kSoakBodiesBothWaysAt10PercentLoss`) at 10 % loss on both sides, 3 runs in `scripts/test interop` and 20
+  with `-Pkcoap.soak=true` (`Soak`, [testing.md](testing.md#nightly-soak)); not scheduled in CI, since
+  `ci.yml` cancels a run in progress on the same ref and a `schedule` there would run every job, so it needs a
+  workflow of its own (left to the next owner of the CI files). L6 runs under the default
+  `AmplificationPolicy.Q_BLOCK_BURSTS` too: libcoap 4.3.5b repeats its registration with Echo. L9 found a
+  client deviation, pinned as `upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, and the K5 and K6
+  deviations got `upstream…` tests of their own. `QBlockStressTest` (3) runs Q-Block bodies with `Stress` on
+  `jvmTest` and `linuxX64Test`. Documentation: the guide's Q-Block section (`GuideExamplesTest`, which also
+  pins the defaults), the Q-Block layer in architecture.md, rfc-compliance.md (RFC 9177 done; §4.8 and §8–9
+  not applicable), checklist.md, kcoap-coap/README.md, interop/README.md.
+  After review: `OscoreClient` records a notification's Partial IV in the registration's window before it
+  decides freshness, so a stale block sent again once its body became the freshest is a replay (§7.4.1;
+  `OscoreQBlockTest`, +1), and a stale notification without a Partial IV uses up the request's nonce too;
+  `OscoreQBlockEndToEndTest` (+1) covers a protected observation falling back to Inner Block2 from a server
+  that does not opt in, NON and CON. Two more libcoap deviations of §1.6 are pinned in
+  `KcoapClientAgainstLibcoapQBlockTest` (per-session Q-Block2 after a Q-Block body, which kcoap's client
+  rejects for a request it sends with RFC 7959; 4.00 for Block2 mixed with Q-Block2), and interop/README.md
+  says why the other two are not (a descending list reads uninitialized memory in libcoap; the 2.31
+  truncation needs a server that leaves Q-Block1 out). L9 counts a one-block download as libcoap's deviation
+  only when every block reached libcoap and kcoap served one body on the right tokens
+  (`servedBodyViolations`, which the L3 pin asserts too). `QBlockStressTest`'s notification case checks that
+  the bodies went in Q-Block2 and that it ran on at least one notification. No document says the soak runs
+  nightly: it runs 20 times with `-Pkcoap.soak=true`, not yet scheduled in CI.
 
 **Amendment to B1.**
 - Move `ResponseMode`, the inbox and `BodyLease` behind `PeerLink`: `DatagramLink` owns the lease; on `ConnectionLink` it does nothing.

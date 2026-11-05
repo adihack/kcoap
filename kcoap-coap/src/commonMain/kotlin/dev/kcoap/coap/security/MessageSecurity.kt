@@ -42,6 +42,12 @@ public interface ProtectedRequest {
      * without verification, such as an unprotected error, is acted on like a verified one, and in a Q-Block
      * body for the whole body (a 4.08 has blocks sent again, a 4.02 turns Q-Block off for the peer).
      *
+     * Ordering and replay protection of the notifications of a protected observation are this layer's job
+     * (RFC 8613 §4.1.3.5.2, §7.4.1): the stack does not order them again, so what this returns must be fresher
+     * than every notification before it or, for a registration carrying Q-Block, a block of the freshest
+     * notification body, whose blocks may arrive in any order (RFC 9177 §4.5). kcoap-oscore's `OscoreClient`
+     * does both.
+     *
      * @throws MessageSecurityException when the response does not verify; the stack drops it.
      */
     public suspend fun unprotectResponse(response: CoapMessage): CoapMessage

@@ -33,7 +33,8 @@ import kotlinx.coroutines.withContext
  *
  * Where the client's Q-Block (RFC 9177) applies to the server, the observation registers with Q-Block2, or
  * uploads a FETCH body in Q-Block1, and every notification body comes in Q-Block2 ([QBlockClient.observe],
- * §4.5): it is assembled per ETag and passed on once, ordered by §3.4 on its first block. Such an observation
+ * §4.5): it is assembled per ETag and passed on once, ordered by §3.4 on its first block, or, on a protected
+ * exchange, by the security layer, which takes the blocks of the freshest body in any order. Such an observation
  * keeps the token the registration was answered on, the token of the request that completed a Q-Block1
  * upload (Figure 14); one uploaded with Q-Block1 ends by forgetting that token, since its body sent again
  * with Observe 1 would need a new Request-Tag. A server that rejects Q-Block gets the RFC 7959 registration.
@@ -91,8 +92,10 @@ internal class ClientObservation(
 
     /** What the Q-Block layer reports to this observation. */
     private val qBlockObserver = object : QBlockClient.Observer {
-        override fun isFresh(value: Long): Boolean =
-            isReliable || client.config.security != null || order.accept(value, client.endpoint.now())
+        // The security layer orders what it protects (RFC 8613 §4.1.3.5.2); a client with security whose resolver
+        // left this registration unprotected orders it here, like the RFC 7959 path does.
+        override fun isFresh(value: Long, isProtected: Boolean): Boolean =
+            isReliable || isProtected || order.accept(value, client.endpoint.now())
 
         override fun onEstablished(token: ByteArray, forgets: Boolean) {
             qBlockToken = token
