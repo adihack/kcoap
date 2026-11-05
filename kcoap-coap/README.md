@@ -48,9 +48,10 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   `/.well-known/core` per server, kept by the endpoint for all its clients, or `ASSUME_SUPPORTED`;
   Q-Block1 uploads and Q-Block2 downloads in NON bursts of MAX_PAYLOADS with 2.31, Continue, 4.08 lists
   and requests for missing blocks, Confirmable bodies in lock-step, back to back on TCP and WebSockets
-  (`onReliableTransports`); RFC 7959 for observations, No-Response, protected requests (unless
-  `withMessageSecurity`, which needs a security layer that takes several responses to one request, as
-  kcoap-oscore's does) and servers that reject Q-Block.
+  (`onReliableTransports`); observations with a Q-Block2 notification body per change (§4.5); RFC 7959
+  for No-Response, protected requests (unless `withMessageSecurity`, which needs a security layer that
+  takes several responses to one request, as kcoap-oscore's does), protected observations and servers
+  that reject Q-Block.
 - **Q-Block server, RFC 9177** (off by default, `CoapServerConfig.qBlock`): Q-Block1 uploads assembled
   from NON bursts with a 2.31 per set and 4.08 lists of missing blocks, Confirmable ones block by block;
   responses to requests carrying Q-Block1 or Q-Block2 sent as Q-Block2 bodies in sets of MAX_PAYLOADS,
@@ -122,7 +123,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177) with OSCORE and Observe.
+(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Observe with Q-Block (RFC 9177 §4.5) under OSCORE.
 
 ## Verified by
 

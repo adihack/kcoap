@@ -121,7 +121,10 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   deregistration would send the body again under a new Request-Tag; when its 2.05 is lost and the client
   sends the last block again on a new token, the server sends the 2.05 again on the token of the request
   that completed the upload, where the notifications go (§4.3), and nothing on the copy. Its follow-ups
-  always carry the upload's Request-Tag and no payload (§4.7).
+  always carry the upload's Request-Tag and no payload (§4.7). Under OSCORE the client observes with Inner
+  Block2 even where both sides opt in to Q-Block: `OscoreClient` takes a notification only with a Partial IV
+  above every one before (RFC 8613 §7.4.1), and with reordering it dropped most blocks of a notification
+  body. Taking them by a window per registration is still open.
 - **Strict towards libcoap's client.** A Q-Block2 follow-up that carries `Q-Block1 0/M` without payload
   gets 4.00; the deviation is pinned as an `upstream…` test.
 

@@ -735,6 +735,15 @@ public class QBlockServerConfig(
   `QBlockServerTest`, `QBlockTest` (6 soaks, 240 runs), `QBlockReliableTest` (+5),
   `KcoapClientAgainstLibcoapQBlockTest.k6…` and `LibcoapClientAgainstKcoapQBlockTest.l6…`. libcoap leaves
   Observe out of the blocks after a Continue (K6) and writes no `-o` file for an observation (L6).
+  After the merge with QB-5: with `withMessageSecurity` on both sides a protected observation would have
+  taken Q-Block2 notification bodies, which neither package tested. `OscoreClient` still takes notifications
+  by a strict high-water mark of their Partial IVs (RFC 8613 §7.4.1); on the in-memory network with 10 % loss
+  and 20–50 ms of jitter it dropped about 130 blocks per run and delivered one or two of five bodies. So
+  `QBlockClient.rfc7959Reason` keeps observations under message security on RFC 7959 (Inner Block2), pinned
+  by `QBlockObserveTest.rfc8613Section7_4_1AnObservationUnderMessageSecurityKeepsRfc7959` and
+  `OscoreQBlockEndToEndTest.rfc8613Section7_4_1AProtectedObservationKeepsInnerBlock2WhenBothSidesOptIn`.
+  Still open: the OSCORE notifications of this package (a window per Q-Block2 registration in
+  `OscoreClient`, reordering in `OscoreQBlockTest`), which then lift that rule.
 
 **QB-7: interop soak, documentation, compliance**
 - **Scope:**
