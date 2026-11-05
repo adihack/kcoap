@@ -71,8 +71,8 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
         override val isByValue: Boolean get() = false
 
         /** Whether this thumbprint matches the DER certificate [der]; false for an unsupported algorithm. */
-        public suspend fun matches(backend: CryptoBackend, der: ByteArray): Boolean =
-            thumbprint(backend, algorithm, der)?.contentEquals(hashBytes) == true
+        public suspend fun matches(crypto: CryptoBackend, der: ByteArray): Boolean =
+            thumbprint(crypto, algorithm, der)?.contentEquals(hashBytes) == true
 
         override fun toString(): String = "X509Thumbprint($algorithm, ${hashBytes.toHex()})"
     }
@@ -128,11 +128,11 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
 
         /** `{ 34 : [ algorithm, hash ] }` for the DER certificate [der]. */
         public suspend fun x509Thumbprint(
-            backend: CryptoBackend,
+            crypto: CryptoBackend,
             der: ByteArray,
             algorithm: Int = SHA_256_64,
         ): X509Thumbprint {
-            val hash = thumbprint(backend, algorithm, der)
+            val hash = thumbprint(crypto, algorithm, der)
                 ?: throw IllegalArgumentException("Unsupported thumbprint algorithm $algorithm")
             return X509Thumbprint(algorithm, hash)
         }
@@ -197,12 +197,12 @@ public sealed class CredentialIdentifier(encoded: ByteArray) {
         }
 
         /** COSE_CertHash over a DER certificate (RFC 9360 §2); null for an unsupported algorithm. */
-        internal suspend fun thumbprint(backend: CryptoBackend, algorithm: Int, der: ByteArray): ByteArray? =
+        internal suspend fun thumbprint(crypto: CryptoBackend, algorithm: Int, der: ByteArray): ByteArray? =
             when (algorithm) {
-                SHA_256_64 -> backend.digest(HashAlgorithm.SHA_256, der).copyOf(8)
-                HashAlgorithm.SHA_256.coseId -> backend.digest(HashAlgorithm.SHA_256, der)
-                HashAlgorithm.SHA_384.coseId -> backend.digest(HashAlgorithm.SHA_384, der)
-                HashAlgorithm.SHAKE256.coseId -> backend.digest(HashAlgorithm.SHAKE256, der)
+                SHA_256_64 -> crypto.digest(HashAlgorithm.SHA_256, der).copyOf(8)
+                HashAlgorithm.SHA_256.coseId -> crypto.digest(HashAlgorithm.SHA_256, der)
+                HashAlgorithm.SHA_384.coseId -> crypto.digest(HashAlgorithm.SHA_384, der)
+                HashAlgorithm.SHAKE256.coseId -> crypto.digest(HashAlgorithm.SHAKE256, der)
                 else -> null
             }
     }

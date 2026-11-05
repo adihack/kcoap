@@ -17,13 +17,13 @@ import dev.kcoap.crypto.Kmac256
  * EDHOC_Expand(PRK, info, length) = KMAC256(PRK, info, 8 * length, "")
  * ```
  */
-internal class KeySchedule(val suite: CipherSuite, private val backend: CryptoBackend) {
+internal class KeySchedule(val suite: CipherSuite, private val crypto: CryptoBackend) {
     private val hash = suite.edhocHash
-    private val hkdf = Hkdf(backend, hash)
+    private val hkdf = Hkdf(crypto, hash)
 
     val hashLength: Int get() = hash.outputLength
 
-    suspend fun hash(data: ByteArray): ByteArray = backend.digest(hash, data)
+    suspend fun hash(data: ByteArray): ByteArray = crypto.digest(hash, data)
 
     /** EDHOC_Extract (RFC 9528 §4.1.1). */
     suspend fun extract(salt: ByteArray, ikm: ByteArray): ByteArray =

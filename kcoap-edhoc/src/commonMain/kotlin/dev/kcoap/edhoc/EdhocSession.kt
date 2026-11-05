@@ -31,9 +31,9 @@ public class EdhocSession internal constructor(
     public val peerCredential: AuthenticationCredential,
     prkOut: ByteArray,
     prkExporter: ByteArray,
-    backend: CryptoBackend,
+    crypto: CryptoBackend,
 ) {
-    private val keySchedule = KeySchedule(cipherSuite, backend)
+    private val keySchedule = KeySchedule(cipherSuite, crypto)
     private var prkOutBytes = prkOut.copyOf()
     private var prkExporterBytes = prkExporter.copyOf()
 

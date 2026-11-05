@@ -33,7 +33,7 @@ public fun interface CredentialResolver {
  * Identity checks beyond the pinned set (subject names, policies) belong in a custom resolver.
  */
 public class TrustedCredentials(
-    private val backend: CryptoBackend,
+    private val crypto: CryptoBackend,
     credentials: List<AuthenticationCredential>,
     private val certificateValidator: CertificateValidator? = null,
 ) : CredentialResolver {
@@ -43,7 +43,7 @@ public class TrustedCredentials(
         when (identifier) {
             is CredentialIdentifier.KeyId -> trusted.filter { it.hasKid(identifier.kid) }
             is CredentialIdentifier.X509Thumbprint -> trusted.filter { credential ->
-                credential.certificate?.let { identifier.matches(backend, it.encoded) } == true
+                credential.certificate?.let { identifier.matches(crypto, it.encoded) } == true
             }
             is CredentialIdentifier.Kccs -> {
                 val offered = identifier.credential()

@@ -42,7 +42,7 @@ internal class AuthenticationInput(
 internal class VerifiedPeer(val credential: AuthenticationCredential, val prk: ByteArray, val mac: ByteArray)
 
 /** Computes and verifies MAC_x and Signature_or_MAC_x for one cipher suite. */
-internal class SignatureOrMac(private val keySchedule: KeySchedule, private val backend: CryptoBackend) {
+internal class SignatureOrMac(private val keySchedule: KeySchedule, private val crypto: CryptoBackend) {
     private val suite = keySchedule.suite
 
     /** mac_length_x: the EDHOC MAC length with static DH, hash_length with signatures. */
@@ -66,7 +66,7 @@ internal class SignatureOrMac(private val keySchedule: KeySchedule, private val 
     ): ByteArray = if (kind == AuthenticationKind.STATIC_DH) {
         mac.copyOf()
     } else {
-        backend.sign(suite.signature, privateKey, toBeSigned(mac, input))
+        crypto.sign(suite.signature, privateKey, toBeSigned(mac, input))
     }
 
     /** Whether [received] is the Signature_or_MAC_x for [mac]; MACs are compared in constant time. */
@@ -78,7 +78,7 @@ internal class SignatureOrMac(private val keySchedule: KeySchedule, private val 
     ): Boolean = if (kind == AuthenticationKind.STATIC_DH) {
         constantTimeEquals(mac, received)
     } else {
-        backend.verify(suite.signature, input.credential.publicKey, toBeSigned(mac, input), received)
+        crypto.verify(suite.signature, input.credential.publicKey, toBeSigned(mac, input), received)
     }
 
     /**
