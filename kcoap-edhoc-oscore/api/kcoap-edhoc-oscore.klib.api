@@ -56,6 +56,17 @@ sealed interface dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.os
         }
     }
 
+    final class SessionEvicted : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc/ConnectionIdentifier) // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.ConnectionIdentifier){}[0]
+
+        final val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.peer.<get-peer>|<get-peer>(){}[0]
+        final val responderId // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.responderId|{}responderId[0]
+            final fun <get-responderId>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.responderId.<get-responderId>|<get-responderId>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.toString|toString(){}[0]
+    }
+
     final class SessionExpired : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired|null[0]
         constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc/ConnectionIdentifier) // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.ConnectionIdentifier){}[0]
 
@@ -82,13 +93,13 @@ final class dev.kcoap.edhoc.oscore/CombinedRequestServer : dev.kcoap.coap.securi
 }
 
 final class dev.kcoap.edhoc.oscore/EdhocClientHandshake { // dev.kcoap.edhoc.oscore/EdhocClientHandshake|null[0]
-    constructor <init>(dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore = ..., kotlin.coroutines/SuspendFunction1<dev.kcoap.coap/CoapMessage, dev.kcoap.coap/CoapMessage>) // dev.kcoap.edhoc.oscore/EdhocClientHandshake.<init>|<init>(dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore;kotlin.coroutines.SuspendFunction1<dev.kcoap.coap.CoapMessage,dev.kcoap.coap.CoapMessage>){}[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore? = ..., kotlin.coroutines/SuspendFunction1<dev.kcoap.coap/CoapMessage, dev.kcoap.coap/CoapMessage>) // dev.kcoap.edhoc.oscore/EdhocClientHandshake.<init>|<init>(dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore?;kotlin.coroutines.SuspendFunction1<dev.kcoap.coap.CoapMessage,dev.kcoap.coap.CoapMessage>){}[0]
 
     final suspend fun run(kotlin/Boolean = ...): dev.kcoap.edhoc.oscore/EdhocOscoreSession // dev.kcoap.edhoc.oscore/EdhocClientHandshake.run|run(kotlin.Boolean){}[0]
     final suspend fun runCombined(): kotlin/Pair<dev.kcoap.edhoc.oscore/EdhocOscoreSession, dev.kcoap.edhoc.oscore/CombinedRequestSecurity> // dev.kcoap.edhoc.oscore/EdhocClientHandshake.runCombined|runCombined(){}[0]
 
     final object Companion { // dev.kcoap.edhoc.oscore/EdhocClientHandshake.Companion|null[0]
-        final fun over(dev.kcoap.coap.client/CoapClient, dev.kcoap.coap/CoapUri, dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore = ...): dev.kcoap.edhoc.oscore/EdhocClientHandshake // dev.kcoap.edhoc.oscore/EdhocClientHandshake.Companion.over|over(dev.kcoap.coap.client.CoapClient;dev.kcoap.coap.CoapUri;dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore){}[0]
+        final fun over(dev.kcoap.coap.client/CoapClient, dev.kcoap.coap/CoapUri, dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore? = ...): dev.kcoap.edhoc.oscore/EdhocClientHandshake // dev.kcoap.edhoc.oscore/EdhocClientHandshake.Companion.over|over(dev.kcoap.coap.client.CoapClient;dev.kcoap.coap.CoapUri;dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore?){}[0]
     }
 }
 
@@ -111,7 +122,7 @@ final class dev.kcoap.edhoc.oscore/EdhocResource : dev.kcoap.coap.server/CoapRes
 }
 
 final class dev.kcoap.edhoc.oscore/EdhocServer { // dev.kcoap.edhoc.oscore/EdhocServer|null[0]
-    constructor <init>(dev.kcoap.edhoc/EdhocResponderConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/InMemoryContextRepository, kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., dev.kcoap.oscore/SequenceNumberStore = ..., kotlin.time/TimeSource = ..., dev.kcoap.edhoc.oscore/EdhocSessionListener = ..., dev.kcoap.edhoc.oscore/EdhocServerEventListener = ..., dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.edhoc.oscore/EdhocServer.<init>|<init>(dev.kcoap.edhoc.EdhocResponderConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.InMemoryContextRepository;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.time.Duration;dev.kcoap.oscore.SequenceNumberStore;kotlin.time.TimeSource;dev.kcoap.edhoc.oscore.EdhocSessionListener;dev.kcoap.edhoc.oscore.EdhocServerEventListener;dev.kcoap.log.LoggerFactory){}[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocResponderConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/InMemoryContextRepository, kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., dev.kcoap.oscore/SequenceNumberStore? = ..., kotlin.time/TimeSource = ..., dev.kcoap.edhoc.oscore/EdhocSessionListener = ..., dev.kcoap.edhoc.oscore/EdhocServerEventListener = ..., dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.edhoc.oscore/EdhocServer.<init>|<init>(dev.kcoap.edhoc.EdhocResponderConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.InMemoryContextRepository;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;dev.kcoap.oscore.SequenceNumberStore?;kotlin.time.TimeSource;dev.kcoap.edhoc.oscore.EdhocSessionListener;dev.kcoap.edhoc.oscore.EdhocServerEventListener;dev.kcoap.log.LoggerFactory){}[0]
 
     final suspend fun completeCombined(dev.kcoap.edhoc/ConnectionIdentifier, kotlin/ByteArray, dev.kcoap.transport/Endpoint): dev.kcoap.oscore/SecurityContext // dev.kcoap.edhoc.oscore/EdhocServer.completeCombined|completeCombined(dev.kcoap.edhoc.ConnectionIdentifier;kotlin.ByteArray;dev.kcoap.transport.Endpoint){}[0]
     final suspend fun handle(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap/CoapMessage // dev.kcoap.edhoc.oscore/EdhocServer.handle|handle(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
