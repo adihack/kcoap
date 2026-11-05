@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# Tests scripts/check-dco on throwaway repositories in a temporary directory.
+#
+#   scripts/check-dco-test
+#
+# Exits 0 when every case passes. Needs nothing but bash and git; the user's git configuration is not
+# read, so signing hooks or a global identity do not change the results.
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")" && pwd)"
+check="$here/check-dco"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+export HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/home/.config"
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+export GIT_COMMITTER_NAME="Committer" GIT_COMMITTER_EMAIL="committer@example.org"
+mkdir -p "$HOME"
+
+alice="Alice Example <alice@example.org>"
+bob="Bob Example <bob@example.org>"
+
+failures=0
+cases=0
+
+# new_repo <name>: a repository with one root commit on main; prints its path.
+new_repo() {
+  local repo="$tmp/$1"
+  git init -q -b main "$repo"
+  author "$repo" "$alice" "Root commit" "" >/dev/null
+  printf '%s\n' "$repo"
+}
+
+# author <repo> <"Name <email>"> <subject> <body>: an empty commit by that author; prints its SHA.
+author() {
+  local repo=$1 who=$2 subject=$3 body=$4 name email
+  name=${who% <*}
+  email=${who##*<}
+  email=${email%>}
+  if [ -n "$body" ]; then
+    printf '%s\n\n%s\n' "$subject" "$body"
+  else
+    printf '%s\n' "$subject"
+  fi | GIT_AUTHOR_NAME="$name" GIT_AUTHOR_EMAIL="$email" git -C "$repo" commit -q --allow-empty -F -
+  git -C "$repo" rev-parse HEAD
+}
+
+# write_baseline <repo> <sha> <subject> <body>: a commit by Alice that sets .github/dco-baseline.
+write_baseline() {
+  local repo=$1 sha=$2 subject=$3 body=$4
+  mkdir -p "$repo/.github"
+  printf '# History before the DCO is exempt.\n\n%s\n' "$sha" >"$repo/.github/dco-baseline"
+  git -C "$repo" add .github/dco-baseline
+  author "$repo" "$alice" "$subject" "$body"
+}
+
+# expect <pass|fail> <description> <repo> <base> <head> [text the output must contain]
+expect() {
+  local want=$1 description=$2 repo=$3 base=$4 head=$5 needle=${6:-} output status=0 got
+  cases=$((cases + 1))
+  output=$(cd "$repo" && "$check" "$base" "$head" 2>&1) || status=$?
+  if [ "$status" -eq 0 ]; then got=pass; elif [ "$status" -eq 1 ]; then got=fail; else got="error $status"; fi
+  if [ "$got" = "$want" ] && { [ -z "$needle" ] || grep -qF -- "$needle" <<<"$output"; }; then
+    echo "ok - $description"
+  else
+    failures=$((failures + 1))
+    echo "not ok - $description (expected $want${needle:+ with \"$needle\"}, got $got)"
+    sed 's/^/    | /' <<<"$output"
+  fi
+}
+
+# Sign-off matching.
+r=$(new_repo signoff)
+base=$(git -C "$r" rev-parse HEAD)
+
+signed=$(author "$r" "$alice" "Signed" "Signed-off-by: $alice")
+expect pass "a commit signed off by its author passes" "$r" "$base" "$signed" "OK"
+
+unsigned=$(author "$r" "$alice" "Unsigned" "No trailer here.")
+expect fail "a commit without a sign-off fails" "$r" "$signed" "$unsigned" "no Signed-off-by trailer"
+
+other=$(author "$r" "$alice" "Signed by someone else" "Signed-off-by: $bob")
+expect fail "a sign-off with another person's email fails" "$r" "$unsigned" "$other" "bob@example.org"
+
+cased=$(author "$r" "Alice Example <Alice@Example.ORG>" "Different case" \
+  "Signed-off-by: Alice Example <alice@EXAMPLE.org>")
+expect pass "a sign-off whose email differs only in case passes" "$r" "$other" "$cased"
+
+several=$(author "$r" "$alice" "Several sign-offs" "Signed-off-by: $bob
+Signed-off-by: $alice
+Co-Authored-By: Carol Example <carol@example.org>")
+expect pass "several sign-offs with one by the author pass" "$r" "$cased" "$several"
+
+middle=$(author "$r" "$alice" "Sign-off in the body" "Signed-off-by: $alice
+
+This paragraph follows the line above, so that line is not a trailer.")
+expect fail "a Signed-off-by line in the middle of the body fails" "$r" "$several" "$middle"
+
+expect fail "failing commits in a range fail the range" "$r" "$base" "$several" "2 of 5"
+
+expect pass "an empty range passes" "$r" "$several" "$several" "No commits to check"
+
+# Merge commits are ignored.
+r=$(new_repo merges)
+base=$(git -C "$r" rev-parse HEAD)
+git -C "$r" checkout -q -b topic
+author "$r" "$alice" "Topic work" "Signed-off-by: $alice" >/dev/null
+git -C "$r" checkout -q main
+author "$r" "$bob" "Main work" "Signed-off-by: $bob" >/dev/null
+GIT_AUTHOR_NAME="Bob Example" GIT_AUTHOR_EMAIL="bob@example.org" \
+  git -C "$r" merge -q --no-ff --no-edit -m "Merge topic without a sign-off" topic
+merged=$(git -C "$r" rev-parse HEAD)
+expect pass "a merge commit without a sign-off is ignored" "$r" "$base" "$merged"
+
+# A baseline in the base exempts its ancestors.
+r=$(new_repo baseline-in-base)
+root=$(git -C "$r" rev-parse HEAD)
+git -C "$r" checkout -q -b old-work
+author "$r" "$alice" "Old unsigned 1" "" >/dev/null
+old=$(author "$r" "$alice" "Old unsigned 2" "")
+git -C "$r" checkout -q main
+base=$(write_baseline "$r" "$old" "Adopt the DCO" "Signed-off-by: $alice")
+git -C "$r" checkout -q old-work
+head=$(author "$r" "$alice" "New signed" "Signed-off-by: $alice")
+expect pass "a baseline in the base exempts the baseline and its ancestors" "$r" "$base" "$head" "Exempt"
+late=$(author "$r" "$alice" "New unsigned" "")
+expect fail "a commit after the baseline is still checked" "$r" "$base" "$late" "New unsigned"
+expect fail "without a baseline the old commits are checked" "$r" "$root" "$head" "Old unsigned 1"
+
+# A baseline changed only in the head is ignored when the base has its own.
+r=$(new_repo baseline-changed-in-head)
+base=$(write_baseline "$r" "$(git -C "$r" rev-parse HEAD)" "Adopt the DCO" "Signed-off-by: $alice")
+unsigned=$(author "$r" "$bob" "Unsigned work" "")
+head=$(write_baseline "$r" "$unsigned" "Move the baseline" "Signed-off-by: $alice")
+expect fail "a baseline changed in the head is ignored when the base has one" "$r" "$base" "$head" \
+  "Unsigned work"
+
+r=$(new_repo baseline-added-in-head)
+mkdir -p "$r/.github"
+printf '# Placeholder before the DCO.\n' >"$r/.github/dco-baseline"
+git -C "$r" add .github/dco-baseline
+base=$(author "$r" "$alice" "Add an empty baseline" "")
+unsigned=$(author "$r" "$bob" "Unsigned work" "")
+head=$(write_baseline "$r" "$unsigned" "Fill in the baseline" "Signed-off-by: $alice")
+expect fail "a baseline added in the head is ignored when the base has the file" "$r" "$base" "$head" \
+  "Unsigned work"
+
+# A baseline only in the head is honoured when the base has none.
+r=$(new_repo baseline-bootstrap)
+base=$(git -C "$r" rev-parse HEAD)
+unsigned=$(author "$r" "$bob" "Pre-DCO work" "")
+head=$(write_baseline "$r" "$unsigned" "Adopt the DCO" "Signed-off-by: $alice")
+expect pass "a baseline only in the head is honoured when the base has none" "$r" "$base" "$head" "Exempt"
+
+# A baseline that is not a commit is ignored with a warning.
+r=$(new_repo baseline-missing)
+base=$(write_baseline "$r" "0123456789abcdef0123456789abcdef01234567" "Adopt the DCO" \
+  "Signed-off-by: $alice")
+head=$(author "$r" "$bob" "Unsigned work" "")
+expect fail "a baseline SHA that does not exist is ignored with a warning" "$r" "$base" "$head" "warning:"
+signed=$(author "$r" "$bob" "Signed work" "Signed-off-by: $bob")
+expect pass "signed commits pass despite a baseline that does not exist" "$r" "$head" "$signed" "warning:"
+
+r=$(new_repo baseline-short)
+short=$(git -C "$r" rev-parse --short HEAD)
+base=$(write_baseline "$r" "$short" "Adopt the DCO with a short SHA" "Signed-off-by: $alice")
+head=$(author "$r" "$bob" "Unsigned work" "")
+expect fail "a baseline that is not a full SHA is ignored with a warning" "$r" "$base" "$head" "warning:"
+
+# Invalid arguments.
+expect "error 2" "a base that is not a commit is an error" "$r" "no-such-revision" "$head"
+
+echo
+if [ "$failures" -eq 0 ]; then
+  echo "check-dco: all $cases cases pass"
+else
+  echo "check-dco: $failures of $cases cases fail"
+  exit 1
+fi

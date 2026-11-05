@@ -1,0 +1,27 @@
+# Checks that every commit of a pull request is signed off by its author (Developer Certificate of
+# Origin 1.1, CONTRIBUTING.md). The SHAs reach the script through environment variables, never through
+# expressions inside the script.
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Sign-off on every commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test the sign-off check
+        run: scripts/check-dco-test
+      - name: Check the pull request's commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-dco "$BASE_SHA" "$HEAD_SHA"
