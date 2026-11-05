@@ -438,8 +438,9 @@ public class CoapEndpoint private constructor(
         require(bodyBytes >= 0) { "A body cannot have a negative size: $bodyBytes" }
         attach()
         if (isOnConnection(peer)) {
+            // Without opening the connection, which the body's first message does.
             lock.withLock { ensureOpen() }
-            return BodyLease.unpaced(peer, nonTimeoutRandom ?: Duration.ZERO)
+            return ConnectionLink.lease(peer, nonTimeoutRandom)
         }
         return datagramLinkTo(peer).leaseBody(bodyBytes, nonTimeoutRandom)
     }
@@ -449,8 +450,7 @@ public class CoapEndpoint private constructor(
      * use the lease. Idempotent; cleanup, so it runs to the end in a cancelled coroutine too.
      */
     internal suspend fun releaseBody(lease: BodyLease): Unit = withContext(NonCancellable) {
-        // A lease that paces nothing, towards a peer on a connection, holds no slot to give back.
-        if (lease.isPaced) datagram?.release(lease) else lease.state = BodyLease.State.RELEASED
+        if (lease.isPaced) datagram?.release(lease) else ConnectionLink.release(lease)
     }
 
     /** Body leases that hold a slot or wait for one, for tests. */

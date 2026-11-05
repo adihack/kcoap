@@ -493,20 +493,30 @@ class ExchangeModesTest {
         assertFailsWith<IllegalArgumentException> { endpoint.leaseBody(peer.address, -1) }
     }
 
+    /**
+     * RFC 8323 §2 has no NSTART: the lease towards a peer on a connection is [ConnectionLink.lease], granted at
+     * once without opening the connection, which the body's first message does.
+     */
     @Test
     fun rfc8323Section2ALeaseTowardsAReliablePeerIsGrantedAtOnceAndPacesNothing() = runTest {
-        val fixture = StackFixture(this)
-        val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig())
+        val fixture = ReliableFixture(this)
+        fixture.server { resource("x") { get { CoapResponse.content("x") } } }
+        val endpoint = fixture.endpoint()
         val tcp = Endpoint.Tcp("127.0.0.1", 5683)
 
         val lease = endpoint.leaseBody(tcp, 3000)
         assertFalse(lease.isPaced)
         assertEquals(BodyLease.State.HELD, lease.state)
+        assertTrue(lease.granted.isCompleted)
         assertEquals(Duration.ZERO, lease.nonTimeoutRandom)
         assertEquals(2.seconds, endpoint.leaseBody(tcp, 3000, nonTimeoutRandom = 2.seconds).nonTimeoutRandom)
         assertEquals(0, endpoint.leaseCount())
+        runCurrent()
+        assertTrue(fixture.connections.connections().isEmpty(), "no connection opened for a lease")
         endpoint.releaseBody(lease)
         assertEquals(BodyLease.State.RELEASED, lease.state)
+        endpoint.releaseBody(lease)
+        assertEquals(BodyLease.State.RELEASED, lease.state, "idempotent")
 
         endpoint.close()
         assertEquals(CoapException.Reason.CLOSED, assertFailsWith<CoapException> { endpoint.leaseBody(tcp, 100) }.reason)

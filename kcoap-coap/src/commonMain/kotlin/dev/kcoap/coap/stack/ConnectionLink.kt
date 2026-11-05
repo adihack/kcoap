@@ -70,10 +70,10 @@ internal class ConnectionLink(
         false
     }
 
-    /** RFC 8323 §2 has no NSTART: the lease is granted at once and holds nothing. */
+    /** RFC 8323 §2 has no NSTART: the lease is granted at once and holds nothing ([lease]). */
     override suspend fun leaseBody(bodyBytes: Int, nonTimeoutRandom: Duration?): BodyLease {
         owner.ensureOpen()
-        return BodyLease.unpaced(peer, nonTimeoutRandom ?: Duration.ZERO)
+        return lease(peer, nonTimeoutRandom)
     }
 
     // ---------------------------------------------------------------- responses to them
@@ -134,4 +134,18 @@ internal class ConnectionLink(
         NotificationPolicy.Untyped
 
     override fun toString(): String = "ConnectionLink($peer)"
+
+    companion object {
+        /**
+         * The body lease towards [peer] on a connection, whether or not the connection is open yet: RFC 8323 §2
+         * has no NSTART, so it is granted at once, holds no slot and paces nothing, and keeps the body's
+         * [nonTimeoutRandom] (zero when there is none, since nothing waits on it).
+         */
+        fun lease(peer: Endpoint, nonTimeoutRandom: Duration?): BodyLease = BodyLease.unpaced(peer, nonTimeoutRandom ?: Duration.ZERO)
+
+        /** The body of a [lease] ended: it holds no slot to give back, so it is only marked released. */
+        fun release(lease: BodyLease) {
+            lease.state = BodyLease.State.RELEASED
+        }
+    }
 }
