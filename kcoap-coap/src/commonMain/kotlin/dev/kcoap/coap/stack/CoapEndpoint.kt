@@ -731,17 +731,43 @@ public class CoapEndpoint private constructor(
      */
     private suspend fun launchHandler(handler: RequestHandler, request: InboundRequest) {
         if (!handlerPermits.tryAcquire()) return refuseOverloaded(request)
+        var ran = false
         val job = scope.launch(handler.context + CoroutineName("coap-request")) {
+            ran = true
             try {
                 handler.handle(request)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 log.error(e) { "Request handler failed on ${request.message} from ${request.peer}" }
+            } finally {
+                withContext(NonCancellable) { answerAbandoned(request) }
             }
         }
         // Also when the coroutine never ran, cancelled with its server before it started.
-        job.invokeOnCompletion { handlerPermits.release() }
+        job.invokeOnCompletion {
+            handlerPermits.release()
+            if (!ran) launchGuarded("answer a request whose handler never ran") { answerAbandoned(request) }
+        }
+    }
+
+    /**
+     * RFC 8323 §3.3: every request on a connection is answered. One whose handler ended without answering,
+     * cancelled with its server or never started, gets 5.03 Service Unavailable, so the peer does not wait
+     * for its own timeout and Pongs with Custody (§5.4.1) and a Release drain (§5.5) do not wait for it.
+     * Over datagrams nothing is owed: the messaging layer acknowledges a Confirmable request on its own.
+     */
+    private suspend fun answerAbandoned(request: InboundRequest) {
+        val connection = request.connection ?: return
+        if (request.isAnswered) return
+        log.debug { "Answering an abandoned request from ${request.peer} with 5.03" }
+        try {
+            connection.respond(request.sequence, CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.debug { "Could not answer an abandoned request from ${request.peer}: ${e.message}" }
+        }
     }
 
     /**

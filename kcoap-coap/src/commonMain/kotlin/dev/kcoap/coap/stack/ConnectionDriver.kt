@@ -150,7 +150,8 @@ internal class ConnectionDriver(
     /**
      * Answers the request delivered with [sequence]: RFC 8323 §3.3 requires the response on the same
      * connection. A response for a connection that closed meanwhile is lost, as messages in flight may
-     * be (RFC 8323 §3.4).
+     * be (RFC 8323 §3.4). The request counts as answered however this ends, cancelled included, so Pongs
+     * with Custody and a Release drain never wait for it.
      */
     suspend fun respond(sequence: Long, response: CoapMessage) {
         try {
@@ -159,7 +160,7 @@ internal class ConnectionDriver(
             if (e.reason != CoapException.Reason.CONNECTION_CLOSED) throw e
             log.debug { "Response ${response.code} not sent: ${e.message}" }
         } finally {
-            answered(sequence)
+            withContext(NonCancellable) { answered(sequence) }
         }
     }
 

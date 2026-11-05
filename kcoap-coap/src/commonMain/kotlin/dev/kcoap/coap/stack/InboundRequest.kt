@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -23,6 +24,14 @@ internal class InboundRequest(
     /** Over a reliable transport every request is answered, as if Confirmable (RFC 8323 §3.3). */
     val isConfirmable: Boolean get() = connection != null || message.type == CoapMessageType.CON
 
+    /**
+     * Whether [respond], [finishWithoutResponse] or [reject] completed. A request on a connection that is
+     * not answered when its handler ends, because it was cancelled or never ran, still gets an answer.
+     */
+    @Volatile
+    var isAnswered: Boolean = false
+        private set
+
     /** What channel security authenticated: TLS on the connection, or the DTLS session of the endpoint. */
     val peerIdentity: PeerIdentity
         get() = connection?.peerIdentity ?: (peer as? Endpoint.Secure)?.identity ?: PeerIdentity.None
@@ -39,7 +48,7 @@ internal class InboundRequest(
     ): Transmission? {
         // RFC 7252 §5.3.1: the token is echoed unchanged; OSCORE does not protect it, so the stack keeps it.
         val withToken = if (response.hasToken(message.token)) response else response.toBuilder().apply { token = message.token }.build()
-        return endpoint.respond(this, withToken, owner, separateType)
+        return endpoint.respond(this, withToken, owner, separateType).also { isAnswered = true }
     }
 
     /** Sends an Empty ACK now, promising a separate response (RFC 7252 §5.2.2); nothing on a connection. */
@@ -50,11 +59,13 @@ internal class InboundRequest(
     /** The request is deliberately not answered (RFC 7967): an Empty ACK for a Confirmable datagram. */
     suspend fun finishWithoutResponse() {
         endpoint.finishWithoutResponse(this)
+        isAnswered = true
     }
 
     /** Rejects the request with a Reset, or silently for a Non-confirmable request or on a connection. */
     suspend fun reject(reason: String) {
         endpoint.reject(this, reason)
+        isAnswered = true
     }
 
     override fun toString(): String = "InboundRequest($peer, $message)"

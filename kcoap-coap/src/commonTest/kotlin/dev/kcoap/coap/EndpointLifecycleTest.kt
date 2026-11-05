@@ -1,12 +1,15 @@
 package dev.kcoap.coap
 
 import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpoint
+import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.DatagramEvent
+import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.delay
@@ -30,6 +34,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 
 /**
  * An endpoint ends in one terminal transition, whichever way it ends: close(), cancellation of its scope,
@@ -220,6 +225,54 @@ class EndpointLifecycleTest {
         delay(5.seconds)
         assertEquals(0, gauge.observerCount, "served as a plain GET (RFC 7641 §4.1)")
         collector.cancel()
+    }
+
+    @Test
+    fun rfc8323Section3_3ARequestWhoseHandlerTheStoppingServerCancelledIsStillAnswered() = runTest {
+        val fixture = ReliableFixture(this)
+        val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig(), listeners = listOf(fixture.listen()))
+        val started = CompletableDeferred<Unit>()
+        val server = CoapServer(endpoint) {
+            resource("slow") {
+                get {
+                    started.complete(Unit)
+                    awaitCancellation()
+                }
+            }
+        }
+        val client = fixture.client(CoapClientConfig(requestTimeout = 60.seconds))
+        val pending = async { client.get(fixture.uri("/slow")) }
+        started.await()
+
+        server.close()
+        assertEquals(CoapCode.SERVICE_UNAVAILABLE, withTimeout(1.seconds) { pending.await() }.code)
+        // RFC 8323 §5.4.1: no request left unanswered holds back a Pong with Custody.
+        assertTrue(client.endpoint.ping(Endpoint.Tcp("127.0.0.1", 5683), custody = true))
+        endpoint.close()
+    }
+
+    @Test
+    fun rfc8323Section3_3ARequestWhoseHandlerNeverRanIsStillAnswered() = runTest {
+        val fixture = ReliableFixture(this)
+        var delivered = false
+        val spy = object : MessageInterceptor {
+            override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage {
+                if (message.isRequest) delivered = true
+                return message
+            }
+        }
+        val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig(interceptors = listOf(spy)), listeners = listOf(fixture.listen()))
+        val server = CoapServer(endpoint) { resource("r") { get { CoapResponse.content("ok") } } }
+        val client = fixture.client(CoapClientConfig(requestTimeout = 60.seconds))
+        val pending = async { client.get(fixture.uri("/r")) }
+
+        // The handler coroutine is launched in the same step that delivers the request, and dispatched only
+        // after this one resumes, so the server stops between the two and the handler never runs.
+        while (!delivered) yield()
+        server.close()
+        assertEquals(CoapCode.SERVICE_UNAVAILABLE, withTimeout(1.seconds) { pending.await() }.code)
+        assertTrue(client.endpoint.ping(Endpoint.Tcp("127.0.0.1", 5683), custody = true))
+        endpoint.close()
     }
 
     @Test
