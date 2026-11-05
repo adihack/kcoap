@@ -12,11 +12,13 @@
 #   scripts/test browser [command]
 #                           kcoap-transport-ktor-websocket's js tests in a headless browser against a
 #                           JVM WebSocket listener; command is google-chrome (the default), chromium or
-#                           firefox (on Ubuntu /snap/bin/firefox)
+#                           firefox (on Ubuntu /snap/bin/firefox), and Gradle flags may follow it or
+#                           replace it
 #   scripts/test images     only build the pinned libcoap and libedhoc images
 #   scripts/test all        unit, interop and coverage
 #
 # Extra arguments go to Gradle, e.g.  scripts/test interop --tests '*Oscore*'
+#                                     scripts/test browser firefox --max-workers=4
 # A summary of the JUnit results is printed at the end.
 set -euo pipefail
 
@@ -72,8 +74,12 @@ apple() {
 }
 
 browser() {
-    local command="${1:-google-chrome}"
-    shift || true
+    # The browser command comes first when given; anything starting with '-' is already a Gradle flag.
+    local command=google-chrome
+    if [[ $# -gt 0 && $1 != -* ]]; then
+        command=$1
+        shift
+    fi
     # The test writes the browser's results here; Gradle passes a filter that matches nothing silently.
     local report=kcoap-transport-ktor-websocket/build/browser/report.txt
     rm -f "$report"
@@ -121,5 +127,5 @@ case "$suite" in
     browser) browser "$@" ;;
     images) trap - EXIT; build_images ;;
     all) unit "$@"; interop "$@"; coverage "$@" ;;
-    *) sed -n '2,19p' "$0"; trap - EXIT; exit 2 ;;
+    *) sed -n '2,21p' "$0"; trap - EXIT; exit 2 ;;
 esac
