@@ -102,9 +102,8 @@ public class CoapClient private constructor(
 
     /**
      * The critical options the client processes in a response: Block1 and Block2 (RFC 7959); OSCORE is gone
-     * after verification. The endpoint rejects a response with any other one (RFC 7252 §5.4.1): a
-     * Confirmable separate response with a Reset, and the request fails with
-     * [CoapException.Reason.BAD_RESPONSE].
+     * after verification. The endpoint rejects a response with any other one (RFC 7252 §5.4.1): a separate
+     * response with a Reset, and the request fails with [CoapException.Reason.BAD_RESPONSE].
      */
     internal val recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS
 

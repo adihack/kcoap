@@ -243,5 +243,7 @@ class ResponseAcknowledgementTest {
         assertEquals(listOf("1"), received)
         assertEquals(listOf(notification.messageId), fixture.sentBy(client.endpoint, CoapMessageType.RST).map { it.messageId })
         assertEquals(0, client.endpoint.exchangeCount(), "the endpoint ended the observation's exchange")
+        delay(10.seconds)
+        assertEquals(listOf(registration.messageId), fixture.sentBy(client.endpoint).filter { it.isRequest }.map { it.messageId }, "the Reset deregistered; no GET with Observe 1 follows")
     }
 }
