@@ -40,7 +40,7 @@ Running the app on emulators across API levels is PL-2.
 ## Building it
 
 ```bash
-./gradlew publishToMavenLocal                                  # in the repository root: kcoap into ~/.m2
+./gradlew publishToMavenLocal                                     # in the repository root: kcoap into ~/.m2
 ./gradlew -p samples/android-consumer assembleRelease lint test   # needs the Android SDK (ANDROID_HOME)
 ```
 
@@ -64,17 +64,25 @@ install on an emulator, and R8's mapping in `app/build/outputs/mapping/`.
 - **No core library desugaring** at minSdk 26: none of the findings below is an API it provides, and
   none needs one.
 - **A durable `SequenceNumberStore`** for pre-shared OSCORE keys, outside Auto Backup:
-  `FileSequenceNumberStore` here uses only API 26 calls. The JVM and Android recipe in
-  [kcoap-oscore's README](../../kcoap-oscore/README.md) calls `Files.readString`, which Android has only
-  from API 33.
+  `FileSequenceNumberStore` here is the JVM and Android recipe of
+  [kcoap-oscore's README](../../kcoap-oscore/README.md), which uses only API 26 calls.
+- **One set of OSCORE contexts per process.** Derive a context once per context name and share it, in
+  the `Application` or a singleton, never per Activity: Android can run two Activities of the app at once,
+  and two live contexts under one name hand out the same sequence numbers, which reuses nonces
+  (RFC 8613 Appendix B.1.1). Here `SampleApplication` holds an `OscoreAssociation`, which derives the
+  client and server contexts on first use.
 
 ## API level findings
 
 `./gradlew checkAndroidApi` checks kcoap's 16 jvm jars against the API 26 signature
-(`net.sf.androidscents.signature:android-api-level-26:8.0.0_r2`), and `./gradlew androidApiDependencyReport`
-the external libraries behind them. Whether R8 keeps a flagged class comes from shrinking this sample's
-code, without `MainActivity`, with standalone R8 9.4.34 and JDK 21 as the library instead of the Android
-SDK; the shrunk code then ran its tour on the JVM, in both flavors.
+(`net.sf.androidscents.signature:android-api-level-26:8.0.0_r2`), and
+`./gradlew checkAndroidApiDependencies` the external libraries behind them. The libraries' uses below
+are listed in [`gradle/android-api-dependencies.baseline`](../../gradle/android-api-dependencies.baseline),
+and `checkAndroidApiDependencies`, part of `check` and `scripts/test unit`, fails on any use it does not
+list: a library update that brings a new one fails the build until the use is triaged here and added
+there. Whether R8 keeps a flagged class comes from shrinking this sample's code, without `MainActivity`,
+with standalone R8 9.4.34 and JDK 21 as the library instead of the Android SDK; the shrunk code then ran
+its tour on the JVM, in both flavors.
 
 | Where | Uses | Android has it | Kept by R8 | Outcome |
 |---|---|---|---|---|
@@ -89,18 +97,29 @@ SDK; the shrunk code then ran its tour on the JVM, in both flavors.
 **minSdk 26 holds.** The violations are all in libraries, on paths kcoap does not reach or guarded at
 runtime, and core library desugaring would not supply any of them: it covers `java.time`,
 `java.util.stream`, `java.util.function` and similar, not `java.lang.management`, `javax.naming`,
-`java.beans` or `ClassValue`.
+`java.beans` or `ClassValue`. What holds it from here on: `checkAndroidApi` for kcoap's own code, the
+baseline for the libraries, and R8 in CI for what a release build keeps.
 
 ## Verified where
 
 - **Here, without the Android SDK:** the build configures with AGP 9.4.1 and the Kotlin Gradle plugin
   2.4.21; both release classpaths resolve kcoap from the local Maven repository; each variant compiles the
   intended Kotlin sources; the tour, compiled for the JVM against the published artifacts, runs in both
-  flavors (two GETs, one under OSCORE, and the second run restoring sequence numbers from the files);
-  standalone R8 shrinks it, failing without kcoap-crypto-default's rules and passing with them, and the
-  shrunk jar runs; no Java resource is duplicated across the jars except `META-INF/MANIFEST.MF`, which
-  AGP drops.
-- **Only in CI:** the Kotlin compilation against `android.jar`, D8, R8 against `android.jar` 36, AGP's
-  packaging, and lint.
+  flavors (two GETs, one under OSCORE, and a second process restoring sequence numbers from the files),
+  and so do the unit tests; standalone R8 9.4.34 shrinks it to class files with JDK 21 as the library,
+  failing without kcoap-crypto-default's rules and passing with them, and the shrunk jar runs; no Java
+  resource is duplicated across the jars except `META-INF/MANIFEST.MF`, which AGP drops.
+- **Here, with a stand-in for `android.jar`:** the same R8 shrinks it to DEX at min API 26 against a
+  library of only the Java classes of API level 26 (from the signature `checkAndroidApi` uses) plus the
+  EdEC and XEC key classes of API 33, which `android.jar` 36 has. In both flavors it reports no class
+  missing from the code it keeps: `java.lang.management`, `javax.naming`, `DSAGenParameterSpec` and
+  `ClassValue` are not reached. Without the API 33 classes it reports `EdECPrivateKey` and
+  `XECPrivateKey`, from `BouncyCastleBridge`; with compileSdk 36 they resolve. To DEX it also passes
+  without kcoap-crypto-default's rules, unlike the class-file run; the rules stay, since they cost
+  nothing, until the CI job shows whether AGP's R8 needs them. The stand-in's own JDK classes refer to
+  JDK internals it lacks, which were told to R8 as missing after checking that no app or library jar
+  refers to them.
+- **Only in CI:** the Kotlin compilation against `android.jar`, D8, AGP's R8 against the real
+  `android.jar` 36, AGP's packaging, lint, and the unit tests under AGP.
 - **Only on an emulator or device (PL-2):** that the app runs at API 26 and later, and the capability
   report per API level.
