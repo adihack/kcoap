@@ -19,7 +19,10 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Delivery takes no time and is first in, first out: every message a step sends is on the wire before the
  * first of them is processed, as a burst of blocks would be. At the same instant, timers run in the order
- * messaging layers, server machines, client machines.
+ * messaging layers, server machines, client machines, or with [clientTimersFirst] client before server.
+ *
+ * The client forgets the tokens an upload released (RFC 9177 §4.3): a response on one of them is answered
+ * with a Reset and not delivered, and a Reset to a 4.08 reaches the server's partial body.
  */
 internal class QBlockWire(
     val parameters: TransmissionParameters = TransmissionParameters(),
@@ -35,6 +38,9 @@ internal class QBlockWire(
 
     /** Drops the message of a line when it returns true; [Line.copy] counts earlier copies of the same block. */
     var drop: (Line) -> Boolean = { false }
+
+    /** Whether the client's machines run their timers before the server's at the same instant. */
+    var clientTimersFirst: Boolean = false
 
     val client = Client()
     val server = Server()
@@ -102,10 +108,16 @@ internal class QBlockWire(
             serverMessaging.onTimer(now)
             serverEffects()
             pump()
+            if (clientTimersFirst) {
+                client.onTimer()
+                pump()
+            }
             server.onTimer()
             pump()
-            client.onTimer()
-            pump()
+            if (!clientTimersFirst) {
+                client.onTimer()
+                pump()
+            }
         }
         now = maxOf(now, limit)
     }
@@ -148,9 +160,15 @@ internal class QBlockWire(
                     }
                 }
                 is MessagingEffect.DeliverResponse -> {
-                    clientMessaging.acknowledge(effect.from, effect.message.messageId)
-                    clientEffects()
-                    client.onResponse(effect.message)
+                    if (tokenIndex(effect.message.token) in client.released) {
+                        // RFC 9177 §4.3: the token was forgotten, so the response is rejected.
+                        clientMessaging.reject(effect.from, effect.message.messageId, "Released token")
+                        clientEffects()
+                    } else {
+                        clientMessaging.acknowledge(effect.from, effect.message.messageId)
+                        clientEffects()
+                        client.onResponse(effect.message)
+                    }
                 }
                 is MessagingEffect.Completed -> client.onOutcome(effect.transmission.message, effect.outcome)
                 else -> Unit
@@ -221,6 +239,12 @@ internal class QBlockWire(
             pump()
         }
 
+        /** The application gives the upload up: every token is forgotten (§4.3). */
+        fun abandon() {
+            execute(checkNotNull(sender).abandon())
+            pump()
+        }
+
         /** Asks for a body with Q-Block2 0/M=1 (§4.4), Non-confirmable unless [confirmable]. */
         fun download(confirmable: Boolean = false) {
             this.confirmable = confirmable
@@ -230,6 +254,7 @@ internal class QBlockWire(
 
         internal fun onResponse(response: CoapMessage) {
             val token = tokenIndex(response.token)
+            if (token in released) return
             val sequence = sequenceOfToken[token]
             val sender = sender
             if (sender != null && sequence != null && !sender.isFinished) {
@@ -362,6 +387,9 @@ internal class QBlockWire(
 
         /** Assembled request bodies. */
         val received = mutableListOf<CoapMessage>()
+
+        /** The partial upload each 4.08 was sent for, by the token it went on. */
+        private val uploadOf408 = HashMap<Int, String>()
         private var servedBody = ByteArray(0)
         private var original: Ref? = null
         private var observing = false
@@ -400,6 +428,12 @@ internal class QBlockWire(
         }
 
         internal fun onOutcome(response: CoapMessage, outcome: TransmissionOutcome) {
+            val upload = uploadOf408[tokenIndex(response.token)]?.takeIf { response.code == CoapCode.REQUEST_ENTITY_INCOMPLETE }
+            if (upload != null) {
+                val receiver = uploads[upload]
+                if (outcome == TransmissionOutcome.Reset && receiver != null) execute(receiver.onReset(now), upload)
+                return
+            }
             val served = served ?: return
             val num = response.options.qBlock2?.number ?: return
             when (outcome) {
@@ -440,10 +474,13 @@ internal class QBlockWire(
                     is QBlockAction.Send231 -> respond(action.ref, response(action.ref, CoapCode.CONTINUE) {
                         options { qBlock1(BlockOption(action.num, true, BlockOption.sizeExponentFor(blockSize))) }
                     })
-                    is QBlockAction.Send408 -> respond(action.ref, response(action.ref, CoapCode.REQUEST_ENTITY_INCOMPLETE) {
-                        options { contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ) }
-                        payload = MissingBlocks.encode(action.missing)
-                    })
+                    is QBlockAction.Send408 -> {
+                        uploadOf408[action.ref.token] = checkNotNull(upload)
+                        respond(action.ref, response(action.ref, CoapCode.REQUEST_ENTITY_INCOMPLETE) {
+                            options { contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ) }
+                            payload = MissingBlocks.encode(action.missing)
+                        })
+                    }
                     is QBlockAction.NoResponse -> if (action.ref.type == CoapMessageType.CON && !reliable) {
                         serverMessaging.acknowledge(clientAddress, action.ref.messageId)
                         serverEffects()

@@ -27,9 +27,11 @@ import kotlin.time.Duration
  *   or, if that set is complete (a 2.31 went out and nothing since), the numbers of the next set (§7.2).
  *   After NON_MAX_RETRANSMIT such 4.08s the body is discarded (Figure 6: at 4, 12, 28 and 60 s, discarded
  *   at 124 s). A new block starts the ladder again.
- * - A 4.08 goes on the request of the highest block that arrived, which the client still holds: it releases
- *   only the tokens a 2.31 confirmed, except that of the latest 2.31, which is the highest block (Figures
- *   5, 6 and 14 put it there too). A Reset to it discards the body ([onReset], §4.3).
+ * - A 4.08 goes on a request the client still holds. The client releases the tokens a 2.31 confirmed, except
+ *   that of the latest 2.31, and keeps those of every later block. So a 4.08 goes on the request of the
+ *   highest block that arrived (Figures 5, 6 and 14 put it there too), and from a 2.31 on, on the 2.31's
+ *   request until a higher block arrives: a 2.31 can go on a resent block below the highest one, whose
+ *   token it releases. A Reset to it discards the body ([onReset], §4.3).
  *
  * [BodyMode.CON] and [BodyMode.RELIABLE] (§7.1, Appendices A and B): every block but the last gets
  * [QBlockAction.NoResponse] (an Empty ACK, or answered on a connection); no 2.31, since §4.3 says it SHOULD
@@ -119,6 +121,8 @@ internal class QBlock1Receiver<R>(
         val setEnd = sets.last(set, count)
         if (set > continuedSet && !sets.isLast(set, count) && received.highest <= setEnd && received.hasAllUpTo(setEnd)) {
             continuedSet = set
+            // The client releases every token up to setEnd but this one, so later 4.08s go here.
+            highestRef = ref
             return listOf(QBlockAction.Send231(ref, setEnd))
         }
         return listOf(QBlockAction.NoResponse(ref))

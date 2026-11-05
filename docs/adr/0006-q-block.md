@@ -38,10 +38,12 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   never because the peer used Q-Block before (libcoap's per-session stickiness is not copied).
 - **ETag counter.** Every Q-Block2 body gets its own 4-byte ETag from a counter with a random start, which
   replaces an application ETag (§4.4 requires one unique per transmitted body).
-- **Tokens.** The final response to an upload goes on the request that completed the body; a 4.08 on the
-  request of the highest block that arrived, which is the token of the latest 2.31 once one was sent. The
-  client releases the tokens a 2.31 confirmed, except that of the latest 2.31, and accepts the final
-  response on any token of the body, as §4.3 allows (Figure 14 uses another token than Figure 5).
+- **Tokens.** The final response to an upload goes on the request that completed the body. The client
+  releases the tokens a 2.31 confirmed, except that of the latest 2.31, keeps those of later blocks, and
+  accepts the final response on any token of the body, as §4.3 allows (Figure 14 uses another token than
+  Figure 5). A 4.08 therefore goes on the request of the highest block that arrived, or, once a 2.31 was
+  sent, on the 2.31's request until a higher block arrives: a resent block below the highest one can
+  complete a set, and its 2.31 releases the highest block's token.
 - **2.31 always carries Q-Block1** with the last NUM of the set, M set, because libcoap's client truncates
   the upload without it.
 - **Block 0 is asked for again as `0/M=1`** by GET and FETCH: libcoap runs the handler again for NUM 0.

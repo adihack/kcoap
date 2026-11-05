@@ -153,6 +153,57 @@ class QBlockFiguresTest {
         assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, failure.reason)
     }
 
+    /**
+     * Not a figure: a resent block completes set 0, so the 2.31 goes on its token and the client forgets
+     * the token of block 9. The next 4.08 must go on the 2.31's token; one on block 9's would get a Reset
+     * and the server would discard the body, which a POST never sends again.
+     */
+    @Test
+    fun rfc9177Section4_3The408AfterA231OnAResentBlockGoesOnTheKeptToken() {
+        val wire = QBlockWire()
+        wire.client.method = CoapCode.POST
+        val upload = body(10 * 1024 + 500)
+        wire.drop = { it.fromClient && it.num in setOf(3L, 10L) && it.copy == 1 }
+
+        wire.client.upload(upload, resendsLastBlock = false)
+        wire.runUntil(300.seconds)
+
+        assertEquals(
+            blocks(0..9) { "${if (it == 3) "X " else ""}0s C>S NON POST T$it QB1:$it/1/1024" } + listOf(
+                "X 2.5s C>S NON POST T10 QB1:10/0/1024",
+                "4s S>C NON 4.08 T9 [3]",
+                "4s C>S NON POST T11 QB1:3/1/1024",
+                "4s S>C NON 2.31 T11 QB1:9/1/1024",
+                "8s S>C NON 4.08 T11 [10]",
+                "8s C>S NON POST T12 QB1:10/0/1024",
+                "8s S>C NON 2.04 T12",
+            ),
+            wire.lines(),
+        )
+        assertEquals((0..11).toSet(), wire.client.released, "every token but the final response's")
+        assertContentEquals(upload, wire.server.received.single().payload)
+        assertEquals(CoapCode.CHANGED, wire.client.delivered.single().code)
+    }
+
+    /** A late 4.08 on a token the client forgot gets a Reset, and the server deletes the partial body (§4.3). */
+    @Test
+    fun rfc9177Section4_3A408OnAForgottenTokenGetsAResetAndEndsTheBody() {
+        val wire = QBlockWire()
+        wire.drop = { it.fromClient && it.num == 1L }
+
+        wire.client.upload(body(2 * 1024 + 100))
+        wire.runUntil(1.seconds)
+        wire.client.abandon()
+        wire.runUntil(10.seconds)
+
+        assertEquals(
+            listOf("4s S>C NON 4.08 T2 [1]", "4s C>S RST 0.00"),
+            wire.lines(from = 3),
+        )
+        assertTrue(wire.server.uploads.isEmpty())
+        assertEquals("The client reset a 4.08", wire.server.actions.filterIsInstance<QBlockAction.Discard>().single().reason)
+    }
+
     // ---------------------------------------------------------------- §10.2: Q-Block2 with NON
 
     private fun observingWire(): QBlockWire = QBlockWire().apply {

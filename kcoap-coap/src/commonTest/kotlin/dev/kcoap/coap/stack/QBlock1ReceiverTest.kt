@@ -114,6 +114,24 @@ class QBlock1ReceiverTest {
         assertEquals(9, ask.ref, "the token of the 2.31, which the client keeps")
     }
 
+    /**
+     * Block 3 is lost and resent after a 4.08 on request 11; it completes set 0, so the 2.31 goes on 11 and
+     * the client releases every token up to block 9, request 9 among them. Later 4.08s must use request 11.
+     */
+    @Test
+    fun rfc9177Section4_3AfterA231OnAResentBlockThe408sGoOnThe231sRequest() {
+        val receiver = receiver()
+        for (num in (0L..9L) - 3L) receiver.block(num)
+        assertEquals(9, assertIs<QBlockAction.Send408<Long>>(receiver.onTimer(4.seconds).single()).ref)
+        val continue231 = assertIs<QBlockAction.Send231<Long>>(receiver.onBlock(4.seconds, upload(3, total), 11).single())
+        assertEquals(11L to 9L, continue231.ref to continue231.num)
+        val ask = assertIs<QBlockAction.Send408<Long>>(receiver.onTimer(8.seconds).single())
+        assertEquals(11, ask.ref, "the token the client kept, not that of block 9")
+        assertEquals((10L..19L).toList(), ask.missing)
+        assertIs<QBlockAction.NoResponse<Long>>(receiver.onBlock(9.seconds, upload(12, total), 12).single())
+        assertEquals(12, assertIs<QBlockAction.Send408<Long>>(receiver.onTimer(13.seconds).single()).ref, "a higher block moves it on")
+    }
+
     @Test
     fun rfc9177Section4_3AResetToA408DiscardsTheBody() {
         val receiver = receiver()
