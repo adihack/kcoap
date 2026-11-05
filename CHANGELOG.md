@@ -188,8 +188,26 @@ adds its entry and migration note below.
   before. Context names repeat across servers: give each server its own durable store.
 - `InMemoryContextRepository.addIfAbsent(context)` adds a context only when no context has its Recipient ID
   and ID Context, and says whether it did (WP-SEC1).
+- The WebSocket client's tests run against real servers on every runtime it serves (WP-W1): on Node.js
+  against an npm `ws` server that records the subprotocols offered, natively against the listener (on
+  macOS and the iOS simulator through the Darwin engine), and in headless Chrome against a JVM listener,
+  a new CI job (`scripts/test browser`). Each checks that `coap` is requested and read back from the
+  negotiated protocol (RFC 8323 §4.1).
 
 ### Changed (breaking)
+
+WebSocket transports (WP-W1):
+
+- **`KtorWebSocketListener.start` takes the ktor server engine first, with no default**, and
+  `kcoap-transport-ktor-websocket-server` no longer depends on `ktor-server-cio`, so an application gets
+  only the engine it chooses. *Migration:* add `io.ktor:ktor-server-cio` (or your engine) to your
+  dependencies and write `KtorWebSocketListener.start(CIO, host, port)` for `start(host, port)`, with
+  `io.ktor.server.cio.CIO`. Mounting with `coapOverWebSockets(listener)` is unchanged.
+- **The WebSocket client runs on the Darwin engine on iOS and macOS**: `KtorWebSocketConnector()`'s
+  default client uses URLSession, which brings up the cellular radio and honours VPN On Demand; CIO's BSD
+  sockets did neither. `kcoap-transport-ktor-websocket` depends on `ktor-client-darwin` on Apple, and on
+  `ktor-client-cio` only on the JVM and Linux. *Migration:* none for the connector; an Apple app that
+  used ktor-client-cio through this module adds it itself, and passes its own `HttpClient` to keep CIO.
 
 EDHOC server session safety (WP-SEC1):
 

@@ -97,6 +97,7 @@ machine, or after `build-logic/build` is deleted, needs the network.
 | Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
 | Interop | Linux | `scripts/test interop` with freshly built images |
 | Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
+| WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
 | API reference | Linux | `dokkaGenerate` |
 
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails. A release
@@ -107,7 +108,10 @@ runs the same workflow first ([releasing](releasing.md)).
 The common tests are one suite for every target: 404 of them run on `linuxX64`, `js` and `wasmJs` alike
 (the JVM adds its own, such as the differential and interop tests). Gradle downloads Node.js for the web
 tests; the browser test tasks are off, because Node.js has the same WebCrypto API and a browser run
-would need a headless browser wherever `check` runs.
+would need a headless browser wherever `check` runs. The one exception is the WebSocket client, whose
+js tests CI's browser job runs in Chrome against a JVM listener (`scripts/test browser`, which also
+takes `firefox`); its own page and a ktor server in a JVM test drive the browser, so no Karma or
+bundler is involved.
 
 A test never asks which target it is on. Where a platform may lack an algorithm, the test asks the
 backend (`crypto.supports(algorithm)`, `CipherSuite.isSupportedBy(crypto, method)`) and covers what is

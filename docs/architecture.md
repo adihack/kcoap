@@ -602,7 +602,7 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders, not published; engine last |
 | `kcoap-transport-ktor` | UDP and TCP on ktor-network; JVM, Apple and Linux (no web targets: ktor-network) | UDP and TCP done; TLS for `coaps+tcp` planned |
 | `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine; every target, browsers included (UNIVERSAL tier) | done |
-| `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone CIO or mounted in an application; JVM, Apple and Linux (SOCKETS tier, no web targets: a browser cannot accept connections) | done |
+| `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone on the engine the application passes (no engine dependency) or mounted in an application; JVM, Apple and Linux (SOCKETS tier, no web targets: a browser cannot accept connections) | done |
 | `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
 | `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
 | `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |
