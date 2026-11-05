@@ -109,7 +109,7 @@ bytes each time, since libcoap's client can exit 0 with a truncated body:
 | L6 + Echo | L6 against a server with the default `AmplificationPolicy.Q_BLOCK_BURSTS` | the registration gets a Non-confirmable 4.01 with Echo whatever the size of its first response (its bodies are bursts no request asks for); libcoap repeats the registration with the Echo value and Q-Block2, and every notification body then arrives whole |
 | L7 | L2 and L4 without `-N` | an Empty ACK per Q-Block1 block and the final response piggybacked, no 2.31; block 0 piggybacked, then Confirmable blocks one per ACK |
 | L8 | raw datagrams | a descending Q-Block2 list and Q-Block1 without Request-Tag or Size1 get 4.00, Block mixed with Q-Block 4.02 |
-| L9 | L4 and L2 with `-l 10%`, and 10 % loss on kcoap's side; 3 runs here, 20 in the nightly soak | every upload stores the whole body or nothing; every download ends with the body, with libcoap giving up (an error, or exit 0 with nothing written), or with the client deviation below; kcoap holds no partial body afterwards; nightly, most runs complete (the first: 14 of 20 uploads, 10 of 20 downloads, 8 meeting the deviation) |
+| L9 | L4 and L2 with `-l 10%`, and 10 % loss on kcoap's side; 3 runs here, 20 with `-Pkcoap.soak=true` (not yet scheduled in CI) | every upload stores the whole body or nothing; every download ends with the body, with libcoap giving up (an error, or exit 0 with nothing written), or with one block written for it, which counts as the client deviation below only when every block reached libcoap and kcoap served one body (one ETag and Size2 on every block, each block on the token of a request that asked for it); kcoap holds no partial body afterwards; at 20 runs most runs reach the end (the first: 14 of 20 uploads, 10 of 20 downloads, 8 meeting the deviation) |
 | L10 | `-L 7 -b 64` over `coap+tcp` and `coap+ws` | blocks back to back, only the final response, no Continue |
 | L12 | L2 against a server with the default `AmplificationPolicy.Q_BLOCK_BURSTS` | the first burst request gets a Non-confirmable 4.01 with Echo; libcoap repeats it with the Echo value and gets the body |
 
@@ -133,7 +133,10 @@ Deviations of libcoap 4.3.5b's client, each pinned by the `upstreamLibcoap…` t
 - **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9): with
   blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, sends Resets
   to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later sets, gets
-  every block, and exits 0 having written one 64-byte block instead of the 3000-byte body.
+  every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test also checks
+  kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered on its own
+  token from the cached body, and the Continues' sets on the original token, so it holds only while the fault
+  is libcoap's.
 
 ```bash
 interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello

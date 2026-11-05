@@ -75,7 +75,7 @@ Gradle property `kcoap.soak` is `true`, which `kcoap-coap`'s build passes to the
 
 | Soak | Test | Each run |
 |---|---|---|
-| L9 | `LibcoapClientAgainstKcoapQBlockTest.l9UploadsAndBodiesAt10PercentLossBothWays` | `coap-client -L 7 -N -b 64` PUTs 3000 bytes to a kcoap server and GETs 3000 bytes from it: the upload is stored whole or not at all; the download is whole, given up by libcoap, or meets its pinned deviation (never bytes that are not the body's); afterwards the server holds no partial body |
+| L9 | `LibcoapClientAgainstKcoapQBlockTest.l9UploadsAndBodiesAt10PercentLossBothWays` | `coap-client -L 7 -N -b 64` PUTs 3000 bytes to a kcoap server and GETs 3000 bytes from it: the upload is stored whole or not at all; the download is whole, given up by libcoap, or ends with one block written, which counts as its pinned deviation only when every block reached libcoap and kcoap served one body (one ETag, every block on a token that asked for it), and as a failure otherwise; never bytes that are not the body's; afterwards the server holds no partial body |
 | K soak | `KcoapClientAgainstLibcoapQBlockTest.kSoakBodiesBothWaysAt10PercentLoss` | kcoap's client PUTs 3000 bytes to `coap-server -L 7` and GETs them back: the right body, a clean `CoapException`, or libcoap's plain 4.08 for three gaps; no exchange left |
 
 ```bash
