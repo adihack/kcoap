@@ -971,7 +971,7 @@ class QBlockServerTest {
     }
 
     @Test
-    fun warnsOnceAtStartWhenQBlockRunsWithoutMessageSecurity() = runTest {
+    fun warnsOnceAtStartWhenQBlockRunsForRequestsWithoutMessageSecurity() = runTest {
         val records = mutableListOf<LogRecord>()
         val stack = StackFixture(this)
         val loggerFactory = LoggerFactory(
@@ -980,12 +980,19 @@ class QBlockServerTest {
                 sink = LogSink { records += it }
             },
         )
-        stack.server(on, CoapEndpointConfig(timeSource = testScheduler.timeSource, loggerFactory = loggerFactory)) {}
-        stack.server(CoapServerConfig(), CoapEndpointConfig(timeSource = testScheduler.timeSource, loggerFactory = loggerFactory)) {}
+        suspend fun start(config: CoapServerConfig): List<String> {
+            records.clear()
+            stack.server(config, CoapEndpointConfig(timeSource = testScheduler.timeSource, loggerFactory = loggerFactory)) {}
+            return records.filter { it.level == LogLevel.WARN }.map { it.message }
+        }
 
-        val warnings = records.filter { it.level == LogLevel.WARN }
-        assertEquals(1, warnings.size)
-        assertTrue("RFC 9177 §11" in warnings.single().message, warnings.single().message)
+        val noSecurity = start(on).single()
+        assertTrue("RFC 9177 §11" in noSecurity && "on without message security" in noSecurity, noSecurity)
+        // With OSCORE, requests without it are still answered unprotected, and may use Q-Block.
+        val unprotected = start(CoapServerConfig(security = ToySecurity, qBlock = qBlockOn)).single()
+        assertTrue("RFC 9177 §11" in unprotected && "also for requests without message security" in unprotected, unprotected)
+        assertEquals(emptyList(), start(CoapServerConfig()))
+        assertEquals(emptyList(), start(CoapServerConfig(security = ToySecurity)))
     }
 
     @Test

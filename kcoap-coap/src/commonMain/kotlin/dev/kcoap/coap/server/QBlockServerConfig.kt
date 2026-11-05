@@ -11,9 +11,11 @@ package dev.kcoap.coap.server
  * the request: Non-confirmable bursts for a Non-confirmable request, Confirmable blocks in lock-step for a
  * Confirmable one (§7), back to back on a reliable transport (Appendix B).
  *
- * RFC 9177 §11 does not recommend Q-Block without security: the server logs a warning at start when it is on
- * without [CoapServerConfig.security], and before a burst to a client whose address it has not verified it
- * asks for an Echo (RFC 9175 §2.4; [CoapServerConfig.amplification]).
+ * RFC 9177 §11 does not recommend Q-Block without security: the server logs a warning once at start when it
+ * is on, that it runs without message security when [CoapServerConfig.security] is null, and otherwise that
+ * requests without OSCORE, which such a server still answers unprotected, use it too. Before a burst to a
+ * client whose address it has not verified it asks for an Echo (RFC 9175 §2.4;
+ * [CoapServerConfig.amplification]).
  *
  * Every Q-Block2 body gets a 4-byte ETag of its own from a counter with a random start, which replaces an
  * ETag the resource set (§4.4: unique for every transmitted body), so 2.03 validation by the resource's own

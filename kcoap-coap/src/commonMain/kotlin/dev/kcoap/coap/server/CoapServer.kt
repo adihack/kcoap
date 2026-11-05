@@ -144,10 +144,13 @@ public class CoapServer private constructor(
                 stop()
             }
         }
-        if (config.qBlock.isEnabled && config.security == null) {
+        if (config.qBlock.isEnabled) {
+            // RFC 9177 §11 does not recommend Q-Block in NoSec mode, which requests without OSCORE use, also on a
+            // server with message security (it answers them unprotected).
+            val who = if (config.security == null) "without message security" else "also for requests without message security"
             log.warn {
-                "Q-Block (RFC 9177) is on without message security, which RFC 9177 §11 does not recommend: bursts " +
-                    "go to unauthenticated clients once their address is verified (${config.amplification})"
+                "Q-Block (RFC 9177) is on $who, which RFC 9177 §11 does not recommend: bursts go to " +
+                    "unauthenticated clients once their address is verified (${config.amplification})"
             }
         }
         // Only now, with the resources and the handler in place, does the endpoint start receiving.
