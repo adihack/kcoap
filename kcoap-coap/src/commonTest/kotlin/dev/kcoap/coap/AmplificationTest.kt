@@ -7,6 +7,7 @@ import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
@@ -365,7 +366,8 @@ class AmplificationTest {
     @Test
     fun rfc9175Section2_6ClientsThatMessageSecurityAuthenticatedAreNotChallenged() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.ALL_RESPONSES)) {
+        // Public, so plain requests reach the resource too (ADR 0008: the default refuses them).
+        val server = fixture.server(CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.ALL_RESPONSES, defaultAccess = AccessPolicy.Public)) {
             resource("large") { get { CoapResponse.content(large) } }
         }
         val protected = fixture.client(CoapClientConfig(security = ToySecurity))

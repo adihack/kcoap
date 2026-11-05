@@ -4,6 +4,7 @@ import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
@@ -263,7 +264,7 @@ class QBlockServerTest {
 
     @Test
     fun rfc9177Section4_1AProtectedRequestGets402UnlessQBlockIsOnWithMessageSecurity() = runTest {
-        val protected = CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.OFF, qBlock = qBlockOn)
+        val protected = CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.OFF, qBlock = qBlockOn, defaultAccess = AccessPolicy.Public)
         val f = fixture(protected)
         f.peer.send(get(f.peer, block(0, true), type = CoapMessageType.CON) { oscore(ByteArray(0)) })
         assertEquals(CoapCode.BAD_OPTION, f.peer.next()?.code, "RFC 8613 has one response per request")

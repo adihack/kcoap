@@ -6,7 +6,6 @@ import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.ConnectionDriver
 import dev.kcoap.coap.stack.EndpointEvent
-import dev.kcoap.coap.stack.ExchangeKey
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.Transmission
 import dev.kcoap.coap.stack.TransmissionOutcome
@@ -22,7 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The lists of observers of a server's resources (RFC 7641 §4.1), keyed by client endpoint and token.
+ * The lists of observers of a server's resources (RFC 7641 §4.1), keyed by client endpoint, token and
+ * message-security identity ([ObservationKey]).
  *
  * Changes take one [Mutex], never held across a suspension; events are reported after it is released.
  * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
@@ -51,7 +51,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
     }
 
     private val lock = Mutex()
-    private val byKey = HashMap<ExchangeKey, ServerObservation>()
+    private val byKey = HashMap<ObservationKey, ServerObservation>()
 
     /** How many of [byKey] each client endpoint has; under [lock]. */
     private val perPeer = HashMap<Endpoint, Int>()
@@ -61,9 +61,12 @@ internal class ObservationRegistry(private val server: CoapServer) {
     private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
 
     /**
-     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST), unless the
-     * registry is closed or full; a replacement does not count against the bounds again. The replaced one
-     * ends: nothing of its Q-Block2 body goes out any more on the token the new one now uses.
+     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST) and the same
+     * message-security identity, unless the registry is closed or full; a replacement does not count against
+     * the bounds again. The replaced one ends: nothing of its Q-Block2 body goes out any more on the token the
+     * new one now uses. A registration of another identity on that endpoint and token is another entry, so a
+     * client that message security did not authenticate cannot take over an authenticated one's observation
+     * (ADR 0008).
      */
     suspend fun register(observation: ServerObservation): Registration {
         val config = server.config
@@ -90,9 +93,12 @@ internal class ObservationRegistry(private val server: CoapServer) {
         return Registration.ADDED
     }
 
-    /** RFC 7641 §3.6 deregistration, or §3.5 cancellation by Reset. */
-    suspend fun remove(peer: Endpoint, token: ByteArray, reason: String) {
-        val observation = lock.withLock { byKey[ExchangeKey(peer, token.toHex())] } ?: return
+    /**
+     * RFC 7641 §3.6 deregistration, by a request of the registration's [identity] only: a GET with Observe 1
+     * from another identity, or none, cancels nothing (ADR 0008).
+     */
+    suspend fun remove(peer: Endpoint, token: ByteArray, identity: SecurityIdentity?, reason: String) {
+        val observation = lock.withLock { byKey[ObservationKey(peer, token.toHex(), identity)] } ?: return
         remove(observation, reason)
     }
 
@@ -205,7 +211,7 @@ internal class ServerObservation(
      */
     val qBlockSize: Int? = null,
 ) : TransmissionOwner {
-    val key: ExchangeKey = ExchangeKey(peer, token.toHex())
+    val key: ObservationKey = ObservationKey(peer, token.toHex(), identity)
     private val mutex = Mutex()
 
     @Volatile
@@ -376,3 +382,10 @@ internal class ServerObservation(
         const val UNAUTHENTICATED_NON_CONFIRMABLE_RUN = 8
     }
 }
+
+/**
+ * What identifies an observer (RFC 7641 §4.1: the client endpoint and the token), with the message-security
+ * [identity] of its registration, compared with `equals`, so that requests of one identity never replace or
+ * cancel the registration of another (ADR 0008).
+ */
+internal data class ObservationKey(val peer: Endpoint, val token: String, val identity: SecurityIdentity?)

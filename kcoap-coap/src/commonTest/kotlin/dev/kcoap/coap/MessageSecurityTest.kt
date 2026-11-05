@@ -8,6 +8,7 @@ import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
@@ -153,14 +154,27 @@ class MessageSecurityTest {
     }
 
     @Test
-    fun unprotectedRequestsStillReachAServerWithSecurity() = runTest {
+    fun unprotectedRequestsReachOnlyPublicResourcesOfAServerWithSecurity() = runTest {
         val fixture = StackFixture(this)
+        var reached = 0
         val server = fixture.server(CoapServerConfig(security = ServerSide())) {
-            resource("public") { get { CoapResponse.content("identity ${securityIdentity == null}") } }
+            resource("public") {
+                access = AccessPolicy.Public
+                get { CoapResponse.content("identity ${securityIdentity == null}") }
+            }
+            resource("secret") {
+                get {
+                    reached++
+                    CoapResponse.content("classified")
+                }
+            }
         }
         val client = fixture.client()
 
         assertEquals("identity true", client.get(fixture.uri(server, "/public")).payloadAsText())
+        // ADR 0008: with message security configured, the default policy refuses what it did not verify.
+        assertEquals(CoapCode.UNAUTHORIZED, client.get(fixture.uri(server, "/secret")).code)
+        assertEquals(0, reached, "the refused request never reached the handler")
     }
 
     @Test

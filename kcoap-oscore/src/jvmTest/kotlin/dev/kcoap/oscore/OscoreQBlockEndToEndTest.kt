@@ -13,6 +13,7 @@ import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
@@ -121,6 +122,7 @@ class OscoreQBlockEndToEndTest {
         server: QBlockServerConfig = QBlockServerConfig(isEnabled = true, withMessageSecurity = true),
         seed: Int = 1,
         restartedServer: Boolean = false,
+        defaultAccess: AccessPolicy = AccessPolicy.MessageSecurityRequired,
     ): Setup {
         val network = InMemoryNetwork(backgroundScope, Random(seed))
         val wire = Collections.synchronizedList(mutableListOf<Wire>())
@@ -142,7 +144,7 @@ class OscoreQBlockEndToEndTest {
         val serverTransport = network.attach()
         val coapServer = CoapServer(
             CoapEndpoint(serverTransport, backgroundScope, endpointConfig(1)),
-            CoapServerConfig(security = OscoreServer(InMemoryContextRepository().apply { add(serverContext) }), qBlock = server),
+            CoapServerConfig(security = OscoreServer(InMemoryContextRepository().apply { add(serverContext) }), qBlock = server, defaultAccess = defaultAccess),
         ) {
             resource("big") { get { CoapResponse.content(big, ContentFormat.OCTET_STREAM) } }
             add(observed)
@@ -288,8 +290,9 @@ class OscoreQBlockEndToEndTest {
     @Test
     fun rfc9177Section4_1AProtectedFallbackLeavesQBlockToTheUnprotectedRequestsOfTheEndpoint() = runTest {
         // A server that takes Q-Block from unprotected requests only, and one endpoint with two clients: the
-        // setup's OSCORE client and a plain one, which share the endpoint's capability cache.
-        val setup = setup(server = QBlockServerConfig(isEnabled = true))
+        // setup's OSCORE client and a plain one, which share the endpoint's capability cache. The server serves
+        // both, so its resources are Public (ADR 0008: by default it would refuse the plain client).
+        val setup = setup(server = QBlockServerConfig(isEnabled = true), defaultAccess = AccessPolicy.Public)
         val plain = CoapClient(setup.client.endpoint, CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE)))
         val big = body(3000, 1)
 

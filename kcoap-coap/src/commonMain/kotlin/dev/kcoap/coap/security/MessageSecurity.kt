@@ -56,8 +56,9 @@ public interface ProtectedRequest {
 public interface ServerMessageSecurity {
     /**
      * Verifies and decrypts [request] from [peer]. Returns null when the request does not use this kind
-     * of protection, so the stack processes it as a plain request (and resources decide whether that is
-     * acceptable).
+     * of protection, so the stack processes it as a plain request, which only resources whose
+     * [dev.kcoap.coap.server.AccessPolicy] permits it reach (with message security configured, the default
+     * policy refuses it, ADR 0008).
      *
      * @throws MessageSecurityException when the request is protected but invalid; the stack answers with
      *   [MessageSecurityException.responseCode], unprotected, as RFC 8613 §8.2 requires.
@@ -70,7 +71,10 @@ public interface UnprotectedRequest {
     /** The inner request, as the resource sees it. */
     public val message: CoapMessage
 
-    /** Who sent it, for authorization. */
+    /**
+     * Who sent it, for authorization ([dev.kcoap.coap.server.AccessPolicy]). Requests of one security context
+     * should give equal identities: the server keys block-wise state and Observe registrations by it.
+     */
     public val identity: SecurityIdentity
 
     /**
@@ -90,7 +94,10 @@ public interface UnprotectedRequest {
     public suspend fun protectResponse(response: CoapMessage): CoapMessage
 }
 
-/** The authenticated identity behind a protected request, such as an OSCORE recipient. */
+/**
+ * The authenticated identity behind a protected request, such as an OSCORE recipient or the peer credential
+ * of the EDHOC session that established the context. Compared with `equals`.
+ */
 public interface SecurityIdentity {
     /** A short human-readable form for logs, never containing keys. */
     public val description: String

@@ -304,8 +304,9 @@ public class OscoreClient(
 
 /**
  * The OSCORE server side for the CoAP stack: verifies requests carrying the OSCORE option against the
- * contexts in [contexts] and protects the responses. Requests without the option are left to the
- * stack (null), so a server can host public and protected resources side by side.
+ * contexts in [contexts] and protects the responses. Requests without the option are left to the stack
+ * (null). On a server with message security its default access policy refuses them, so only the resources
+ * the application makes [dev.kcoap.coap.server.AccessPolicy.Public] serve them (ADR 0008).
  */
 public class OscoreServer(
     private val contexts: SecurityContextRepository,
