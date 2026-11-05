@@ -3,6 +3,8 @@ package dev.kcoap.coap.interop
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
+import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.server.CoapServer
@@ -19,6 +21,8 @@ import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +59,14 @@ class LibcoapClientAgainstKcoapTest {
     private val recorder = object : MessageInterceptor {
         override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = message.also { sent += it }
     }
+
+    /** Every message the kcoap server received, with the monotonic time it arrived. */
+    private val received: MutableList<Pair<TimeSource.Monotonic.ValueTimeMark, CoapMessage>> =
+        Collections.synchronizedList(mutableListOf())
+    private val arrivals = object : MessageInterceptor {
+        override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage =
+            message.also { received += TimeSource.Monotonic.markNow() to it }
+    }
     private val large: String = Random(5).let { random -> String(CharArray(3000) { 'a' + random.nextInt(26) }) }
 
     private val counter = object : ObservableResource("counter") {
@@ -71,7 +83,7 @@ class LibcoapClientAgainstKcoapTest {
         runBlocking {
             server = CoapServer(
                 KtorUdpTransport.bind("127.0.0.1"), scope,
-                endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder)),
+                endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder, arrivals)),
             ) {
                 resource("hello") { get { CoapResponse.content("Hello from kcoap") } }
                 resource("store") {
@@ -210,6 +222,35 @@ class LibcoapClientAgainstKcoapTest {
         assertTrue("</large>;sz=3000" in document, document)
         val filtered = client("$uri/.well-known/core?rt=count").payloads.single()
         assertEquals("</counter>;title=\"Counter\";rt=\"count\";obs", filtered)
+    }
+
+    /**
+     * RFC 9177 §4.1 with Q-Block off on kcoap's side (the default): libcoap 4.3.5 turns Q-Block on with
+     * `-L 7` (COAP_BLOCK_USE_LIBCOAP + COAP_BLOCK_SINGLE_BODY + COAP_BLOCK_TRY_Q_BLOCK; it has no `-Q`), probes
+     * with a Confirmable request carrying Q-Block2, gets 4.02, and sends its real request without Q-Block.
+     */
+    @Test
+    fun fallsBackFromQBlockWhileItIsOff() {
+        sent.clear()
+        received.clear()
+        val result = Libcoap.client("-L", "7", "-v", "7", "-B", "10", "-w", "$uri/hello", mount = directory)
+
+        assertEquals(0, result.exitCode, "$result")
+        // At -v 7 the debug log shares stdout with the payload.
+        assertTrue("Hello from kcoap" in result.stdout.lines(), "$result")
+        assertTrue("Q-Block support not available" in result.stdout + result.stderr, "$result")
+        assertTrue(result.messages.any { it.startsWith("v:1 t:CON c:GET ") && "Q-Block2:0/_/16" in it }, "libcoap's probe: $result")
+        val requests = received.filter { it.second.isRequest }
+        val probe = requests.first { CoapOptions.Q_BLOCK2.number in it.second.options }
+        assertEquals(CoapMessageType.CON, probe.second.type, "RFC 9177 §4.1: the probe is Confirmable")
+        val refusal = sent.single { it.hasToken(probe.second.token) }
+        assertEquals(CoapCode.BAD_OPTION, refusal.code, "$refusal")
+        val real = requests.last()
+        assertEquals("/hello", real.second.options.path)
+        assertTrue(real.second.options.none { it.number == CoapOptions.Q_BLOCK1.number || it.number == CoapOptions.Q_BLOCK2.number })
+        val gap = real.first - probe.first
+        assertTrue(gap < 1.seconds, "the real request follows the 4.02 within 1 s, not after a timeout: $gap")
+        assertEquals(CoapCode.CONTENT, sent.last().code)
     }
 
     @Test
