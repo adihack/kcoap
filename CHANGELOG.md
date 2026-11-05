@@ -410,6 +410,9 @@ Build governance (WP-C1):
 - EDHOC: a crypto backend that lacks a curve, KEM or algorithm no longer fails the handshake as if the peer
   had sent an invalid key or as "Processing message_2 failed"; the diagnostic names what is missing
   ("P_256 is not available in this crypto backend") (WP-A2).
+- The JVM and Android `SequenceNumberStore` recipe in `kcoap-oscore/README.md` reads its file with
+  `Files.readAllBytes`: it called `Files.readString`, which Android has only from API level 33, so on
+  API 26 to 32 every OSCORE context derived with it failed (PL-1).
 
 ### Security
 

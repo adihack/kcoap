@@ -18,8 +18,8 @@ import java.nio.file.StandardOpenOption.WRITE
 
 /**
  * Sender Sequence Numbers in files under [directory], durable before [store] returns (RFC 8613
- * Appendix B.1.1): the recipe of kcoap-oscore's README, with the calls of API level 26. java.nio.file
- * came with API 26, but `Files.readString` only with 33, so the value is read as bytes.
+ * Appendix B.1.1): the recipe of kcoap-oscore's README. java.nio.file came with API level 26, but
+ * `Files.readString` only with 33, so the value is read as bytes.
  */
 internal class FileSequenceNumberStore(private val directory: Path) : SequenceNumberStore {
     private val lock = Mutex()

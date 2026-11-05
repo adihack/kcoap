@@ -77,7 +77,7 @@ class FileSequenceNumberStore(private val directory: Path) : SequenceNumberStore
     override suspend fun load(contextName: String): Long? = lock.withLock {
         withContext(Dispatchers.IO) {
             val file = directory.resolve("$contextName.seq")
-            if (Files.exists(file)) Files.readString(file).trim().toLong() else null
+            if (Files.exists(file)) Files.readAllBytes(file).decodeToString().trim().toLong() else null
         }
     }
 
@@ -100,7 +100,8 @@ class FileSequenceNumberStore(private val directory: Path) : SequenceNumberStore
 ```
 
 On Android, put the directory under `Context.noBackupFilesDir`, which Auto Backup skips. `java.nio.file`
-needs API 26. Below that, use `FileOutputStream.getFD().sync()` and `File.renameTo`.
+needs API 26, kcoap's minSdk; the value is read as bytes because `Files.readString` came only with API 33.
+[samples/android-consumer](../samples/android-consumer/README.md) compiles this store at API 26.
 
 **iOS and macOS.** The same steps over POSIX from Kotlin/Native: `open`, `write`,
 `fcntl(fd, F_FULLFSYNC)` (on Apple platforms `fsync` does not flush the drive's cache), `close`,
