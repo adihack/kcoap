@@ -88,8 +88,11 @@ internal class QBlockServer(
     private val timing = QBlockTiming(endpoint.parameters)
     private val reserve = if (config.security != null) config.securityReserve else 0
 
-    /** Drawn once from the endpoint's source, so tests stay reproducible, and used under [lock] only. */
-    private val random = Random(endpoint.config.random.nextLong())
+    /**
+     * Seeded once from the endpoint's source, so tests stay reproducible, and used under [lock] only. A server
+     * with Q-Block off draws nothing, so the endpoint's sequence of random values stays as it was.
+     */
+    private val random = if (qBlock.isEnabled) Random(endpoint.config.random.nextLong()) else Random(0)
     private val scope = CoroutineScope(endpoint.scope.coroutineContext + SupervisorJob(parent) + CoroutineName("coap-qblock"))
 
     private val lock = Mutex()
