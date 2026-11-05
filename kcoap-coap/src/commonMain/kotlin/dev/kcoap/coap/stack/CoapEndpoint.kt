@@ -302,7 +302,8 @@ public class CoapEndpoint private constructor(
         token: ByteArray?,
     ): ClientExchange {
         lock.withLock { ensureOpen() }
-        val connection = reserveConnection(peer)
+        // Counted on the connection before the request is, so its idle Release cannot start in between.
+        val connection = reliable.reservedConnectionFor(peer)
         val exchange = try {
             lock.withLock {
                 ensureOpen()
@@ -325,18 +326,6 @@ public class CoapEndpoint private constructor(
             throw e
         }
         return exchange
-    }
-
-    /**
-     * A connection to [peer] with this exchange already counted on it, so its idle Release cannot start
-     * between finding the connection and sending the request. One that started releasing meanwhile is
-     * skipped: the next lookup waits until it is gone and opens a new one (RFC 8323 §5.5).
-     */
-    private suspend fun reserveConnection(peer: Endpoint): ConnectionDriver {
-        while (true) {
-            val connection = reliable.connectionFor(peer)
-            if (connection.reserve()) return connection
-        }
     }
 
     /**

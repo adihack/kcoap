@@ -107,10 +107,15 @@ internal class ConnectionDriver(
 
     /**
      * Queues the CSM, then starts writing, reading and the timers. The state machine starts first, since
-     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it.
+     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it. A
+     * connection this side opens starts with one exchange counted for its opener, so it is not released
+     * as idle before [handOver].
      */
     suspend fun start() {
-        withMessaging { now -> start(now) }
+        withMessaging { now ->
+            start(now)
+            if (isInitiator) exchangeOpened()
+        }
         writer = scope.launch(CoroutineName("coap-connection-writer")) { writeLoop() }
         scope.launch(CoroutineName("coap-connection-reader")) { readLoop() }
         scope.launch(CoroutineName("coap-connection-timers")) { timerLoop() }
@@ -161,6 +166,19 @@ internal class ConnectionDriver(
     /** The request delivered with [sequence] is done without a response (RFC 7967), for Custody and Release. */
     suspend fun answered(sequence: Long) {
         withMessaging { answered(sequence) }
+    }
+
+    /**
+     * The opener hands the connection over to the [count] callers that waited for it: each gets an exchange
+     * counted, in one step with dropping the opener's own (see [start]), so the idle Release (RFC 8323 §5.5)
+     * cannot start before they ran, however late a single-threaded event loop resumes them. False when the
+     * connection no longer takes requests; the opener's count goes either way.
+     */
+    suspend fun handOver(count: Int): Boolean = withMessaging {
+        val usable = isEstablished && !isReleasing
+        if (usable) repeat(count) { exchangeOpened() }
+        exchangeClosed(null)
+        usable
     }
 
     /**

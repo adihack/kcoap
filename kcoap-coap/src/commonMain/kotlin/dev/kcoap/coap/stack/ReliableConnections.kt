@@ -44,7 +44,7 @@ internal class ReliableConnections(
     private val log = config.loggerFactory.logger(LogTags.TRANSPORT)
     private val lock = Mutex()
     private val drivers = HashMap<Endpoint, ConnectionDriver>()
-    private val connecting = HashMap<Endpoint, CompletableDeferred<ConnectionDriver>>()
+    private val connecting = HashMap<Endpoint, Attempt>()
     private val holdOffUntil = HashMap<Endpoint, Duration>()
 
     /** One permit per accepted connection still waiting for its peer's CSM. */
@@ -68,12 +68,25 @@ internal class ReliableConnections(
      * @throws CoapException with [CoapException.Reason.CONNECTION_CLOSED] when the connection cannot be
      *   opened, or the peer asked not to reconnect yet (Hold-Off, §5.5).
      */
-    suspend fun connectionFor(peer: Endpoint): ConnectionDriver {
+    suspend fun connectionFor(peer: Endpoint): ConnectionDriver = find(peer, reserve = false)
+
+    /**
+     * Like [connectionFor], with an exchange already counted on the connection for the caller, so its idle
+     * Release (§5.5) cannot start before the caller's request goes out; the caller counts it out again with
+     * [ConnectionDriver.exchangeClosed]. A connection that started releasing meanwhile is skipped, and the
+     * next one opens once it is gone.
+     */
+    suspend fun reservedConnectionFor(peer: Endpoint): ConnectionDriver = find(peer, reserve = true)
+
+    private suspend fun find(peer: Endpoint, reserve: Boolean): ConnectionDriver {
         val scheme = schemeOf(peer)
         while (true) {
             val step = lock.withLock {
                 if (isClosed) throw CoapException("Endpoint closed", CoapException.Reason.CLOSED)
-                connecting[peer]?.let { return@withLock Step.Join(it) }
+                connecting[peer]?.let { attempt ->
+                    if (reserve) attempt.reservations++
+                    return@withLock Step.Join(attempt)
+                }
                 val existing = drivers[peer]
                 when {
                     // An accepted connection serves requests to its peer too (RFC 8323 §3.3); a connector is
@@ -81,31 +94,77 @@ internal class ReliableConnections(
                     existing == null -> {
                         val connector = connectors.firstOrNull { scheme in it.schemes }
                             ?: throw IllegalArgumentException("${scheme.scheme} needs a Connector; this endpoint has none for it")
-                        Step.Join(startConnecting(peer, connector))
+                        Step.Join(startConnecting(peer, connector).also { if (reserve) it.reservations++ })
                     }
-                    existing.isUsable -> return existing
+                    existing.isUsable -> Step.Use(existing)
                     else -> Step.Wait(existing)
                 }
             }
             when (step) {
-                is Step.Join -> return step.attempt.await()
+                is Step.Join -> {
+                    val driver = join(step.attempt, reserve)
+                    if (!reserve || step.attempt.isReserved) return driver
+                }
+                is Step.Use -> if (!reserve || step.driver.reserve()) return step.driver
                 // Accepted and not established yet, or released: a new connection opens once this one is gone.
                 is Step.Wait -> step.driver.awaitSettled()
             }
         }
     }
 
+    /** Waits for [attempt]; a caller cancelled meanwhile gives its reservation back. */
+    private suspend fun join(attempt: Attempt, reserved: Boolean): ConnectionDriver {
+        try {
+            return attempt.result.await()
+        } catch (e: CancellationException) {
+            if (reserved) withContext(NonCancellable) { giveBack(attempt) }
+            throw e
+        }
+    }
+
+    private suspend fun giveBack(attempt: Attempt) {
+        val pending = lock.withLock { (!attempt.isSettled).also { if (it) attempt.reservations-- } }
+        if (pending) return
+        // The opener counted it already: wait for the hand-over, then count it out.
+        val driver = try {
+            attempt.result.await()
+        } catch (e: CoapException) {
+            return
+        }
+        if (attempt.isReserved) driver.exchangeClosed(null)
+    }
+
     private sealed interface Step {
-        class Join(val attempt: CompletableDeferred<ConnectionDriver>) : Step
+        class Join(val attempt: Attempt) : Step
+
+        class Use(val driver: ConnectionDriver) : Step
 
         class Wait(val driver: ConnectionDriver) : Step
+    }
+
+    /**
+     * One attempt to open a connection, which concurrent callers share. Those that will send an exchange on
+     * it are counted in [reservations] while they wait, and the opener hands the connection over to all of
+     * them in one step ([ConnectionDriver.handOver]), so none finds it released as idle. Fields other than
+     * [result] and [isReserved] are guarded by [lock].
+     */
+    private class Attempt {
+        val result = CompletableDeferred<ConnectionDriver>()
+        var reservations = 0
+
+        /** Set once the opener took [reservations]; a caller cancelled after that counts itself out on the connection. */
+        var isSettled = false
+
+        /** Whether the hand-over counted [reservations] on the connection; set before [result] completes. */
+        @Volatile
+        var isReserved = false
     }
 
     /** The connection to [peer] if there is one, for notifications to observers. */
     suspend fun existing(peer: Endpoint): ConnectionDriver? = lock.withLock { drivers[peer] }
 
     /** Called under [lock]. */
-    private fun startConnecting(peer: Endpoint, connector: Connector): CompletableDeferred<ConnectionDriver> {
+    private fun startConnecting(peer: Endpoint, connector: Connector): Attempt {
         holdOffUntil[peer]?.let { until ->
             val now = endpoint.now()
             if (now < until) {
@@ -113,7 +172,7 @@ internal class ReliableConnections(
             }
             holdOffUntil.remove(peer)
         }
-        val attempt = CompletableDeferred<ConnectionDriver>()
+        val attempt = Attempt()
         connecting[peer] = attempt
         val job = scope.launch(CoroutineName("coap-connect")) {
             val result = try {
@@ -122,9 +181,18 @@ internal class ReliableConnections(
                 Result.failure(e)
             }
             // Every caller waits on the attempt, so it is settled even when the endpoint is closing.
-            withContext(NonCancellable) { lock.withLock { connecting.remove(peer) } }
+            val reservations = withContext(NonCancellable) {
+                lock.withLock {
+                    connecting.remove(peer)
+                    attempt.isSettled = true
+                    attempt.reservations
+                }
+            }
             result.fold(
-                onSuccess = { attempt.complete(it) },
+                onSuccess = { driver ->
+                    attempt.isReserved = withContext(NonCancellable) { driver.handOver(reservations) }
+                    attempt.result.complete(driver)
+                },
                 onFailure = { error ->
                     val cause = when {
                         error is CoapException -> error
@@ -134,12 +202,12 @@ internal class ReliableConnections(
                         else -> CoapException("Cannot connect to $peer: ${error.message}", CoapException.Reason.CONNECTION_CLOSED, error)
                     }
                     log.debug { cause.message ?: "Cannot connect to $peer" }
-                    attempt.completeExceptionally(cause)
+                    attempt.result.completeExceptionally(cause)
                 },
             )
         }
         // A launch into a closing endpoint may never run its body; its callers must not wait forever.
-        job.invokeOnCompletion { attempt.completeExceptionally(CoapException("Endpoint closed", CoapException.Reason.CLOSED, it)) }
+        job.invokeOnCompletion { attempt.result.completeExceptionally(CoapException("Endpoint closed", CoapException.Reason.CLOSED, it)) }
         return attempt
     }
 
@@ -232,7 +300,7 @@ internal class ReliableConnections(
             drivers.values.toList() to connecting.values.toList()
         }
         val closed = CoapException("Endpoint closed", CoapException.Reason.CLOSED)
-        attempts.forEach { it.completeExceptionally(closed) }
+        attempts.forEach { it.result.completeExceptionally(closed) }
         for (listener in listeners) runCatching { listener.close() }
         for (driver in open) driver.shutdown("endpoint closed", SHUTDOWN_FLUSH_TIMEOUT)
         for (connector in connectors) runCatching { connector.close() }
