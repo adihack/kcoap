@@ -42,7 +42,7 @@ Sender Sequence Number. A context that restarts at 0 with the same key reuses no
 | Where the keys come from | `sequenceStore` | `FreshnessPolicy.AUTO` (the default) |
 |---|---|---|
 | A provisioned Master Secret, used across restarts | a durable store (recipes below) | the first request after every start is answered with an Echo challenge (Appendix B.1.2) |
-| EDHOC (`EdhocSession.oscoreContext()` in `kcoap-edhoc-oscore`) | `EphemeralSequenceNumberStore`, its default | trusted from the start: the keys are new |
+| EDHOC (`EdhocSession.oscoreContext()` in `kcoap-edhoc-oscore`) | `EphemeralSequenceNumberStore`, its default; the context ends with the process, so run EDHOC again after a restart | trusted from the start: the keys are new |
 | Tests | `EphemeralSequenceNumberStore` | trusted, unless the same store derives the context again |
 
 - **Appendix B.1.1.** The context reserves `persistInterval` numbers (64 by default) per write. Every
