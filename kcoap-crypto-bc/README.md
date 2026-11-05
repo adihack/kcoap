@@ -16,6 +16,8 @@ val received = crypto.decapsulate(responder.privateKey, sent.ciphertext)   // sa
 `BouncyCastleCryptoBackend(classical = DefaultCryptoBackend(), isSigningDeterministic = false)` implements
 `generateKeyPair`, `importKeyPair`, `sign`, `verify`, `encapsulate` and `decapsulate` for the ML-KEM and ML-DSA
 key types and delegates everything else (hashes, HMAC, AEADs, X25519, P-256/384, Ed25519, ECDSA) to `classical`.
+Its `supports` members answer yes for ML-KEM and ML-DSA without probing and pass every other question to
+`classical` ([ADR 0001](../docs/adr/0001-crypto-capabilities.md)), so EDHOC offers suite -24 with it.
 
 | Algorithm | Parameter sets | Spec |
 |---|---|---|

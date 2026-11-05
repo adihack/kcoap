@@ -31,6 +31,9 @@ import dev.kcoap.crypto.backend.DefaultCryptoBackend
  *
  * ML-DSA is pure ML-DSA (not HashML-DSA) with an empty context string, as COSE uses it (draft-ietf-cose-dilithium).
  *
+ * The `supports` members answer for ML-KEM and ML-DSA without probing, since Bouncy Castle always has them,
+ * and ask [classical] about everything else (docs/adr/0001-crypto-capabilities.md).
+ *
  * @param classical the backend for every algorithm that is not ML-KEM or ML-DSA, and for randomness.
  * @param isSigningDeterministic whether ML-DSA signs with the deterministic variant (`rnd = {0}^32`, FIPS 204
  *   §3.4) instead of the default hedged one. Deterministic signatures are reproducible, which known-answer
@@ -40,6 +43,18 @@ public class BouncyCastleCryptoBackend(
     private val classical: CryptoBackend = DefaultCryptoBackend(),
     private val isSigningDeterministic: Boolean = false,
 ) : CryptoBackend by classical {
+
+    /** True for the ML-KEM and ML-DSA key types; [classical]'s answer for the others. */
+    override suspend fun supports(type: KeyType): Boolean =
+        MlKem.of(type) != null || MlDsa.of(type) != null || classical.supports(type)
+
+    /** True for ML-DSA-44/65/87; [classical]'s answer for the others. */
+    override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
+        MlDsa.of(algorithm) != null || classical.supports(algorithm)
+
+    /** True for ML-KEM-512/768/1024; [classical]'s answer for any other KEM. */
+    override suspend fun supports(algorithm: KemAlgorithm): Boolean =
+        MlKem.of(algorithm) != null || classical.supports(algorithm)
 
     /** ML-KEM.KeyGen (FIPS 203 Algorithm 19) or ML-DSA.KeyGen (FIPS 204 Algorithm 1), with the seed as private key. */
     override suspend fun generateKeyPair(type: KeyType): KeyPair {
