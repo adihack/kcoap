@@ -190,6 +190,7 @@ internal class QBlockServer(
             val isFinal = !block.more || block.number == record.completingNumber
             return if (isFinal && record.response != null) Upload.Repeat(record) else Upload.Duplicate
         }
+        var isFirst = false
         val body = partials[key] ?: run {
             val limit = when {
                 partials.size >= qBlock.maxPartialBodies -> Limit.PARTIAL_BODIES
@@ -198,9 +199,15 @@ internal class QBlockServer(
             }
             if (limit != null) return Upload.Refused(limit)
             val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.connection != null)
+            isFirst = true
             PartialBody(key, QBlock1Receiver(ref.request, mode, timing, now)).also { partials[key] = it }
         }
         val action = body.receiver.onBlock(now, ref.request, ref).single()
+        if (isFirst && action is QBlockAction.Reject) {
+            // Nothing of the body was taken, so nothing of it stays (plan row 39: refused before any state).
+            removePartial(body)
+            return Upload.Next(body, action)
+        }
         if (!body.receiver.isComplete) {
             schedule(body)
             return Upload.Next(body, action)
@@ -305,7 +312,14 @@ internal class QBlockServer(
             if (body.isDropped || body.timerAt != at) return
             body.timer = null
             body.timerAt = null
-            body.receiver.onTimer(endpoint.now()).also { if (body.receiver.isDiscarded) removePartial(body) else schedule(body) }
+            val next = try {
+                body.receiver.onTimer(endpoint.now())
+            } catch (e: Exception) {
+                // A body whose timer cannot run would stay for good: it goes, and the failure is logged.
+                removePartial(body)
+                throw e
+            }
+            next.also { if (body.receiver.isDiscarded) removePartial(body) else schedule(body) }
         }
         executeUpload(body, actions)
     }

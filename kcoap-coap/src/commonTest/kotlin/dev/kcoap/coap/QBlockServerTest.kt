@@ -754,6 +754,28 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc7959Section7_1ABlockStartingAtSize1Gets400AndLeavesNothingBehind() = runTest {
+        // Q-Block1 2/0/64 with Size1 128 and no payload adds up to Size1 but lies outside the body (plan row 39).
+        val f = fixture()
+        f.peer.send(upload(f.peer, 2, body = ByteArray(128)))
+        val answer = f.peer.drain().single()
+        assertEquals(CoapCode.BAD_REQUEST, answer.code)
+        assertEquals("Q-Block1 block 2 starts beyond Size1 128", answer.payloadAsText())
+
+        // As many as the bounds take, from 16 addresses: none of them starts a body.
+        val spoofed = List(16) { QBlockPeer.of(f.stack, f.server) }
+        for (peer in spoofed) repeat(4) { peer.send(upload(peer, 2, body = ByteArray(128), requestTag = byteArrayOf(it.toByte()))) }
+        spoofed.forEach { assertEquals(4, it.drain().count { answer -> answer.code == CoapCode.BAD_REQUEST }) }
+        assertTrue(f.server.qBlock.state().isEmpty, "${f.server.qBlock.state()}")
+        delay(TransmissionParameters.Default.nonPartialTimeout + 1.seconds)
+        assertTrue(f.server.qBlock.state().isEmpty, "${f.server.qBlock.state()}")
+
+        (0L..46L).forEach { f.peer.send(upload(f.peer, it)) }
+        assertEquals(CoapCode.CHANGED, f.peer.drain().last().code, "no 5.03")
+        assertTrue(f.events.none { it is EndpointEvent.LimitReached })
+    }
+
+    @Test
     fun cachedBodiesBeyondTheBoundsGiveWayOldestFirst() = runTest {
         val config = CoapServerConfig(
             amplification = AmplificationPolicy.OFF,

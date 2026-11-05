@@ -140,12 +140,14 @@ internal class QBlock1Receiver<R>(
         if (now < deadline) return emptyList()
         if (mode != BodyMode.NON) return discard("No block for NON_PARTIAL_TIMEOUT")
         if (retries >= timing.nonMaxRetransmit) return discard("Missing blocks asked for NON_MAX_RETRANSMIT times")
+        // Every block was rejected: there is no request to put a 4.08 on, nor anything to keep.
+        val ref = highestRef ?: return discard("No block of the body arrived")
         val highestSet = sets.of(received.highest)
         val missing = received.missing(0..sets.last(highestSet, count), timing.maxPayloads)
             .ifEmpty { sets.numbers(highestSet + 1, count).toList() }
         retries++
         last408At = now
-        return listOf(QBlockAction.Send408(checkNotNull(highestRef), missing))
+        return listOf(QBlockAction.Send408(ref, missing))
     }
 
     /** The client answered a 4.08 with a Reset: it abandoned the body (RFC 9177 §4.3). */

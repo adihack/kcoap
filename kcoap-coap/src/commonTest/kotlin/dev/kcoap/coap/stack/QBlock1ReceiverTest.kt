@@ -183,6 +183,18 @@ class QBlock1ReceiverTest {
     }
 
     @Test
+    fun rfc9177Section7_2ABodyWhoseEveryBlockWasRejectedIsDiscardedByItsTimer() {
+        // Block 2 of a 128-byte body, empty: QBlockCheck refuses it first; on its own the receiver rejects it.
+        val receiver = receiver(first = upload(2, 128))
+        assertIs<QBlockAction.Reject<Long>>(receiver.onBlock(Duration.ZERO, upload(2, 128), 2).single())
+
+        val discard = assertIs<QBlockAction.Discard>(receiver.onTimer(4.seconds).single())
+        assertEquals("No block of the body arrived", discard.reason, "no request to put a 4.08 on")
+        assertTrue(receiver.isDiscarded)
+        assertNull(receiver.nextDeadline())
+    }
+
+    @Test
     fun rfc9177Section4_3AnEmptyBodyIsCompleteWithItsOnlyBlock() {
         val receiver = receiver(first = upload(0, 0))
         assertEquals(1, receiver.count)
