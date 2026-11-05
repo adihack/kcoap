@@ -5,6 +5,7 @@ import dev.kcoap.cbor.CborBytes
 import dev.kcoap.cbor.CborException
 import dev.kcoap.cbor.CborInt
 import dev.kcoap.cbor.CborReader
+import dev.kcoap.cbor.CborType
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapRequest
 import dev.kcoap.coap.CoapResponse
@@ -60,7 +61,8 @@ public object EdhocOverCoap {
      *
      * The payload comes from the peer, so a malformed one is an EDHOC failure, not a caller mistake: the
      * exception's [EdhocException.errorMessage] is the EDHOC error (code 1) to answer it with, in a 4.00
-     * response (RFC 9528 Appendix A.2.3, [errorResponse]).
+     * response (RFC 9528 Appendix A.2.3, [errorResponse]). The exception message says what was wrong for this
+     * side's logs, naming the kind of a CBOR item but never quoting the peer's bytes or text.
      *
      * @throws EdhocException when the payload does not start with `true` or a connection identifier in the
      *   representation of RFC 9528 §3.3.2, or nothing follows it.
@@ -72,8 +74,8 @@ public object EdhocOverCoap {
             return ServerRequest.NewSession(payload.copyOfRange(1, payload.size))
         }
         val reader = CborReader(payload)
-        val item = try {
-            reader.readEncodedItem()
+        val (type, item) = try {
+            reader.peekType() to reader.readEncodedItem()
         } catch (e: CborException) {
             throw malformed("no CBOR item for a connection identifier", e)
         }
@@ -85,7 +87,8 @@ public object EdhocOverCoap {
                 ConnectionIdentifier(item)
             }
             is CborBytes -> ConnectionIdentifier(value.bytes)
-            else -> throw malformed("a connection identifier is an integer or a byte string, got $value")
+            // The type only: the item is the peer's, and its text would go into this side's logs as it is.
+            else -> throw malformed("a connection identifier is an integer or a byte string, got an item of type $type")
         }
         if (reader.isAtEnd) throw malformed("no EDHOC message after the connection identifier")
         return ServerRequest.Continuation(identifier, payload.copyOfRange(reader.position, payload.size))

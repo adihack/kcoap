@@ -1,6 +1,7 @@
 package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.cbor.CborReader
+import dev.kcoap.cbor.CborWriter
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapRequest
@@ -29,6 +30,10 @@ import dev.kcoap.edhoc.EdhocException
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocPeerErrorException
 import dev.kcoap.edhoc.EdhocRole
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LoggerFactory
+import dev.kcoap.log.RingBufferSink
 import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.oscore.MutableSecurityContextRepository
@@ -403,17 +408,42 @@ class EdhocOscoreTest {
             "18" to "no CBOR item for a connection identifier",
             "1818" to "connection identifiers as integers are -24..23",
             "3818" to "connection identifiers as integers are -24..23",
-            "f6" to "a connection identifier is an integer or a byte string",
+            "f6" to "a connection identifier is an integer or a byte string, got an item of type SIMPLE",
             "41" to "no CBOR item for a connection identifier",
             "4100" to "no EDHOC message after the connection identifier",
             "0a" to "no EDHOC message after the connection identifier",
+            // The peer's text and bytes stay out: only the type of the item is named.
+            "620a41" + "00" to "a connection identifier is an integer or a byte string, got an item of type TEXT",
+            "8142cafe" + "00" to "a connection identifier is an integer or a byte string, got an item of type ARRAY",
         )
         for ((hex, detail) in cases) {
             val failure = assertFailsWith<EdhocException>(hex) { EdhocOverCoap.parseRequest(hex.hexToBytes()) }
             assertEquals(EdhocError.unspecified("Malformed EDHOC request"), failure.error, hex)
             assertContentEquals(failure.error.encode(), failure.errorMessage, "an error to answer with")
-            assertTrue(failure.message!!.startsWith("Malformed EDHOC request: $detail"), "$hex: ${failure.message}")
+            assertEquals("Malformed EDHOC request: $detail", failure.message, hex)
         }
+    }
+
+    /**
+     * docs/logging.md: the server logs a rejected request's payload as its length only, and nothing the peer put in
+     * it: a text item with a line break cannot forge a log record, and a byte string is not dumped.
+     */
+    @Test
+    fun aRejectedRequestIsLoggedWithoutWhatThePeerSent() = runTest {
+        val peers = Peers.create(crypto)
+        val logs = RingBufferSink(50)
+        val loggerFactory = LoggerFactory(LogConfig.build { level = LogLevel.TRACE; sink = logs })
+        val edhoc = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository(), loggerFactory = loggerFactory)
+        val forged = CborWriter().writeText("\nERROR edhoc forged").toByteArray() + byteArrayOf(0)
+        val dumped = CborWriter().writeArrayHeader(1).writeBytes("c0ffee".hexToBytes()).toByteArray() + byteArrayOf(0)
+        for (payload in listOf(forged, dumped)) {
+            assertEquals(CoapCode.BAD_REQUEST, edhoc.handle(payload, peer).code)
+            val rejected = logs.snapshot().last()
+            assertEquals(LogLevel.WARN, rejected.level)
+            assertTrue("${payload.size} bytes" in rejected.message, rejected.message)
+        }
+        val messages = logs.snapshot().map { it.message }
+        assertTrue(messages.none { '\n' in it || "forged" in it || "c0ffee" in it.lowercase() }, "$messages")
     }
 
     @Test

@@ -141,7 +141,7 @@ public class EdhocServer(
         val parsed = try {
             EdhocOverCoap.parseRequest(payload)
         } catch (e: EdhocException) {
-            log.warn { "Rejected a request from $peer: ${e.message}" }
+            log.warn { "Rejected a request of ${log.payload(payload)} from $peer: ${e.message}" }
             return errorResponse(e)
         }
         return when (parsed) {
