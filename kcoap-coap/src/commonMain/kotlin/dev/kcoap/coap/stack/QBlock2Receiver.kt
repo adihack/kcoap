@@ -26,12 +26,14 @@ import kotlin.time.Duration.Companion.seconds
  * old one are ignored; a block that cannot start a body has the whole body asked for again. Otherwise the
  * transfer fails. A block without ETag is dropped, except one without ETag and Size2 while a body is being
  * assembled: that is how libcoap answers a request for missing blocks after it ran the handler again, so it
- * counts as a changed representation.
+ * counts as a changed representation. Until a block of the new body comes, the request for the whole body
+ * is repeated on the ladder below (NON and CON), and after NON_MAX_RETRANSMIT repeats the body is discarded.
  *
  * [BodyMode.NON] (§7.2):
  * - When every block up to the end of a set arrived and none of a later set has, a Continue asks for the
- *   next set at once (Figure 8). A Continue is never repeated by itself: if it is lost, the timer below asks
- *   for the next set.
+ *   next set at once (Figure 8), also when the block that completes it is one asked for as missing after
+ *   that set came in (libcoap's server sends no later set by itself then). A Continue is never repeated by
+ *   itself: if it is lost, the timer below asks for the next set.
  * - A block of a later set while earlier sets have gaps asks for those gaps at once, once per set (Figure 9).
  * - Otherwise the gaps up to the end of the highest set that arrived, or the next set if there are none, are
  *   asked for NON_RECEIVE_TIMEOUT × 2^n after the later of the last new block and the last request for
@@ -93,6 +95,13 @@ internal class QBlock2Receiver(
     /** ETags of bodies that were superseded, so their late blocks are not taken for a new body. */
     private val superseded = ArrayDeque<ByteArray>()
 
+    /** The whole body asked for again after the representation changed, until a block of the new one comes. */
+    private class Restart(val sizeExponent: Int, var sentAt: Duration) {
+        var retries = 0
+    }
+
+    private var restart: Restart? = null
+
     /** Whether the transfer failed for good. */
     var isFailed: Boolean = false
         private set
@@ -108,7 +117,7 @@ internal class QBlock2Receiver(
         val block = options.qBlock2 ?: return drop("No Q-Block2")
         val etags = options.etags
         if (etags.size > 1) return drop("More than one ETag")
-        val etag = etags.firstOrNull() ?: return onBlockWithoutETag(response, block)
+        val etag = etags.firstOrNull() ?: return onBlockWithoutETag(now, response, block)
         val current = body
         val isOtherBody = current == null || !current.etag.contentEquals(etag)
         if (isOtherBody && superseded.any { it.contentEquals(etag) }) return drop("A block of a superseded body")
@@ -118,7 +127,7 @@ internal class QBlock2Receiver(
             supersede(current)
             if (options.size2 == null) {
                 // Without Size2 this block cannot start the new body: ask for all of it.
-                return listOf(QBlockAction.RequestMissing(listOf(BlockOption(0, true, block.sizeExponent))))
+                return askForWholeBody(now, block.sizeExponent)
             }
         } else if (current != null && current.isDelivered) {
             return drop("A block of a body already delivered")
@@ -138,22 +147,31 @@ internal class QBlock2Receiver(
      * blocks without ETag and Size2 after it ran the handler again, so such a block during the assembly of a
      * body means the representation changed.
      */
-    private fun onBlockWithoutETag(response: CoapMessage, block: BlockOption): List<QBlockAction<Nothing>> {
+    private fun onBlockWithoutETag(now: Duration, response: CoapMessage, block: BlockOption): List<QBlockAction<Nothing>> {
         val current = body
         if (current == null || current.isDelivered || response.options.size2 != null) return drop("No ETag")
         if (!restartable) return fail(CoapException.Reason.BLOCKWISE_FAILED, REPRESENTATION_CHANGED)
         supersede(current)
-        return listOf(QBlockAction.RequestMissing(listOf(BlockOption(0, true, block.sizeExponent))))
+        return askForWholeBody(now, block.sizeExponent)
     }
 
-    /** When [onTimer] must run next, or null while no body is being assembled. */
+    /**
+     * When [onTimer] must run next: to ask for missing blocks, to give up a partial body, or to ask for the
+     * whole body again; null while nothing is pending.
+     */
     fun nextDeadline(): Duration? {
-        val body = body?.takeIf { !it.isDelivered } ?: return null
+        val body = body?.takeIf { !it.isDelivered } ?: return restartDeadline()
         val recovery = recoveryBase()?.let { maxOf(body.lastActivity, body.lastRequestAt) + it * (1 shl body.retries) }
         return listOfNotNull(recovery, body.expiresAt).min()
     }
 
+    private fun restartDeadline(): Duration? {
+        val restart = restart?.takeIf { body == null } ?: return null
+        return recoveryBase()?.let { restart.sentAt + it * (1 shl restart.retries) }
+    }
+
     fun onTimer(now: Duration): List<QBlockAction<Nothing>> {
+        if (body == null) return onRestartTimer(now)
         val body = body?.takeIf { !it.isDelivered } ?: return emptyList()
         if (now >= body.expiresAt) return discard(body, "The partial body expired")
         val deadline = nextDeadline() ?: return emptyList()
@@ -167,11 +185,35 @@ internal class QBlock2Receiver(
         return listOf(QBlockAction.RequestMissing(options(body, missing)))
     }
 
+    /**
+     * The request for the whole body got no block of the new body: it is repeated on the NON_RECEIVE_TIMEOUT
+     * (or MAX_TRANSMIT_SPAN) ladder, and after NON_MAX_RETRANSMIT repeats the body is given up.
+     */
+    private fun onRestartTimer(now: Duration): List<QBlockAction<Nothing>> {
+        val restart = restart ?: return emptyList()
+        val deadline = restartDeadline() ?: return emptyList()
+        if (now < deadline) return emptyList()
+        if (restart.retries >= timing.nonMaxRetransmit) {
+            this.restart = null
+            return listOf(QBlockAction.Discard("The whole body was asked for again NON_MAX_RETRANSMIT times"))
+        }
+        restart.retries++
+        restart.sentAt = now
+        return listOf(QBlockAction.RequestMissing(listOf(BlockOption(0, true, restart.sizeExponent))))
+    }
+
     // ---------------------------------------------------------------- internals
+
+    /** Asks for the whole body again, `0/M=1`: libcoap runs the handler again for NUM 0. */
+    private fun askForWholeBody(now: Duration, sizeExponent: Int): List<QBlockAction<Nothing>> {
+        restart = Restart(sizeExponent, now)
+        return listOf(QBlockAction.RequestMissing(listOf(BlockOption(0, true, sizeExponent))))
+    }
 
     private fun newBody(now: Duration, response: CoapMessage, block: BlockOption, etag: ByteArray, size2: Long): Body {
         val maxAge = response.options.maxAge.seconds
         val lifetime = maxOf(minOf(timing.nonPartialTimeout, maxAge), timing.receiveLadder)
+        restart = null
         return Body(etag, size2, block.sizeExponent, block.size, response.options.contentFormat, lifetime, now)
     }
 
@@ -209,12 +251,13 @@ internal class QBlock2Receiver(
             body.lastRequestAt = now
             return listOf(QBlockAction.RequestMissing(options(body, gaps)))
         }
-        val setEnd = sets.last(set, body.count)
-        if (set > body.continuedSet && !sets.isLast(set, body.count) && body.received.highest <= setEnd &&
-            body.received.hasAllUpTo(setEnd)
-        ) {
-            body.continuedSet = set
-            return listOf(QBlockAction.SendContinue(sets.first(set + 1)))
+        // The highest set that arrived, complete with every set before it, asks for the next one. That is this
+        // block's set, or a later one when this block filled the last gap below it: a block asked for after a
+        // later set came in.
+        val top = sets.of(body.received.highest)
+        if (top > body.continuedSet && !sets.isLast(top, body.count) && body.received.hasAllUpTo(sets.last(top, body.count))) {
+            body.continuedSet = top
+            return listOf(QBlockAction.SendContinue(sets.first(top + 1)))
         }
         return emptyList()
     }
@@ -277,6 +320,7 @@ internal class QBlock2Receiver(
     private fun fail(reason: CoapException.Reason, diagnostic: String): List<QBlockAction<Nothing>> {
         isFailed = true
         body = null
+        restart = null
         return listOf(QBlockAction.Fail(reason, diagnostic))
     }
 

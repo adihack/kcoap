@@ -21,6 +21,18 @@ final enum class dev.kcoap.coap.client/ObserveCancellation : kotlin/Enum<dev.kco
     final fun values(): kotlin/Array<dev.kcoap.coap.client/ObserveCancellation> // dev.kcoap.coap.client/ObserveCancellation.values|values#static(){}[0]
 }
 
+final enum class dev.kcoap.coap.client/QBlockMode : kotlin/Enum<dev.kcoap.coap.client/QBlockMode> { // dev.kcoap.coap.client/QBlockMode|null[0]
+    enum entry ASSUME_SUPPORTED // dev.kcoap.coap.client/QBlockMode.ASSUME_SUPPORTED|null[0]
+    enum entry OFF // dev.kcoap.coap.client/QBlockMode.OFF|null[0]
+    enum entry PROBE // dev.kcoap.coap.client/QBlockMode.PROBE|null[0]
+
+    final val entries // dev.kcoap.coap.client/QBlockMode.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.client/QBlockMode> // dev.kcoap.coap.client/QBlockMode.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.coap.client/QBlockMode // dev.kcoap.coap.client/QBlockMode.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.coap.client/QBlockMode> // dev.kcoap.coap.client/QBlockMode.values|values#static(){}[0]
+}
+
 final enum class dev.kcoap.coap.server/AmplificationPolicy : kotlin/Enum<dev.kcoap.coap.server/AmplificationPolicy> { // dev.kcoap.coap.server/AmplificationPolicy|null[0]
     enum entry ALL_RESPONSES // dev.kcoap.coap.server/AmplificationPolicy.ALL_RESPONSES|null[0]
     enum entry OFF // dev.kcoap.coap.server/AmplificationPolicy.OFF|null[0]
@@ -399,6 +411,43 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
     }
 }
 
+sealed interface dev.kcoap.coap.stack/QBlockClientEvent : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/QBlockClientEvent|null[0]
+    final class Fallback : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.Fallback|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
+
+        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.peer.<get-peer>|<get-peer>(){}[0]
+        final val reason // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Fallback.toString|toString(){}[0]
+    }
+
+    final class PartialBodyDropped : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
+
+        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.peer.<get-peer>|<get-peer>(){}[0]
+        final val reason // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.PartialBodyDropped.toString|toString(){}[0]
+    }
+
+    final class Recovery : dev.kcoap.coap.stack/QBlockClientEvent { // dev.kcoap.coap.stack/QBlockClientEvent.Recovery|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Boolean, kotlin.collections/List<kotlin/Long>) // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Boolean;kotlin.collections.List<kotlin.Long>){}[0]
+
+        final val blocks // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.blocks|{}blocks[0]
+            final fun <get-blocks>(): kotlin.collections/List<kotlin/Long> // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.blocks.<get-blocks>|<get-blocks>(){}[0]
+        final val peer // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.peer.<get-peer>|<get-peer>(){}[0]
+        final val sent // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.sent|{}sent[0]
+            final fun <get-sent>(): kotlin/Boolean // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.sent.<get-sent>|<get-sent>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/QBlockClientEvent.Recovery.toString|toString(){}[0]
+    }
+}
+
 abstract class dev.kcoap.coap.server/CoapResource { // dev.kcoap.coap.server/CoapResource|null[0]
     constructor <init>(kotlin/String) // dev.kcoap.coap.server/CoapResource.<init>|<init>(kotlin.String){}[0]
 
@@ -486,7 +535,7 @@ final class dev.kcoap.coap.client/CoapClient { // dev.kcoap.coap.client/CoapClie
 }
 
 final class dev.kcoap.coap.client/CoapClientConfig { // dev.kcoap.coap.client/CoapClientConfig|null[0]
-    constructor <init>(dev.kcoap.coap.security/ClientMessageSecurity? = ..., kotlin.time/Duration? = ..., kotlin/Int? = ..., kotlin/Int = ..., dev.kcoap.coap.client/EndpointResolver = ..., dev.kcoap.coap.client/ObserveCancellation = ..., kotlin/Boolean = ..., kotlin/Int = ...) // dev.kcoap.coap.client/CoapClientConfig.<init>|<init>(dev.kcoap.coap.security.ClientMessageSecurity?;kotlin.time.Duration?;kotlin.Int?;kotlin.Int;dev.kcoap.coap.client.EndpointResolver;dev.kcoap.coap.client.ObserveCancellation;kotlin.Boolean;kotlin.Int){}[0]
+    constructor <init>(dev.kcoap.coap.security/ClientMessageSecurity? = ..., kotlin.time/Duration? = ..., kotlin/Int? = ..., kotlin/Int = ..., dev.kcoap.coap.client/EndpointResolver = ..., dev.kcoap.coap.client/ObserveCancellation = ..., kotlin/Boolean = ..., kotlin/Int = ..., dev.kcoap.coap.client/QBlockClientConfig = ...) // dev.kcoap.coap.client/CoapClientConfig.<init>|<init>(dev.kcoap.coap.security.ClientMessageSecurity?;kotlin.time.Duration?;kotlin.Int?;kotlin.Int;dev.kcoap.coap.client.EndpointResolver;dev.kcoap.coap.client.ObserveCancellation;kotlin.Boolean;kotlin.Int;dev.kcoap.coap.client.QBlockClientConfig){}[0]
 
     final val blockSize // dev.kcoap.coap.client/CoapClientConfig.blockSize|{}blockSize[0]
         final fun <get-blockSize>(): kotlin/Int? // dev.kcoap.coap.client/CoapClientConfig.blockSize.<get-blockSize>|<get-blockSize>(){}[0]
@@ -496,6 +545,8 @@ final class dev.kcoap.coap.client/CoapClientConfig { // dev.kcoap.coap.client/Co
         final fun <get-maxResponseBodySize>(): kotlin/Int // dev.kcoap.coap.client/CoapClientConfig.maxResponseBodySize.<get-maxResponseBodySize>|<get-maxResponseBodySize>(){}[0]
     final val observeCancellation // dev.kcoap.coap.client/CoapClientConfig.observeCancellation|{}observeCancellation[0]
         final fun <get-observeCancellation>(): dev.kcoap.coap.client/ObserveCancellation // dev.kcoap.coap.client/CoapClientConfig.observeCancellation.<get-observeCancellation>|<get-observeCancellation>(){}[0]
+    final val qBlock // dev.kcoap.coap.client/CoapClientConfig.qBlock|{}qBlock[0]
+        final fun <get-qBlock>(): dev.kcoap.coap.client/QBlockClientConfig // dev.kcoap.coap.client/CoapClientConfig.qBlock.<get-qBlock>|<get-qBlock>(){}[0]
     final val requestTimeout // dev.kcoap.coap.client/CoapClientConfig.requestTimeout|{}requestTimeout[0]
         final fun <get-requestTimeout>(): kotlin.time/Duration? // dev.kcoap.coap.client/CoapClientConfig.requestTimeout.<get-requestTimeout>|<get-requestTimeout>(){}[0]
     final val resolver // dev.kcoap.coap.client/CoapClientConfig.resolver|{}resolver[0]
@@ -506,6 +557,27 @@ final class dev.kcoap.coap.client/CoapClientConfig { // dev.kcoap.coap.client/Co
         final fun <get-securityReserve>(): kotlin/Int // dev.kcoap.coap.client/CoapClientConfig.securityReserve.<get-securityReserve>|<get-securityReserve>(){}[0]
 
     final fun toString(): kotlin/String // dev.kcoap.coap.client/CoapClientConfig.toString|toString(){}[0]
+}
+
+final class dev.kcoap.coap.client/QBlockClientConfig { // dev.kcoap.coap.client/QBlockClientConfig|null[0]
+    constructor <init>(dev.kcoap.coap.client/QBlockMode = ..., kotlin/String = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // dev.kcoap.coap.client/QBlockClientConfig.<init>|<init>(dev.kcoap.coap.client.QBlockMode;kotlin.String;kotlin.time.Duration;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
+
+    final val capabilityLifetime // dev.kcoap.coap.client/QBlockClientConfig.capabilityLifetime|{}capabilityLifetime[0]
+        final fun <get-capabilityLifetime>(): kotlin.time/Duration // dev.kcoap.coap.client/QBlockClientConfig.capabilityLifetime.<get-capabilityLifetime>|<get-capabilityLifetime>(){}[0]
+    final val isEnabled // dev.kcoap.coap.client/QBlockClientConfig.isEnabled|{}isEnabled[0]
+        final fun <get-isEnabled>(): kotlin/Boolean // dev.kcoap.coap.client/QBlockClientConfig.isEnabled.<get-isEnabled>|<get-isEnabled>(){}[0]
+    final val missingBlockMBit // dev.kcoap.coap.client/QBlockClientConfig.missingBlockMBit|{}missingBlockMBit[0]
+        final fun <get-missingBlockMBit>(): kotlin/Boolean // dev.kcoap.coap.client/QBlockClientConfig.missingBlockMBit.<get-missingBlockMBit>|<get-missingBlockMBit>(){}[0]
+    final val mode // dev.kcoap.coap.client/QBlockClientConfig.mode|{}mode[0]
+        final fun <get-mode>(): dev.kcoap.coap.client/QBlockMode // dev.kcoap.coap.client/QBlockClientConfig.mode.<get-mode>|<get-mode>(){}[0]
+    final val onReliableTransports // dev.kcoap.coap.client/QBlockClientConfig.onReliableTransports|{}onReliableTransports[0]
+        final fun <get-onReliableTransports>(): kotlin/Boolean // dev.kcoap.coap.client/QBlockClientConfig.onReliableTransports.<get-onReliableTransports>|<get-onReliableTransports>(){}[0]
+    final val probePath // dev.kcoap.coap.client/QBlockClientConfig.probePath|{}probePath[0]
+        final fun <get-probePath>(): kotlin/String // dev.kcoap.coap.client/QBlockClientConfig.probePath.<get-probePath>|<get-probePath>(){}[0]
+    final val withMessageSecurity // dev.kcoap.coap.client/QBlockClientConfig.withMessageSecurity|{}withMessageSecurity[0]
+        final fun <get-withMessageSecurity>(): kotlin/Boolean // dev.kcoap.coap.client/QBlockClientConfig.withMessageSecurity.<get-withMessageSecurity>|<get-withMessageSecurity>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.client/QBlockClientConfig.toString|toString(){}[0]
 }
 
 final class dev.kcoap.coap.codec/CoapFormatException : kotlin/Exception { // dev.kcoap.coap.codec/CoapFormatException|null[0]

@@ -3,7 +3,11 @@ package dev.kcoap.coap.stack
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.time.Duration
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 
 /**
  * The bounded queue that the exchanges of one Q-Block body ([ResponseMode.Inbox]) report into, and that
@@ -37,6 +41,16 @@ internal class ExchangeInbox(val capacity: Int) {
     /** The next event, or null when none is queued. */
     fun tryReceive(): ExchangeEvent? = events.tryReceive().getOrNull()
 
+    /**
+     * The next event, waiting at most [timeout] for one; null when none came. Unlike a `receive` inside
+     * `withTimeoutOrNull`, the timeout never takes an event out of the inbox and loses it.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun receive(timeout: Duration): ExchangeEvent? = select {
+        events.onReceive { it }
+        onTimeout(timeout) { null }
+    }
+
     override fun toString(): String = "ExchangeInbox(capacity=$capacity, lost=$lost)"
 
     companion object {
@@ -47,5 +61,19 @@ internal class ExchangeInbox(val capacity: Int) {
          * loses nothing.
          */
         fun forBody(parameters: TransmissionParameters): ExchangeInbox = ExchangeInbox(4 * parameters.maxPayloads + 8)
+
+        /**
+         * An inbox for one body on a reliable transport (RFC 9177 Appendix B), which never drops an event of the
+         * body: there nothing is asked for again, so a dropped block would stall the body until it timed out,
+         * and a connection reads many back-to-back blocks at once. It has room for a response body of
+         * [maxBodySize] bytes in 16-byte blocks, besides what [forBody] has room for. The queue grows as events
+         * come, so the room costs nothing until it is used, and the capacity still bounds what a server that
+         * floods the body's tokens can queue.
+         */
+        fun forReliableBody(parameters: TransmissionParameters, maxBodySize: Int): ExchangeInbox {
+            val blocks = (maxBodySize.toLong() + Blockwise.MIN_BLOCK_SIZE - 1) / Blockwise.MIN_BLOCK_SIZE
+            val capacity = blocks + 4L * parameters.maxPayloads + 8
+            return ExchangeInbox(capacity.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        }
     }
 }

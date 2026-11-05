@@ -267,6 +267,47 @@ class ExchangeModesTest {
     }
 
     @Test
+    fun rfc9177Section7_1AConfirmableInboxExchangeReportsAnEmptyAckAndStaysOpen() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox.forBody(endpoint.parameters)
+
+        val exchange = endpoint.openExchange(peer.address, get(), confirmable = true, security = null, mode = ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val acknowledged = assertIs<ExchangeEvent.Acknowledged>(inbox.receive())
+        peer.send(peer.response(request, CoapMessageType.CON, "separate"))
+        val response = assertIs<ExchangeEvent.Response>(inbox.receive())
+
+        assertSame(exchange, acknowledged.exchange)
+        assertTrue(acknowledged.toString().startsWith("Acknowledged("))
+        assertEquals("separate", response.message.payloadAsText())
+        assertTrue(exchange.isOpen)
+        exchange.cancel()
+    }
+
+    @Test
+    fun aTimedReceiveReturnsNullWithoutTakingAnEventAndOtherwiseTheNextEvent() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox.forBody(endpoint.parameters)
+        endpoint.openExchange(peer.address, get(), false, null, ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+
+        assertNull(inbox.receive(2.seconds))
+        assertEquals(2.seconds, fixture.now)
+        val late = async { inbox.receive(10.seconds) }
+        delay(1.seconds)
+        peer.send(peer.response(request, CoapMessageType.NON, "in time"))
+
+        assertEquals("in time", assertIs<ExchangeEvent.Response>(late.await()).message.payloadAsText())
+        assertEquals(3.seconds, fixture.now)
+        assertNull(inbox.tryReceive())
+    }
+
+    @Test
     fun anInboxExchangeHasNoResponsesToAwait() = runTest {
         val fixture = StackFixture(this)
         val peer = RawPeer(fixture.transport())

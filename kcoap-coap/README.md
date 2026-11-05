@@ -42,8 +42,14 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   separate and Non-confirmable responses; response timeouts; cancellation through coroutines; the
   message-security SPI around each message. A separate response is answered only after it was verified
   and its critical options checked: one with an unknown critical option gets a Reset and fails the
-  request (§5.4.1). For Q-Block (RFC 9177, being wired up) exchanges can take several responses on one
-  token into a per-body inbox, and a body lease holds one NSTART slot for a whole Non-confirmable body.
+  request (§5.4.1). For Q-Block (RFC 9177) exchanges can take several responses on one token into a
+  per-body inbox, and a body lease holds one NSTART slot for a whole Non-confirmable body.
+- **Q-Block client, RFC 9177** (off by default, `CoapClientConfig.qBlock`): a probe of
+  `/.well-known/core` per server, kept by the endpoint for all its clients, or `ASSUME_SUPPORTED`;
+  Q-Block1 uploads and Q-Block2 downloads in NON bursts of MAX_PAYLOADS with 2.31, Continue, 4.08 lists
+  and requests for missing blocks, Confirmable bodies in lock-step, back to back on TCP and WebSockets
+  (`onReliableTransports`); RFC 7959 for observations, No-Response, protected requests (until OSCORE
+  takes several responses to one request) and servers that reject Q-Block.
 - **Server**: resource tree by Uri-Path with template methods (`handleGet` … `handleIPatch`, 4.05 by
   default) or a DSL; 4.04; 4.02 with a diagnostic for unrecognized critical options, wrong lengths and
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
@@ -109,7 +115,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177).
+(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516), the Q-Block server (RFC 9177), Q-Block with OSCORE
+and Observe.
 
 ## Verified by
 

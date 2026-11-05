@@ -11,6 +11,9 @@ applications built on it.
   `InMemoryNetwork.tap` sees every datagram with its `DatagramFate`.
 - `InMemoryTransport.inject` hands any `DatagramEvent` to the receiver, for example
   `SessionEnded` to simulate a DTLS layer.
+- `RebindingTransport`: a client behind a NAT that rebinds. It sends from one attached transport until
+  a chosen datagram and from a second one after that, so the peer sees the source address change in the
+  middle of a conversation; it receives on both, or only on the new one when the old binding expired.
 - `InMemoryConnections`: listeners and a `Connector` for `coap+tcp`, `coaps+tcp`, `coap+ws` and
   `coaps+ws` (RFC 8323). Byte streams deliver writes in pieces of `chunkSize` bytes, so stream
   reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw

@@ -151,6 +151,17 @@ public class CoapEndpoint private constructor(
     internal var requestHandler: RequestHandler? = null
 
     /**
+     * Whether the peers support Q-Block (RFC 9177 §4.1), as the clients of this endpoint found out; shared by
+     * them, and forgotten for a peer when its DTLS session ends or its connection closes.
+     */
+    internal val qBlockCapabilities = QBlockCapabilities()
+
+    /** What the clients learned about [peer] goes with its session or connection. */
+    private suspend fun forgetPeer(peer: Endpoint) {
+        if (qBlockCapabilities.invalidate(peer)) log.debug { "Forgot whether $peer supports Q-Block" }
+    }
+
+    /**
      * Why the endpoint closed, or null while it is open: [CoapException.Reason.CLOSED] after [close] or when
      * its scope was cancelled; [CoapException.Reason.TRANSPORT_FAILED], with the transport's exception as
      * cause, when the datagram transport failed. Set once, in the terminal transition.
@@ -918,6 +929,7 @@ public class CoapEndpoint private constructor(
             exchanges.values.filter { it.peer == peer }
         }
         val cause = CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED)
+        forgetPeer(peer)
         bound.forEach { it.fail(cause) }
         requestHandler?.onSessionEnded(peer)
     }
@@ -962,6 +974,7 @@ public class CoapEndpoint private constructor(
             exchanges.values.filter { it.connection === connection }
         }
         val cause = CoapException("The connection to $peer closed: $reason", CoapException.Reason.CONNECTION_CLOSED)
+        forgetPeer(peer)
         bound.forEach { it.fail(cause) }
         requestHandler?.onSessionEnded(peer)
     }

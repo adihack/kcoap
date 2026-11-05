@@ -205,10 +205,10 @@ class QBlock1SenderTest {
         // Figure 14 answers on the token of the body's last block, not of the request that completed it.
         val sender = sender(size = 4 * 64 - 10)
         sender.start(Duration.ZERO)
-        sender.onResponse(4.seconds, 3, missing(1, 2))
+        assertEquals(listOf(0), sender.onResponse(4.seconds, 3, missing(1, 2)).released(), "block 0 arrived")
         val actions = sender.onResponse(4.seconds, 3, response(CoapCode.CONTENT) { qBlock2(block(0, true)) })
         assertEquals(3, assertIs<QBlockAction.Deliver<Int>>(actions.first()).ref)
-        assertEquals(listOf(0, 1, 2, 4, 5), actions.released(), "every token but the one of the response")
+        assertEquals(listOf(1, 2, 4, 5), actions.released(), "every other token but the one of the response")
         assertIs<QBlockAction.Drop>(sender.onResponse(5.seconds, 3, continue231).single(), "after the end")
         assertEquals(emptyList(), sender.onTimer(10.seconds))
         assertEquals(emptyList(), sender.abandon())
@@ -305,6 +305,51 @@ class QBlock1SenderTest {
     }
 
     @Test
+    fun rfc9177Section5A408ReleasesTheTokensOfTheBlocksItShowsArrived() {
+        val sender = sender()
+        sender.start(Duration.ZERO)
+        sender.onTimer(pause)
+
+        // On block 15's request, the server misses 2 and 7: every other block up to 15 has arrived.
+        val short = sender.onResponse(3.seconds, 15, missing(2, 7))
+        assertEquals((0..14) - listOf(2, 7), short.released())
+        assertEquals(listOf("2/1@20", "7/1@21"), short.sent())
+
+        // A full list may have been cut short: only the blocks below its last entry count as arrived.
+        val cut = sender()
+        cut.start(Duration.ZERO)
+        cut.onTimer(pause)
+        val full = cut.onResponse(3.seconds, 19, missing(1, 3, 5, 7, 9, 11, 13, 15, 17, 18))
+        assertEquals(listOf(0, 2, 4, 6, 8, 10, 12, 14, 16), full.released())
+    }
+
+    @Test
+    fun rfc9177Section4_3AnAcknowledgedConfirmableBlockReleasesItsTokenWhileLaterBlocksAreUnsent() {
+        val sender = sender(size = 4 * 64, mode = BodyMode.CON)
+        sender.start(Duration.ZERO)
+
+        val first = sender.onAcknowledged(1.seconds, 0)
+        val second = sender.onAcknowledged(2.seconds, 1)
+        val third = sender.onAcknowledged(3.seconds, 2)
+
+        assertEquals(listOf(0), first.released(), "block 0 cannot complete the body while 1 to 3 are unsent")
+        assertEquals(listOf("1/1@1"), first.sent())
+        assertEquals(listOf(1), second.released())
+        assertEquals(listOf(2), third.released())
+        assertEquals(listOf("3/0@3"), third.sent())
+        assertEquals(emptyList(), sender.onAcknowledged(4.seconds, 3).released(), "the last block may carry the final response")
+    }
+
+    @Test
+    fun rfc9177Section4_3WithNstart2ABlockAcknowledgedOnceEveryBlockWentOutKeepsItsToken() {
+        val sender = sender(size = 3 * 64, mode = BodyMode.CON, parameters = TransmissionParameters(nstart = 2))
+        sender.start(Duration.ZERO)
+
+        assertEquals(listOf(0), sender.onAcknowledged(1.seconds, 0).released())
+        assertEquals(emptyList(), sender.onAcknowledged(2.seconds, 1).released(), "block 1 may arrive after block 2")
+    }
+
+    @Test
     fun rfc9177Section4_3AResetFailsTheBody() {
         val sender = sender()
         sender.start(Duration.ZERO)
@@ -320,6 +365,72 @@ class QBlock1SenderTest {
         assertNull(sender.nextDeadline())
         assertEquals(emptyList(), sender.onResponse(1.seconds, 5, continue231), "no 2.31 on a reliable transport")
         assertEquals(emptyList(), sender.onAcknowledged(1.seconds, 5))
+    }
+
+    @Test
+    fun rfc9177AppendixBOnAReliableTransportOnlyBlock0AndTheLastBlockKeepTheirTokens() {
+        val sender = sender(size = 300 * 64, mode = BodyMode.RELIABLE)
+        val actions = sender.start(Duration.ZERO)
+
+        assertEquals(300, actions.sent().size)
+        assertEquals((1..298).toList(), actions.released(), "intermediate blocks get no response")
+        // Each block's token goes once the next block is out, so a body never holds more than three.
+        var held = 0
+        var most = 0
+        for (action in actions) {
+            if (action is QBlockAction.SendBlock<*>) held++
+            if (action is QBlockAction.Release<*>) held -= action.refs.size
+            most = maxOf(most, held)
+        }
+        assertEquals(3, most)
+        val early = sender.onResponse(1.seconds, 0, response(CoapCode.REQUEST_ENTITY_TOO_LARGE))
+        assertIs<QBlockAction.Deliver<Int>>(early.first(), "an early error on block 0 still arrives")
+        assertEquals(listOf(299), early.released())
+    }
+
+    @Test
+    fun rfc9177Section7_2ANonBodyWaitsForTheServerOnceItHoldsFourSetsOfTokens() {
+        val sender = sender(size = 300 * 64)
+        sender.start(Duration.ZERO)
+        sender.onTimer(pause)
+        sender.onTimer(pause * 2)
+        sender.onTimer(pause * 3)
+
+        // 40 requests are unconfirmed (libcoap sends no 2.31 while set 0 has a gap): set 4 waits.
+        assertEquals(emptyList(), sender.onTimer(pause * 4))
+        assertEquals(pause * 3 + 124.seconds, sender.nextDeadline(), "no resend while waiting, only the whole ladder")
+        assertEquals(emptyList(), sender.onTimer(11.seconds))
+
+        // The server's own 4.08, NON_RECEIVE_TIMEOUT after the last block it got, releases what arrived.
+        val missing = sender.onResponse(pause * 3 + 4.seconds, 39, missing(3))
+        assertEquals((0..38) - 3, missing.released())
+        assertEquals(listOf("3/1@40"), missing.sent())
+        assertEquals(pause * 4 + 4.seconds, sender.nextDeadline(), "the next set after the pause")
+        assertEquals(List(10) { "${it + 40}/1@${it + 41}" }, sender.onTimer(pause * 4 + 4.seconds).sent())
+
+        // A 2.31 that brings the body below the limit lets a waiting set go at once.
+        val waiting = sender(size = 300 * 64)
+        waiting.start(Duration.ZERO)
+        (1..4).forEach { waiting.onTimer(pause * it) }
+        assertEquals(emptyList(), waiting.onResponse(11.seconds, 9, continue231).sent(), "31 + 10 would still be too many")
+        val resumed = waiting.onResponse(11.seconds, 19, continue231)
+        assertEquals(List(10) { "${it + 40}/1@${it + 40}" }, resumed.sent())
+        assertEquals((9..18).toList(), resumed.released().sorted())
+    }
+
+    @Test
+    fun rfc9177Section7_2ANonBodyThatWaitsForTokensAndHearsNothingTimesOut() {
+        val sender = sender(size = 300 * 64)
+        sender.start(Duration.ZERO)
+        (1..4).forEach { sender.onTimer(pause * it) }
+
+        val actions = sender.onTimer(pause * 3 + 124.seconds)
+
+        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, assertIs<QBlockAction.Fail>(actions.first()).reason)
+        assertEquals((0..39).toList(), actions.released())
+        assertFailsWith<IllegalArgumentException> {
+            QBlock1Sender(300 * 64, 64, BodyMode.NON, timing, pause, resendsLastBlock = true, maxTokens = 19)
+        }
     }
 
     @Test

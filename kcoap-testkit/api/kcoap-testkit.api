@@ -133,6 +133,23 @@ public final class dev/kcoap/testkit/LinkConditions$Companion {
 	public final fun getPerfect ()Ldev/kcoap/testkit/LinkConditions;
 }
 
+public final class dev/kcoap/testkit/RebindingTransport : dev/kcoap/transport/DatagramTransport {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/testkit/InMemoryTransport;IZ)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/testkit/InMemoryTransport;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getFirst ()Ldev/kcoap/testkit/InMemoryTransport;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public final fun getOldAddressReceives ()Z
+	public final fun getSecond ()Ldev/kcoap/testkit/InMemoryTransport;
+	public final fun getSent ()I
+	public final fun getSwitchAt ()I
+	public final fun isRebound ()Z
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class dev/kcoap/testkit/Stress {
 	public static final field DEFAULT_ITERATIONS I
 	public static final field DEFAULT_PARALLELISM I

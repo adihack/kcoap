@@ -172,11 +172,46 @@ class QBlock2ReceiverTest {
             remove(CoapOptions.SIZE2.number)
         }.build()
         assertEquals(listOf("0/1/64"), receiver.onBlock(Duration.ZERO, rerun).requested(), "the whole body is asked for again")
-        assertNull(receiver.nextDeadline(), "nothing is assembled meanwhile")
+        assertFalse(receiver.isAssembling, "nothing is assembled meanwhile")
+        assertEquals(4.seconds, receiver.nextDeadline(), "but the request is repeated if no block comes")
         val unsafe = receiver(restartable = false)
         unsafe.feed(0, 1, 2)
         val failure = assertIs<QBlockAction.Fail>(unsafe.onBlock(Duration.ZERO, rerun).single())
         assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
+    }
+
+    @Test
+    fun rfc9177Section4_4ALostRequestForTheWholeBodyIsRepeatedOnTheLadderThenGivenUp() {
+        val receiver = receiver()
+        receiver.feed(0, 1, 2)
+        val rerun = download(4, size2).toBuilder().options {
+            remove(CoapOptions.ETAG.number)
+            remove(CoapOptions.SIZE2.number)
+        }.build()
+        receiver.onBlock(Duration.ZERO, rerun)
+
+        assertEquals(emptyList(), receiver.onTimer(3.seconds))
+        val times = listOf(4, 12, 28, 60).map { it.seconds }
+        for (at in times) {
+            assertEquals(at, receiver.nextDeadline())
+            assertEquals(listOf("0/1/64"), receiver.onTimer(at).requested(), "at $at")
+        }
+        assertEquals(124.seconds, receiver.nextDeadline())
+        assertIs<QBlockAction.Discard>(receiver.onTimer(124.seconds).single())
+        assertNull(receiver.nextDeadline())
+        assertEquals(emptyList(), receiver.onTimer(200.seconds))
+
+        // A block of the new body ends the wait; a new ETag without Size2 starts it as well.
+        val restarted = receiver()
+        restarted.feed(0, 1, 2)
+        assertEquals(listOf("0/1/64"), restarted.onBlock(Duration.ZERO, download(4, size2, etag = 2) { remove(CoapOptions.SIZE2.number) }).requested())
+        assertEquals(4.seconds, restarted.nextDeadline())
+        restarted.feed(0, at = 1.seconds, etag = 3)
+        assertEquals(5.seconds, restarted.nextDeadline(), "the new body's own recovery")
+        val reliable = receiver(mode = BodyMode.RELIABLE)
+        reliable.feed(0, 1, 2)
+        reliable.onBlock(Duration.ZERO, rerun)
+        assertNull(reliable.nextDeadline(), "nothing is lost on a reliable transport")
     }
 
     @Test
@@ -188,6 +223,19 @@ class QBlock2ReceiverTest {
         val ahead = receiver()
         ahead.feed(0, 1, 2, 3, 4, 5, 6, 7, 8, 12)
         assertEquals(emptyList(), ahead.feed(9), "no Continue once the next set arrives")
+    }
+
+    @Test
+    fun rfc9177Section7_2AMissingBlockThatCompletesTheHighestSetSendsTheContinue() {
+        // libcoap K2: blocks 2 and 7 are lost, asked for when block 10 arrives, and come after block 19.
+        val receiver = receiver()
+        val first = receiver.feed(*((0L..19L) - listOf(2L, 7L)).toLongArray())
+        assertEquals(listOf("2/0/64, 7/0/64"), first.requested())
+        assertEquals(emptyList(), first.filterIsInstance<QBlockAction.SendContinue>())
+
+        assertEquals(emptyList(), receiver.feed(2))
+        assertEquals(listOf(QBlockAction.SendContinue(20).toString()), receiver.feed(7).map { it.toString() })
+        assertEquals(emptyList(), receiver.feed(7).filterIsInstance<QBlockAction.SendContinue>(), "a duplicate asks for nothing")
     }
 
     @Test

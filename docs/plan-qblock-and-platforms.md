@@ -588,10 +588,46 @@ public class QBlockServerConfig(
   - The soak passes for 20 seeds with no leaked exchanges (`endpoint` exchange count is 0).
   - No message ever carries both Block and Q-Block options; a property check over all `traffic`.
   - Probe results are cached and invalidated as specified.
+- **Status: done.** `KC/client/QBlockClientConfig.kt` (`QBlockMode`, `QBlockClientConfig`),
+  `KC/client/QBlockSupport.kt` (probe, single-flight, cache per peer and protection),
+  `KC/client/QBlockClient.kt` (the driver of `QBlock1Sender` and `QBlock2Receiver` over inbox exchanges and
+  the body lease) and `KC/stack/QBlockClientEvent.kt` (`Fallback`, `Recovery`, `PartialBodyDropped`, a
+  sealed `EndpointEvent` subtype in a file of its own, so it merges with QB-3's events). The endpoint
+  reports an Empty ACK to an inbox exchange (`ExchangeEvent.Acknowledged`), waits on an inbox without
+  losing events to a timeout (`ExchangeInbox.receive(timeout)`) and tells clients when a peer's session
+  ends (`addPeerEndedListener`). Changes to the cores, each with tests: `QBlock1Sender` releases the tokens
+  a 4.08 shows arrived and those of acknowledged Confirmable blocks while later blocks are unsent (the soak
+  ran into `maxExchangesPerPeer` without it); `QBlock2Receiver` sends the Continue when a requested missing
+  block completes the highest set (K2). Deviations from the plan: a 4.02 or Reset before any other answer
+  sends the request again with RFC 7959 instead of returning or failing; in ASSUME_SUPPORTED mode such a
+  rejection marks the peer UNSUPPORTED for the capability lifetime; a Non-confirmable download without any
+  answer is sent again on the NON_RECEIVE_TIMEOUT ladder if its method may be repeated. Tests:
+  `QBlockClientTest`, `QBlockSupportTest`, `QBlockClientSoakTest` (soak, lease, rebinding, abandonment) on a
+  server scripted from the QB-1 server cores (`KT/QBlockTestServer.kt`), `RebindingTransportTest`, and
+  `KJ/KcoapClientAgainstLibcoapQBlockTest.kt` (K1–K5, K7–K10, K12; libcoap deviations pinned as
+  `upstreamLibcoap…` tests: a plain 4.08 for three gaps, no ETag after its 8 s cache expired, only block 0 of
+  a 2.01 body; K5 pins its 4.02 that repeats Q-Block2). K9 (b) passes: libcoap sends block 0 of the echoed
+  body and answers the client's request for blocks 1–2. A server-side `DroppingTransport` is not added; the
+  client test drops datagrams in a `LossyTransport` nested in its test class, so it does not clash with
+  QB-3's.
+  After review: a NON upload holds at most 4 × MAX_PAYLOADS unconfirmed tokens and lets the next set wait
+  for a 2.31 or 4.08 beyond that (libcoap sends no 2.31 while set 0 has a gap), and a reliable one releases
+  each block's token once the next is sent, except block 0's and the last's; a reliable body's inbox holds
+  every block (`ExchangeInbox.forReliableBody`); the request repeated with Echo gets the whole
+  NON_RECEIVE_TIMEOUT ladder, and a challenged Continue or request for missing blocks is repeated once with
+  Echo; the request for the whole body after a changed representation is repeated on the ladder; the
+  capability cache lives in the endpoint (`QBlockCapabilities`), shared by its clients, instead of a
+  listener per client. Two more deviations: an Empty ACK, 2.31, 4.08 or block counts as an answer, so a
+  4.02 after one is returned and leaves the capability as it is (item 2 of 1.4 forgot it on any 4.02); and
+  `QBlockClientConfig.withMessageSecurity` has no effect until QB-5, since OSCORE accepts one response per
+  request (`OscoreQBlockClientTest`). Tests: `QBlockClientReliableTest` (300-block bodies on a connection),
+  PROBE-mode silence tests for the probe invalidation, MESSAGE_TOO_LARGE, and against libcoap a 300-block
+  K4 and a 320-block K10.
 
 **QB-5: OSCORE with Q-Block**
 - **Scope:**
   - `KO/OscoreEndpoints.kt`, `KO/OscoreProtection.kt` (the binding flag).
+  - `KC/client/QBlockClient.kt` (`rfc7959Reason`): let `QBlockClientConfig.withMessageSecurity` take effect; QB-4 keeps every protected request on RFC 7959 until then, pinned by `ROOT/kcoap-oscore/src/jvmTest/kotlin/dev/kcoap/oscore/OscoreQBlockClientTest.kt`, which this package turns around.
   - New `ROOT/kcoap-oscore/src/commonTest/kotlin/dev/kcoap/oscore/OscoreQBlockTest.kt`: unit tests plus kcoap-to-kcoap end to end on `InMemoryNetwork` with loss.
   - `ROOT/kcoap-oscore/src/jvmTest/kotlin/dev/kcoap/oscore/StackOscoreInteropTest.kt`: K11 and L11.
 - **Accept:**

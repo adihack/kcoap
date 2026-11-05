@@ -92,6 +92,30 @@ adds its entry and migration note below.
   body dropped) and `CACHED_BODIES`; an exhaustive `when` over `EndpointEvent` or `Limit` needs the new
   branches. `qBlock` is a new trailing constructor parameter with a default, so source stays compatible;
   compiled callers of the `CoapServerConfig` constructor recompile.
+- The Q-Block client (RFC 9177; QB-4), off by default: `CoapClientConfig.qBlock` takes a
+  `QBlockClientConfig` whose `mode` is `QBlockMode.OFF` (the default; nothing changes), `PROBE` (each server
+  is asked once, with the Confirmable `GET /.well-known/core` carrying Q-Block2 0/0/16 that libcoap sends,
+  and the endpoint keeps the answer for `capabilityLifetime`, 1 hour, for all its clients) or
+  `ASSUME_SUPPORTED`. With a server that
+  supports it, bodies that need blocks go in Q-Block1 and responses come in Q-Block2, with 2.31, Continue,
+  4.08 lists and requests for missing blocks recovering lost blocks without a round trip per block. A
+  body follows its request's message type: use `nonConfirmable()` for the bursts of §7.2; Confirmable
+  bodies go in lock-step. `CoapClientConfig.blockSize` and `maxResponseBodySize` apply. A NON upload holds
+  at most four sets of unconfirmed requests (40 by default) and waits for the server's 2.31 or 4.08 beyond
+  that, so a long body stays well below `maxExchangesPerPeer`. Requests with No-Response, Observe or block
+  options of their own, observations, requests under message security and requests over TCP or WebSockets
+  (unless `onReliableTransports`) keep RFC 7959; so does a request a server rejects with 4.02 or a Reset
+  before answering anything else, which is sent again with RFC 7959. `withMessageSecurity` is not
+  functional yet: OSCORE accepts one response per request (RFC 8613 §7.4) until QB-5, so a client with
+  message security uses RFC 7959 whatever it says, and logs a warning when it is set.
+  `missingBlockMBit` asks for the missing tail of a set with one option. New `QBlockClientEvent`s, an
+  `EndpointEvent` subtype, report `Fallback`, `Recovery` and `PartialBodyDropped`; an exhaustive `when`
+  over `EndpointEvent` needs a branch for it. `qBlock` is a new trailing constructor parameter with a
+  default, so source stays compatible; compiled callers of the constructor recompile. Tested against
+  libcoap's `coap-server -L 7` (K1–K5, K7–K10, K12, with 300-block uploads over UDP and TCP) and soaked at
+  10 % and 30 % loss.
+- `kcoap-testkit`: `RebindingTransport`, a client whose source address changes at a chosen datagram, as
+  behind a NAT that rebinds (QB-4).
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by

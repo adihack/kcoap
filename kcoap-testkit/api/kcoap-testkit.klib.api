@@ -179,6 +179,32 @@ final class dev.kcoap.testkit/LinkConditions { // dev.kcoap.testkit/LinkConditio
     }
 }
 
+final class dev.kcoap.testkit/RebindingTransport : dev.kcoap.transport/DatagramTransport { // dev.kcoap.testkit/RebindingTransport|null[0]
+    constructor <init>(dev.kcoap.testkit/InMemoryTransport, dev.kcoap.testkit/InMemoryTransport, kotlin/Int, kotlin/Boolean = ...) // dev.kcoap.testkit/RebindingTransport.<init>|<init>(dev.kcoap.testkit.InMemoryTransport;dev.kcoap.testkit.InMemoryTransport;kotlin.Int;kotlin.Boolean){}[0]
+
+    final val first // dev.kcoap.testkit/RebindingTransport.first|{}first[0]
+        final fun <get-first>(): dev.kcoap.testkit/InMemoryTransport // dev.kcoap.testkit/RebindingTransport.first.<get-first>|<get-first>(){}[0]
+    final val isRebound // dev.kcoap.testkit/RebindingTransport.isRebound|{}isRebound[0]
+        final fun <get-isRebound>(): kotlin/Boolean // dev.kcoap.testkit/RebindingTransport.isRebound.<get-isRebound>|<get-isRebound>(){}[0]
+    final val localEndpoint // dev.kcoap.testkit/RebindingTransport.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.testkit/RebindingTransport.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val maxDatagramSize // dev.kcoap.testkit/RebindingTransport.maxDatagramSize|{}maxDatagramSize[0]
+        final fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.testkit/RebindingTransport.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
+    final val oldAddressReceives // dev.kcoap.testkit/RebindingTransport.oldAddressReceives|{}oldAddressReceives[0]
+        final fun <get-oldAddressReceives>(): kotlin/Boolean // dev.kcoap.testkit/RebindingTransport.oldAddressReceives.<get-oldAddressReceives>|<get-oldAddressReceives>(){}[0]
+    final val second // dev.kcoap.testkit/RebindingTransport.second|{}second[0]
+        final fun <get-second>(): dev.kcoap.testkit/InMemoryTransport // dev.kcoap.testkit/RebindingTransport.second.<get-second>|<get-second>(){}[0]
+    final val sent // dev.kcoap.testkit/RebindingTransport.sent|{}sent[0]
+        final fun <get-sent>(): kotlin/Int // dev.kcoap.testkit/RebindingTransport.sent.<get-sent>|<get-sent>(){}[0]
+    final val switchAt // dev.kcoap.testkit/RebindingTransport.switchAt|{}switchAt[0]
+        final fun <get-switchAt>(): kotlin/Int // dev.kcoap.testkit/RebindingTransport.switchAt.<get-switchAt>|<get-switchAt>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.testkit/RebindingTransport.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/RebindingTransport.close|close(){}[0]
+    final suspend fun receive(): dev.kcoap.transport/DatagramEvent // dev.kcoap.testkit/RebindingTransport.receive|receive(){}[0]
+    final suspend fun send(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.testkit/RebindingTransport.send|send(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+}
+
 final class dev.kcoap.testkit/StressScope : kotlinx.coroutines/CoroutineScope { // dev.kcoap.testkit/StressScope|null[0]
     final val background // dev.kcoap.testkit/StressScope.background|{}background[0]
         final fun <get-background>(): kotlinx.coroutines/CoroutineScope // dev.kcoap.testkit/StressScope.background.<get-background>|<get-background>(){}[0]
