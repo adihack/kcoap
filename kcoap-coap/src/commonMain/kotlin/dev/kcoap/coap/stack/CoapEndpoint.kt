@@ -302,13 +302,16 @@ public class CoapEndpoint private constructor(
         token: ByteArray?,
     ): ClientExchange {
         lock.withLock { ensureOpen() }
-        val connection = reliable.connectionFor(peer)
-        val exchange = lock.withLock {
-            ensureOpen()
-            register(peer, token, isObservation)?.also { it.connection = connection }
-        } ?: throw tooManyExchanges(peer)
-        // Counted at once, cancelled or not: the cleanup below counts it out again.
-        withContext(NonCancellable) { connection.exchangeOpened() }
+        val connection = reserveConnection(peer)
+        val exchange = try {
+            lock.withLock {
+                ensureOpen()
+                register(peer, token, isObservation)?.also { it.connection = connection }
+            } ?: throw tooManyExchanges(peer)
+        } catch (e: Throwable) {
+            withContext(NonCancellable) { connection.exchangeClosed(null) }
+            throw e
+        }
         val plain = request.toBuilder().apply { this.token = exchange.token }.build()
         try {
             val protected = security?.protectRequest(plain, peer)
@@ -324,7 +327,18 @@ public class CoapEndpoint private constructor(
         return exchange
     }
 
-    /** Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it. */
+    /**
+     * A connection to [peer] with this exchange already counted on it, so its idle Release cannot start
+     * between finding the connection and sending the request. One that started releasing meanwhile is
+     * skipped: the next lookup waits until it is gone and opens a new one (RFC 8323 §5.5).
+     */
+    private suspend fun reserveConnection(peer: Endpoint): ConnectionDriver {
+        while (true) {
+            val connection = reliable.connectionFor(peer)
+            if (connection.reserve()) return connection
+        }
+    }
+
     /**
      * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
      * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.

@@ -163,8 +163,13 @@ internal class ConnectionDriver(
         withMessaging { answered(sequence) }
     }
 
-    suspend fun exchangeOpened() {
-        withMessaging(signal = false) { exchangeOpened() }
+    /**
+     * Counts a new exchange on this connection, if it still takes new requests: checked and counted under
+     * the lock, so an idle Release (RFC 8323 §5.5) cannot start between the two. False when the connection
+     * is being released or is gone; the caller then waits for the next one.
+     */
+    suspend fun reserve(): Boolean = withMessaging(signal = false) {
+        (isEstablished && !isReleasing).also { if (it) exchangeOpened() }
     }
 
     /** An exchange ended; [tokenHex] is its token if no newer exchange took it over. */
