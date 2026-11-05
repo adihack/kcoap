@@ -55,7 +55,8 @@ suspend fun startServer(scope: CoroutineScope): CoapServer {
   DTLS `peerIdentity`, the OSCORE `securityIdentity`, and `acknowledge()` to promise a separate response
   early.
 - Large responses and request bodies go block-wise automatically, in blocks that fit the transport's
-  datagram size. `/.well-known/core` lists every resource with handlers, with `obs` for observable ones.
+  datagram size. `/.well-known/core` lists every resource with handlers that the caller may use (see
+  [Message security](#message-security)), with `obs` for observable ones.
 - An `ObservableResource` (or `observable()` in the DSL) is observed through GET or FETCH with Observe;
   call `notifyObservers()` whenever its state changes.
 
@@ -80,7 +81,8 @@ suspend fun useServer(scope: CoroutineScope) {
 ```
 
 - Every call suspends until the whole response arrived: separate responses are awaited, Block1 and
-  Block2 are done for you, a 4.01 with Echo is repeated with that Echo.
+  Block2 are done for you, a 4.01 with Echo is repeated with that Echo (under message security, only a
+  verified one).
 - Error codes come back as responses (`response.isSuccess`); no answer at all throws `CoapException`
   with a `reason` such as `TRANSMISSION_TIMEOUT` or `RESET`. Cancelling the coroutine cancels the
   exchange.
@@ -253,6 +255,34 @@ suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
 `dev.kcoap.coap.security` that `kcoap-oscore` implements. The stack calls it between the exchange layer
 and messaging, as RFC 8613 Figure 1 does: resources see decrypted requests, every block and every
 notification is protected on its own, and failures are answered unprotected with Max-Age 0.
+
+Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md)):
+
+- **Who may use a resource** is its `AccessPolicy`: `access = AccessPolicy.Public` in the DSL (or override
+  `CoapResource.access`), `MessageSecurityRequired`, `Authenticated` (message security, or DTLS/TLS for the
+  hop), or a lambda on the `AccessRequest`, which carries the method, the path, the resource, the peer, the
+  `securityIdentity` and the channel's `peerIdentity`. A policy covers the resource and everything below it
+  that sets none; `CoapServerConfig.defaultAccess` covers the rest, and is `MessageSecurityRequired` when
+  `security` is set, `Public` otherwise. `/.well-known/core` and the EDHOC resource are `Public`.
+- **The policy decides first.** A refused request gets 4.01 (4.03 when message security authenticated it and
+  the policy still says no) before any handler runs, any Block1 or Q-Block1 body is kept, any observation is
+  registered or cancelled, or any burst goes out. A path that does not exist is refused like its nearest
+  existing ancestor, so protected names do not leak through 4.04. `/.well-known/core` lists only what the
+  caller may use, and marks OSCORE-only resources with `osc` (RFC 8613 §9).
+- **Who sent it.** `securityIdentity` is the identity of the security context: an `OscoreIdentity` (Recipient
+  ID and ID Context), or, for a context EDHOC established, an `EdhocIdentity` with the peer's authenticated
+  credential (kcoap-edhoc-oscore). Observe registrations are kept per identity, so one client cannot
+  replace or cancel another's.
+- **What the client acts on.** Only responses its security layer verified. OSCORE sends its errors without
+  protection (RFC 8613 §8.2), and anyone who sees the token can send one too, so such a response neither
+  has the request repeated with its Echo value nor steers a block-wise or Q-Block body nor ends an
+  observation. A request answered only that way fails with `CoapException` and
+  `Reason.UNVERIFIED_RESPONSE`; `exception.response` is the error as it came. A server that lost its
+  context answers like this: run EDHOC again rather than repeating a request that may already have run.
+- **No silent plaintext.** `OscoreClient` fails a request its resolver finds no context for, and
+  kcoap-edhoc-oscore's `PeerSecurity` one to a server without an installed protection, with
+  `MessageSecurityException`, before anything is sent; `allowUnprotected = true` on either sends such
+  requests in plain CoAP on purpose.
 
 ## Testing without a network
 

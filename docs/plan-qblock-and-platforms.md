@@ -681,6 +681,12 @@ public class QBlockServerConfig(
   fallback's 4.02 is a protected 2.04 on the wire, and one endpoint shared by a plain and an OSCORE client keeps
   their probes and capabilities apart); `upstreamLibcoapCannotProtectQBlock2Bursts` reads the upload back
   with Inner Block2 and allows a block sent again.
+  Superseded by WP-SEC2 ([ADR 0008](adr/0008-fail-closed-message-security.md)): every unprotected 4.xx and
+  5.xx is now handed to the stack as unverified, for every request, and the stack acts on none of them, so
+  `UnprotectedResponses` no longer needs a rule of its own for Inner Q-Block requests. An injected 4.02 or
+  4.08 ends the body with `CoapException.Reason.UNVERIFIED_RESPONSE` instead of being dropped, and still
+  steers nothing; an unprotected 4.02 from a server without OSCORE ends the request at once instead of in a
+  timeout.
 
 **QB-6: Observe with Q-Block**
 - **Scope:**

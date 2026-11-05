@@ -63,10 +63,16 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   default) or a DSL; 4.04; 4.02 with a diagnostic for unrecognized critical options, wrong lengths and
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
   Proxy-Uri / Proxy-Scheme (§5.10.2); 5.00 for failing handlers; conditional-request helper (§5.10.8);
-  `/.well-known/core` with `rt`, `if`, `ct`, `sz`, `title`, `obs` and RFC 6690 §4.1 filtering;
+  `/.well-known/core` with `rt`, `if`, `ct`, `sz`, `title`, `obs`, `osc` and RFC 6690 §4.1 filtering;
   No-Response (RFC 7967); the request context with the peer, its `PeerIdentity` and the
   `SecurityIdentity`.
-- **Observe, RFC 7641**: server observers keyed by endpoint and token, 24-bit sequence numbers, at
+- **Access control** ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)): an `AccessPolicy` per
+  resource (`Public`, `MessageSecurityRequired`, `Authenticated` or the application's own), inherited down
+  the tree, `CoapServerConfig.defaultAccess` (`MessageSecurityRequired` with message security, else
+  `Public`), asked before any work for the request; 4.01 or 4.03, protected when the request was; missing
+  paths refused like their nearest ancestor; `/.well-known/core` filtered per caller.
+- **Observe, RFC 7641**: server observers keyed by endpoint, token and message-security identity, 24-bit
+  sequence numbers, at
   most one outstanding notification per client (NSTART) with superseding at the next timeout (§4.5.2),
   NON notifications rate-limited with a CON at least every 24 hours, observers removed on RST, timeout,
   non-2.xx notification, deregistration, ended session and resource removal; client observations shared
@@ -76,8 +82,12 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   Block1 assembly with 2.31 / 4.08 / 4.13 + Size1, Block2 from a cached representation with an ETag, also
   for notifications (§2.6); block sizes from the transport's `maxDatagramSize`. RFC 9175 Request-Tags for
   concurrent Block1 operations, and server state keyed by them.
-- **RFC 9175 Echo**: a 4.01 with Echo is answered once with the Echo value; the security layer can
-  answer with a challenge instead of the resource (RFC 8613 Appendix B.1.2). Against amplification the
+- **RFC 9175 Echo**: a 4.01 with Echo is answered once with the Echo value, under message security only a
+  verified one; the security layer can answer with a challenge instead of the resource (RFC 8613 Appendix
+  B.1.2).
+- **Verified responses**: the client acts only on responses its security layer verified
+  (`ResponseVerification`); an unverified error to a protected request fails it with
+  `CoapException.Reason.UNVERIFIED_RESPONSE` and is ignored by an established observation. Against amplification the
   server verifies a client's address before a response larger than three times its request (§2.4 item
   3, §2.6): a client that neither OSCORE nor DTLS authenticated, on a datagram transport, gets a 4.01
   with an Echo value instead, piggybacked or Non-confirmable, and returning the value verifies the
@@ -139,7 +149,10 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   including loss, duplication and reordering.
 - The message-security SPI with a fake OSCORE-like protection (inner options and code moved into the
   payload): protection per block and per notification, unprotected 4.01 / 4.00 errors with Max-Age 0,
-  structured error bodies, challenges.
+  structured error bodies, challenges. Access policies against a scripted client (`AccessPolicyTest`:
+  nothing buffered, registered or burst for a refused request, identity-keyed observations, filtered
+  discovery), and forged unprotected errors to protected requests, CON and NON, Block1, Q-Block and
+  Observe, none acted on (`UnverifiedResponseTest`).
 - Live interop with libcoap v4.3.5b in both directions (`src/jvmTest/.../interop`, see
   `interop/README.md`).
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class

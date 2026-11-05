@@ -12,6 +12,13 @@ adds its entry and migration note below.
 
 ### Added
 
+- Access control on the server (WP-SEC2): `AccessPolicy` with `Public`, `MessageSecurityRequired` and
+  `Authenticated`, `AccessRequest`, `CoapResource.access`, `ResourceBuilder.access`,
+  `CoapServerConfig.defaultAccess`, `LinkFormat.OSCORE` (`osc`, RFC 8613 §9). Verification on the client:
+  `ResponseVerification`, `CoapException.Reason.UNVERIFIED_RESPONSE` and `CoapException.response`. Who a
+  request comes from: `SecurityContext.identity` and the `identity` parameter of `SecurityContext.derive`,
+  `EdhocIdentity`. Plaintext by choice: `allowUnprotected` on `OscoreClient` and `PeerSecurity`.
+
 - CoAP over UDP (RFC 7252) with Observe (RFC 7641), Block-wise (RFC 7959), FETCH/PATCH/iPATCH (RFC 8132),
   Echo and Request-Tag (RFC 9175), No-Response (RFC 7967), Hop-Limit (RFC 8768) and link format (RFC 6690).
 - CoAP over TCP and WebSockets (RFC 8323): CSM, Ping/Pong, Release, Abort, BERT.
@@ -211,6 +218,48 @@ adds its entry and migration note below.
 
 ### Changed (breaking)
 
+Fail-closed message security (WP-SEC2, [ADR 0008](docs/adr/0008-fail-closed-message-security.md)):
+
+- **A server with message security refuses unprotected requests by default.** Resources have an
+  `AccessPolicy` (`CoapResource.access`, `access = ...` in the DSL; null inherits from the parent), and
+  `CoapServerConfig.defaultAccess` governs the rest: `AccessPolicy.MessageSecurityRequired` when `security`
+  is set, `AccessPolicy.Public` otherwise. The server asks the policy right after the resource lookup: a
+  refused request gets 4.01, or 4.03 when message security authenticated it, and reaches no handler, buffers
+  no Block1 or Q-Block1 body, registers or cancels no observation and gets no burst. A path that does not
+  exist is refused like its nearest existing ancestor instead of getting 4.04. `/.well-known/core` and
+  `EdhocResource` are `Public`; `/.well-known/core` lists only what the caller may use, with `osc` on
+  OSCORE-only resources (RFC 8613 §9). *Migration:* mark resources meant for everyone
+  `access = AccessPolicy.Public`, or set `defaultAccess = AccessPolicy.Public` to keep the old behaviour, or
+  `AccessPolicy.Authenticated` to also take DTLS-authenticated clients; replace hand-written
+  `if (securityIdentity is OscoreIdentity)` checks with the policy. Compiled callers of the
+  `CoapServerConfig` constructor recompile.
+- **Observe registrations are keyed by endpoint, token and message-security identity**: a request of another
+  identity, or of none, neither replaces nor cancels a registration (RFC 7641 §3.6, §4.1). *Migration:* none
+  for clients that deregister the way they registered.
+- **`ProtectedRequest.unprotectResponse` returns `ResponseVerification`** (`Verified(message)` or
+  `Unverified(message, reason)`) instead of a `CoapMessage`, and still throws `MessageSecurityException` for a
+  response to drop. *Migration:* only implementations of the SPI change: wrap a verified response in
+  `ResponseVerification.Verified`, and return an unprotected error you used to pass on as `Unverified`.
+- **The client acts only on verified responses to protected requests.** An unprotected error to a protected
+  request (`ResponseVerification.Unverified`) is no longer returned as a response: the request fails with
+  `CoapException(Reason.UNVERIFIED_RESPONSE)`, whose new `response` property holds it, and it is never
+  repeated for an Echo option, continued block-wise or taken as a Q-Block answer; an established observation
+  ignores it. `OscoreClient` hands every unprotected 4.xx and 5.xx on that way, also to requests carrying
+  Inner Q-Block, so an unprotected 4.02 from a server without OSCORE ends such a request at once instead of
+  in a timeout. *Migration:* where you read an unprotected 4.01 such as "Security context not found" from
+  `response.code`, catch `CoapException` with `UNVERIFIED_RESPONSE` and read `e.response`; run EDHOC again
+  rather than repeating a request that is not idempotent, which may already have run.
+- **`OscoreClient` and `PeerSecurity` never send plaintext silently.** A request whose `ClientContextResolver`
+  returns null, or to a server for which `PeerSecurity` has no protection installed (also after `remove`),
+  fails with `MessageSecurityException` before anything is sent; `PeerSecurity`'s `unprotectedPaths` (the
+  EDHOC resource) still go unprotected. *Migration:* pass `allowUnprotected = true` to `OscoreClient` or
+  `PeerSecurity` where plain CoAP to some servers is intended, and install protections before requesting.
+- **Requests of a context that EDHOC established carry an `EdhocIdentity`**, with the peer credential EDHOC
+  authenticated and the context's `OscoreIdentity`, instead of the bare `OscoreIdentity`
+  (`SecurityContext.identity`, which `OscoreServer` reports). *Migration:* authorize on
+  `(securityIdentity as? EdhocIdentity)?.peerCredential`, or on `.oscore` where the Recipient ID is what you
+  used; a provisioned context may name its peer with `SecurityContext.derive(..., identity = ...)`.
+
 WebSocket transports (WP-W1):
 
 - **`KtorWebSocketListener.start` takes the ktor server engine first, with no default**, and
@@ -403,6 +452,17 @@ Build governance (WP-C1):
 
 ### Security
 
+- CoAP server (WP-SEC2): configuring message security protected no resource by itself. Unprotected
+  requests reached every handler that did not check `securityIdentity`, and before any handler ran they
+  could buffer request bodies, register, replace or cancel observations of authenticated clients, get Q-Block2
+  bursts and list every resource. The default access policy of such a server now refuses them before any
+  work (ADR 0008).
+- CoAP client (WP-SEC2): anyone who saw a token could answer a protected request with an unprotected 4.01
+  and Echo, and the client sent the request again under a fresh Partial IV, so a POST could run twice
+  although OSCORE's replay protection never failed (RFC 8613 §8.2 errors are not authenticated). The client
+  now acts only on verified responses, and reports an unverified one as `UNVERIFIED_RESPONSE`.
+- OSCORE client and `PeerSecurity` (WP-SEC2): a missing context or protection no longer sends a request in
+  plaintext.
 - OSCORE: a `SequenceNumberStore.store()` that throws or is cancelled no longer lets the Sender
   Sequence Number advance past the durable limit, which could reuse nonces after a restart (RFC 8613
   Appendix B.1.1).
