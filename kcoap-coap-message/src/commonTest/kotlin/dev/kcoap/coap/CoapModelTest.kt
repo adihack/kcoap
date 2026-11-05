@@ -215,4 +215,26 @@ class CoapModelTest {
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%2") }
         assertFailsWith<IllegalArgumentException> { CoapUri(CoapScheme.COAP, "h", port = 0) }
     }
+
+    @Test
+    fun requestsAndResponsesValidateAndRender() {
+        val response = CoapResponse.content("hi")
+        assertEquals("2.05 Content [Content-Format: 0] 2 bytes", response.toString())
+        assertEquals(response, CoapResponse.of(response.toMessage(byteArrayOf(1))))
+        assertEquals(response.hashCode(), CoapResponse.content("hi").hashCode())
+        assertFalse(response == CoapResponse.content("ho"))
+        assertTrue(response.isSuccess)
+        assertEquals(CoapCode.CONTENT, CoapResponse.content(byteArrayOf(1)).code)
+        assertNull(CoapResponse.content(byteArrayOf(1)).contentFormat)
+        assertEquals(CoapCode.DELETED, CoapResponse.deleted().code)
+        assertEquals("4.04 Not Found", CoapResponse.error(CoapCode.NOT_FOUND).toString())
+        assertFailsWith<IllegalArgumentException> { CoapResponse(CoapCode.GET) }
+        assertFailsWith<IllegalArgumentException> { CoapResponse.error(CoapCode.CONTENT) }
+
+        val request = CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/x")).payload("body").accept(50).nonConfirmable().build()
+        assertEquals("0.02 POST coap://[::1]/x [Accept: 50] 4 bytes NON", request.toString())
+        assertEquals(request.toString(), request.toBuilder().build().toString())
+        assertEquals(4, request.payloadSize)
+        assertFailsWith<IllegalArgumentException> { CoapRequest(CoapCode.CONTENT, CoapUri.parse("coap://[::1]/x")) }
+    }
 }

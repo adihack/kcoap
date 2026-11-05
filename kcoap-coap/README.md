@@ -155,9 +155,10 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   WebSocket sockets; libcoap in both directions over `coap+tcp` and `coap+ws` (`interop/README.md`).
 
 - The RFC 7252, 7641, 7959, 6690, 9175 rules as unit tests named after their sections, on virtual time
-  over `kcoap-testkit`'s simulated network, including loss, duplication and reordering. The codecs'
-  tests (RFC 8613 Appendix C messages byte for byte, the RFC 8323 framings, fuzzing) are in
-  kcoap-coap-message.
+  over `kcoap-testkit`'s simulated network, including loss, duplication and reordering. The tests that
+  need no stack are in kcoap-coap-message: the codecs (RFC 8613 Appendix C messages byte for byte, the
+  RFC 8323 framings, fuzzing), link format, the signaling-option registry, `CoapRequest` and
+  `CoapResponse`.
 - The message-security SPI with a fake OSCORE-like protection (inner options and code moved into the
   payload): protection per block and per notification, unprotected 4.01 / 4.00 errors with Max-Age 0,
   structured error bodies, challenges. Access policies against a scripted client (`AccessPolicyTest`:

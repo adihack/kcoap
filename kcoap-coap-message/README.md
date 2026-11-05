@@ -62,13 +62,19 @@ layers, tokens and Message IDs, Block-wise, Observe, Q-Block, the client and the
 - `ReliableMessageCodecTest`: the RFC 8323 §3.2 length forms and the WebSocket framing (§4.2).
 - `CodecFuzzTest`: mutated messages from `kcoap-testkit`'s `ByteMutator` either decode or fail with
   `CoapFormatException`.
-- `CoapModelTest` and `CoapOptionsTest`: codes, options, builders, Block options, URIs and the option
-  registry.
-- In kcoap-coap, where they need the stack: link format in `DiscoveryTest`, the signaling options in
-  `SignalTest`, and the message-security SPI with a fake OSCORE-like layer in `MessageSecurityTest`,
-  `AccessPolicyTest` and `UnverifiedResponseTest`. kcoap-oscore implements the SPI against RFC 8613
-  Appendix C.
-- Line coverage in the root Kover report (`./gradlew koverXmlReport`), which counts the tests of every
-  module: 98.7% for `dev.kcoap.coap`, 100% for `dev.kcoap.coap.codec` and 93.8% for
-  `dev.kcoap.coap.security`. This module's own tests alone cover 69.5%
-  (`./gradlew :kcoap-coap-message:koverXmlReport`).
+- `CoapModelTest` and `CoapOptionsTest`: codes, options, builders, Block options, URIs, the option
+  registry, and `CoapRequest` and `CoapResponse`.
+- `LinkFormatTest`: the RFC 6690 §5 example document both ways, flags, escapes and quoted commas, malformed
+  documents, and the §4.1 query filters.
+- `SignalingOptionsTest`: the RFC 8323 §11.2 registry per signaling code, and how a signaling message
+  prints its options (§5.2).
+- `MessageSecurityTypesTest`: the SPI's values on their own: `MessageSecurityException`'s defaults and its
+  copied error body, `UnprotectedRequest.challenge`, `ResponseVerification`.
+- In kcoap-coap, how the stack uses these types: `/.well-known/core` in `DiscoveryTest`, the CSM, Ping,
+  Pong, Release and Abort signals in `SignalTest`, and the message-security SPI with a fake OSCORE-like
+  layer in `MessageSecurityTest`, `AccessPolicyTest` and `UnverifiedResponseTest`. kcoap-oscore implements
+  the SPI against RFC 8613 Appendix C.
+- Line coverage: this module's own tests cover 94.0% of its lines
+  (`./gradlew :kcoap-coap-message:koverXmlReport`). The root Kover report (`./gradlew koverXmlReport`),
+  which counts the tests of every module, gives 98.7% for `dev.kcoap.coap`, 100% for
+  `dev.kcoap.coap.codec` and 93.8% for `dev.kcoap.coap.security`.
