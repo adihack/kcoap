@@ -145,16 +145,19 @@ internal object Blockwise {
     private const val FNV_PRIME = 0x100000001b3L
 
     /**
-     * The options that identify a block-wise operation: all but Block1, Block2, Observe and the elective
-     * NoCacheKey options such as Size1, Size2 and Echo (RFC 7959 §2.4, RFC 9175 §3.3). Request-Tag is
-     * among them, so operations with different tags stay apart.
+     * The options that identify a block-wise operation: all but Block1, Block2, Q-Block1, Q-Block2, Observe
+     * and the elective NoCacheKey options such as Size1, Size2 and Echo (RFC 7959 §2.4, RFC 9175 §3.3,
+     * RFC 9177 §4.3). Request-Tag is among them, so operations with different tags stay apart.
      */
     fun operationOptions(options: OptionSet): List<CoapOption> = options.filter { option ->
         val number = option.number
         val electiveNoCacheKey = number % 2 == 0 && (number and 0x1e) == 0x1c
-        number != CoapOptions.BLOCK1.number && number != CoapOptions.BLOCK2.number &&
-            number != CoapOptions.OBSERVE.number && !electiveNoCacheKey
+        number !in BLOCK_OPTIONS && number != CoapOptions.OBSERVE.number && !electiveNoCacheKey
     }
+
+    private val BLOCK_OPTIONS = setOf(
+        CoapOptions.BLOCK1.number, CoapOptions.BLOCK2.number, CoapOptions.Q_BLOCK1.number, CoapOptions.Q_BLOCK2.number,
+    )
 }
 
 /** Identifies one block-wise operation of one peer (and message-security identity). */

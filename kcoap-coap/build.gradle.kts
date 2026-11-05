@@ -11,6 +11,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(project(":kcoap-testkit"))
+            implementation(project(":kcoap-cbor"))
         }
         jvmTest.dependencies {
             // The libcoap interop tests talk to coap-server and coap-client over real UDP, TCP and
