@@ -30,8 +30,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * [BodyMode.NON] (§7.2):
  * - When every block up to the end of a set arrived and none of a later set has, a Continue asks for the
- *   next set at once (Figure 8). A Continue is never repeated by itself: if it is lost, the timer below asks
- *   for the next set.
+ *   next set at once (Figure 8), also when the block that completes it is one asked for as missing after
+ *   that set came in (libcoap's server sends no later set by itself then). A Continue is never repeated by
+ *   itself: if it is lost, the timer below asks for the next set.
  * - A block of a later set while earlier sets have gaps asks for those gaps at once, once per set (Figure 9).
  * - Otherwise the gaps up to the end of the highest set that arrived, or the next set if there are none, are
  *   asked for NON_RECEIVE_TIMEOUT × 2^n after the later of the last new block and the last request for
@@ -209,12 +210,13 @@ internal class QBlock2Receiver(
             body.lastRequestAt = now
             return listOf(QBlockAction.RequestMissing(options(body, gaps)))
         }
-        val setEnd = sets.last(set, body.count)
-        if (set > body.continuedSet && !sets.isLast(set, body.count) && body.received.highest <= setEnd &&
-            body.received.hasAllUpTo(setEnd)
-        ) {
-            body.continuedSet = set
-            return listOf(QBlockAction.SendContinue(sets.first(set + 1)))
+        // The highest set that arrived, complete with every set before it, asks for the next one. That is this
+        // block's set, or a later one when this block filled the last gap below it: a block asked for after a
+        // later set came in.
+        val top = sets.of(body.received.highest)
+        if (top > body.continuedSet && !sets.isLast(top, body.count) && body.received.hasAllUpTo(sets.last(top, body.count))) {
+            body.continuedSet = top
+            return listOf(QBlockAction.SendContinue(sets.first(top + 1)))
         }
         return emptyList()
     }

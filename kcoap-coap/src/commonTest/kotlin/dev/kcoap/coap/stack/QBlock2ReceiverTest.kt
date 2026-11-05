@@ -191,6 +191,19 @@ class QBlock2ReceiverTest {
     }
 
     @Test
+    fun rfc9177Section7_2AMissingBlockThatCompletesTheHighestSetSendsTheContinue() {
+        // libcoap K2: blocks 2 and 7 are lost, asked for when block 10 arrives, and come after block 19.
+        val receiver = receiver()
+        val first = receiver.feed(*((0L..19L) - listOf(2L, 7L)).toLongArray())
+        assertEquals(listOf("2/0/64, 7/0/64"), first.requested())
+        assertEquals(emptyList(), first.filterIsInstance<QBlockAction.SendContinue>())
+
+        assertEquals(emptyList(), receiver.feed(2))
+        assertEquals(listOf(QBlockAction.SendContinue(20).toString()), receiver.feed(7).map { it.toString() })
+        assertEquals(emptyList(), receiver.feed(7).filterIsInstance<QBlockAction.SendContinue>(), "a duplicate asks for nothing")
+    }
+
+    @Test
     fun rfc9177Section4_4MissingBlock0IsAskedForWithTheWholeBodyForGet() {
         val receiver = receiver()
         receiver.feed(1, 2, 3)
