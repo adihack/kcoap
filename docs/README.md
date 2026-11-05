@@ -58,7 +58,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 |---|---|
 | [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published with the first release |
 | [kcoap-common](../kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers (no README yet; see the API reference) |
-| [kcoap-crypto](../kcoap-crypto) | The `CryptoBackend` SPI, AES-CCM, HKDF, SHAKE256, KMAC256 (no README yet; see the API reference) |
+| [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |
 | [kcoap-crypto-default](../kcoap-crypto-default/README.md) | The default backend per platform, its capabilities and fallbacks, and its R8 rules |
 | [kcoap-crypto-bc](../kcoap-crypto-bc/README.md) | The post-quantum backend: ML-KEM and ML-DSA on Bouncy Castle |
 | [kcoap-cbor](../kcoap-cbor/README.md) | CBOR and CBOR sequences |

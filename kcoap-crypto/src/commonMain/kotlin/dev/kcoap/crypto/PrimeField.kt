@@ -1,7 +1,7 @@
-package dev.kcoap.crypto.backend
+package dev.kcoap.crypto
 
 /**
- * Arithmetic modulo an odd prime, for the elliptic-curve point decompression in [EcPointDecompression].
+ * Arithmetic modulo an odd prime, for the elliptic-curve point decompression in [Sec1].
  *
  * Only public values pass through here (coordinates of public keys), so nothing is constant time.
  * Numbers are little-endian arrays of 16-bit limbs held in `Int`s: every product of two limbs plus two

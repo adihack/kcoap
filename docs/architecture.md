@@ -31,7 +31,7 @@ Protocol modules depend on SPIs, never on a backend or transport: applications c
 |---|---|
 | SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `LogSink`, `SecurityContextRepository` (`InMemoryContextRepository`) |
 | SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run. `MutableSecurityContextRepository` for an EDHOC server: `EdhocServer` adds a context per handshake, so production servers supply one with a bound; `InMemoryContextRepository` has none |
-| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend |
+| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend; a key-store backend around a software one, overriding only the private-key operations (kcoap-crypto README) |
 | Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
 | Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
 | State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
@@ -442,8 +442,8 @@ adding it later changes no other module:
 | `DtlsEngine` and `DtlsEffect`: the sans-IO engine interface | `kcoap-dtls` |
 | `DtlsCipherSuite`: the two mandatory suites, CCM-8 parameters, record overhead incl. CID | `kcoap-dtls` |
 | `DtlsConfig` with RFC 7925 defaults and per-mode validation | `kcoap-dtls` |
-| `DtlsCredentials`: `PskStore`, `DtlsSigner` (key stays in KeyStore/Enclave/HSM), `RawPublicKeyTrust` | `kcoap-dtls` |
-| `CertificateValidator`, shared with EDHOC | `kcoap-crypto` |
+| `DtlsCredentials`: `PskStore`, `DtlsLocalCredential` (a `PrivateKey` handle that can stay in KeyStore/Enclave/HSM, the same kind EDHOC's `LocalCredential` takes), `RawPublicKeyTrust` | `kcoap-dtls` |
+| `CertificateValidator`, X.509 and SubjectPublicKeyInfo parsing (the `x509` package) and DER↔raw ECDSA signatures (`EcdsaSignatureCodec`), all shared with EDHOC | `kcoap-crypto` |
 
 The rules every layer above must follow so that DTLS drops in without changes:
 
@@ -619,7 +619,7 @@ common-code fallbacks where those are small and handle only public data:
 | SHA-256/384, HMAC, AES-GCM, ECDH and ECDSA on P-256/P-384 | yes | used directly |
 | SHAKE256, KMAC256, HKDF, AES-CCM | no | common code (CCM on the AES block below) |
 | AES block for CCM | no ECB | AES-ECB where the provider has it, else AES-CTR on a zero block with the input as the counter |
-| ECDH from an x-only EDHOC key (`02 \|\| x`) | not reliably | compressed points expanded in common code before any provider sees them |
+| ECDH from an x-only EDHOC key (`02 \|\| x`) | not reliably | EDHOC expands it with `Sec1` (kcoap-crypto) before any backend sees it; the SPI takes uncompressed points only |
 | X25519, Ed25519 | in current browsers and Node.js | used directly; `UnsupportedAlgorithmException` where missing |
 | ChaCha20/Poly1305 | no | `UnsupportedAlgorithmException`: EDHOC suites 4 and 5 cannot run |
 | 192-bit AES keys | not in Chromium | `UnsupportedAlgorithmException` there |
@@ -663,9 +663,14 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
   EDHOC adds them), persisted sequence numbers (RFC 8613 Appendix B.1.1), replay windows, EDHOC state
   between messages, DTLS session tickets.
 - **Credentials**: resolvers for EDHOC credentials, PSKs and raw public keys; one `CertificateValidator`
-  shared by EDHOC (`x5chain`) and DTLS/TLS. No validator ships yet: a common-code validator for the
-  RFC 7925 profile and thin platform adapters (JVM `CertPathValidator`, Apple `SecTrust`) are on the
-  [roadmap](roadmap.md). What is trusted today:
+  shared by EDHOC (`x5chain`) and DTLS/TLS. Certificates and raw public keys are parsed in kcoap-crypto's
+  `x509` package (`X509Certificate`, `SubjectPublicKeyInfo`), which both protocols use and which throws
+  only `CertificateFormatException`, whatever a peer sends. Parsing is not validation, and kcoap ships no
+  validator yet: trusting an `x5chain` today means pinning or a validator the application supplies. The
+  planned default is a common-code validator for the RFC 7925 profile, verifying signatures through
+  `CryptoBackend.verify` with an injected clock, so it behaves the same on every platform; validators on the
+  operating system's trust store (JVM `CertPathValidator`, Apple `SecTrust`) may follow as optional adapters
+  ([roadmap](roadmap.md)). What is trusted today:
   - `TrustedCredentials` without a validator trusts only its pinned credentials; any other certificate
     chain fails closed.
   - With a validator, every chain the validator accepts authenticates, whoever its end entity is. A
@@ -673,6 +678,10 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
     on `EdhocSession.peerCredential` (its `certificate`) and `peerCredentialIdentifier`, or in a
     `CredentialResolver` that wraps `TrustedCredentials` (kcoap-edhoc README). A stub validator that
     accepts everything trusts every certificate.
+- **Key stores**: a `CryptoBackend` decorator that overrides `sign`, `keyAgreement` and `decapsulate` for
+  its own `PrivateKey` subclass and delegates the rest to a software backend. EDHOC (`LocalCredential`) and
+  DTLS (`DtlsLocalCredential`) take the same handles, and protocol code releases the keys it owns with
+  `PrivateKey.destroy()`.
 - **EAD handlers** for EDHOC.
 - **Logging and metrics** as hooks, no logging framework dependency.
 
@@ -682,15 +691,17 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 2. **AES-CCM is common code on the platform AES block**, from AES-ECB where the provider has it and
    from AES-CTR otherwise (encrypting a zero block with the input as the counter yields the encrypted
    input), as on WebCrypto. Done.
-3. **ECDH, ECDSA, EdDSA, KEMs and signatures are in the SPI**, with opaque private-key handles. COSE
-   uses raw `r || s` ECDSA signatures; DTLS will need DER and converts.
+3. **ECDH, ECDSA, EdDSA, KEMs and signatures are in the SPI**, with opaque private-key handles that
+   protocol code releases with `destroy()`. Public keys are raw: P-256 and P-384 uncompressed, expanded
+   from compressed form with `Sec1` before the SPI. COSE uses raw `r || s` ECDSA signatures; DTLS and
+   X.509 use DER and convert with `EcdsaSignatureCodec`. Done.
 4. **`js` and `wasmJs` targets**, with `browser()` and `nodejs()`, for every module except the
    adapters around runtime-bound libraries (`kcoap-transport-ktor`: sockets; `kcoap-crypto-bc`: JVM).
    The common tests run on Node.js for both. Done.
 5. **Capabilities, not platforms.** Code never branches on the target. A backend reports what its
    platform lacks with `UnsupportedAlgorithmException`, `supports(...)` asks that question in advance,
-   and gaps get common-code fallbacks where they are small and safe (the AES block, point
-   decompression). Tests skip by capability too.
+   and gaps get common-code fallbacks where they are small and safe (the AES block, SHAKE256, point
+   decompression in kcoap-crypto's `Sec1`). Tests skip by capability too.
 
 ## Modules
 

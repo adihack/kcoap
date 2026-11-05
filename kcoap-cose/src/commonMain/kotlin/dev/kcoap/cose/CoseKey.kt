@@ -1,5 +1,6 @@
 package dev.kcoap.cose
 
+import dev.kcoap.cbor.CborBool
 import dev.kcoap.cbor.CborBytes
 import dev.kcoap.cbor.CborException
 import dev.kcoap.cbor.CborInt
@@ -10,6 +11,7 @@ import dev.kcoap.cbor.asInt
 import dev.kcoap.cbor.toCbor
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.Sec1
 
 /** COSE key types (RFC 9053 §7, RFC 9052 §7). */
 public enum class CoseKeyType(public val value: Int) {
@@ -115,7 +117,17 @@ public class CoseKey(
         /** The public key of an AKP key; it shares label -1 with crv of the other key types. */
         public const val LABEL_AKP_PUB: Int = -1
 
-        /** Parses a COSE_Key map. Unknown parameters are ignored, as RFC 9052 §7 allows. */
+        /**
+         * Parses a COSE_Key map. Unknown parameters are ignored, as RFC 9052 §7 allows.
+         *
+         * An EC2 key on P-256 or P-384 may give y as its sign bit instead of the coordinate, `true` for an
+         * odd y (RFC 9053 §7.1.1, a compressed point). The coordinate is computed with [Sec1], so [y],
+         * [rawPublicKey] and [encode] carry it in full.
+         *
+         * @throws CborException for a map that is not a COSE_Key kcoap supports, among them an EC2 key
+         *   without crv or y (RFC 9053 §7.1.1) and an OKP key without crv or with a y (§7.2), or a sign bit
+         *   whose x is not on the curve.
+         */
         public fun fromCbor(map: CborMap): CoseKey {
             val type = map[LABEL_KTY]?.asInt()?.let(CoseKeyType::fromValue)
                 ?: throw CborException("COSE_Key has a missing or unsupported kty")
@@ -131,11 +143,30 @@ public class CoseKey(
             val y = when (val value = map[LABEL_Y]) {
                 null -> null
                 is CborBytes -> value.bytes
-                // RFC 9053 §7.1.1: y may be a boolean sign bit for compressed points; not supported.
-                else -> throw CborException("COSE_Key y must be a byte string")
+                is CborBool -> coordinateWithSignBit(type, curve, x, isOdd = value.value)
+                else -> throw CborException("COSE_Key y must be a byte string or a sign bit")
+            }
+            when {
+                curve == null -> throw CborException("$type COSE_Key without crv")
+                type == CoseKeyType.EC2 && y == null -> throw CborException("EC2 COSE_Key without y")
+                type == CoseKeyType.OKP && y != null -> throw CborException("OKP COSE_Key with y")
             }
             val algorithm = (map[LABEL_ALG] as? CborInt)?.value?.toInt()
             return CoseKey(type, curve, x, y, map[LABEL_KID]?.asBytes(), algorithm)
+        }
+
+        /** The y-coordinate of the point x on [curve] whose y has the parity [isOdd] (SEC 1 v2 §2.3.4). */
+        private fun coordinateWithSignBit(type: CoseKeyType, curve: CoseCurve?, x: ByteArray, isOdd: Boolean): ByteArray {
+            if (type != CoseKeyType.EC2 || (curve != CoseCurve.P_256 && curve != CoseCurve.P_384)) {
+                throw CborException("A sign bit for y needs an EC2 key on P-256 or P-384")
+            }
+            val compressed = byteArrayOf(if (isOdd) 3 else 2) + x
+            val point = try {
+                Sec1.decompress(curve.keyType, compressed)
+            } catch (_: IllegalArgumentException) {
+                throw CborException("COSE_Key x is not a coordinate of a point on $curve")
+            }
+            return point.copyOfRange(1 + x.size, point.size)
         }
     }
 }

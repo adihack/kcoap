@@ -195,7 +195,48 @@ abstract class dev.kcoap.crypto/PrivateKey { // dev.kcoap.crypto/PrivateKey|null
     final val type // dev.kcoap.crypto/PrivateKey.type|{}type[0]
         final fun <get-type>(): dev.kcoap.crypto/KeyType // dev.kcoap.crypto/PrivateKey.type.<get-type>|<get-type>(){}[0]
 
+    open fun destroy() // dev.kcoap.crypto/PrivateKey.destroy|destroy(){}[0]
     open fun toString(): kotlin/String // dev.kcoap.crypto/PrivateKey.toString|toString(){}[0]
+}
+
+final class dev.kcoap.crypto.x509/CertificateFormatException : kotlin/Exception { // dev.kcoap.crypto.x509/CertificateFormatException|null[0]
+    constructor <init>(kotlin/String, kotlin/Throwable? = ...) // dev.kcoap.crypto.x509/CertificateFormatException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
+}
+
+final class dev.kcoap.crypto.x509/SubjectPublicKeyInfo { // dev.kcoap.crypto.x509/SubjectPublicKeyInfo|null[0]
+    final val encoded // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.encoded|{}encoded[0]
+        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.encoded.<get-encoded>|<get-encoded>(){}[0]
+    final val keyType // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.keyType|{}keyType[0]
+        final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.keyType.<get-keyType>|<get-keyType>(){}[0]
+    final val publicKey // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.publicKey|{}publicKey[0]
+        final fun <get-publicKey>(): kotlin/ByteArray // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.publicKey.<get-publicKey>|<get-publicKey>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.Companion|null[0]
+        final fun decode(kotlin/ByteArray): dev.kcoap.crypto.x509/SubjectPublicKeyInfo // dev.kcoap.crypto.x509/SubjectPublicKeyInfo.Companion.decode|decode(kotlin.ByteArray){}[0]
+    }
+}
+
+final class dev.kcoap.crypto.x509/X509Certificate { // dev.kcoap.crypto.x509/X509Certificate|null[0]
+    final val encoded // dev.kcoap.crypto.x509/X509Certificate.encoded|{}encoded[0]
+        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.crypto.x509/X509Certificate.encoded.<get-encoded>|<get-encoded>(){}[0]
+    final val keyType // dev.kcoap.crypto.x509/X509Certificate.keyType|{}keyType[0]
+        final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.crypto.x509/X509Certificate.keyType.<get-keyType>|<get-keyType>(){}[0]
+    final val publicKey // dev.kcoap.crypto.x509/X509Certificate.publicKey|{}publicKey[0]
+        final fun <get-publicKey>(): kotlin/ByteArray // dev.kcoap.crypto.x509/X509Certificate.publicKey.<get-publicKey>|<get-publicKey>(){}[0]
+    final val subjectCommonName // dev.kcoap.crypto.x509/X509Certificate.subjectCommonName|{}subjectCommonName[0]
+        final fun <get-subjectCommonName>(): kotlin/String? // dev.kcoap.crypto.x509/X509Certificate.subjectCommonName.<get-subjectCommonName>|<get-subjectCommonName>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.crypto.x509/X509Certificate.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.crypto.x509/X509Certificate.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.crypto.x509/X509Certificate.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.crypto.x509/X509Certificate.Companion|null[0]
+        final fun parse(kotlin/ByteArray): dev.kcoap.crypto.x509/X509Certificate // dev.kcoap.crypto.x509/X509Certificate.Companion.parse|parse(kotlin.ByteArray){}[0]
+    }
 }
 
 final class dev.kcoap.crypto/AeadAuthenticationException : kotlin/Exception { // dev.kcoap.crypto/AeadAuthenticationException|null[0]
@@ -234,9 +275,9 @@ final class dev.kcoap.crypto/KemEncapsulation { // dev.kcoap.crypto/KemEncapsula
 
     final val ciphertext // dev.kcoap.crypto/KemEncapsulation.ciphertext|{}ciphertext[0]
         final fun <get-ciphertext>(): kotlin/ByteArray // dev.kcoap.crypto/KemEncapsulation.ciphertext.<get-ciphertext>|<get-ciphertext>(){}[0]
-    final val sharedSecret // dev.kcoap.crypto/KemEncapsulation.sharedSecret|{}sharedSecret[0]
-        final fun <get-sharedSecret>(): kotlin/ByteArray // dev.kcoap.crypto/KemEncapsulation.sharedSecret.<get-sharedSecret>|<get-sharedSecret>(){}[0]
 
+    final fun destroy() // dev.kcoap.crypto/KemEncapsulation.destroy|destroy(){}[0]
+    final fun sharedSecret(): kotlin/ByteArray // dev.kcoap.crypto/KemEncapsulation.sharedSecret|sharedSecret(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.crypto/KemEncapsulation.toString|toString(){}[0]
 }
 
@@ -267,8 +308,18 @@ final class dev.kcoap.crypto/UnsupportedAlgorithmException : kotlin/Exception { 
         final fun <get-algorithm>(): kotlin/String // dev.kcoap.crypto/UnsupportedAlgorithmException.algorithm.<get-algorithm>|<get-algorithm>(){}[0]
 }
 
+final object dev.kcoap.crypto/EcdsaSignatureCodec { // dev.kcoap.crypto/EcdsaSignatureCodec|null[0]
+    final fun fromDer(dev.kcoap.crypto/SignatureAlgorithm, kotlin/ByteArray): kotlin/ByteArray? // dev.kcoap.crypto/EcdsaSignatureCodec.fromDer|fromDer(dev.kcoap.crypto.SignatureAlgorithm;kotlin.ByteArray){}[0]
+    final fun toDer(dev.kcoap.crypto/SignatureAlgorithm, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto/EcdsaSignatureCodec.toDer|toDer(dev.kcoap.crypto.SignatureAlgorithm;kotlin.ByteArray){}[0]
+}
+
 final object dev.kcoap.crypto/Kmac256 { // dev.kcoap.crypto/Kmac256|null[0]
     final fun compute(kotlin/ByteArray, kotlin/ByteArray, kotlin/Int, kotlin/ByteArray = ...): kotlin/ByteArray // dev.kcoap.crypto/Kmac256.compute|compute(kotlin.ByteArray;kotlin.ByteArray;kotlin.Int;kotlin.ByteArray){}[0]
+}
+
+final object dev.kcoap.crypto/Sec1 { // dev.kcoap.crypto/Sec1|null[0]
+    final fun decompress(dev.kcoap.crypto/KeyType, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto/Sec1.decompress|decompress(dev.kcoap.crypto.KeyType;kotlin.ByteArray){}[0]
+    final fun isCompressed(kotlin/ByteArray): kotlin/Boolean // dev.kcoap.crypto/Sec1.isCompressed|isCompressed(kotlin.ByteArray){}[0]
 }
 
 final object dev.kcoap.crypto/Shake256 { // dev.kcoap.crypto/Shake256|null[0]

@@ -17,12 +17,12 @@ class DtlsConfigTest {
         override suspend fun credentialFor(peer: Endpoint, identityHint: ByteArray?): PskCredential? = null
     }
 
-    private fun signer(chain: List<ByteArray>) = object : DtlsSigner {
-        override val subjectPublicKeyInfo: ByteArray = ByteArray(91)
-        override val certificateChain: List<ByteArray> = chain
-
-        override suspend fun sign(data: ByteArray): ByteArray = ByteArray(0)
-    }
+    private val rawPublicKey = DtlsLocalCredential(TestCredentials.p256Key(), TestCredentials.p256Spki())
+    private val withCertificate = DtlsLocalCredential(
+        TestCredentials.p256Key(),
+        TestCredentials.p256Spki(),
+        listOf(TestCredentials.certificate(TestCredentials.p256Spki())),
+    )
 
     private val pskOnly = DtlsCredentials(preSharedKeys = pskStore)
 
@@ -58,22 +58,22 @@ class DtlsConfigTest {
     fun eachModeNeedsItsCredentials() {
         assertFailsWith<IllegalArgumentException> { DtlsConfig(setOf(SecurityMode.PRE_SHARED_KEY), DtlsCredentials()) }
         assertFailsWith<IllegalArgumentException> {
-            DtlsConfig(setOf(SecurityMode.RAW_PUBLIC_KEY), DtlsCredentials(signer = signer(emptyList())))
+            DtlsConfig(setOf(SecurityMode.RAW_PUBLIC_KEY), DtlsCredentials(localCredential = rawPublicKey))
         }
         DtlsConfig(
             setOf(SecurityMode.RAW_PUBLIC_KEY),
-            DtlsCredentials(signer = signer(emptyList()), rawPublicKeyTrust = RawPublicKeyTrust { _, _ -> true }),
+            DtlsCredentials(localCredential = rawPublicKey, rawPublicKeyTrust = RawPublicKeyTrust { _, _ -> true }),
         )
         val validator = CertificateValidator { }
         assertFailsWith<IllegalArgumentException> {
             DtlsConfig(
                 setOf(SecurityMode.CERTIFICATE),
-                DtlsCredentials(signer = signer(emptyList()), certificateValidator = validator),
+                DtlsCredentials(localCredential = rawPublicKey, certificateValidator = validator),
             )
         }
         DtlsConfig(
             setOf(SecurityMode.CERTIFICATE),
-            DtlsCredentials(signer = signer(listOf(ByteArray(300))), certificateValidator = validator),
+            DtlsCredentials(localCredential = withCertificate, certificateValidator = validator),
         )
     }
 

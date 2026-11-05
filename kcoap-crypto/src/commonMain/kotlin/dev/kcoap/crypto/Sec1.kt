@@ -1,22 +1,25 @@
-package dev.kcoap.crypto.backend
+package dev.kcoap.crypto
 
 import dev.kcoap.common.hexToBytes
-import dev.kcoap.crypto.KeyType
 
 /**
- * Compressed SEC1 points (`02 || x` or `03 || x`) for P-256 and P-384, expanded to `04 || x || y` in
- * common code (SEC 1 v2 §2.3.4).
+ * Compressed SEC1 points (`02 || x` or `03 || x`) for P-256 and P-384, expanded to the uncompressed
+ * `04 || x || y` that [KeyType.P256] and [KeyType.P384] document (SEC 1 v2 §2.3.4).
  *
- * EDHOC sends only the x-coordinate of P-256 and P-384 keys (RFC 9528 §3.7), and kcoap passes such a
- * key on as `02 || x`. JCA, CommonCrypto, OpenSSL and Node.js accept compressed points, but browsers'
- * WebCrypto does not reliably, so the backend expands the point itself and hands every platform the
- * uncompressed form. The point is public, so the arithmetic need not be constant time.
+ * P-256 and P-384 public keys cross the [CryptoBackend] boundary uncompressed, so protocol code expands
+ * every compressed point before a backend sees it: EDHOC sends only the x-coordinate of an ephemeral
+ * key (RFC 9528 §3.7, Appendix B), certificates may carry compressed keys (RFC 5480 §2.2), and a COSE_Key
+ * may give y as a sign bit (RFC 9053 §7.1.1). Platforms disagree about compressed points: JCA, OpenSSL and
+ * Node.js accept them, but Apple's SecKey and browsers' WebCrypto do not reliably, and a secure element
+ * may not at all. Expanding them here makes the same input behave the same way on every platform and
+ * with every backend.
  *
  * Both curves are `y^2 = x^3 - 3x + b` over a prime `p ≡ 3 (mod 4)`, so the square root is
- * `(x^3 - 3x + b)^((p + 1) / 4)`. A candidate that does not square back to the right-hand side means
- * x is not on the curve, and the key is rejected.
+ * `(x^3 - 3x + b)^((p + 1) / 4)`. A candidate that does not square back to the right-hand side means x
+ * is not on the curve, and the point is rejected. The point is public, so the arithmetic need not be
+ * constant time.
  */
-internal object EcPointDecompression {
+public object Sec1 {
     private class Curve(prime: String, b: String) {
         val field = PrimeField(prime.hexToBytes())
         val b = field.fromBytes(b.hexToBytes())
@@ -40,15 +43,18 @@ internal object EcPointDecompression {
         )
     }
 
-    /** Whether [point] is a compressed SEC1 encoding (`02` or `03` prefix). */
-    fun isCompressed(point: ByteArray): Boolean = point.isNotEmpty() && (point[0].toInt() == 2 || point[0].toInt() == 3)
+    /** Whether [point] starts like a compressed SEC1 point: with `02` or `03`. Its length is not checked. */
+    public fun isCompressed(point: ByteArray): Boolean =
+        point.isNotEmpty() && (point[0].toInt() == 2 || point[0].toInt() == 3)
 
     /**
-     * The uncompressed `04 || x || y` for the compressed [point] on the curve of [type].
+     * The uncompressed `04 || x || y` of the compressed [point] on the curve of [type]: y is the square root
+     * whose parity the prefix gives, `02` for an even y and `03` for an odd one.
      *
-     * @throws IllegalArgumentException when the encoding is malformed or x is not on the curve.
+     * @throws IllegalArgumentException when [type] is not P-256 or P-384, when [point] is not `02` or `03`
+     *   followed by one coordinate, or when x is not below the field prime or not on the curve.
      */
-    fun decompress(type: KeyType, point: ByteArray): ByteArray {
+    public fun decompress(type: KeyType, point: ByteArray): ByteArray {
         val curve = when (type) {
             KeyType.P256 -> p256
             KeyType.P384 -> p384

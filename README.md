@@ -189,7 +189,7 @@ More in the [client and server guide](docs/guide-client-server.md).
 | Module | What it is |
 |---|---|
 | [`kcoap-common`](kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers `@InternalKcoapApi` and `@ExperimentalKcoapApi` |
-| [`kcoap-crypto`](kcoap-crypto) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256 |
+| [`kcoap-crypto`](kcoap-crypto/README.md) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER, X.509 parsing |
 | [`kcoap-crypto-default`](kcoap-crypto-default/README.md) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple, OpenSSL on Linux, WebCrypto in browsers and Node.js |
 | [`kcoap-crypto-bc`](kcoap-crypto-bc/README.md) | Post-quantum backend on Bouncy Castle: ML-KEM and ML-DSA (JVM, Android) |
 | [`kcoap-cbor`](kcoap-cbor/README.md) | Deterministic CBOR and CBOR sequences |

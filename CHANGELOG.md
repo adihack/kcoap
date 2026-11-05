@@ -252,8 +252,56 @@ adds its entry and migration note below.
   on its own: without them R8 stops on missing classes when it shrinks an app that does not use
   `kcoap-crypto-bc`, the Bouncy Castle classes that cryptography-kotlin's JDK provider names and loads
   only when present (PL-1).
+- Shared crypto building blocks in kcoap-crypto (WP-A4), with a [README](kcoap-crypto/README.md): `Sec1`
+  expands compressed P-256 and P-384 points (SEC 1 v2 §2.3.4) in common code on every target;
+  `EcdsaSignatureCodec` converts ECDSA signatures between raw `r || s` and DER (`toDer`, and `fromDer`,
+  which returns null for anything but a strict DER signature); `x509.SubjectPublicKeyInfo.decode` reads a DER
+  SubjectPublicKeyInfo (RFC 7250 §3) into its `KeyType` and raw key; `PrivateKey.destroy()` releases any key
+  handle; `KemEncapsulation.destroy()`. `CoseKey.fromCbor` accepts an EC2 y given as a sign bit (RFC 9053
+  §7.1.1), which it expands to the coordinate. kcoap-dtls has `DtlsLocalCredential` (below).
 
 ### Changed (breaking)
+
+kcoap-crypto as the home of shared crypto blocks (WP-A4):
+
+- **`X509Certificate` moved from `dev.kcoap.edhoc` (kcoap-edhoc) to `dev.kcoap.crypto.x509` (kcoap-crypto)**,
+  next to `CertificateValidator`, with no typealias left behind; DTLS uses the same parser. It throws the new
+  `CertificateFormatException` (same package) instead of `IllegalArgumentException` for any input it cannot
+  use, so DER from a peer never surfaces as an `IllegalArgumentException`, and so does
+  `AuthenticationCredential.x509`. Its `publicKey` for P-256 and P-384 is always the uncompressed point,
+  also when the certificate carries a compressed one, and a SubjectPublicKeyInfo with fields after the key or
+  a 65-byte point that does not start with `04` is refused. *Migration:* import
+  `dev.kcoap.crypto.x509.X509Certificate`, and catch `CertificateFormatException` where you caught
+  `IllegalArgumentException` from `X509Certificate.parse` or `AuthenticationCredential.x509`.
+- **`KemEncapsulation.sharedSecret` is the function `sharedSecret()`**, which returns a copy on every call
+  (API-10: secrets are functions); `destroy()` overwrites the secret, after which `sharedSecret()` throws
+  `IllegalStateException`. The constructor takes over both arrays without copying them. *Migration:* call
+  `sharedSecret()`, and `destroy()` the encapsulation once you have the secret; backends construct it as
+  before.
+- **`CryptoBackend.keyAgreement` and `verify` take P-256 and P-384 public keys uncompressed**, `04 || x || y`,
+  as `KeyType` documents. EDHOC now expands the x-only shares of its peers with `Sec1` before it calls the
+  backend, so a share whose x is not on the curve fails the same way on every platform, and before the
+  Responder generates Y for it. `DefaultCryptoBackend` still accepts compressed points. *Migration:* a backend
+  of your own no longer needs to decode compressed points; code that passed compressed points to a backend
+  expands them with `Sec1.decompress` first.
+- **EDHOC destroys every ephemeral private key it is done with by calling `PrivateKey.destroy()`**, where it
+  destroyed only `SoftwarePrivateKey`s; `SoftwarePrivateKey.destroy()` now overrides it. It also destroys a
+  key pair from an `EphemeralKeySource` that it cannot use, such as one with a public key of the wrong size.
+  `destroy()` releases on a best-effort basis and must not throw; EDHOC logs one that throws anyway at WARN,
+  still wipes its secrets, and completes the handshake or aborts it with an `EdhocException`. *Migration:* a
+  `PrivateKey` subclass of your own that an `EphemeralKeySource` or a backend hands to EDHOC gets `destroy()`
+  called: override it to release the key, catching what the platform throws (Android's
+  `KeyStore.deleteEntry` can), or keep the default, which does nothing.
+- **`CoseKey.fromCbor` throws `CborException`, not `IllegalArgumentException`, for an EC2 map without crv or
+  y and an OKP map without crv or with a y** (RFC 9053 §7.1.1, §7.2), as its documentation says for every
+  map that is not a COSE_Key kcoap supports. *Migration:* catch `CborException` only.
+- **`DtlsSigner` is removed, and `DtlsCredentials.signer` is `localCredential: DtlsLocalCredential?`**
+  (kcoap-dtls, which is not published yet). `DtlsLocalCredential(privateKey, subjectPublicKeyInfo,
+  certificateChain)` takes a P-256 `PrivateKey` handle, the same kind EDHOC's `LocalCredential` takes, and
+  checks that the SubjectPublicKeyInfo and the end-entity certificate hold its public key; the engine will
+  sign through `CryptoBackend.sign` and `EcdsaSignatureCodec.toDer`. *Migration:* make the stored key a
+  `PrivateKey` subclass that a `CryptoBackend` decorator signs with ([kcoap-crypto README](kcoap-crypto/README.md)),
+  and pass its SubjectPublicKeyInfo and chain.
 
 One endpoint over an internal per-peer link (WP-B1, [ADR 0005](docs/adr/0005-peer-link-seam.md)). Block-wise,
 Observe, Q-Block, Echo/Request-Tag, the access policy and message security now run on the same exchange layer

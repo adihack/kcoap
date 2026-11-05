@@ -2,6 +2,7 @@ package dev.kcoap.cose
 
 import dev.kcoap.cbor.CborException
 import dev.kcoap.cbor.CborMap
+import dev.kcoap.cbor.CborValue
 import dev.kcoap.cbor.toCbor
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.common.toHex
@@ -69,11 +70,66 @@ class CoseTest {
         assertFailsWith<CborException> { CoseKey.fromCbor(CborMap(1.toCbor() to 1.toCbor(), (-1).toCbor() to 4.toCbor())) }
         assertFailsWith<CborException> {
             CoseKey.fromCbor(
-                CborMap(1.toCbor() to 2.toCbor(), (-1).toCbor() to 1.toCbor(), (-2).toCbor() to ByteArray(32).toCbor(), (-3).toCbor() to true.toCbor()),
+                CborMap(1.toCbor() to 2.toCbor(), (-1).toCbor() to 1.toCbor(), (-2).toCbor() to ByteArray(32).toCbor(), (-3).toCbor() to "y".toCbor()),
             )
         }
         assertEquals(CoseKeyType.EC2, CoseKeyType.fromValue(2))
         assertEquals(CoseCurve.X25519, CoseCurve.fromValue(4))
+    }
+
+    /**
+     * RFC 9053 §7.1.1 and §7.2: an EC2 key needs crv and y, an OKP key crv and no y. A map without them is
+     * not a COSE_Key kcoap supports, and fromCbor says so with a CborException, never an
+     * IllegalArgumentException from the constructor.
+     */
+    @Test
+    fun rfc9053Section7KeysWithoutTheirParametersAreCborErrors() {
+        val x = (-2).toCbor() to ByteArray(32).toCbor()
+        val y = (-3).toCbor() to ByteArray(32).toCbor()
+        val ec2 = 1.toCbor() to 2.toCbor()
+        val okp = 1.toCbor() to 1.toCbor()
+        val p256 = (-1).toCbor() to 1.toCbor()
+        val x25519 = (-1).toCbor() to 4.toCbor()
+        val cases = mapOf(
+            "EC2 COSE_Key without y" to CborMap(ec2, p256, x),
+            "EC2 COSE_Key without crv" to CborMap(ec2, x, y),
+            "OKP COSE_Key with y" to CborMap(okp, x25519, x, y),
+            "OKP COSE_Key without crv" to CborMap(okp, x),
+        )
+        for ((diagnostic, map) in cases) {
+            assertEquals(diagnostic, assertFailsWith<CborException>(diagnostic) { CoseKey.fromCbor(map) }.message)
+        }
+        val complete = CoseKey(CoseKeyType.EC2, CoseCurve.P_256, ByteArray(32), ByteArray(32))
+        assertEquals(complete, CoseKey.fromCbor(CborMap(ec2, p256, x, y)))
+    }
+
+    /**
+     * RFC 9053 §7.1.1: y as a sign bit, `true` for an odd y. The RFC 9529 §3.4 key PK_R has an even y, so
+     * `false` gives it back, and `true` the other point with the same x.
+     */
+    @Test
+    fun rfc9053Section7_1_1SignBitsExpandToTheCoordinate() {
+        val x = "bbc34960526ea4d32e940cad2a234148ddc21791a12afbcbac93622046dd44f0"
+        val y = "4519e257236b2a0ce2023f0931f1f386ca7afda64fcde0108c224c51eabf6072"
+        fun key(curve: Int, x: String, y: CborValue, kty: Int = 2) = CoseKey.fromCbor(
+            CborMap(1.toCbor() to kty.toCbor(), (-1).toCbor() to curve.toCbor(), (-2).toCbor() to x.hexToBytes().toCbor(), (-3).toCbor() to y),
+        )
+        val even = key(1, x, false.toCbor())
+        assertEquals(y, even.y!!.toHex())
+        assertEquals("04$x$y", even.rawPublicKey().toHex())
+        assertEquals(key(1, x, y.hexToBytes().toCbor()), even, "the same key as with the coordinate")
+        val odd = key(1, x, true.toCbor())
+        assertEquals(1, odd.y!!.last().toInt() and 1)
+        // P-384: the base point of SEC 2 v2 §2.5.1, whose y is odd.
+        val gx = "aa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7"
+        val gy = "3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"
+        assertEquals(gy, key(2, gx, true.toCbor()).y!!.toHex())
+
+        val notOnTheCurve = "00".repeat(31) + "01"
+        assertFailsWith<CborException> { key(1, notOnTheCurve, true.toCbor()) }
+        assertFailsWith<CborException> { key(1, "00".repeat(31), true.toCbor()) }
+        assertFailsWith<CborException> { key(4, x, true.toCbor()) }
+        assertFailsWith<CborException> { key(4, x, true.toCbor(), kty = 1) }
     }
 
     /** RFC 9529 §3: CRED_R of trace 2, a CCS for the subject "example.edu" with a P-256 key. */

@@ -3,6 +3,7 @@ package dev.kcoap.edhoc
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.log.LogTags
+import dev.kcoap.log.Logger
 import dev.kcoap.log.LoggerFactory
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -95,7 +96,7 @@ public class EdhocInitiator(
             val (suite, runnable) = start.runnable?.let { start.suite to it } ?: firstSelection()
             val suites = runnable.take(runnable.indexOf(suite) + 1).map { it.value }
             val keySchedule = KeySchedule(suite, crypto)
-            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys)
+            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys, log)
             val share = exchange.initiatorShare()
             val connectionIdentifier = config.connectionIdentifiers.choose(crypto, null)
             val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_1)
@@ -173,7 +174,7 @@ public class EdhocInitiator(
                 "message_2 verified: C_R ${received.connectionIdentifier}, " +
                     "ID_CRED_R ${received.credentialIdentifier}, EAD_2 ${received.ead.describe()}"
             }
-            waiting.share.privateKey.destroyIfSoftware()
+            waiting.share.privateKey.release(log)
             state = State.VerifiedMessage2(waiting, gY, received, verified.credential, verified.prk, th3)
         }
     }
@@ -299,7 +300,7 @@ public class EdhocInitiator(
             val ead = Plaintext4.decode(plaintext4)
             config.eadHandler.receive(EdhocMessage.MESSAGE_4, ead)
             log.debug { "message_4 verified: EAD_4 ${ead.describe()}" }
-            completed.destroy()
+            completed.destroy(log)
             state = State.Persisted(completed.session)
         }
     }
@@ -325,7 +326,7 @@ public class EdhocInitiator(
         val next = suitesR?.let { offered -> waiting.runnable.firstOrNull { it.value in offered } }
         if (next != null && next != waiting.suite) {
             log.debug { "Responder supports $suitesR; selecting suite ${next.value} for the next message_1" }
-            waiting.destroy()
+            waiting.destroy(log)
             state = State.Start(next, waiting.runnable)
             throw EdhocPeerErrorException(error, retryWith = next)
         }
@@ -364,9 +365,14 @@ public class EdhocInitiator(
         throw failure
     }
 
+    /** Moves to [EdhocPhase.ABORTED], also if destroying the secrets of the current state fails. */
     private fun abortWith(failure: EdhocException) {
-        state.destroy()
-        state = State.Aborted(failure, state.suite)
+        val previous = state
+        try {
+            previous.destroy(log)
+        } finally {
+            state = State.Aborted(failure, previous.suite)
+        }
     }
 
     private fun record(name: String, value: ByteArray) {
@@ -374,8 +380,11 @@ public class EdhocInitiator(
     }
 
     private sealed class State(val phase: EdhocPhase, val suite: CipherSuite) {
-        /** Overwrites the secrets this state holds. */
-        open fun destroy() {}
+        /**
+         * Overwrites the secrets this state holds, then releases its keys; [log] reports a key handle whose
+         * release fails, which never stops the rest.
+         */
+        open fun destroy(log: Logger) {}
 
         /**
          * Ready for message_1. [runnable] is null until the crypto backend has been asked which suites it
@@ -393,7 +402,7 @@ public class EdhocInitiator(
             val connectionIdentifier: ConnectionIdentifier,
             val hashMessage1: ByteArray,
         ) : State(EdhocPhase.WAIT_M2, suite) {
-            override fun destroy() = share.privateKey.destroyIfSoftware()
+            override fun destroy(log: Logger) = share.privateKey.release(log)
         }
 
         class VerifiedMessage2(
@@ -410,7 +419,7 @@ public class EdhocInitiator(
             val responderConnectionIdentifier: ConnectionIdentifier = plaintext2.connectionIdentifier!!
             val peerIdentifier: CredentialIdentifier = plaintext2.credentialIdentifier
 
-            override fun destroy() = wipeAll(prk3e2m)
+            override fun destroy(log: Logger) = wipeAll(prk3e2m)
         }
 
         class Completed(
@@ -419,7 +428,7 @@ public class EdhocInitiator(
             val prk4e3m: ByteArray,
             val th4: ByteArray,
         ) : State(EdhocPhase.COMPLETED, session.cipherSuite) {
-            override fun destroy() = wipeAll(prk4e3m)
+            override fun destroy(log: Logger) = wipeAll(prk4e3m)
         }
 
         class Persisted(val session: EdhocSession) : State(EdhocPhase.PERSISTED, session.cipherSuite)

@@ -584,6 +584,19 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** medium (backed by test vectors).
 - **Accept:** compressed-point tests on every target; peer DER input never throws `IllegalArgumentException` (fuzzed with `ByteMutator`); RFC 9529 traces, Keccak/CCM differential tests, X.509 tests, libedhoc interop.
 
+> **Amendment (A4).** Done as listed, with these shapes: `Sec1` has `isCompressed` and `decompress`;
+> `EcdsaSignatureCodec.fromDer(algorithm, der)` returns null rather than throwing for anything but a strict
+> DER signature, since a malformed peer signature is one that does not verify; `KemEncapsulation` has
+> `destroy()` beside `sharedSecret()`, because a copying accessor alone could not overwrite the array the
+> backend handed over; `CertificateFormatException` extends `Exception` until D2 adds `KcoapException`.
+> `DtlsLocalCredential(privateKey, subjectPublicKeyInfo, certificateChain)` is a file of its own, takes P-256
+> only (RFC 7925 §4.3, §4.4) and checks that the SubjectPublicKeyInfo and the end-entity certificate hold the same
+> key. `DerReader` also reads the DER signatures, and the parsers check what they read more strictly (no
+> fields after the subject public key, `04` before a 65-byte point). EDHOC's Diffie-Hellman Responder checks
+> G_X before it generates Y and destroys Y when the agreement fails. The optional COSE_Key sign bit is done.
+> Beyond the list: the kcoap-crypto README carries the key-store recipe of U5 item 1, which C3 listed. Not
+> done, as planned: the parser extensions of U10 item 2 (TBS bytes, validity, extensions, SAN) wait for E2.
+
 **WP-A5: DefaultCryptoBackend as a final adapter**
 
 - **Findings:** MB-5; U9; API-06 (2); API-07 (4–5, option (b)); U2 (5); MB-4 (1); MB-6 (2, the crypto-default and crypto-bc parts).

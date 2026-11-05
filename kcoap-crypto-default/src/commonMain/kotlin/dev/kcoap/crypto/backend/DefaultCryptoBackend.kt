@@ -10,6 +10,7 @@ import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.Sec1
 import dev.kcoap.crypto.Shake256
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
@@ -47,9 +48,9 @@ import dev.whyoleg.cryptography.operations.SignatureVerifier
  * backend adapts by capability, never by platform:
  * - The AES block under CCM comes from AES-ECB when the provider has it and from AES-CTR otherwise
  *   (WebCrypto has no ECB); see [PlatformAesBlock].
- * - Compressed P-256 and P-384 points are expanded in common code before any provider sees them
- *   ([EcPointDecompression]), so ECDH from an x-only EDHOC key works whether or not the platform
- *   accepts compressed points.
+ * - P-256 and P-384 keys arrive uncompressed, as the [CryptoBackend] contract has them; protocol code
+ *   expands compressed points with [Sec1]. This backend also accepts compressed ones, which it expands
+ *   with [Sec1] before any provider sees them, since not every platform takes them.
  * - What the platform lacks is reported as [UnsupportedAlgorithmException] when it is asked for, and
  *   the `supports` members ask in advance: ChaCha20/Poly1305 on WebCrypto, 192-bit AES keys in
  *   Chromium, X25519 and Ed25519 in browsers that predate them.
@@ -267,7 +268,7 @@ public open class DefaultCryptoBackend(
      */
     private suspend fun generatesKeysOf(type: KeyType): Boolean = capabilities.answer(KeyGeneration(type)) {
         try {
-            platformKeyPair(type).privateKey.softwareKey().destroy()
+            platformKeyPair(type).privateKey.destroy()
             true
         } catch (_: UnsupportedAlgorithmException) {
             false
@@ -337,6 +338,6 @@ public open class DefaultCryptoBackend(
 
         /** A SEC1 point as `04 || x || y`: compressed points (`02 || x`, `03 || x`) are expanded first. */
         fun uncompressedPoint(type: KeyType, point: ByteArray): ByteArray =
-            if (EcPointDecompression.isCompressed(point)) EcPointDecompression.decompress(type, point) else point
+            if (Sec1.isCompressed(point)) Sec1.decompress(type, point) else point
     }
 }

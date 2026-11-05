@@ -2,6 +2,8 @@ package dev.kcoap.edhoc
 
 import dev.kcoap.cbor.CborWriter
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.edhoc.vectors.Rfc9529InvalidTraces
 import dev.kcoap.edhoc.vectors.Rfc9529Trace2
@@ -16,13 +18,17 @@ class Rfc9529InvalidTracesTest {
     private val backend = DefaultCryptoBackend()
 
     /** A method-3 Responder for [suite], with a static DH credential on its curve. */
-    private suspend fun responder(suite: CipherSuite): EdhocResponder {
+    private suspend fun responder(
+        suite: CipherSuite,
+        keys: EphemeralKeySource = EphemeralKeySource.Random,
+    ): EdhocResponder {
         val keyType = Fixtures.keyTypeFor(AuthenticationKind.STATIC_DH, suite)
         val credential = Fixtures.ccsCredential(backend, AuthenticationKind.STATIC_DH, keyType, byteArrayOf(0x32))
         return EdhocResponder(
             EdhocResponderConfig(
                 setOf(EdhocMethod.STATIC_DH_STATIC_DH), listOf(suite), listOf(credential),
                 TrustedCredentials(backend, emptyList()),
+                ephemeralKeys = keys,
             ),
             backend,
         )
@@ -68,22 +74,28 @@ class Rfc9529InvalidTracesTest {
 
     /**
      * §4.2.2 (x ≥ p), §4.2.3 (x not on P-256) and §4.2.4 (low-order X25519 point): message_1 parses, and the
-     * public key validation of RFC 9528 §9.2 fails when message_2 is composed, before anything is sent.
+     * public key validation of RFC 9528 §9.2 fails when message_2 is composed, before anything is sent. The
+     * P-256 shares fail in common code ([dev.kcoap.crypto.Sec1]) before Y is generated, the same way on
+     * every platform; the X25519 one fails after, and Y is destroyed.
      */
     @Test
     fun invalidPublicKeysAreRejected() = runTest {
         for (
-            (hex, suite) in listOf(
-                Rfc9529InvalidTraces.ERROR_IN_ELLIPTIC_CURVE_REPRESENTATION to CipherSuite.SUITE_2,
-                Rfc9529InvalidTraces.ERROR_IN_THE_ELLIPTIC_CURVE_POINT to CipherSuite.SUITE_2,
-                Rfc9529InvalidTraces.CURVE_POINT_OF_THE_LOW_ORDER to CipherSuite.SUITE_0,
+            (hex, suite, spendsY) in listOf(
+                Triple(Rfc9529InvalidTraces.ERROR_IN_ELLIPTIC_CURVE_REPRESENTATION, CipherSuite.SUITE_2, false),
+                Triple(Rfc9529InvalidTraces.ERROR_IN_THE_ELLIPTIC_CURVE_POINT, CipherSuite.SUITE_2, false),
+                Triple(Rfc9529InvalidTraces.CURVE_POINT_OF_THE_LOW_ORDER, CipherSuite.SUITE_0, true),
             )
         ) {
-            val responder = responder(suite)
+            val keys = mutableListOf<PrivateKey>()
+            val recording = EphemeralKeySource { crypto, type -> crypto.generateKeyPair(type).also { keys += it.privateKey } }
+            val responder = responder(suite, recording)
             responder.processMessage1(hex.hex())
             val failure = assertFailsWith<EdhocException>(hex) { responder.createMessage2() }
             assertTrue(failure.error.diagnostic!!.startsWith("Invalid public key"), failure.error.diagnostic)
             assertEquals(EdhocPhase.ABORTED, responder.phase)
+            assertEquals(if (spendsY) 1 else 0, keys.size, hex)
+            for (y in keys) assertFailsWith<IllegalStateException>("Y is destroyed") { (y as SoftwarePrivateKey).encoded() }
         }
     }
 

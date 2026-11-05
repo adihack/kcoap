@@ -4,6 +4,7 @@ import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.log.LogTags
+import dev.kcoap.log.Logger
 import dev.kcoap.log.LoggerFactory
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -128,7 +129,7 @@ public class EdhocResponder(
             val (method, suite, initiatorConnectionIdentifier) = verified.negotiation
             val keySchedule = verified.keySchedule
             val own = config.credentialFor(method, suite)!!
-            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys)
+            val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys, log)
             val share = exchange.respond(verified.gX)
             // Until the WaitingForMessage3 state holds them, the finally block below owns these secrets.
             var prk2e: ByteArray? = null
@@ -181,7 +182,7 @@ public class EdhocResponder(
                 // Y is still needed for G_IY when the Initiator authenticates with static DH (RFC 9528 §4.1.1.3).
                 val keepY = method.initiatorAuthentication == AuthenticationKind.STATIC_DH
                 val ephemeralKey = share.privateKey.takeIf { keepY }
-                if (!keepY) share.privateKey?.destroyIfSoftware()
+                if (!keepY) share.privateKey?.release(log)
                 log.debug {
                     "message_2: C_R $connectionIdentifier, ID_CRED_R ${own.identifier}, EAD_2 ${ead.describe()}"
                 }
@@ -194,8 +195,8 @@ public class EdhocResponder(
             } finally {
                 wipeAll(prk2e)
                 if (!isComposed) {
-                    share.privateKey?.destroyIfSoftware()
                     wipeAll(share.sharedSecret, prk3e2m)
+                    share.privateKey?.release(log)
                 }
             }
         }
@@ -240,7 +241,7 @@ public class EdhocResponder(
                 prkOut, prkExporter, crypto,
             )
             wipeAll(prkOut, prkExporter)
-            waiting.destroy()
+            waiting.destroy(log)
             log.debug {
                 "message_3 verified: ID_CRED_I ${received.credentialIdentifier}, EAD_3 ${received.ead.describe()}; " +
                     "session completed"
@@ -310,7 +311,7 @@ public class EdhocResponder(
             val message4 = SingleByteStringMessage.encode(ciphertext4)
             log.debug { "message_4: EAD_4 ${ead.describe()}" }
             log.trace { "message_4 ${log.payload(message4)}" }
-            completed.destroy()
+            completed.destroy(log)
             state = State.Persisted(completed.negotiation, completed.session)
             message4
         }
@@ -355,9 +356,14 @@ public class EdhocResponder(
         throw failure
     }
 
+    /** Moves to [EdhocPhase.ABORTED], also if destroying the secrets of the current state fails. */
     private fun abortWith(failure: EdhocException) {
-        state.destroy()
-        state = State.Aborted(failure, state.negotiation)
+        val previous = state
+        try {
+            previous.destroy(log)
+        } finally {
+            state = State.Aborted(failure, previous.negotiation)
+        }
     }
 
     private fun record(name: String, value: ByteArray) {
@@ -375,8 +381,11 @@ public class EdhocResponder(
         /** What message_1 settled, from [EdhocPhase.VERIFIED_M1] on. */
         abstract val negotiation: Negotiation?
 
-        /** Overwrites the secrets this state holds. */
-        open fun destroy() {}
+        /**
+         * Overwrites the secrets this state holds, then releases its keys; [log] reports a key handle whose
+         * release fails, which never stops the rest.
+         */
+        open fun destroy(log: Logger) {}
 
         data object Start : State(EdhocPhase.START) {
             override val negotiation: Negotiation? get() = null
@@ -399,9 +408,9 @@ public class EdhocResponder(
             val prk3e2m: ByteArray,
             val th3: ByteArray,
         ) : State(EdhocPhase.WAIT_M3) {
-            override fun destroy() {
-                ephemeralKey?.destroyIfSoftware()
+            override fun destroy(log: Logger) {
                 wipeAll(prk3e2m)
+                ephemeralKey?.release(log)
             }
         }
 
@@ -412,7 +421,7 @@ public class EdhocResponder(
             val prk4e3m: ByteArray,
             val th4: ByteArray,
         ) : State(EdhocPhase.COMPLETED) {
-            override fun destroy() = wipeAll(prk4e3m)
+            override fun destroy(log: Logger) = wipeAll(prk4e3m)
         }
 
         class Persisted(override val negotiation: Negotiation, val session: EdhocSession) : State(EdhocPhase.PERSISTED)

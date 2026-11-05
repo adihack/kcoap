@@ -55,7 +55,7 @@ class MlKemKnownAnswerTest {
                 )
             }
             val secret = backend.decapsulate(expanded.privateKey, encapsulation.ciphertext)
-            assertContentEquals(encapsulation.sharedSecret, secret, vector.name)
+            assertContentEquals(encapsulation.sharedSecret(), secret, vector.name)
             assertContentEquals(vector.dk.hex(), expanded.privateKey.encoded, vector.name)
         }
     }
@@ -70,7 +70,7 @@ class MlKemKnownAnswerTest {
             val encapsulation = scripted.encapsulate(vector.algorithm, vector.ek.hex())
 
             assertHexEquals(vector.c, encapsulation.ciphertext, vector.name)
-            assertHexEquals(vector.k, encapsulation.sharedSecret, vector.name)
+            assertHexEquals(vector.k, encapsulation.sharedSecret(), vector.name)
             assertEquals(0, random.remaining, vector.name)
             val pair = backend.importKeyPair(vector.algorithm.keyType, vector.dk.hex(), vector.ek.hex())
             assertHexEquals(vector.k, backend.decapsulate(pair.privateKey, vector.c.hex()), vector.name)

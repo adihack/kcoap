@@ -2,7 +2,10 @@ package dev.kcoap.edhoc
 
 import dev.kcoap.common.toHex
 import dev.kcoap.cose.CwtClaimsSet
+import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -270,6 +273,127 @@ class RoundTripTest {
         assertTrue(session.toString().startsWith("EdhocSession(INITIATOR"), "toString still works")
         // The peer's session is its own and keeps working.
         assertEquals(16, handshake.responderSession.oscoreMasterSecret().size)
+    }
+
+    /**
+     * RFC 9528 §9.8: the ephemeral keys are destroyed after use whatever backend holds them, not only
+     * software keys: here they are handles of a key store that a decorator unwraps (PrivateKey.destroy).
+     */
+    @Test
+    fun ephemeralKeysOfAKeyStoreAreDestroyed() = runTest {
+        val handles = mutableListOf<KeyStoreHandle>()
+        for (method in listOf(EdhocMethod.SIGNATURE_SIGNATURE, EdhocMethod.STATIC_DH_STATIC_DH)) {
+            for (suite in listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_2)) {
+                handles.clear()
+                val configs = Fixtures.configs(backend, method, suite).withEphemeralKeys(inKeyStore(handles))
+                assertSessionsAgree(Fixtures.handshake(keyStore, configs), "method ${method.value}, suite ${suite.value}")
+                assertEquals(2, handles.size, "X and Y")
+                for (handle in handles) assertTrue(handle.isDestroyed, "method ${method.value}, suite ${suite.value}")
+            }
+        }
+    }
+
+    /**
+     * PrivateKey.destroy() must not throw, but a key-store handle may, as Android's KeyStore.deleteEntry
+     * does. EDHOC logs the failure and carries on: the handshake completes, and a failed or abandoned one
+     * still ends ABORTED with an EdhocException, its PRKs wiped first (RFC 9528 §9.8).
+     */
+    @Test
+    fun aKeyThatFailsToReleaseNeitherBreaksNorStallsTheHandshake() = runTest {
+        val handles = mutableListOf<KeyStoreHandle>()
+        val failing = inKeyStore(handles, failsToRelease = true)
+        val sink = RingBufferSink(capacity = 50)
+        val logging = LoggerFactory(
+            LogConfig.build {
+                level = LogLevel.WARN
+                this.sink = sink
+            },
+        )
+        val methods = listOf(EdhocMethod.SIGNATURE_SIGNATURE, EdhocMethod.STATIC_DH_STATIC_DH)
+        for (method in methods) {
+            handles.clear()
+            val configs = Fixtures.configs(backend, method, CipherSuite.SUITE_2).withEphemeralKeys(failing)
+            val initiator = EdhocInitiator(configs.first, keyStore, logging)
+            val responder = EdhocResponder(configs.second, keyStore, logging)
+            responder.processMessage1(initiator.createMessage1())
+            initiator.processMessage2(responder.createMessage2())
+            val (message3, session) = initiator.createMessage3()
+            val responderSession = responder.processMessage3(message3)
+            assertContentEquals(session.prkOut(), responderSession.prkOut(), "method ${method.value}")
+            assertEquals(EdhocPhase.COMPLETED, initiator.phase)
+            assertEquals(EdhocPhase.COMPLETED, responder.phase)
+            assertEquals(2, handles.size, "X and Y")
+            assertTrue(handles.all { it.isDestroyed }, "method ${method.value}")
+        }
+        val warnings = sink.snapshot().filter { "Destroying the ephemeral" in it.message }
+        assertEquals(2 * methods.size, warnings.size)
+        assertTrue(warnings.all { it.level == LogLevel.WARN && it.error is IllegalStateException })
+
+        // Failures: Y is still held in WAIT_M3 with method 3, X in WAIT_M2.
+        handles.clear()
+        val configs =
+            Fixtures.configs(backend, EdhocMethod.STATIC_DH_STATIC_DH, CipherSuite.SUITE_2).withEphemeralKeys(failing)
+        val initiator = EdhocInitiator(configs.first, keyStore, logging)
+        val responder = EdhocResponder(configs.second, keyStore, logging)
+        responder.processMessage1(initiator.createMessage1())
+        val message2 = responder.createMessage2()
+        message2[message2.lastIndex] = (message2.last().toInt() xor 1).toByte()
+        val initiatorFailure = assertFailsWith<EdhocException> { initiator.processMessage2(message2) }
+        assertEquals(EdhocPhase.ABORTED, initiator.phase)
+        assertSame(initiatorFailure, initiator.failure)
+        val responderFailure = assertFailsWith<EdhocException> { responder.processMessage3("4100".hex()) }
+        assertEquals(EdhocPhase.ABORTED, responder.phase)
+        assertSame(responderFailure, responder.failure)
+        assertEquals(2, handles.size)
+        assertTrue(handles.all { it.isDestroyed })
+
+        // The application gives up while a key is held.
+        handles.clear()
+        val abandoning = EdhocInitiator(configs.first, keyStore, logging)
+        val abandoned = EdhocResponder(configs.second, keyStore, logging)
+        abandoned.processMessage1(abandoning.createMessage1())
+        abandoned.createMessage2()
+        assertNull(abandoning.abort("Not now"))
+        assertNull(abandoned.abort("Not now"))
+        assertEquals(EdhocPhase.ABORTED, abandoning.phase)
+        assertEquals(EdhocPhase.ABORTED, abandoned.phase)
+        assertTrue(handles.all { it.isDestroyed })
+    }
+
+    /** A key store: a decorator of the software backend that unwraps its [KeyStoreHandle]s. */
+    private val keyStore = object : CryptoBackend by backend {
+        override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray =
+            backend.keyAgreement((privateKey as? KeyStoreHandle)?.key ?: privateKey, peerPublicKey)
+    }
+
+    /** Ephemeral keys as handles of [keyStore], collected in [handles]. */
+    private fun inKeyStore(handles: MutableList<KeyStoreHandle>, failsToRelease: Boolean = false) =
+        EphemeralKeySource { crypto, type ->
+            val pair = crypto.generateKeyPair(type)
+            KeyPair(pair.publicKey, KeyStoreHandle(pair.privateKey, failsToRelease).also { handles += it })
+        }
+
+    private fun Pair<EdhocInitiatorConfig, EdhocResponderConfig>.withEphemeralKeys(keys: EphemeralKeySource) =
+        EdhocInitiatorConfig(
+            first.method, first.cipherSuites, first.credentials, first.credentialResolver,
+            first.connectionIdentifiers, first.eadHandler, keys,
+        ) to EdhocResponderConfig(
+            second.methods, second.cipherSuites, second.credentials, second.credentialResolver,
+            second.connectionIdentifiers, second.eadHandler, keys,
+        )
+
+    /**
+     * A key-store key: it holds a software key here, and records that EDHOC released it. With
+     * [failsToRelease], destroy() throws afterwards, as a store that cannot delete the entry would.
+     */
+    private class KeyStoreHandle(val key: PrivateKey, private val failsToRelease: Boolean) : PrivateKey(key.type) {
+        var isDestroyed = false
+
+        override fun destroy() {
+            isDestroyed = true
+            key.destroy()
+            if (failsToRelease) throw IllegalStateException("KeyStoreException: the entry was not deleted")
+        }
     }
 
     private suspend fun credential(kind: AuthenticationKind, type: KeyType, kid: Int): LocalCredential =

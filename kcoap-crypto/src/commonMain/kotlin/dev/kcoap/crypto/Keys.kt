@@ -11,6 +11,19 @@ import kotlin.concurrent.Volatile
  * `toString()` never reveals key material.
  */
 public abstract class PrivateKey protected constructor(public val type: KeyType) {
+    /**
+     * Releases the key once nothing needs it any more. Protocol code calls this for the keys it owns, such
+     * as EDHOC's ephemeral keys (RFC 9528 §9.8), whatever backend made them. The default does nothing; a
+     * subclass overwrites its key material, or frees a session or handle on a device. Calling it again
+     * does nothing, and a destroyed key must not be used.
+     *
+     * Release is best effort and must not throw: protocol code calls this while it cleans up after a
+     * failure, too. A subclass whose platform call can fail, such as deleting a key-store entry, catches
+     * and reports that failure itself. EDHOC also contains and logs one that escapes, so that its other
+     * secrets are still wiped.
+     */
+    public open fun destroy() {}
+
     override fun toString(): String = "PrivateKey($type)"
 }
 
@@ -48,7 +61,7 @@ public class SoftwarePrivateKey(type: KeyType, encoded: ByteArray) : PrivateKey(
     }
 
     /** Overwrites the key material; [encoded] throws afterwards. Calling it again does nothing. */
-    public fun destroy() {
+    override fun destroy() {
         isDestroyed = true
         material.wipe()
     }
@@ -67,7 +80,38 @@ public class KeyPair(publicKey: ByteArray, public val privateKey: PrivateKey) {
     override fun toString(): String = "KeyPair($type)"
 }
 
-/** The result of a KEM encapsulation: [ciphertext] goes to the key owner, [sharedSecret] stays here. */
-public class KemEncapsulation(public val ciphertext: ByteArray, public val sharedSecret: ByteArray) {
+/**
+ * The result of a KEM encapsulation (FIPS 203 §7.2): [ciphertext] goes to the key owner, the shared
+ * secret stays here.
+ *
+ * A transfer value from the backend to its caller, which owns both arrays afterwards: the backend must
+ * not reuse them, and the constructor does not copy them. The secret leaves only through
+ * [sharedSecret], one copy per call, so every copy shows at the call site; [destroy] overwrites it once
+ * the caller has what it needs.
+ */
+public class KemEncapsulation(
+    /** The KEM ciphertext, public: EDHOC sends it as G_Y (draft-ietf-lake-pqsuites §3). */
+    public val ciphertext: ByteArray,
+    sharedSecret: ByteArray,
+) {
+    private val secret = sharedSecret
+    private var isDestroyed = false
+
+    /**
+     * A copy of the shared secret K.
+     *
+     * @throws IllegalStateException after [destroy].
+     */
+    public fun sharedSecret(): ByteArray {
+        check(!isDestroyed) { "The shared secret was destroyed" }
+        return secret.copyOf()
+    }
+
+    /** Overwrites the shared secret; [sharedSecret] throws afterwards. Calling it again does nothing. */
+    public fun destroy() {
+        isDestroyed = true
+        secret.wipe()
+    }
+
     override fun toString(): String = "KemEncapsulation(${ciphertext.size}-byte ciphertext)"
 }

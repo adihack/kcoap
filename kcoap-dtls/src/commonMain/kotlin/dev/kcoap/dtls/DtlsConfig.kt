@@ -49,13 +49,13 @@ public class DtlsConfig(
             require(credentials.preSharedKeys != null) { "PreSharedKey mode needs a PskStore" }
         }
         if (SecurityMode.RAW_PUBLIC_KEY in modes) {
-            require(credentials.signer != null) { "RawPublicKey mode needs a signer" }
+            require(credentials.localCredential != null) { "RawPublicKey mode needs a DtlsLocalCredential" }
             require(credentials.rawPublicKeyTrust != null) { "RawPublicKey mode needs a RawPublicKeyTrust" }
         }
         if (SecurityMode.CERTIFICATE in modes) {
-            val signer = credentials.signer
-            require(signer != null && signer.certificateChain.isNotEmpty()) {
-                "Certificate mode needs a signer with a certificate chain"
+            val local = credentials.localCredential
+            require(local != null && local.certificateChain.isNotEmpty()) {
+                "Certificate mode needs a DtlsLocalCredential with a certificate chain"
             }
             require(credentials.certificateValidator != null) { "Certificate mode needs a CertificateValidator" }
         }
