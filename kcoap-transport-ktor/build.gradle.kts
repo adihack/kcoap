@@ -1,5 +1,5 @@
 plugins {
-    id("kcoap.kmp-library")
+    id("kcoap.kmp-jvm-native-library")
 }
 
 kotlin {

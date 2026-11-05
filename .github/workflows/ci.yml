@@ -19,6 +19,8 @@ jobs:
       - run: ./gradlew jvmTest koverXmlReport koverVerify
       # The common tests again as native code (Kotlin/Native, OpenSSL crypto): the runtime iOS also uses.
       - run: ./gradlew linuxX64Test
+      # And on Node.js as JavaScript and as Wasm, with WebCrypto underneath, as in browsers.
+      - run: ./gradlew jsNodeTest wasmJsNodeTest
       - uses: actions/upload-artifact@v5
         if: always()
         with:
