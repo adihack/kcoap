@@ -34,5 +34,11 @@ internal enum class BodyMode {
             type == CoapMessageType.NON -> NON
             else -> CON
         }
+
+        /**
+         * The mode of a body started by a message of [type] on a link with [capabilities]: the message type
+         * decides only where the link has message types ([LinkCapabilities.hasMessageTypes]).
+         */
+        fun of(type: CoapMessageType, capabilities: LinkCapabilities): BodyMode = of(type, isReliable = !capabilities.hasMessageTypes)
     }
 }

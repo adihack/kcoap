@@ -19,7 +19,10 @@ import kotlinx.coroutines.channels.ChannelResult
 
 /**
  * One request on the wire and the responses it gets, matched by peer [Endpoint] and token
- * (RFC 7252 §5.3.2, §9.1.2). Its [mode] says how responses are handed on: [ResponseMode.Single] ends the
+ * (RFC 7252 §5.3.2, §9.1.2), and on a connection only on the [link] it went on (RFC 8323 §3.3). How the
+ * request's delivery ends comes from the link as a [DeliveryOutcome]: an ACK, perhaps with the response
+ * piggybacked, a Reset or a timeout over datagrams, or a failure on any link, such as a closed connection.
+ * Its [mode] says how responses are handed on: [ResponseMode.Single] ends the
  * exchange with the first one, [ResponseMode.Stream] keeps it open for every notification of an
  * observation (RFC 7641 §3.2), and [ResponseMode.Inbox] reports responses and outcomes to the inbox of a
  * Q-Block body, which may get several responses on one token (RFC 9177 §4.3, §4.4).
@@ -39,25 +42,27 @@ import kotlinx.coroutines.channels.ChannelResult
  */
 internal class ClientExchange(
     private val endpoint: CoapEndpoint,
-    val peer: Endpoint,
+    /** The link the request goes on; on a connection, only responses on that connection match it. */
+    val link: PeerLink,
     val token: ByteArray,
     val mode: ResponseMode,
     /** The critical options the caller processes in a response; any other one rejects it (RFC 7252 §5.4.1). */
     private val recognizedOptions: Set<Int>,
     private val log: Logger,
-) : TransmissionOwner {
+) : DeliveryOwner {
+    val peer: Endpoint = link.peer
     val key: ExchangeKey = ExchangeKey(peer, token.toHex())
 
     /** The request as sent, after protection. */
     var request: CoapMessage? = null
     var protectedRequest: ProtectedRequest? = null
 
-    /** The datagram transmission of the request; null on a connection. Set under the endpoint's lock. */
+    /**
+     * How the request goes out on a datagram link, until it is answered or settled; set under the link's lock.
+     * Null on a connection, where it is written and done.
+     */
     @Volatile
-    var transmission: Transmission? = null
-
-    /** The connection the request went on (RFC 8323), whose responses alone match; null for datagrams. */
-    var connection: ConnectionDriver? = null
+    var delivery: Delivery? = null
 
     /** Set once by [CoapEndpoint.forget], under its lock. */
     var isForgotten: Boolean = false
@@ -77,25 +82,25 @@ internal class ClientExchange(
         is ResponseMode.Inbox -> null
     }
 
-    override suspend fun onOutcome(transmission: Transmission, outcome: TransmissionOutcome) {
+    override suspend fun onOutcome(delivery: Delivery, outcome: DeliveryOutcome) {
         when (outcome) {
-            is TransmissionOutcome.Acknowledged -> {
-                val piggybacked = outcome.piggybackedResponse
+            is DeliveryOutcome.Delivered -> {
+                val piggybacked = outcome.piggybacked
                 when {
                     piggybacked != null -> onResponse(piggybacked)
                     mode is ResponseMode.Inbox && isOpen -> report(mode.inbox, ExchangeEvent.Acknowledged(this))
                 }
             }
-            TransmissionOutcome.Reset -> end(
+            DeliveryOutcome.Rejected -> end(
                 CoapException("Request rejected with RST by $peer", CoapException.Reason.RESET),
                 ExchangeEvent.Reset(this),
             )
-            TransmissionOutcome.TimedOut -> end(
+            DeliveryOutcome.TimedOut -> end(
                 CoapException("No ACK from $peer after MAX_RETRANSMIT retransmissions", CoapException.Reason.TRANSMISSION_TIMEOUT),
                 ExchangeEvent.TimedOut(this),
             )
-            TransmissionOutcome.SlotReleased -> Unit
-            is TransmissionOutcome.Failed -> fail(outcome.cause)
+            DeliveryOutcome.Released -> Unit
+            is DeliveryOutcome.Failed -> fail(outcome.cause)
         }
     }
 
@@ -216,7 +221,7 @@ internal class ClientExchange(
     }
 
     private suspend fun settleRequest() {
-        transmission?.takeIf { it.state != Transmission.State.DONE }?.let { endpoint.settle(it) }
+        delivery?.takeIf { !it.isDone }?.let { link.settle(it) }
     }
 
     /** The next response; throws [CoapException] when the exchange failed. Not for an inbox exchange. */
@@ -252,7 +257,7 @@ internal class ClientExchange(
         if (!isOpen) return
         close()
         responses?.close()
-        transmission?.let { endpoint.settle(it) }
+        delivery?.let { link.settle(it) }
     }
 
     private suspend fun close() {

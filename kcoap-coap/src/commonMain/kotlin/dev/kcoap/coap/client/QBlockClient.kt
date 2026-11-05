@@ -11,6 +11,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.stack.BodyLease
 import dev.kcoap.coap.stack.BodyMode
+import dev.kcoap.coap.stack.LinkCapabilities
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.ClientExchange
 import dev.kcoap.coap.stack.EndpointEvent
@@ -151,14 +152,14 @@ internal class QBlockClient(private val client: CoapClient) {
      * @throws CoapException when the registration gets no response, or the observation fails.
      */
     suspend fun observe(peer: Endpoint, registration: CoapMessage, confirmable: Boolean, observer: Observer): CoapResponse? {
-        val reliable = endpoint.isReliable(peer)
-        rfc7959Reason(registration, reliable, isObservation = true)?.let { reason ->
+        val capabilities = endpoint.capabilities(peer)
+        rfc7959Reason(registration, capabilities, isObservation = true)?.let { reason ->
             log.debug { "RFC 7959 for the observation of ${registration.options.path}: $reason" }
             return null
         }
         val isProtected = client.config.security != null
         if (support.capability(peer, isProtected) != QBlockCapabilities.Capability.SUPPORTED) return null
-        val transfer = Transfer(peer, registration, confirmable, reliable, endpoint.limits(peer), isProtected, observer)
+        val transfer = Transfer(peer, registration, confirmable, capabilities, endpoint.limits(peer), isProtected, observer)
         return when (val outcome = transfer.run()) {
             is Outcome.Done -> outcome.response
             is Outcome.Fallback -> {
@@ -174,15 +175,15 @@ internal class QBlockClient(private val client: CoapClient) {
      * it: Q-Block does not apply to it or to [peer], or the peer rejected it without processing it.
      */
     suspend fun send(peer: Endpoint, request: CoapMessage, confirmable: Boolean): CoapResponse? {
-        val reliable = endpoint.isReliable(peer)
-        rfc7959Reason(request, reliable)?.let { reason ->
+        val capabilities = endpoint.capabilities(peer)
+        rfc7959Reason(request, capabilities)?.let { reason ->
             log.debug { "RFC 7959 for ${request.code} ${request.options.path}: $reason" }
             return null
         }
         val isProtected = client.config.security != null
         if (support.capability(peer, isProtected) != QBlockCapabilities.Capability.SUPPORTED) return null
         val limits = endpoint.limits(peer)
-        val transfer = Transfer(peer, request, confirmable, reliable, limits, isProtected)
+        val transfer = Transfer(peer, request, confirmable, capabilities, limits, isProtected)
         return when (val outcome = transfer.run()) {
             is Outcome.Done -> outcome.response
             is Outcome.Fallback -> {
@@ -198,10 +199,10 @@ internal class QBlockClient(private val client: CoapClient) {
      * Why [request] goes with RFC 7959 whatever the peer supports, or null when Q-Block may carry it. Only an
      * [isObservation] registration, which [observe] sends, carries Observe with Q-Block.
      */
-    private fun rfc7959Reason(request: CoapMessage, reliable: Boolean, isObservation: Boolean = false): String? {
+    private fun rfc7959Reason(request: CoapMessage, capabilities: LinkCapabilities, isObservation: Boolean = false): String? {
         val options = request.options
         return when {
-            reliable && !config.onReliableTransports -> "Q-Block is off on reliable transports"
+            !capabilities.hasMessageTypes && !config.onReliableTransports -> "Q-Block is off on reliable transports"
             // OSCORE takes one response per request (RFC 8613 §7.4) unless the application opts in.
             client.config.security != null && !config.withMessageSecurity -> "Q-Block with message security is off"
             options.noResponse != null -> "the request carries No-Response"
@@ -252,13 +253,14 @@ internal class QBlockClient(private val client: CoapClient) {
         private val peer: Endpoint,
         private val request: CoapMessage,
         private val confirmable: Boolean,
-        private val reliable: Boolean,
+        /** What the link to [peer] does: a body follows the request's message type only where it has types. */
+        private val capabilities: LinkCapabilities,
         private val limits: MessageLimits,
         private val isProtected: Boolean,
         /** The observation the request registers, which every body goes to ([observe]); null for a request. */
         private val observer: Observer? = null,
     ) {
-        private val mode = BodyMode.of(if (confirmable) CoapMessageType.CON else CoapMessageType.NON, reliable)
+        private val mode = BodyMode.of(if (confirmable) CoapMessageType.CON else CoapMessageType.NON, capabilities)
         private val method = request.code
         private val inbox = if (mode == BodyMode.RELIABLE) {
             ExchangeInbox.forReliableBody(endpoint.parameters, client.config.maxResponseBodySize)
@@ -587,7 +589,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 remove(CoapOptions.SIZE1.number)
                 blocks.forEach { addQBlock2(it) }
             }.build()
-            if (isObserving && lease == null && !confirmable && !reliable) {
+            if (isObserving && lease == null && !confirmable && capabilities.hasMessageTypes) {
                 // §7.2: the requests for a Non-confirmable notification body take one NSTART slot for the body.
                 lease = endpoint.leaseBody(peer, UdpMessageCodec.encode(message).size)
             }
@@ -913,7 +915,7 @@ internal class QBlockClient(private val client: CoapClient) {
             }
             if (etag == null) return logger.debug { "Dropped a block without ETag" }
             sizeExponent = block.sizeExponent
-            val bodyMode = if (reliable) BodyMode.RELIABLE else BodyMode.of(message.type, isReliable = false)
+            val bodyMode = BodyMode.of(message.type, capabilities)
             val receiver = QBlock2Receiver(
                 mode = bodyMode,
                 timing = timing,

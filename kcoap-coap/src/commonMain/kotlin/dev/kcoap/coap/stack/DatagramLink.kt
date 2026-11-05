@@ -8,6 +8,7 @@ import dev.kcoap.log.LogTags
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
+import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionEndedException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -25,7 +26,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * CoAP over a [DatagramTransport] (RFC 7252): the driver of [UdpMessaging], the sans-IO messaging layer, for
- * every datagram peer of one [CoapEndpoint]. It owns the messaging state behind one lock that is never held
+ * every datagram peer of one [CoapEndpoint], and the [PeerLink] to each of them ([to]). It owns the messaging
+ * state behind one lock that is never held
  * across a suspension, a receive loop that feeds it datagrams and a timer loop that fires its deadlines, and
  * performs its effects (datagrams to send, messages to deliver, outcomes of transmissions) after releasing the
  * lock, under `NonCancellable`, because the state machine has committed to them and they may belong to other
@@ -60,6 +62,9 @@ internal class DatagramLink(
 
     /** What one datagram may be (RFC 7252 §4.6): the transport's datagram size, in the UDP framing. */
     val limits: MessageLimits = MessageLimits(transport.maxDatagramSize, UdpMessageCodec, allowsBert = false, isReliable = false)
+
+    /** The link to [peer] over this transport. Links to one peer are equal, so they match the same exchanges. */
+    fun to(peer: Endpoint): PeerLink = Peer(peer)
 
     /**
      * Receives and fires timers until the endpoint closes. Returns null when it closed, or the failure when the
@@ -258,8 +263,8 @@ internal class DatagramLink(
         for (effect in effects) {
             when (effect) {
                 is MessagingEffect.Transmit -> transmit(effect)
-                is MessagingEffect.DeliverRequest -> endpoint.onDatagramRequest(effect.from, effect.message)
-                is MessagingEffect.DeliverResponse -> endpoint.onSeparateResponse(effect.from, effect.message)
+                is MessagingEffect.DeliverRequest -> endpoint.onRequest(to(effect.from), effect.message)
+                is MessagingEffect.DeliverResponse -> endpoint.onResponse(to(effect.from), effect.message)
                 is MessagingEffect.Completed -> effect.transmission.owner?.let { owner ->
                     try {
                         owner.onOutcome(effect.transmission, effect.outcome)
@@ -310,7 +315,7 @@ internal class DatagramLink(
     private suspend fun onSessionEnded(peer: Endpoint) {
         log.info { "Session to $peer ended" }
         withMessaging { onSessionEnded(peer) }
-        endpoint.onSessionEnded(peer)
+        endpoint.onLinkEnded(to(peer), CoapException("DTLS session to $peer ended", CoapException.Reason.SESSION_ENDED))
     }
 
     private suspend fun receiveLoop(): CoapException? {
@@ -367,4 +372,108 @@ internal class DatagramLink(
     }
 
     override fun toString(): String = "DatagramLink($transport)"
+
+    /** RFC 7252 messaging with one [peer], on the messaging layer this driver runs for all of them. */
+    private inner class Peer(override val peer: Endpoint) : PeerLink {
+        override val limits: MessageLimits get() = this@DatagramLink.limits
+
+        override val capabilities: LinkCapabilities get() = LinkCapabilities.DATAGRAM
+
+        /** What the DTLS session authenticated, for an [Endpoint.Secure] peer. */
+        override val peerIdentity: PeerIdentity get() = (peer as? Endpoint.Secure)?.identity ?: PeerIdentity.None
+
+        override fun checkPacing(confirmable: Boolean, pacing: Pacing) {
+            if (pacing !is Pacing.Body) return
+            require(!confirmable) { "A Confirmable body takes a slot per message (RFC 9177 §7.1), not a body lease" }
+            require(pacing.lease.peer == peer) { "The body lease is towards ${pacing.lease.peer}, not $peer" }
+        }
+
+        override suspend fun address(request: CoapMessage, token: ByteArray, confirmable: Boolean): CoapMessage {
+            val messageId = allocateMessageId(peer)
+            return request.toBuilder().apply {
+                type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
+                this.messageId = messageId
+                this.token = token
+            }.build()
+        }
+
+        override suspend fun sendRequest(request: CoapMessage, pacing: Pacing, owner: DeliveryOwner, queued: (Delivery) -> Unit) {
+            val lease = (pacing as? Pacing.Body)?.lease
+            // A message of a body takes no slot of its own: the body's lease holds one for all of them.
+            val slotHold = if (request.type == CoapMessageType.CON || lease != null) null else nonConfirmableSlotHold(request)
+            send(peer, request, owner.forTransmissions(), slotHold, lease, queued)
+        }
+
+        override suspend fun settle(delivery: Delivery) {
+            if (delivery is Transmission) this@DatagramLink.settle(delivery)
+        }
+
+        /** Exchanges count only on connections. */
+        override suspend fun exchangeClosed(token: String?) = Unit
+
+        /** RFC 7252 §4.3; [custody] is RFC 8323's and does not apply. */
+        override suspend fun ping(custody: Boolean): Boolean = this@DatagramLink.ping(peer)
+
+        override suspend fun leaseBody(bodyBytes: Int, nonTimeoutRandom: Duration?): BodyLease = lease(peer, bodyBytes, nonTimeoutRandom)
+
+        override suspend fun acceptResponse(response: CoapMessage) {
+            this@DatagramLink.acknowledge(peer, response.messageId)
+        }
+
+        override suspend fun rejectResponse(response: CoapMessage, reason: String) {
+            this@DatagramLink.reject(peer, response.messageId, reason)
+        }
+
+        override suspend fun respond(request: InboundRequest, response: CoapMessage, owner: DeliveryOwner?, confirmable: Boolean): Delivery? {
+            val separateType = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
+            return this@DatagramLink.respond(peer, request.message.messageId, request.message.type, response, owner?.forTransmissions(), separateType)
+        }
+
+        override suspend fun acknowledge(request: InboundRequest) {
+            this@DatagramLink.acknowledge(peer, request.message.messageId)
+        }
+
+        /** RFC 7967: an Empty ACK for a Confirmable request, nothing for a Non-confirmable one. */
+        override suspend fun finishWithoutResponse(request: InboundRequest) {
+            acknowledge(request)
+        }
+
+        override suspend fun reject(request: InboundRequest, reason: String) {
+            this@DatagramLink.reject(peer, request.message.messageId, reason)
+        }
+
+        override suspend fun notify(message: CoapMessage, confirmable: Boolean, owner: DeliveryOwner, slotHold: Duration?): Delivery {
+            val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
+            return sendSeparately(peer, message, type, owner.forTransmissions(), slotHold)
+        }
+
+        override suspend fun supersede(delivery: Delivery, message: CoapMessage): Boolean =
+            delivery is Transmission && this@DatagramLink.supersede(delivery, message)
+
+        override fun notificationPolicy(registeredAt: Duration, isAuthenticated: Boolean, confirmableInterval: Duration): NotificationPolicy =
+            NotificationPolicy.Interspersed(registeredAt, isAuthenticated, confirmableInterval)
+
+        override fun equals(other: Any?): Boolean = other is Peer && other.link === this@DatagramLink && other.peer == peer
+
+        override fun hashCode(): Int = peer.hashCode()
+
+        override fun toString(): String = "DatagramLink($peer)"
+
+        private val link: DatagramLink get() = this@DatagramLink
+    }
+
+    private companion object {
+        /** The [TransmissionOwner] that reports a datagram's outcome to this [DeliveryOwner]. */
+        fun DeliveryOwner.forTransmissions(): TransmissionOwner = TransmissionOwner { transmission, outcome ->
+            onOutcome(transmission, outcome.asDelivery())
+        }
+
+        fun TransmissionOutcome.asDelivery(): DeliveryOutcome = when (this) {
+            is TransmissionOutcome.Acknowledged -> DeliveryOutcome.Delivered(piggybackedResponse)
+            TransmissionOutcome.Reset -> DeliveryOutcome.Rejected
+            TransmissionOutcome.TimedOut -> DeliveryOutcome.TimedOut
+            TransmissionOutcome.SlotReleased -> DeliveryOutcome.Released
+            is TransmissionOutcome.Failed -> DeliveryOutcome.Failed(cause)
+        }
+    }
 }
