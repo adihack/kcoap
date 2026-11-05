@@ -53,6 +53,11 @@ class Fixture(private val directory: File, vararg plugins: String) {
         directory.resolve(path).apply { parentFile.mkdirs() }.writeText(content.trimIndent() + "\n")
     }
 
+    /** Appends [content], without its common indentation, to the fixture's build.gradle.kts. */
+    fun buildScript(content: String): Fixture = apply {
+        directory.resolve("build.gradle.kts").appendText("\n" + content.trimIndent() + "\n")
+    }
+
     fun runner(vararg arguments: String): GradleRunner = GradleRunner.create()
         .withProjectDir(directory)
         .withTestKitDir(File(systemProperty("kcoap.testKitDir")))

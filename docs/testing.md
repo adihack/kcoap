@@ -81,9 +81,12 @@ Gradle invocation, and `./gradlew check` includes the first two for each module:
 The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit
 Gradle home under `build-logic/build/testkit`: a core fixture with a `jvmMain` file must fail
 `verifyCommonOnly`, an adapter fixture with the same file must pass, `check` must depend on the
-verification, and `kcoap.unpublished` must remove the publication and the ABI tasks (and fail when it is
-applied after the tier plugin). None of them compiles Kotlin or resolves a dependency, so they run
-offline and take seconds.
+verification, a published fixture's Maven publications must carry `kcoap.group` and `kcoap.version`
+(and the version given with `-Pkcoap.version`, as the release workflow passes it), and
+`kcoap.unpublished` must remove the publication and the ABI tasks (and fail when it is applied after the
+tier plugin). The fixtures compile no Kotlin and take seconds, but the Kotlin plugin resolves the Kotlin
+standard libraries for them from Maven Central into the TestKit Gradle home, so the first run on a
+machine, or after `build-logic/build` is deleted, needs the network.
 
 ## Continuous integration
 
