@@ -186,6 +186,66 @@ fun overConnections() = runTest {
 }
 ```
 
+## Q-Block (RFC 9177)
+
+Q-Block moves large bodies in bursts of blocks instead of one round trip per block, and recovers lost
+blocks without stopping the burst. It is **off by default on both sides**; with it off, nothing changes:
+bodies use Block1 and Block2 (RFC 7959). Turn it on in the server and in the client:
+
+```kotlin
+suspend fun qBlockServer(scope: CoroutineScope, port: Int): CoapServer {
+    val big = ByteArray(20_000) { (it % 251).toByte() }
+    var stored = ByteArray(0)
+    val config = CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true)) // off by default
+    return CoapServer(KtorUdpTransport.bind("127.0.0.1", port), scope, config) {
+        resource("big") { get { CoapResponse.content(big, ContentFormat.OCTET_STREAM) } }
+        resource("upload") {
+            put {
+                stored = payload
+                CoapResponse.changed()
+            }
+            get { CoapResponse.content(stored, ContentFormat.OCTET_STREAM) }
+        }
+    }
+}
+
+suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
+    val qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) // OFF by default
+    val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(qBlock = qBlock))
+    val server = "coap://127.0.0.1:$port"
+    // Non-confirmable requests get Non-confirmable bursts; Confirmable ones go block by block.
+    val body = client.get("$server/big") { nonConfirmable() }.payload
+    client.put("$server/upload", body) { nonConfirmable() }
+    println("${body.size} bytes down and up")
+    client.close()
+}
+```
+
+- **Finding out.** `QBlockMode.PROBE` asks each server once, with the Confirmable
+  `GET /.well-known/core` carrying Q-Block2 that libcoap sends too, and the endpoint remembers the answer
+  for `capabilityLifetime` (1 hour) for all its clients. A server that does not take Q-Block gets RFC 7959.
+  `ASSUME_SUPPORTED` skips the probe for servers you know; a rejection still falls back to RFC 7959.
+- **Message type.** A body follows its request: `nonConfirmable()` gives the bursts of MAX_PAYLOADS
+  (10) blocks of §7.2, with 2.31, Continue and lists of missing blocks; the default Confirmable request
+  sends one block per ACK. A Non-confirmable body holds one NSTART slot towards the peer while it lasts.
+- **Observe.** Where both sides have Q-Block on, `observe` registers with Q-Block2 and every
+  notification comes as a Q-Block2 body, emitted once it is whole.
+- **TCP and WebSockets.** The client keeps Q-Block off there (`onReliableTransports = false`), since
+  BERT does the same with fewer messages; the server takes it (`QBlockServerConfig.onReliableTransports`).
+- **OSCORE.** Q-Block under message security is opt-in on both sides: `withMessageSecurity = true` in
+  `QBlockClientConfig` and in `QBlockServerConfig`, with kcoap-oscore on both. Otherwise protected bodies
+  use Inner Block1 and Block2. libcoap 4.3.5 protects only one response per request, so against it keep
+  the defaults.
+- **Amplification.** RFC 9177 §11 does not recommend Q-Block without security, and the server warns
+  once at start. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS` a client that nothing
+  authenticated gets a 4.01 with Echo before its first burst (RFC 9175 §2.4); kcoap's client, and libcoap's,
+  repeat the request with the Echo value.
+- **Parameters.** `TransmissionParameters` holds MAX_PAYLOADS, NON_TIMEOUT, NON_RECEIVE_TIMEOUT and
+  NON_MAX_RETRANSMIT (Table 3); MAX_PAYLOADS must be the same on both peers. Each body gets an ETag of its
+  own, which replaces the resource's ETag on Q-Block2 bodies.
+- **Events.** `EndpointEvent.QBlockFallback` reports a server found not to take Q-Block,
+  `QBlockRecovery` blocks asked for again, and `PartialBodyDropped` a body given up.
+
 ## Message security
 
 `CoapServerConfig(security = …)` and `CoapClientConfig(security = …)` take the SPI from
