@@ -35,5 +35,9 @@ kotlin {
             implementation(project(":kcoap-transport-ktor-websocket-server"))
             implementation(libs.ktor.server.cio)
         }
+        jsTest.dependencies {
+            // The Node.js tests run an npm ws server, whose handleProtocols sees the subprotocols offered.
+            implementation(npm("ws", libs.versions.npm.ws.get()))
+        }
     }
 }

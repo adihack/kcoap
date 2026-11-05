@@ -7,6 +7,9 @@ bouncycastle = "1.86"
 ktor = "3.6.1"
 maven-publish = "0.37.0"
 dokka = "2.2.0"
+# npm `ws`, the WebSocket server of kcoap-transport-ktor-websocket's Node.js tests: the version
+# ktor-client-core already brings for Node.js, so the yarn lock stays as it is.
+npm-ws = "8.20.1"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
