@@ -31,7 +31,7 @@ asking the provider, never by checking the platform:
 | Need | Provider has it | Provider lacks it |
 |---|---|---|
 | AES block for CCM | AES-ECB on single blocks | AES-CTR: a zero block encrypted with the input as the counter is `AES_K(input)` (WebCrypto) |
-| ECDH or ECDSA from a compressed point (EDHOC sends x only) | — | always expanded in common code first: `y = sqrt(x^3 - 3x + b)` with the parity of the prefix |
+| ECDH or ECDSA from a compressed point | — | the contract asks for uncompressed points, which protocol code makes with `Sec1` (kcoap-crypto); this backend also takes compressed ones and expands them with `Sec1` before the provider sees them |
 | An AEAD, curve or key size | used | `UnsupportedAlgorithmException`: ChaCha20/Poly1305 on WebCrypto, 192-bit AES in Chromium, X25519 or Ed25519 in browsers that predate them |
 
 The `supports` members of `CryptoBackend` ask in advance, the same way for every platform and every
@@ -53,8 +53,7 @@ values.
 | `AesCcmTest` | all 24 RFC 3610 packets, the RFC 8613 Appendix C AEAD vectors, tampering |
 | `AesBlockTest` | FIPS 197 Appendix C through both AES-block constructions, ECB and CTR agree where ECB exists, RFC 3610 through CTR |
 | `HkdfTest` | RFC 5869, RFC 8613 Appendix C key derivation |
-| `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, unusable peer keys |
-| `EcPointDecompressionTest` | the SEC 2 base points, fresh platform keys of both parities, off-curve and out-of-range x |
+| `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, fresh platform keys of both parities through `Sec1` (whose vectors are in kcoap-crypto), unusable peer keys |
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
 | `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |

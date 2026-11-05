@@ -78,7 +78,7 @@ keeps the answers too.
 | `EdhocSession`, `Message3` | PRK_out, PRK_exporter, `exporter`, `oscoreMasterSecret/Salt`, `keyUpdate` (Appendix H), peer credential, C_I / C_R; `Message3` is message_3 with the session it completes |
 | `EdhocPeerErrorException` | The peer sent an error message; `retryWith` is the suite of the next message_1 after error code 2 |
 | `CipherSuite`, `KeyExchangeAlgorithm` | Registry of RFC 9528 §10.2 plus suite -24; the key exchange is Diffie-Hellman or KEM |
-| `AuthenticationCredential`, `X509Certificate` | CRED_x as CCS or DER certificate, with the authentication key |
+| `AuthenticationCredential` | CRED_x as CCS or DER certificate, with the authentication key; certificates are parsed by `dev.kcoap.crypto.x509.X509Certificate` (kcoap-crypto) |
 | `CredentialIdentifier` | ID_CRED_x: `KeyId`, `X509Thumbprint`, `X509Chain`, `Kccs`, `Other` |
 | `CredentialResolver`, `TrustedCredentials` | Resolves and authorizes a received ID_CRED_x; chains go through `CertificateValidator` |
 | `LocalCredential` | Own CRED_x, ID_CRED_x, private key handle, and whether it signs or does static DH |
@@ -104,14 +104,19 @@ both in the configuration and when a Responder receives such a message_1.
   of Appendix G.
 - Connection identifiers and compact 'kid' encoding (§3.3.2, §3.5.3.2), enforced on receipt.
 - Credentials by `kid`, `x5t` (SHA-256/64, SHA-256, SHA-384, SHAKE256), `x5chain` and `kccs`;
-  non-unique kids are tried in turn (§3.5.3). A minimal DER reader extracts SubjectPublicKeyInfo for
-  Ed25519, X25519, X448, P-256, P-384 and ML-DSA-44/65/87.
+  non-unique kids are tried in turn (§3.5.3). Certificates are parsed by kcoap-crypto's `x509` package
+  (Ed25519, X25519, X448, P-256, P-384 and ML-DSA-44/65/87 keys), which throws only
+  `CertificateFormatException` for what cannot be used, so a malformed `x5chain` from a peer ends the
+  session with error code 1.
 - Error codes 0–3 and cipher suite negotiation (§6). Unknown 'kid' / 'x5t' answers with code 3;
   untrusted or unsupported identifiers with code 1, as §6.4 requires.
 - Received messages must be deterministically encoded CBOR (§3.1, §9.8); public keys and all
-  cryptographic field lengths are validated (§9.2, §9.8), including the X25519 all-zero check.
-- Intermediate secrets (G_XY, G_RX, G_IY, PRKs, K_3/IV_3, K_4/IV_4) are wiped after use and software
-  ephemeral keys destroyed (§9.8). A destroyed `EdhocSession` or `SoftwarePrivateKey` throws
+  cryptographic field lengths are validated (§9.2, §9.8), including the X25519 all-zero check. An x-only
+  P-256 or P-384 share is expanded to the uncompressed point with kcoap-crypto's `Sec1` before the backend
+  sees it, which checks that x is on the curve in common code: the same share fails the same way on every
+  platform, and before an ephemeral key is generated for it.
+- Intermediate secrets (G_XY, G_RX, G_IY, PRKs, K_3/IV_3, K_4/IV_4) are wiped after use and the
+  ephemeral keys destroyed with `PrivateKey.destroy()`, whatever backend holds them (§9.8). A destroyed `EdhocSession` or `SoftwarePrivateKey` throws
   `IllegalStateException` instead of handing out the wiped bytes. Logging: DEBUG for protocol steps,
   TRACE for message bytes through `Logger.payload`; keys, PRKs and plaintexts are never logged.
 
@@ -161,7 +166,7 @@ because with OSCORE both would become the same Recipient ID (§3.3.3).
 |---|---|
 | RFC 9529 §2 (trace 1) | Method 0, suite 0, Ed25519 certificates by `x5t`: every message byte for byte on both sides; H(message_1), G_XY, TH_2, PRK_2e, KEYSTREAM_2, PLAINTEXT_2, MAC_2, Signature_or_MAC_2, TH_3, PRK_3e2m, PRK_4e3m, MAC_3, Signature_or_MAC_3, PLAINTEXT_3, K_3, IV_3, TH_4, K_4, IV_4, PRK_out, PRK_exporter, OSCORE Master Secret/Salt, key update; context_2/3, info encodings, messages to be signed, A_3/A_4 |
 | RFC 9529 §3 (trace 2) | Method 3, suite 2, CCS by `kid`: the rejected first message_1 and the error `02 02`, renegotiation to SUITES_I = [6, 2], then the same values as trace 1 plus SALT_3e2m, G_RX, SALT_4e3m, G_IY |
-| RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve, the low-order X25519 point, a short MAC, non-deterministic CBOR |
+| RFC 9529 §4 | All 15 invalid messages are rejected: encoding errors, wrong key lengths, x ≥ p, points off the curve (before Y is generated), the low-order X25519 point (Y destroyed), a short MAC, non-deterministic CBOR |
 | Round trips | Every method × suites 0–6 and 24 (every suite the backend supports: on WebCrypto not 4 and 5); both identifier encodings; message_4 on and off; EAD and padding; credentials by value; non-unique kids |
 | Suite negotiation | `SuiteNegotiationTest`: for every suite and method on every target, `isSupportedBy` is true exactly when a loopback handshake succeeds (the default backend, one without ChaCha20/Poly1305 and ES256, the PQ test double); SUITES_R holds only runnable suites; a selected suite the Responder cannot run gets error code 2 and the retry succeeds; SUITES_I and retries draw only on runnable suites; missing curves, KEMs and algorithms are named; `supportedBy` in both roles |
 | Post-quantum | Suite -24 and an ML-KEM-1024 / ML-DSA-87 / SHA-384 private suite, with a test double that has the FIPS 203 / 204 sizes (`FakePostQuantumBackend`): G_X 800, G_Y 768, signatures 2420 bytes, KMAC256 derivation; on the JVM with real ML-KEM and ML-DSA from `kcoap-crypto-bc` (`PostQuantumBouncyCastleTest`), with CCS (AKP COSE_Key) and ML-DSA X.509 credentials |
