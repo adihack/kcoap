@@ -9,17 +9,25 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.TransmissionParameters
+import dev.kcoap.testkit.InMemoryConnections
 import dev.kcoap.testkit.InMemoryNetwork
 import dev.kcoap.testkit.LinkConditions
 import dev.kcoap.transport.Endpoint
+import dev.kcoap.transport.ktor.KtorTcpConnector
+import dev.kcoap.transport.ktor.KtorTcpListener
 import dev.kcoap.transport.ktor.KtorUdpTransport
+import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
+import dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener
 import java.net.DatagramSocket
+import java.net.ServerSocket
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +120,43 @@ class GuideExamplesTest {
         eventListener = { event -> if (event is EndpointEvent.Retransmitted) println(event) },
     )
 
+    suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
+        val listeners = listOf(
+            KtorTcpListener.bind("127.0.0.1", tcpPort), // coap+tcp
+            KtorWebSocketListener.start("127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
+        )
+        return CoapServer(listeners, scope) {
+            resource("hello") { get { CoapResponse.content("Hello over ${peer::class.simpleName}") } }
+        }
+    }
+
+    suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int) {
+        val client = CoapClient(listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope)
+        println(client.get("coap+tcp://127.0.0.1:$tcpPort/hello").payloadAsText())
+        println(client.get("coap+ws://127.0.0.1:$webSocketPort/hello").payloadAsText())
+        println(client.ping("coap+tcp://127.0.0.1:$tcpPort"))
+        client.close()
+    }
+
+    val reliableConfig = CoapEndpointConfig(
+        reliable = ReliableTransportConfig(
+            maxMessageSize = 64 * 1024 + 512, // announced in the CSM; BERT blocks of up to 64 KiB
+            idleTimeout = 2.minutes, // release connections this side opened after 2 idle minutes
+            keepAliveInterval = 30.seconds, // Ping a quiet connection; abort it if nothing answers
+        ),
+    )
+
+    @Test
+    fun overConnections() = runTest {
+        val connections = InMemoryConnections()
+        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        CoapServer(listOf(connections.listen(5683)), backgroundScope, endpointConfig = config) {
+            resource("hello") { get { CoapResponse.content("Hello") } }
+        }
+        val client = CoapClient(listOf(connections.connector), backgroundScope, endpointConfig = config)
+        assertEquals("Hello", client.get("coap+tcp://127.0.0.1:5683/hello").payloadAsText())
+    }
+
     @Test
     fun greets() = runTest {
         val network = InMemoryNetwork(backgroundScope, Random(1))
@@ -141,6 +186,24 @@ class GuideExamplesTest {
             assertEquals("Hello, Udp(host=127.0.0.1", output[0].substringBefore(", port="))
             assertEquals(listOf("on", "finally", "[/time]"), output.subList(1, 4))
             assertEquals(3, output.count { it.startsWith("time: ") })
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun theTcpAndWebSocketExamplesWork() = runBlocking(Dispatchers.IO) {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            withTimeout(30.seconds) {
+                val tcpPort = ServerSocket(0).use { it.localPort }
+                val webSocketPort = ServerSocket(0).use { it.localPort }
+                val server = reliableServer(scope, tcpPort, webSocketPort)
+                reliableClient(scope, tcpPort, webSocketPort)
+                server.close()
+            }
+            assertEquals(listOf("Hello over Tcp", "Hello over WebSocket", "true"), output)
+            assertEquals(66048, reliableConfig.reliable.maxMessageSize)
         } finally {
             scope.cancel()
         }

@@ -5,8 +5,10 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
+import dev.kcoap.coap.stack.BlockSizing
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.ExpiringCache
+import dev.kcoap.coap.stack.MessageLimits
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.common.ByteArrayBuilder
 import dev.kcoap.transport.Endpoint
@@ -18,10 +20,12 @@ import kotlinx.coroutines.sync.withLock
  * The server side of RFC 7959: assembling Block1 request bodies atomically, and serving large responses
  * in Block2 blocks from a cached representation. State is dropped EXCHANGE_LIFETIME after its last use
  * (RFC 7959 §2.4, §2.5) or when [CoapServerConfig.maxConcurrentTransfers] is exceeded.
+ *
+ * Block sizes follow the [MessageLimits] of each peer: its datagram size, or on a connection its
+ * Max-Message-Size, with BERT blocks for peers that indicated BERT (RFC 8323 §6).
  */
 internal class BlockwiseServer(
     private val config: CoapServerConfig,
-    private val maxDatagramSize: Int,
     lifetime: Duration,
 ) {
     private val lock = Mutex()
@@ -40,13 +44,24 @@ internal class BlockwiseServer(
         class Assembled(val request: CoapMessage, val control: BlockOption) : Block1Result
     }
 
-    /** Processes one block of a Block1 transfer (RFC 7959 §2.5, Figures 7 and 9). */
-    suspend fun receiveBlock1(key: OperationKey, request: CoapMessage, block: BlockOption, now: Duration): Block1Result =
+    /**
+     * Processes one block of a Block1 transfer (RFC 7959 §2.5, Figures 7 and 9). A BERT block (RFC 8323 §6)
+     * is a run of 1024-byte blocks starting at its number; it is acknowledged as BERT when [limits] allow
+     * BERT, otherwise with SZX 6, which asks the client for plain blocks.
+     */
+    suspend fun receiveBlock1(
+        key: OperationKey,
+        request: CoapMessage,
+        block: BlockOption,
+        now: Duration,
+        limits: MessageLimits,
+    ): Block1Result =
         lock.withLock {
             val payload = request.payload
             val options = request.options
-            if (block.more && payload.size != block.size) {
-                // §2.3: with M set, the payload size MUST match SZX.
+            // §2.3: with M set, the payload size MUST match SZX; RFC 8323 §6: a non-final BERT block is a multiple of 1024.
+            val sizeMatches = if (block.isBert) payload.isNotEmpty() && payload.size % block.size == 0 else payload.size == block.size
+            if (block.more && !sizeMatches) {
                 return@withLock reject(CoapCode.BAD_REQUEST, "Block1 payload of ${payload.size} bytes does not match ${block.size}")
             }
             options.size1?.let { announced ->
@@ -74,7 +89,12 @@ internal class BlockwiseServer(
             }
             if (upload.body.size > config.maxBodySize) return@withLock tooLarge(key)
             // §2.3: the control SZX is the server's preference, at most what the client used.
-            val control = BlockOption(block.number, block.more, minOf(block.sizeExponent, preferredExponent()))
+            val exponent = if (block.isBert && limits.allowsBert && config.maxBlockSize == Blockwise.MAX_BLOCK_SIZE) {
+                block.sizeExponent
+            } else {
+                minOf(block.sizeExponent, preferredExponent())
+            }
+            val control = BlockOption(block.number, block.more, exponent)
             if (block.more) {
                 return@withLock Block1Result.Respond(CoapResponse(CoapCode.CONTINUE).withOptions { block1(control) })
             }
@@ -106,9 +126,10 @@ internal class BlockwiseServer(
 
     /**
      * Turns [response] into the block the request asks for (RFC 7959 §2.4): unchanged if it
-     * fits one message and no block was asked for, else block NUM of the requested or largest fitting
-     * size, with an ETag (added if missing) and Size2. Multi-block representations are cached under [key]
-     * so that the following blocks come from the same representation.
+     * fits one message within [limits] and no block was asked for, else block NUM of the requested or
+     * largest fitting size, with an ETag (added if missing) and Size2. To a peer that indicated BERT and
+     * asked for no smaller block, the blocks are BERT blocks (RFC 8323 §6). Multi-block representations
+     * are cached under [key] so that the following blocks come from the same representation.
      *
      * @param requested the Block2 option of the request, or the block size an observer asked for.
      */
@@ -119,8 +140,9 @@ internal class BlockwiseServer(
         response: CoapResponse,
         reserve: Int,
         now: Duration,
+        limits: MessageLimits,
     ): CoapResponse {
-        if (requested == null && Blockwise.fits(response.toMessage(token), maxDatagramSize, reserve)) return response
+        if (requested == null && Blockwise.fits(response.toMessage(token), limits, reserve)) return response
         val body = response.payload
         val needsETag = response.options.etags.isEmpty()
         // The largest header a block can have: an ETag of 8 bytes, a 3-byte Block2 and Size2.
@@ -130,14 +152,16 @@ internal class BlockwiseServer(
             size2(body.size.toLong())
         }
         val limit = minOf(config.maxBlockSize, requested?.size ?: Blockwise.MAX_BLOCK_SIZE)
-        val size = Blockwise.fittingBlockSize(maxDatagramSize, header.toMessage(token), reserve, limit)
-            ?: return CoapResponse.error(CoapCode.INTERNAL_SERVER_ERROR, "Response options do not fit a datagram")
-        val full = if (needsETag && body.size > size) response.withOptions { etag(Blockwise.etagOf(body)) } else response
+        val bertWanted = config.maxBlockSize == Blockwise.MAX_BLOCK_SIZE && (requested == null || requested.isBert)
+        val sizing = (if (bertWanted) Blockwise.bertSizing(limits, header.toMessage(token), reserve) else null)
+            ?: Blockwise.fittingBlockSize(limits, header.toMessage(token), reserve, limit)?.let(BlockSizing::of)
+            ?: return CoapResponse.error(CoapCode.INTERNAL_SERVER_ERROR, "Response options do not fit a message")
+        val full = if (needsETag && body.size > sizing.chunk) response.withOptions { etag(Blockwise.etagOf(body)) } else response
         // A request for a larger block than fits is answered from the same offset in smaller blocks.
-        val number = if (requested == null) 0 else requested.offset / size
-        val (slice, more) = Blockwise.slice(body, number, size)
+        val offset = if (requested == null) 0 else requested.offset / sizing.unit * sizing.unit
+        val (slice, more) = Blockwise.slice(body, offset, sizing.length(offset, body.size))
             ?: return CoapResponse.error(CoapCode.BAD_OPTION, "Block ${requested?.number} is beyond the end of the body")
-        if (body.size > size) {
+        if (body.size > sizing.chunk) {
             // Later blocks are plain responses: a notification's Observe stays with its first block.
             val stored = full.withOptions { remove(CoapOptions.OBSERVE.number) }
             lock.withLock { representations.put(key, stored, now) }
@@ -145,7 +169,7 @@ internal class BlockwiseServer(
         return CoapResponse(
             full.code,
             full.options.toBuilder().apply {
-                block2(Blockwise.block(number, more, size))
+                block2(sizing.option(offset, more))
                 size2(body.size.toLong())
             }.build(),
             slice,

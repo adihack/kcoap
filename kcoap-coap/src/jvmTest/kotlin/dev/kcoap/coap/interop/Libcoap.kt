@@ -2,6 +2,7 @@ package dev.kcoap.coap.interop
 
 import java.io.File
 import java.net.DatagramSocket
+import java.net.ServerSocket
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -19,6 +20,18 @@ object Libcoap {
     /** A UDP port nobody listens on right now. */
     fun freePort(): Int = DatagramSocket(0).use { it.localPort }
 
+    /** A port free for both UDP and TCP, since `coap-server -p` listens on both (RFC 8323 §8.1 shares 5683). */
+    fun freeUdpAndTcpPort(): Int {
+        while (true) {
+            val port = freePort()
+            val tcpFree = runCatching { ServerSocket(port).close() }.isSuccess
+            if (tcpFree) return port
+        }
+    }
+
+    /** A TCP port nobody listens on right now. */
+    fun freeTcpPort(): Int = ServerSocket(0).use { it.localPort }
+
     class Result(val exitCode: Int, val stdout: String, val stderr: String) {
         /** The messages libcoap logged at verbosity 6 or more: `v:1 t:CON c:GET i:1234 {} [ ... ]`. */
         val messages: List<String> get() = (stdout + "\n" + stderr).lines().filter { it.startsWith("v:1 ") }
@@ -26,9 +39,14 @@ object Libcoap {
         override fun toString(): String = "exit $exitCode\nstdout: $stdout\nstderr: $stderr"
     }
 
-    /** A running `coap-server`; [close] removes the container. */
-    class Server(val port: Int, private val container: String) : AutoCloseable {
+    /**
+     * A running `coap-server`, on UDP and TCP at [port] and, if started so, on WebSockets at
+     * [webSocketPort]; [close] removes the container.
+     */
+    class Server(val port: Int, private val container: String, val webSocketPort: Int? = null) : AutoCloseable {
         val uri: String get() = "coap://127.0.0.1:$port"
+        val tcpUri: String get() = "coap+tcp://127.0.0.1:$port"
+        val webSocketUri: String get() = "coap+ws://127.0.0.1:${checkNotNull(webSocketPort)}"
 
         fun logs(): String = run(listOf("docker", "logs", container), 30).let { it.stdout + it.stderr }
 
@@ -37,17 +55,19 @@ object Libcoap {
         }
     }
 
-    /** Starts `coap-server -p <port>` with [arguments]. */
-    fun startServer(vararg arguments: String): Server {
-        val port = freePort()
+    /** Starts `coap-server -p <port>` with [arguments], and `-w <port>` for WebSockets if [webSockets]. */
+    fun startServer(vararg arguments: String, webSockets: Boolean = false): Server {
+        val port = freeUdpAndTcpPort()
+        val webSocketPort = if (webSockets) freeTcpPort() else null
         val name = "kcoap-interop-${UUID.randomUUID()}"
+        val webSocketArguments = webSocketPort?.let { listOf("-w", "$it") } ?: emptyList()
         val result = run(
             listOf("docker", "run", "-d", "--rm", "--name", name, "--network", "host", IMAGE, "coap-server", "-p", "$port") +
-                arguments,
+                webSocketArguments + arguments,
             60,
         )
         check(result.exitCode == 0) { "coap-server did not start: $result" }
-        return Server(port, name)
+        return Server(port, name, webSocketPort)
     }
 
     /** Runs `coap-client` with [arguments]; [mount] is visible as /data in the container. */

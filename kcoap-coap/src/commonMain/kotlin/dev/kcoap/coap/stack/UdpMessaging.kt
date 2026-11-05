@@ -207,7 +207,7 @@ internal class UdpMessaging(
             return
         }
         if (log.isEnabled(LogLevel.TRACE)) log.trace { "Received $decoded from $from: ${log.payload(datagram)}" }
-        val message = intercept(decoded) { interceptor, current -> interceptor.onReceive(from, current) } ?: return
+        val message = interceptors.intercept(decoded, log) { interceptor, current -> interceptor.onReceive(from, current) } ?: return
         when (message.type) {
             CoapMessageType.ACK -> onAcknowledgement(now, from, message)
             CoapMessageType.RST -> onReset(now, from, message)
@@ -524,7 +524,7 @@ internal class UdpMessaging(
 
     /** Runs the interceptors and encodes; null when an interceptor dropped the message. */
     private fun encodeForSending(peer: Endpoint, message: CoapMessage): ByteArray? {
-        val intercepted = intercept(message) { interceptor, current -> interceptor.onSend(peer, current) } ?: return null
+        val intercepted = interceptors.intercept(message, log) { interceptor, current -> interceptor.onSend(peer, current) } ?: return null
         val bytes = UdpMessageCodec.encode(intercepted)
         if (bytes.size > maxDatagramSize) {
             throw CoapException(
@@ -533,23 +533,6 @@ internal class UdpMessaging(
             )
         }
         return bytes
-    }
-
-    /** Passes [message] through the interceptor chain; null when one of them dropped it. */
-    private inline fun intercept(
-        message: CoapMessage,
-        call: (MessageInterceptor, CoapMessage) -> CoapMessage?,
-    ): CoapMessage? {
-        var current = message
-        for (interceptor in interceptors) {
-            current = try {
-                call(interceptor, current)
-            } catch (e: Exception) {
-                log.error(e) { "Interceptor $interceptor failed; dropping $current" }
-                null
-            } ?: return null
-        }
-        return current
     }
 
     private fun transmit(peer: Endpoint, message: CoapMessage, bytes: ByteArray) {

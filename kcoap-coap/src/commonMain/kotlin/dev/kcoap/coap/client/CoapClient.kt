@@ -15,6 +15,7 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.log.LogTags
+import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
@@ -35,11 +36,20 @@ import kotlinx.coroutines.sync.withLock
  * ([CoapClientConfig.security]). Error codes are returned as responses; a request that gets no response
  * at all throws [CoapException]. Cancelling the calling coroutine cancels the exchange.
  *
+ * The URI's scheme picks the transport: `coap` goes over the endpoint's datagram transport, `coap+tcp`,
+ * `coaps+tcp`, `coap+ws` and `coaps+ws` (RFC 8323 §8) over connections that its connectors open on
+ * demand. On connections, message sizes and block sizes follow the server's Max-Message-Size, with BERT
+ * blocks when both sides support them (RFC 8323 §6).
+ *
  * ```
  * val client = CoapClient(KtorUdpTransport.bind(), scope)
  * val response = client.get("coap://192.0.2.1/sensors/temp")
  * client.put("coap://192.0.2.1/config", "on".encodeToByteArray(), ContentFormat.TEXT_PLAIN)
  * client.observe("coap://192.0.2.1/time").take(3).collect { println(it.payloadAsText()) }
+ *
+ * val tcp = CoapClient(listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope)
+ * tcp.get("coap+tcp://192.0.2.1/sensors/temp")
+ * tcp.get("coap+ws://example.org/sensors/temp")
  * ```
  */
 public class CoapClient private constructor(
@@ -57,6 +67,19 @@ public class CoapClient private constructor(
         config: CoapClientConfig = CoapClientConfig(),
         endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
     ) : this(CoapEndpoint(transport, scope, endpointConfig), config, true)
+
+    /**
+     * A client for CoAP over reliable transports (RFC 8323) on a new endpoint: requests to `coap+tcp`,
+     * `coaps+tcp`, `coap+ws` or `coaps+ws` URIs open connections through [connectors], reuse them per peer
+     * and release them when idle ([dev.kcoap.coap.stack.ReliableTransportConfig.idleTimeout]). [close]
+     * closes the endpoint and its connections.
+     */
+    public constructor(
+        connectors: List<Connector>,
+        scope: CoroutineScope,
+        config: CoapClientConfig = CoapClientConfig(),
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+    ) : this(CoapEndpoint(scope, endpointConfig, connectors = connectors), config, true)
 
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_CLIENT)
     internal val blockwise = BlockwiseClient(this)
@@ -231,7 +254,10 @@ public class CoapClient private constructor(
     public fun observe(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): Flow<CoapResponse> =
         observe(CoapUri.parse(uri), configure)
 
-    /** RFC 7252 §4.3 CoAP ping of the server at [uri]: true if it answered with a Reset (or ACK). */
+    /**
+     * CoAP ping of the server at [uri]: an Empty Confirmable message over UDP (RFC 7252 §4.3), true if it
+     * answered with a Reset (or ACK); a Ping over a reliable transport (RFC 8323 §5.4), true if the Pong came.
+     */
     public suspend fun ping(uri: CoapUri): Boolean = endpoint.ping(config.resolver.resolve(uri))
 
     /** CoAP ping of the server at the CoAP URI [uri]. */

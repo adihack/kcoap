@@ -33,7 +33,15 @@ internal class ClientExchange(
     /** The request as sent, after protection. */
     var request: CoapMessage? = null
     var protectedRequest: ProtectedRequest? = null
+
+    /** The datagram transmission of the request; null on a connection. */
     var transmission: Transmission? = null
+
+    /** The connection the request went on (RFC 8323), whose responses alone match; null for datagrams. */
+    var connection: ConnectionDriver? = null
+
+    /** Set once by [CoapEndpoint.forget], under its lock. */
+    var isForgotten: Boolean = false
 
     @Volatile
     var isOpen: Boolean = true

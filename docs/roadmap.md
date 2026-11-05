@@ -15,7 +15,7 @@ depends on it. Interop with libcoap and libedhoc runs as soon as a layer can tal
 | 8 | CoAP endpoint: messaging, exchanges, client and server API, UDP transport | `kcoap-coap`, `kcoap-transport-ktor`, `kcoap-testkit` | unit tests on a simulated network, libcoap both ways | done (UDP; DTLS with 12) |
 | 9 | EDHOC over CoAP and RFC 9668 combined request | `kcoap-edhoc-oscore` | RFC 9668 Figure 4, full-stack tests | done; combined flow live interop pending |
 | 10 | Interop harness: libcoap and libedhoc in containers, byte-exact oracles | `interop/` | CI | live harnesses done (libcoap CoAP + OSCORE, libedhoc EDHOC incl. PQ, in CI); byte-exact oracles planned |
-| 11 | TCP and WebSocket transports, browser target (JS/Wasm) | `kcoap-transport-*`, build | libcoap; the common tests on Node.js | in progress: RFC 8323 codec done; `js` and `wasmJs` targets done (every protocol module, WebCrypto backend with capability checks and common-code fallbacks); transports in progress |
+| 11 | TCP and WebSocket transports (RFC 8323), browser target (JS/Wasm) | `kcoap-coap`, `kcoap-transport-ktor`, `kcoap-transport-ktor-websocket(-server)`, `kcoap-testkit`, build | RFC 8323 figures, in-memory and loopback tests, libcoap both ways over TCP and WebSockets; the common tests on Node.js | RFC 8323 done except `coaps+tcp` (no TLS connector yet); `js` and `wasmJs` targets done (every protocol module, WebCrypto backend with capability checks and common-code fallbacks) |
 | 12 | DTLS 1.2 | `kcoap-dtls` | libcoap with five DTLS backends | last |
 
 Post-quantum: libedhoc implements the KEM-based ephemeral exchange of draft-ietf-lake-pqsuites with

@@ -59,12 +59,26 @@ public class CoapMessage(
 
     override fun hashCode(): Int = 31 * (31 * code.value + messageId) + tokenBytes.contentHashCode()
 
-    /** `CON 0.01 GET mid=23 token=4a7b [Uri-Path: tv1] 5 bytes`; payload content is never shown. */
+    /**
+     * `CON 0.01 GET mid=23 token=4a7b [Uri-Path: tv1] 5 bytes`; payload content is never shown. Signaling
+     * messages show their options by the signaling registry (RFC 8323 §5.2): `7.01 CSM [Max-Message-Size: 1152]`.
+     */
     override fun toString(): String = buildString {
-        append(type).append(' ').append(code)
-        append(" mid=").append(messageId)
+        if (isSignaling) {
+            append(code)
+        } else {
+            append(type).append(' ').append(code)
+            append(" mid=").append(messageId)
+        }
         if (tokenBytes.isNotEmpty()) append(" token=").append(tokenHex)
-        if (!options.isEmpty()) append(' ').append(options)
+        if (!options.isEmpty()) {
+            append(' ')
+            if (isSignaling) {
+                options.joinTo(this, prefix = "[", postfix = "]") { SignalingOptions.describe(code, it) }
+            } else {
+                append(options)
+            }
+        }
         if (payloadBytes.isNotEmpty()) append(' ').append(payloadBytes.size).append(" bytes")
     }
 

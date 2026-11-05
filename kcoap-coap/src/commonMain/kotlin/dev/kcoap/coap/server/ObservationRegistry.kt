@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.stack.ConnectionDriver
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.ExchangeKey
 import dev.kcoap.coap.stack.OperationKey
@@ -12,6 +13,7 @@ import dev.kcoap.coap.stack.TransmissionOutcome
 import dev.kcoap.coap.stack.TransmissionOwner
 import dev.kcoap.common.toHex
 import dev.kcoap.transport.Endpoint
+import dev.kcoap.transport.PeerIdentity
 import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -61,7 +63,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
         entries.load().values.filter { it.resource === resource }.forEach { it.end() }
     }
 
-    /** RFC 7252 §9.1.1: observations bound to an ended DTLS session end with it. */
+    /** RFC 7252 §9.1.1, RFC 8323 §7.4: observations bound to an ended DTLS session or closed connection end with it. */
     fun sessionEnded(peer: Endpoint) {
         entries.load().values.filter { it.peer == peer }.forEach { remove(it, "session ended") }
     }
@@ -86,6 +88,11 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * messaging layer's NSTART). A change while one is outstanding is not queued: a Confirmable notification
  * is superseded at its next timeout (§4.5.2), otherwise the latest state is sent once the outstanding one
  * completes, so intermediate states are skipped and the client eventually sees the latest (§4.5).
+ *
+ * No notification goes out before the registration response: on reliable transports the client ignores
+ * Observe values and takes notifications in the order they arrive (RFC 8323 §7.1), so the order of
+ * sending is the order of freshness. There, notifications have no message type (§7.2) and go on the
+ * registration's [connection].
  */
 internal class ServerObservation(
     private val server: CoapServer,
@@ -101,6 +108,10 @@ internal class ServerObservation(
     val blockSize: Int?,
     val operationKey: OperationKey,
     registeredAt: Duration,
+    /** The connection the registration came on (RFC 8323); null for datagrams. */
+    val connection: ConnectionDriver? = null,
+    /** What channel security authenticated when the client registered. */
+    val peerIdentity: PeerIdentity = PeerIdentity.None,
 ) : TransmissionOwner {
     val key: ExchangeKey = ExchangeKey(peer, token.toHex())
     private val mutex = Mutex()
@@ -118,13 +129,21 @@ internal class ServerObservation(
     @Volatile
     private var changedMeanwhile = false
 
+    @Volatile
+    private var registrationSent = false
+
     private var lastConfirmableAt: Duration = registeredAt
 
     /** The registration response was sent; a separate one is the first outstanding notification. */
-    fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
-        // On a multi-threaded dispatcher the ACK may already have been processed.
-        outstanding = transmission?.takeIf { it.isOutstanding }
-        if (type == CoapMessageType.CON) lastConfirmableAt = now
+    suspend fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
+        val changed = mutex.withLock {
+            // On a multi-threaded dispatcher the ACK may already have been processed.
+            outstanding = transmission?.takeIf { it.isOutstanding }
+            if (type == CoapMessageType.CON) lastConfirmableAt = now
+            registrationSent = true
+            changedMeanwhile
+        }
+        if (changed) schedule()
     }
 
     override suspend fun onOutcome(transmission: Transmission, outcome: TransmissionOutcome) {
@@ -167,6 +186,11 @@ internal class ServerObservation(
     private suspend fun notifyNow() = mutex.withLock {
         scheduled = false
         if (!isActive) return@withLock
+        if (!registrationSent) {
+            // Sent when the registration response is out, so that it stays the oldest state.
+            changedMeanwhile = true
+            return@withLock
+        }
         // Recorded transmissions that completed meanwhile (an outcome raced the recording) no longer count.
         val current = outstanding?.takeIf { it.isOutstanding }
         if (current != null && !current.isConfirmable) {
@@ -187,7 +211,7 @@ internal class ServerObservation(
         if (type == CoapMessageType.CON) lastConfirmableAt = now
         val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
         // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
-        outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold)
+        outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"

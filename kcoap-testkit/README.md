@@ -1,6 +1,7 @@
 # kcoap-testkit
 
-An in-memory datagram network for tests: of kcoap itself, and of applications built on it.
+An in-memory datagram network and in-memory connections for tests: of kcoap itself, and of
+applications built on it.
 
 - `InMemoryNetwork`: attaches `InMemoryTransport`s (a `DatagramTransport` each) at UDP-style
   addresses and delivers datagrams between them in memory.
@@ -10,6 +11,11 @@ An in-memory datagram network for tests: of kcoap itself, and of applications bu
   `InMemoryNetwork.tap` sees every datagram with its `DatagramFate`.
 - `InMemoryTransport.inject` hands any `DatagramEvent` to the receiver, for example
   `SessionEnded` to simulate a DTLS layer.
+- `InMemoryConnections`: listeners and a `Connector` for `coap+tcp`, `coaps+tcp`, `coap+ws` and
+  `coaps+ws` (RFC 8323). Byte streams deliver writes in pieces of `chunkSize` bytes, so stream
+  reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw
+  bytes to one side, `reset` breaks a connection, `tap` sees every write. TLS is not simulated; a
+  listener reports the identities it is given.
 
 Delays run on coroutine time: under `runTest`, pass `backgroundScope` to the network and
 `testScheduler.timeSource` to the CoAP endpoint, and retransmissions, lifetimes and latency all run

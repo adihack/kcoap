@@ -16,6 +16,7 @@ import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.RequestHandler
 import dev.kcoap.log.LogTags
+import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlinx.coroutines.CancellationException
@@ -68,10 +69,22 @@ public class CoapServer private constructor(
         routes: ResourceBuilder.() -> Unit = {},
     ) : this(CoapEndpoint(transport, scope, endpointConfig), config, true, routes)
 
+    /**
+     * Serves CoAP over reliable transports (RFC 8323) on the connections [listeners] accept, such as TCP
+     * and WebSocket listeners, on a new endpoint; [close] closes it and the listeners.
+     */
+    public constructor(
+        listeners: List<ConnectionListener>,
+        scope: CoroutineScope,
+        config: CoapServerConfig = CoapServerConfig(),
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+        routes: ResourceBuilder.() -> Unit = {},
+    ) : this(CoapEndpoint(scope, endpointConfig, listeners = listeners), config, true, routes)
+
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_SERVER)
     private val rootResource = DslResource("")
     internal val observations = ObservationRegistry(this)
-    private val blockwise = BlockwiseServer(config, endpoint.maxDatagramSize, endpoint.parameters.exchangeLifetime)
+    private val blockwise = BlockwiseServer(config, endpoint.parameters.exchangeLifetime)
     private val reserve = if (config.security != null) config.securityReserve else 0
 
     /** The root of the resource tree; requests to "/" go to its handlers. */
@@ -179,8 +192,9 @@ public class CoapServer private constructor(
         if (resource == null) return Reply(CoapResponse(CoapCode.NOT_FOUND))
         val block1 = options.block1
         val block2 = options.block2
-        if (block1?.isBert == true || block2?.isBert == true) {
-            // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00 (BERT exists only on RFC 8323 transports).
+        val limits = endpoint.limits(inbound.connection)
+        if (!limits.isReliable && (block1?.isBert == true || block2?.isBert == true)) {
+            // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00; it is BERT on RFC 8323 transports only.
             return Reply(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
         }
         val now = endpoint.now()
@@ -189,7 +203,7 @@ public class CoapServer private constructor(
         var effective = request
         var block1Control: BlockOption? = null
         if (block1 != null) {
-            when (val result = blockwise.receiveBlock1(key, request, block1, now)) {
+            when (val result = blockwise.receiveBlock1(key, request, block1, now, limits)) {
                 is BlockwiseServer.Block1Result.Respond -> return Reply(result.response)
                 is BlockwiseServer.Block1Result.Assembled -> {
                     effective = result.request
@@ -202,7 +216,7 @@ public class CoapServer private constructor(
 
         if (block2 != null && block2.number > 0 && block1 == null) {
             blockwise.representation(key, now)?.let { cached ->
-                return Reply(blockwise.serve(key, request.token, block2, cached, reserve, now))
+                return Reply(blockwise.serve(key, request.token, block2, cached, reserve, now, limits))
             }
             if (request.code != CoapCode.GET && request.code != CoapCode.FETCH) {
                 // Re-running an unsafe method for a later block would repeat its effect.
@@ -219,13 +233,13 @@ public class CoapServer private constructor(
         val registering = observe == OBSERVE_REGISTER && isObserveMethod && observable != null &&
             observable.isObservable && (block2 == null || block2.number == 0L)
 
-        val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound)
+        val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
         var response = acceptable(options, invoke(resource, context))
         var observation: ServerObservation? = null
         if (registering && response.isSuccess) {
             observation = ServerObservation(
                 this, observable, peer, request.token, effective, unprotected, unprotected?.identity,
-                block2?.size, key, now,
+                block2?.size, key, now, inbound.connection, inbound.peerIdentity,
             )
             observations.register(observation)
             response = response.withOptions { observe(observable.nextSequence()) }
@@ -234,7 +248,7 @@ public class CoapServer private constructor(
             response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
         }
         block1Control?.let { control -> response = response.withOptions { block1(control) } }
-        return Reply(blockwise.serve(key, request.token, block2, response, reserve, now), observation)
+        return Reply(blockwise.serve(key, request.token, block2, response, reserve, now, limits), observation)
     }
 
     /**
@@ -262,14 +276,20 @@ public class CoapServer private constructor(
         val response = reply.response
         if (reply.observation == null && isSuppressed(request.options, response.code)) {
             // RFC 7967 §2: the client is not interested; a Confirmable request still gets its ACK.
-            inbound.acknowledge()
+            inbound.finishWithoutResponse()
             return
         }
         val message = response.toMessage(request.token)
         val outgoing = unprotected?.protectResponse(message) ?: message
         log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
-        val transmission = inbound.respond(outgoing, owner = reply.observation)
-        reply.observation?.onRegistrationSent(transmission, transmission?.message?.type ?: CoapMessageType.ACK, endpoint.now())
+        val observation = reply.observation
+        val transmission = try {
+            inbound.respond(outgoing, owner = observation)
+        } catch (e: Exception) {
+            observation?.let { observations.remove(it, "registration response failed") }
+            throw e
+        }
+        observation?.onRegistrationSent(transmission, transmission?.message?.type ?: CoapMessageType.ACK, endpoint.now())
     }
 
     /** RFC 7967 §2.1: bit 2 suppresses 2.xx, bit 8 4.xx and bit 16 5.xx responses. */
@@ -295,7 +315,9 @@ public class CoapServer private constructor(
     internal suspend fun notification(observation: ServerObservation): CoapMessage? {
         if (!observation.isActive) return null
         val resource = observation.resource
-        val context = RequestContext(observation.request, observation.peer, observation.identity, resource, inbound = null)
+        val context = RequestContext(
+            observation.request, observation.peer, observation.identity, resource, inbound = null, observation.peerIdentity,
+        )
         var response = invoke(resource, context)
         response = if (response.isSuccess) {
             response.withOptions { observe(resource.nextSequence()) }
@@ -304,7 +326,8 @@ public class CoapServer private constructor(
             response.withOptions { remove(CoapOptions.OBSERVE.number) }
         }
         val requested = observation.blockSize?.let { Blockwise.block(0, false, it) }
-        response = blockwise.serve(observation.operationKey, observation.token, requested, response, reserve, endpoint.now())
+        val limits = endpoint.limits(observation.connection)
+        response = blockwise.serve(observation.operationKey, observation.token, requested, response, reserve, endpoint.now(), limits)
         val message = response.toMessage(observation.token)
         return observation.unprotected?.protectResponse(message) ?: message
     }
@@ -313,7 +336,7 @@ public class CoapServer private constructor(
     internal suspend fun sendRemovalNotice(observation: ServerObservation) {
         val message = CoapResponse(CoapCode.NOT_FOUND).toMessage(observation.token)
         val outgoing = observation.unprotected?.protectResponse(message) ?: message
-        endpoint.sendSeparately(observation.peer, outgoing, CoapMessageType.CON, observation)
+        endpoint.sendSeparately(observation.peer, outgoing, CoapMessageType.CON, observation, connection = observation.connection)
     }
 
     override fun toString(): String = "CoapServer($endpoint)"

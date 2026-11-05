@@ -1,10 +1,12 @@
 # Guide: CoAP clients and servers
 
-How to serve and request CoAP resources with kcoap over UDP. Every example here is compiled and run (on
-free ports instead of 5683) by `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/GuideExamplesTest.kt`.
+How to serve and request CoAP resources with kcoap over UDP, TCP and WebSockets. Every example here is
+compiled and run (on free ports instead of 5683) by
+`kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/GuideExamplesTest.kt`.
 
-Modules: `kcoap-coap` (the stack), `kcoap-transport-ktor` (UDP sockets), and for tests
-`kcoap-testkit` (a simulated network).
+Modules: `kcoap-coap` (the stack), `kcoap-transport-ktor` (UDP and TCP sockets),
+`kcoap-transport-ktor-websocket` and `kcoap-transport-ktor-websocket-server` (WebSockets), and for tests
+`kcoap-testkit` (a simulated network and in-memory connections).
 
 ## A server
 
@@ -114,6 +116,75 @@ val config = CoapEndpointConfig(
 `TransmissionParameters` holds RFC 7252 §4.8's ACK_TIMEOUT, ACK_RANDOM_FACTOR, MAX_RETRANSMIT, NSTART,
 PROBING_RATE and MAX_LATENCY and derives EXCHANGE_LIFETIME and the other §4.8.2 values. Interceptors see
 every message at the wire, after OSCORE protection; `toString()` of a message never shows its payload.
+
+## Over TCP and WebSockets
+
+CoAP over reliable transports (RFC 8323) uses the same client and server: the URI scheme picks the
+transport. A server takes listeners, a client takes connectors; both can also share a `CoapEndpoint`
+with a UDP transport.
+
+```kotlin
+suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
+    val listeners = listOf(
+        KtorTcpListener.bind("127.0.0.1", tcpPort), // coap+tcp
+        KtorWebSocketListener.start("127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
+    )
+    return CoapServer(listeners, scope) {
+        resource("hello") { get { CoapResponse.content("Hello over ${peer::class.simpleName}") } }
+    }
+}
+
+suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int) {
+    val client = CoapClient(listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope)
+    println(client.get("coap+tcp://127.0.0.1:$tcpPort/hello").payloadAsText())
+    println(client.get("coap+ws://127.0.0.1:$webSocketPort/hello").payloadAsText())
+    println(client.ping("coap+tcp://127.0.0.1:$tcpPort"))
+    client.close()
+}
+```
+
+- Modules: `kcoap-transport-ktor` (TCP on ktor-network), `kcoap-transport-ktor-websocket` (the WebSocket
+  client on the ktor client, any engine, browsers included) and `kcoap-transport-ktor-websocket-server`
+  (a standalone CIO server, or `routing { coapOverWebSockets(listener) }` inside your own ktor
+  application).
+- The client opens a connection when a request needs one, sends its CSM, waits for the server's
+  (RFC 8323 §3.3) and reuses the connection for every request to that peer. An idle connection it opened
+  is released (§5.5). If a connection closes, its exchanges fail with
+  `CoapException.Reason.CONNECTION_CLOSED` and its observations end; reconnecting is the next request.
+- Messages are as large as the peer's Max-Message-Size allows, so bodies that fit need no blocks. Larger
+  ones go block-wise, in BERT blocks (§6) when both CSMs announce BERT.
+- Observe works as over UDP. Notifications carry no message type, their Observe values are ignored in
+  favour of arrival order (§7.1), and cancelling always deregisters (§7.4).
+- `ping` sends a CoAP Ping and waits for the Pong (§5.4); `endpoint.ping(peer, custody = true)` asks for
+  Custody (§5.4.1).
+- `coaps+ws` works with `wss://` on the engine's TLS. `coaps+tcp` needs a TLS connector, which is not
+  built yet.
+
+```kotlin
+val reliableConfig = CoapEndpointConfig(
+    reliable = ReliableTransportConfig(
+        maxMessageSize = 64 * 1024 + 512, // announced in the CSM; BERT blocks of up to 64 KiB
+        idleTimeout = 2.minutes, // release connections this side opened after 2 idle minutes
+        keepAliveInterval = 30.seconds, // Ping a quiet connection; abort it if nothing answers
+    ),
+)
+```
+
+`EndpointEvent`s report connections opened and closed, CSMs, Releases and Aborts. On virtual time,
+`kcoap-testkit`'s `InMemoryConnections` stands in for sockets:
+
+```kotlin
+@Test
+fun overConnections() = runTest {
+    val connections = InMemoryConnections()
+    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    CoapServer(listOf(connections.listen(5683)), backgroundScope, endpointConfig = config) {
+        resource("hello") { get { CoapResponse.content("Hello") } }
+    }
+    val client = CoapClient(listOf(connections.connector), backgroundScope, endpointConfig = config)
+    assertEquals("Hello", client.get("coap+tcp://127.0.0.1:5683/hello").payloadAsText())
+}
+```
 
 ## Message security
 

@@ -8,7 +8,7 @@ post-quantum EDHOC suite.
 | Protocol | RFC | State | Verified by |
 |---|---|---|---|
 | CoAP over UDP: messaging, client, server, Observe, Block-wise, Echo/Request-Tag, link format | 7252, 7641, 7959, 9175, 6690 | done | unit tests on a simulated lossy network; libcoap both directions |
-| CoAP message codecs for TCP and WebSockets | 8323 | codec done, transport planned | unit tests |
+| CoAP over TCP and WebSockets: CSM, Ping/Pong, Release, Abort, BERT, Observe | 8323 | done (TLS for `coaps+tcp` pending) | RFC 8323 figures byte for byte; in-memory and loopback tests; libcoap both directions over TCP and WebSockets |
 | OSCORE | 8613 | done (Appendix B.2 pending) | every Appendix C vector byte for byte; libcoap both directions, raw and through the stack |
 | EDHOC: methods 0–3, suites 0–6, 24, post-quantum suite -24 | 9528 | done | both RFC 9529 traces byte for byte, all §4 invalid messages; libedhoc interop in progress |
 | EDHOC over CoAP, EDHOC→OSCORE, combined request | 9528 App. A, 9668 | done | RFC 9668 Figure 4 byte for byte; full-stack tests |
@@ -59,8 +59,10 @@ The server side mounts `EdhocResource` under `/.well-known` and uses `CombinedRe
 | [`kcoap-cbor`](kcoap-cbor/README.md) | Deterministic CBOR and CBOR sequences |
 | [`kcoap-cose`](kcoap-cose/README.md) | COSE structures, COSE_Key, CWT Claims Sets |
 | [`kcoap-transport`](kcoap-transport/README.md) | Transport interfaces, endpoints, peer identities, URI schemes |
-| [`kcoap-transport-ktor`](kcoap-transport-ktor) | UDP on ktor-network (JVM, Apple, Linux; not the web) |
-| [`kcoap-testkit`](kcoap-testkit/README.md) | Simulated network with loss, duplication and reordering, for tests |
+| [`kcoap-transport-ktor`](kcoap-transport-ktor) | UDP and TCP on ktor-network (JVM, Apple, Linux; not the web) |
+| [`kcoap-transport-ktor-websocket`](kcoap-transport-ktor-websocket/README.md) | WebSocket client on the ktor client, any engine, browsers included |
+| [`kcoap-transport-ktor-websocket-server`](kcoap-transport-ktor-websocket-server/README.md) | WebSocket server on the ktor server, standalone or mounted |
+| [`kcoap-testkit`](kcoap-testkit/README.md) | Simulated network with loss, duplication and reordering, and in-memory TCP/WebSocket connections, for tests |
 | [`kcoap-coap`](kcoap-coap) | Messages, codecs, the CoAP endpoint, `CoapClient`, `CoapServer` |
 | [`kcoap-oscore`](kcoap-oscore/README.md) | OSCORE |
 | [`kcoap-edhoc`](kcoap-edhoc/README.md) | EDHOC Initiator and Responder |

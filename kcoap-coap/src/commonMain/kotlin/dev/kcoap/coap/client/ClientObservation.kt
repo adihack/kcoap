@@ -23,8 +23,9 @@ import kotlinx.coroutines.withContext
  *
  * Notifications are ordered by §3.4 and stale ones dropped; with message security, ordering and replay
  * protection are the security layer's job (RFC 8613 §4.1.3.5.2), whose verified notifications are all
- * passed on. Large notifications are completed with Block2 requests (RFC 7959 §2.6). A response without
- * Observe, or a non-2.xx one, ends the observation (§3.2).
+ * passed on. On a reliable transport, which delivers in order, the Observe value MUST be ignored and every
+ * notification is passed on (RFC 8323 §7.1). Large notifications are completed with Block2 requests
+ * (RFC 7959 §2.6). A response without Observe, or a non-2.xx one, ends the observation (§3.2).
  */
 internal class ClientObservation(
     private val client: CoapClient,
@@ -57,6 +58,7 @@ internal class ClientObservation(
     @Volatile
     private var established = false
     private val order = NotificationOrder()
+    private val isReliable = client.endpoint.isReliable(peer)
 
     fun start() {
         job = client.endpoint.scope.launch { run() }
@@ -72,7 +74,7 @@ internal class ClientObservation(
                 return
             }
             established = true
-            order.accept(first.options.observe!!, client.endpoint.now())
+            if (!isReliable) order.accept(first.options.observe!!, client.endpoint.now())
             mutableEvents.emit(Event.Notification(client.blockwise.complete(peer, registration, first, confirmable)))
             while (true) {
                 val result = current.receiveCatching()
@@ -88,7 +90,7 @@ internal class ClientObservation(
                     finish(Event.Final(client.blockwise.complete(peer, registration, notification, confirmable)))
                     return
                 }
-                if (current.protectedRequest == null && !order.accept(value, client.endpoint.now())) {
+                if (current.protectedRequest == null && !isReliable && !order.accept(value, client.endpoint.now())) {
                     log.debug { "Dropped a stale notification $value (RFC 7641 §3.4)" }
                     continue
                 }
@@ -126,13 +128,18 @@ internal class ClientObservation(
         mutableEvents.emit(event)
     }
 
-    /** The last collector left: stop, and deregister if the observation was established (§3.6). */
+    /**
+     * The last collector left: stop, and deregister if the observation was established (§3.6). On a
+     * reliable transport the client MUST deregister (RFC 8323 §7.4), since there is no Reset to answer the
+     * next notification with, so [ObserveCancellation.FORGET] does not apply there.
+     */
     fun stop() {
         job?.cancel()
         val current = exchange ?: return
         client.endpoint.scope.launch {
             withContext(NonCancellable) {
-                if (!established || client.config.observeCancellation == ObserveCancellation.FORGET || !current.isOpen) {
+                val forget = client.config.observeCancellation == ObserveCancellation.FORGET && !isReliable
+                if (!established || forget || !current.isOpen) {
                     current.cancel()
                     return@withContext
                 }

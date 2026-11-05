@@ -1,6 +1,7 @@
 package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.log.Logger
 import dev.kcoap.transport.Endpoint
 
 /**
@@ -21,4 +22,25 @@ public interface MessageInterceptor {
 
     /** [message] was decoded from a datagram that came from [from]. */
     public fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage? = message
+}
+
+/**
+ * Passes [message] through the chain; null when an interceptor dropped it. An interceptor that throws
+ * drops the message too, and is logged.
+ */
+internal inline fun List<MessageInterceptor>.intercept(
+    message: CoapMessage,
+    log: Logger,
+    call: (MessageInterceptor, CoapMessage) -> CoapMessage?,
+): CoapMessage? {
+    var current = message
+    for (interceptor in this) {
+        current = try {
+            call(interceptor, current)
+        } catch (e: Exception) {
+            log.error(e) { "Interceptor $interceptor failed; dropping $current" }
+            null
+        } ?: return null
+    }
+    return current
 }

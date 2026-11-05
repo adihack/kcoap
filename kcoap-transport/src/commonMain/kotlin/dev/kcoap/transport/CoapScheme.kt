@@ -33,6 +33,12 @@ public enum class CoapScheme(
         /** TLS ALPN protocol identifier for CoAP over TLS (RFC 8323 §8.2 and §11.7). */
         public const val ALPN: String = "coap"
 
+        /** The WebSocket subprotocol a CoAP WebSocket client MUST request (RFC 8323 §4.1, §11.8). */
+        public const val WEBSOCKET_SUBPROTOCOL: String = "coap"
+
+        /** The path of a CoAP WebSocket endpoint (RFC 8323 §8.3, §11.6). */
+        public const val WEBSOCKET_PATH: String = "/.well-known/coap"
+
         /** URI schemes are case insensitive (RFC 3986 §3.1). */
         public fun fromScheme(scheme: String): CoapScheme? =
             entries.firstOrNull { it.scheme.equals(scheme, ignoreCase = true) }

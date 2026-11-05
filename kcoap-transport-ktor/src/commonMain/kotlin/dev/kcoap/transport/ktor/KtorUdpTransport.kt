@@ -5,7 +5,6 @@ import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
-import dev.kcoap.transport.IpLiteral
 import io.ktor.network.selector.SelectorManager
 import io.ktor.network.sockets.BoundDatagramSocket
 import io.ktor.network.sockets.Datagram
@@ -19,7 +18,7 @@ import kotlinx.io.readByteArray
 /**
  * A UDP [DatagramTransport] on ktor-network, for `coap` on the JVM (and Android) and Apple platforms.
  *
- * Peers are reported as [Endpoint.Udp] with the address in [IpLiteral] canonical form, never by host
+ * Peers are reported as [Endpoint.Udp] with the address in [dev.kcoap.transport.IpLiteral] canonical form, never by host
  * name, so responses match requests by endpoint equality. Datagrams from addresses that are not IP
  * (none exist on UDP sockets) are dropped. [maxDatagramSize] is what the CoAP layer may send; RFC 7252
  * §4.6 recommends 1152 bytes when the path MTU is unknown, which the default follows. Received datagrams
@@ -113,10 +112,6 @@ public class KtorUdpTransport private constructor(
         private const val MIN_DATAGRAM_SIZE = 64
 
         /** Uses the raw address, never a reverse DNS lookup, and its canonical text. */
-        private fun endpointOf(address: InetSocketAddress): Endpoint.Udp {
-            val raw = address.resolveAddress()
-            val host = if (raw != null) IpLiteral.format(raw) else IpLiteral.canonical(address.hostname) ?: address.hostname
-            return Endpoint.Udp(host, address.port)
-        }
+        private fun endpointOf(address: InetSocketAddress): Endpoint.Udp = Endpoint.Udp(canonicalHost(address), address.port)
     }
 }

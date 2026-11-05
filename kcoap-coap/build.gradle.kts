@@ -13,8 +13,11 @@ kotlin {
             implementation(project(":kcoap-testkit"))
         }
         jvmTest.dependencies {
-            // The libcoap interop tests talk to coap-server and coap-client over real UDP sockets.
+            // The libcoap interop tests talk to coap-server and coap-client over real UDP, TCP and
+            // WebSocket sockets.
             implementation(project(":kcoap-transport-ktor"))
+            implementation(project(":kcoap-transport-ktor-websocket"))
+            implementation(project(":kcoap-transport-ktor-websocket-server"))
         }
     }
 }
