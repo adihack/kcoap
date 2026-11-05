@@ -57,7 +57,9 @@ public class CoapUri(
 
     public companion object {
         private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
-        private val URI = Regex("""^([A-Za-z][A-Za-z0-9+.-]*)://(\[[^\]]*]|[^/:?#\[]*)(?::(\d*))?([^?#]*)(?:\?([^#]*))?(#.*)?$""")
+        // Brackets are escaped even where Java's syntax would not need it: JavaScript compiles regexes in
+        // Unicode mode, which rejects a lone "]".
+        private val URI = Regex("""^([A-Za-z][A-Za-z0-9+.-]*)://(\[[^\]]*\]|[^/:?#\[]*)(?::(\d*))?([^?#]*)(?:\?([^#]*))?(#.*)?$""")
 
         private const val UNRESERVED = "-._~"
         private const val SUB_DELIMS = "!$&'()*+,;="

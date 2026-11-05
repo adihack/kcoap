@@ -18,8 +18,12 @@ import dev.kcoap.crypto.backend.DefaultCryptoBackend
 
 /** Credentials, configurations and handshakes shared by the tests. */
 internal object Fixtures {
-    /** The suites the default backend runs: all registered ones except 25. */
-    val classicalSuites: List<CipherSuite> = CipherSuite.registered.filter { it.isImplemented }
+    /**
+     * The registered suites [backend] runs on this platform: for the default backend all but 25, and
+     * where the platform has no ChaCha20/Poly1305 (WebCrypto) not suites 4 and 5 either.
+     */
+    suspend fun registeredSuitesRunBy(backend: CryptoBackend): List<CipherSuite> =
+        CipherSuite.registered.filter { it.isSupportedBy(backend) }
 
     /** The key type [kind] needs in [suite]. */
     fun keyTypeFor(kind: AuthenticationKind, suite: CipherSuite): KeyType = when (kind) {

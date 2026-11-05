@@ -72,6 +72,30 @@ class AsymmetricTest {
         }
     }
 
+    /**
+     * Protocol code turns a backend's exceptions into protocol errors (RFC 9528 §9.8), so unusable peer
+     * keys must fail with an [Exception] on every platform, also where WebCrypto rejects them with
+     * something that is not one. Verification may instead just return false.
+     */
+    @Test
+    fun unusablePeerKeysFailWithAnException() = runTest {
+        val p256 = backend.generateKeyPair(KeyType.P256)
+        val notOnTheCurve = byteArrayOf(4) + ByteArray(64) { 1 }
+        assertFailsWith<Exception> { backend.keyAgreement(p256.privateKey, notOnTheCurve) }
+        val xNotOnTheCurve = byteArrayOf(2) + ByteArray(31) + byteArrayOf(1)
+        assertFailsWith<IllegalArgumentException> { backend.keyAgreement(p256.privateKey, xNotOnTheCurve) }
+        val x25519 = backend.generateKeyPair(KeyType.X25519)
+        assertFailsWith<Exception> { backend.keyAgreement(x25519.privateKey, ByteArray(31)) }
+
+        suspend fun rejects(algorithm: SignatureAlgorithm, publicKey: ByteArray): Boolean = try {
+            !backend.verify(algorithm, publicKey, ByteArray(1), ByteArray(algorithm.signatureLength))
+        } catch (_: Exception) {
+            true
+        }
+        assertTrue(rejects(SignatureAlgorithm.ES256, notOnTheCurve))
+        assertTrue(rejects(SignatureAlgorithm.EDDSA, ByteArray(31)))
+    }
+
     @Test
     fun signaturesRoundTripAndRejectTampering() = runTest {
         for (algorithm in listOf(SignatureAlgorithm.EDDSA, SignatureAlgorithm.ES256, SignatureAlgorithm.ES384)) {

@@ -1,11 +1,16 @@
 package dev.kcoap.edhoc
 
+import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
+import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.EcdhCurve
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.UnsupportedAlgorithmException
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -55,6 +60,32 @@ class CipherSuiteTest {
     @Test
     fun mandatorySuitesAreTwoAndThree() {
         assertEquals(setOf(2, 3), CipherSuite.registered.filter { it.isMandatoryToImplement }.map { it.value }.toSet())
+    }
+
+    /** The mandatory suites run on every platform; the default backend runs no post-quantum suite. */
+    @Test
+    fun theDefaultBackendRunsTheMandatorySuitesEverywhere() = runTest {
+        val backend = DefaultCryptoBackend()
+        assertTrue(CipherSuite.SUITE_2.isSupportedBy(backend))
+        assertTrue(CipherSuite.SUITE_3.isSupportedBy(backend))
+        assertFalse(CipherSuite.SUITE_PQC_1.isSupportedBy(backend), "no ML-KEM or ML-DSA")
+        assertFalse(CipherSuite.SUITE_25.isSupportedBy(backend), "not implemented")
+    }
+
+    /** A platform without ChaCha20/Poly1305, as WebCrypto is, loses exactly suites 4 and 5. */
+    @Test
+    fun aSuiteNeedsEveryOneOfItsAlgorithms() = runTest {
+        val default = DefaultCryptoBackend()
+        val withoutChaCha = object : CryptoBackend by default {
+            override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead =
+                if (algorithm == AeadAlgorithm.CHACHA20_POLY1305) {
+                    throw UnsupportedAlgorithmException(algorithm.name)
+                } else {
+                    default.aead(algorithm, key)
+                }
+        }
+        val supported = CipherSuite.registered.filter { it.isSupportedBy(withoutChaCha) }.map { it.value }
+        assertEquals(listOf(0, 1, 2, 3, 6, 24), supported)
     }
 
     /** RFC 9528 Table 6 lists suite 25, but its EdDSA uses Ed448, which no backend has. */

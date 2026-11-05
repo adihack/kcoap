@@ -6,6 +6,7 @@ import dev.kcoap.common.toHex
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.crypto.supports
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -145,7 +146,9 @@ class OscorePartsTest {
     @Test
     fun otherAeadAlgorithms() = runTest {
         val crypto = DefaultCryptoBackend()
-        for (algorithm in listOf(AeadAlgorithm.A128GCM, AeadAlgorithm.CHACHA20_POLY1305, AeadAlgorithm.AES_CCM_16_128_128)) {
+        // ChaCha20/Poly1305 where the platform has it (WebCrypto does not).
+        val candidates = listOf(AeadAlgorithm.A128GCM, AeadAlgorithm.CHACHA20_POLY1305, AeadAlgorithm.AES_CCM_16_128_128)
+        for (algorithm in candidates.filter { crypto.supports(it) }) {
             val client = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(1), byteArrayOf(2), aeadAlgorithm = algorithm), crypto)
             val server = SecurityContext.derive(SecurityContextParameters(secret, byteArrayOf(2), byteArrayOf(1), aeadAlgorithm = algorithm), crypto)
             val request = dev.kcoap.coap.CoapMessage.request(CoapCode.GET) { options { uriPath("x") } }
