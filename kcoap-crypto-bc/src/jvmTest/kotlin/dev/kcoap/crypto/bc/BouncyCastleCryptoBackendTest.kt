@@ -38,9 +38,9 @@ class BouncyCastleCryptoBackendTest {
             assertEquals(algorithm.keyType.publicKeyLength, pair.publicKey.size, algorithm.name)
             assertEquals(MlKem.SEED_LENGTH, pair.privateKey.encoded.size, algorithm.name)
             assertEquals(algorithm.ciphertextLength, encapsulation.ciphertext.size, algorithm.name)
-            assertEquals(algorithm.sharedSecretLength, encapsulation.sharedSecret.size, algorithm.name)
+            assertEquals(algorithm.sharedSecretLength, encapsulation.sharedSecret().size, algorithm.name)
             assertContentEquals(
-                encapsulation.sharedSecret,
+                encapsulation.sharedSecret(),
                 backend.decapsulate(pair.privateKey, encapsulation.ciphertext),
                 algorithm.name,
             )
@@ -65,7 +65,7 @@ class BouncyCastleCryptoBackendTest {
                 val secret = backend.decapsulate(pair.privateKey, tampered)
 
                 assertContentEquals(Shake256.digest(z + tampered, algorithm.sharedSecretLength), secret, algorithm.name)
-                assertFalse(secret.contentEquals(encapsulation.sharedSecret), algorithm.name)
+                assertFalse(secret.contentEquals(encapsulation.sharedSecret()), algorithm.name)
             }
         }
     }
@@ -268,7 +268,7 @@ class BouncyCastleCryptoBackendTest {
         val minimal = BouncyCastleCryptoBackend(SymmetricOnlyBackend())
         val kem = minimal.generateKeyPair(KeyType.ML_KEM_512)
         val encapsulation = minimal.encapsulate(KemAlgorithm.ML_KEM_512, kem.publicKey)
-        assertContentEquals(encapsulation.sharedSecret, minimal.decapsulate(kem.privateKey, encapsulation.ciphertext))
+        assertContentEquals(encapsulation.sharedSecret(), minimal.decapsulate(kem.privateKey, encapsulation.ciphertext))
         val dsa = minimal.generateKeyPair(KeyType.ML_DSA_44)
         val signature = minimal.sign(SignatureAlgorithm.ML_DSA_44, dsa.privateKey, data)
         assertTrue(minimal.verify(SignatureAlgorithm.ML_DSA_44, dsa.publicKey, data, signature))

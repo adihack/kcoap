@@ -173,7 +173,7 @@ public class EdhocInitiator(
                 "message_2 verified: C_R ${received.connectionIdentifier}, " +
                     "ID_CRED_R ${received.credentialIdentifier}, EAD_2 ${received.ead.describe()}"
             }
-            waiting.share.privateKey.destroyIfSoftware()
+            waiting.share.privateKey.destroy()
             state = State.VerifiedMessage2(waiting, gY, received, verified.credential, verified.prk, th3)
         }
     }
@@ -393,7 +393,7 @@ public class EdhocInitiator(
             val connectionIdentifier: ConnectionIdentifier,
             val hashMessage1: ByteArray,
         ) : State(EdhocPhase.WAIT_M2, suite) {
-            override fun destroy() = share.privateKey.destroyIfSoftware()
+            override fun destroy() = share.privateKey.destroy()
         }
 
         class VerifiedMessage2(

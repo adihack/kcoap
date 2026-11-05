@@ -8,7 +8,8 @@ libedhoc's private suite -24 uses ML-KEM-512 for the ephemeral key exchange and 
 val crypto = BouncyCastleCryptoBackend()                     // wraps DefaultCryptoBackend
 val responder = crypto.generateKeyPair(KeyType.ML_KEM_512)
 val sent = crypto.encapsulate(KemAlgorithm.ML_KEM_512, responder.publicKey)
-val received = crypto.decapsulate(responder.privateKey, sent.ciphertext)   // same bytes as sent.sharedSecret
+val received = crypto.decapsulate(responder.privateKey, sent.ciphertext)   // same bytes as sent.sharedSecret()
+sent.destroy()                                                              // overwrites the sender's copy
 ```
 
 ## What it does

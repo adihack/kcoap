@@ -7,7 +7,6 @@ import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
-import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -18,8 +17,8 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 public fun interface EphemeralKeySource {
     /**
-     * A key pair of [type], made with or for [crypto]. EDHOC destroys software private keys once it no
-     * longer needs them.
+     * A key pair of [type], made with or for [crypto]. EDHOC [destroys][PrivateKey.destroy] the private key
+     * once it no longer needs it, whatever kind of handle it is.
      */
     public suspend fun keyPair(crypto: CryptoBackend, type: KeyType): KeyPair
 
@@ -137,12 +136,18 @@ internal sealed class EphemeralKeyExchange(
             val encapsulation = backendCall(algorithm.name, "Invalid ${algorithm.name} encapsulation key") {
                 crypto.encapsulate(algorithm, gX)
             }
-            if (encapsulation.ciphertext.size != algorithm.ciphertextLength ||
-                encapsulation.sharedSecret.size != algorithm.sharedSecretLength
-            ) {
-                throw EdhocException.unspecified("${algorithm.name} encapsulation has the wrong size")
+            try {
+                val secret = encapsulation.sharedSecret()
+                if (encapsulation.ciphertext.size != algorithm.ciphertextLength ||
+                    secret.size != algorithm.sharedSecretLength
+                ) {
+                    secret.wipe()
+                    throw EdhocException.unspecified("${algorithm.name} encapsulation has the wrong size")
+                }
+                return ResponderShare(encapsulation.ciphertext, secret, privateKey = null)
+            } finally {
+                encapsulation.destroy()
             }
-            return ResponderShare(encapsulation.ciphertext, encapsulation.sharedSecret, privateKey = null)
         }
 
         override suspend fun complete(privateKey: PrivateKey, gY: ByteArray): ByteArray {
@@ -190,11 +195,6 @@ internal sealed class EphemeralKeyExchange(
             throw EdhocException.unspecified(diagnostic, e)
         }
     }
-}
-
-/** Overwrites the key material of software private keys; other handles are left to their backend. */
-internal fun PrivateKey.destroyIfSoftware() {
-    (this as? SoftwarePrivateKey)?.destroy()
 }
 
 /** Wipes every array, for intermediate secrets that are no longer needed (RFC 9528 §9.8). */

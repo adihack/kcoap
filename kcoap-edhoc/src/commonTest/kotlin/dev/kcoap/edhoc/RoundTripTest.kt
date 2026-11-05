@@ -2,7 +2,10 @@ package dev.kcoap.edhoc
 
 import dev.kcoap.common.toHex
 import dev.kcoap.cose.CwtClaimsSet
+import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -270,6 +273,49 @@ class RoundTripTest {
         assertTrue(session.toString().startsWith("EdhocSession(INITIATOR"), "toString still works")
         // The peer's session is its own and keeps working.
         assertEquals(16, handshake.responderSession.oscoreMasterSecret().size)
+    }
+
+    /**
+     * RFC 9528 §9.8: the ephemeral keys are destroyed after use whatever backend holds them, not only
+     * software keys: here they are handles of a key store that a decorator unwraps (PrivateKey.destroy).
+     */
+    @Test
+    fun ephemeralKeysOfAKeyStoreAreDestroyed() = runTest {
+        val handles = mutableListOf<KeyStoreHandle>()
+        val keyStore = object : CryptoBackend by backend {
+            override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray =
+                backend.keyAgreement((privateKey as? KeyStoreHandle)?.key ?: privateKey, peerPublicKey)
+        }
+        val inKeyStore = EphemeralKeySource { crypto, type ->
+            val pair = crypto.generateKeyPair(type)
+            KeyPair(pair.publicKey, KeyStoreHandle(pair.privateKey).also { handles += it })
+        }
+        for (method in listOf(EdhocMethod.SIGNATURE_SIGNATURE, EdhocMethod.STATIC_DH_STATIC_DH)) {
+            for (suite in listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_2)) {
+                handles.clear()
+                val (initiator, responder) = Fixtures.configs(backend, method, suite)
+                val configs = EdhocInitiatorConfig(
+                    initiator.method, initiator.cipherSuites, initiator.credentials, initiator.credentialResolver,
+                    initiator.connectionIdentifiers, ephemeralKeys = inKeyStore,
+                ) to EdhocResponderConfig(
+                    responder.methods, responder.cipherSuites, responder.credentials, responder.credentialResolver,
+                    responder.connectionIdentifiers, ephemeralKeys = inKeyStore,
+                )
+                assertSessionsAgree(Fixtures.handshake(keyStore, configs), "method ${method.value}, suite ${suite.value}")
+                assertEquals(2, handles.size, "X and Y")
+                for (handle in handles) assertTrue(handle.isDestroyed, "method ${method.value}, suite ${suite.value}")
+            }
+        }
+    }
+
+    /** A key-store key: it holds a software key here, and records that EDHOC released it. */
+    private class KeyStoreHandle(val key: PrivateKey) : PrivateKey(key.type) {
+        var isDestroyed = false
+
+        override fun destroy() {
+            isDestroyed = true
+            key.destroy()
+        }
     }
 
     private suspend fun credential(kind: AuthenticationKind, type: KeyType, kid: Int): LocalCredential =

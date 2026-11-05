@@ -36,7 +36,7 @@ internal object Probe {
     suspend fun kem(crypto: CryptoBackend, algorithm: KemAlgorithm): Boolean = answer {
         withKeyPair(crypto, algorithm.keyType) { pair ->
             val encapsulation = crypto.encapsulate(algorithm, pair.publicKey)
-            encapsulation.sharedSecret.wipe()
+            encapsulation.destroy()
             crypto.decapsulate(pair.privateKey, encapsulation.ciphertext).wipe()
         }
     }
@@ -62,7 +62,7 @@ internal object Probe {
         try {
             use(pair)
         } finally {
-            (pair.privateKey as? SoftwarePrivateKey)?.destroy()
+            pair.privateKey.destroy()
         }
     }
 }

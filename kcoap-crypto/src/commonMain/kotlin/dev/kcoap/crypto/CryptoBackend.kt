@@ -93,6 +93,10 @@ public interface CryptoBackend {
         signature: ByteArray,
     ): Boolean = throw UnsupportedAlgorithmException(algorithm.name)
 
+    /**
+     * Encapsulates a fresh shared secret to the encapsulation key [publicKey] (FIPS 203 §7.2). The caller
+     * owns the result and [destroys][KemEncapsulation.destroy] it once it has the secret.
+     */
     public suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation =
         throw UnsupportedAlgorithmException(algorithm.name)
 

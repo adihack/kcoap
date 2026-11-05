@@ -59,8 +59,33 @@ class BackendDefaultsTest {
         assertContentEquals(ByteArray(32) { 2 }, pair.publicKey)
         assertContentEquals(ByteArray(32) { 1 }, (pair.privateKey as SoftwarePrivateKey).encoded())
         assertFailsWith<IllegalArgumentException> { minimal.importKeyPair(KeyType.P256, ByteArray(32), ByteArray(64)) }
-        val encapsulation = KemEncapsulation(ByteArray(768), ByteArray(32))
+    }
+
+    /** The shared secret leaves only as copies, and destroy() overwrites it (API-10: secrets are functions). */
+    @Test
+    fun kemEncapsulationsHandOutCopiesUntilDestroyed() {
+        val secret = ByteArray(32) { 5 }
+        val encapsulation = KemEncapsulation(ByteArray(768), secret)
         assertEquals("KemEncapsulation(768-byte ciphertext)", encapsulation.toString())
+        assertEquals(768, encapsulation.ciphertext.size)
+        encapsulation.sharedSecret().fill(0)
+        assertContentEquals(ByteArray(32) { 5 }, encapsulation.sharedSecret())
+        encapsulation.destroy()
+        encapsulation.destroy()
+        assertContentEquals(ByteArray(32), secret, "the array the backend handed over is overwritten")
+        assertFailsWith<IllegalStateException> { encapsulation.sharedSecret() }
+    }
+
+    /** A handle of another backend may hold nothing to overwrite: destroy() is there and does nothing. */
+    @Test
+    fun privateKeysOfOtherBackendsCanBeDestroyed() {
+        val handle = object : PrivateKey(KeyType.P256) {}
+        handle.destroy()
+        handle.destroy()
+        assertEquals("PrivateKey(P256)", handle.toString())
+        val software: PrivateKey = SoftwarePrivateKey(KeyType.X25519, ByteArray(32) { 1 })
+        software.destroy()
+        assertFailsWith<IllegalStateException> { (software as SoftwarePrivateKey).encoded() }
     }
 
     @Test

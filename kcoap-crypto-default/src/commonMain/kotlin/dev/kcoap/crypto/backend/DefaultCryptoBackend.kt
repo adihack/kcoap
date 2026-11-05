@@ -267,7 +267,7 @@ public open class DefaultCryptoBackend(
      */
     private suspend fun generatesKeysOf(type: KeyType): Boolean = capabilities.answer(KeyGeneration(type)) {
         try {
-            platformKeyPair(type).privateKey.softwareKey().destroy()
+            platformKeyPair(type).privateKey.destroy()
             true
         } catch (_: UnsupportedAlgorithmException) {
             false

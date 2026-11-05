@@ -181,7 +181,7 @@ public class EdhocResponder(
                 // Y is still needed for G_IY when the Initiator authenticates with static DH (RFC 9528 §4.1.1.3).
                 val keepY = method.initiatorAuthentication == AuthenticationKind.STATIC_DH
                 val ephemeralKey = share.privateKey.takeIf { keepY }
-                if (!keepY) share.privateKey?.destroyIfSoftware()
+                if (!keepY) share.privateKey?.destroy()
                 log.debug {
                     "message_2: C_R $connectionIdentifier, ID_CRED_R ${own.identifier}, EAD_2 ${ead.describe()}"
                 }
@@ -194,7 +194,7 @@ public class EdhocResponder(
             } finally {
                 wipeAll(prk2e)
                 if (!isComposed) {
-                    share.privateKey?.destroyIfSoftware()
+                    share.privateKey?.destroy()
                     wipeAll(share.sharedSecret, prk3e2m)
                 }
             }
@@ -400,7 +400,7 @@ public class EdhocResponder(
             val th3: ByteArray,
         ) : State(EdhocPhase.WAIT_M3) {
             override fun destroy() {
-                ephemeralKey?.destroyIfSoftware()
+                ephemeralKey?.destroy()
                 wipeAll(prk3e2m)
             }
         }
