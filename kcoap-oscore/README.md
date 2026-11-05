@@ -30,6 +30,12 @@ Both plug into the CoAP stack through `dev.kcoap.coap.security` (`ClientMessageS
 `ServerMessageSecurity`), at the place RFC 8613 Figure 1 puts OSCORE: below Block-wise and Observe,
 above retransmission and deduplication.
 
+The module depends on [kcoap-coap-message](../kcoap-coap-message/README.md) (the message model, the option
+codec and that SPI), not on the endpoint stack: OSCORE's API carries no `CoapEndpoint`, `CoapClient` or
+`CoapServer`, so a proxy, a gateway or another CoAP stack can call `OscoreClient` and `OscoreServer` on
+`CoapMessage`s of its own. An application that runs OSCORE through kcoap's client and server adds
+[kcoap-coap](../kcoap-coap/README.md) to its dependencies.
+
 `OscoreServer` finds contexts through the `SecurityContextRepository` SPI (`find` by Recipient ID and ID
 Context). `MutableSecurityContextRepository` adds `add`, `addIfAbsent` and `remove`, for contexts that come
 and go while the server runs: kcoap-edhoc-oscore's `EdhocServer` adds one per completed handshake.

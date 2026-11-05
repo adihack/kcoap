@@ -255,6 +255,25 @@ adds its entry and migration note below.
 
 ### Changed (breaking)
 
+The CoAP wire vocabulary is its own module, `kcoap-coap-message` (WP-B2, finding MB-2):
+
+- **New artifact `dev.kcoap:kcoap-coap-message`** holds the packages `dev.kcoap.coap` (the message model,
+  options, `CoapUri`, `CoapRequest`, `CoapResponse`, link format, signaling options), `dev.kcoap.coap.codec`
+  and `dev.kcoap.coap.security` (the message-security SPI), which moved out of `kcoap-coap` unchanged and
+  under the same package names. It depends on `kcoap-common` and `kcoap-transport` only, with no coroutines.
+  `kcoap-coap` keeps the endpoint, the client and the server, and depends on it with `api`. *Migration:*
+  none for consumers of `kcoap-coap`, which get `kcoap-coap-message` transitively; imports of the moved
+  types do not change.
+- **`CoapException` moved from `dev.kcoap.coap` to `dev.kcoap.coap.stack`** and stays in `kcoap-coap`: it
+  reports how an exchange failed, which only the stack, the client and the server do. The class, its
+  `Reason` values and its constructor are the same. *Migration:* replace `import dev.kcoap.coap.CoapException`
+  with `import dev.kcoap.coap.stack.CoapException`; code in the package `dev.kcoap.coap` that used it
+  without an import adds that import. Compiled callers recompile, since the JVM class name changed.
+- **`kcoap-oscore` depends on `kcoap-coap-message` instead of `kcoap-coap`**, so OSCORE's API no longer
+  brings `CoapEndpoint`, `CoapClient` or `CoapServer` along, and kotlinx-coroutines is no longer an `api`
+  dependency of it. *Migration:* an application that runs OSCORE through kcoap's client and server and
+  declared only `kcoap-oscore` adds `dev.kcoap:kcoap-coap`. `kcoap-edhoc-oscore` still brings both.
+
 One endpoint over an internal per-peer link (WP-B1, [ADR 0005](docs/adr/0005-peer-link-seam.md)). Block-wise,
 Observe, Q-Block, Echo/Request-Tag, the access policy and message security now run on the same exchange layer
 over datagrams and connections; what a link can do (Resets, message types, ordering) decides the few places

@@ -660,6 +660,17 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
   - `sort(kcoap-coap.api before)` equals `sort(kcoap-coap.api after ∪ kcoap-coap-message.api)`, apart from the one `CoapException` package line.
   - Standard gate.
 
+> **Amendment (B2).** Done as listed. The moved tests are `CoapModelTest`, `CoapOptionsTest` and the three codec
+> tests; tests that need the stack stay in kcoap-coap even where they cover moved types (`DiscoveryTest` for
+> link format, `SignalTest` for the signaling options, `MessageSecurityTest`, `AccessPolicyTest` and
+> `UnverifiedResponseTest` for the security SPI), and the root Kover report counts them as before. "The one
+> `CoapException` package line" is every dump line that names `CoapException` (21 JVM, 26 klib, including
+> `CoapEndpoint.closeCause` and `awaitClosed`); with that rename the sorted dumps are equal. KDoc links from
+> moved code into kcoap-coap (`AccessPolicy`, `CoapException.Reason`) and from kcoap-oscore to `AccessPolicy`
+> became code spans. Ownership deviation: kcoap-edhoc-oscore's build file gains `api(kcoap-coap-message)`
+> next to `api(kcoap-coap)`, because its API uses `CoapRequest` and the security SPI directly
+> ([code-style.md](code-style.md#dependencies-and-api): every module declares what it imports).
+
 **WP-B3: kcoap-coap public API cleanup**
 
 - **Findings:** API-03 (1–4); API-08 (1, 7); API-10 (list copies); API-11 (3, 5, 6); U8 (1–3, 5); API-07 (2); the errors/observability findings for coap.

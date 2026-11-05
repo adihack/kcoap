@@ -5,7 +5,7 @@ EDHOC as the key establishment for OSCORE, over CoAP:
 | Spec | What | Where |
 |---|---|---|
 | RFC 9528 App. A.1 | OSCORE context from an EDHOC session: exporter-derived Master Secret and Salt, application AEAD and HKDF, Sender/Recipient IDs from C_R/C_I (Table 14) | `EdhocSession.oscoreParameters()`, `oscoreContext()` |
-| RFC 9528 App. A.2 | EDHOC over CoAP, forward flow: POST to `/.well-known/edhoc`, `true`/C_R prefixes, Content-Formats 64/65, error responses (A.2.3), in kcoap-coap's application model (`CoapRequest`, `CoapResponse`) | `EdhocOverCoap`, `EdhocServer.handle()`, `EdhocResource`, `EdhocClientHandshake.run()` |
+| RFC 9528 App. A.2 | EDHOC over CoAP, forward flow: POST to `/.well-known/edhoc`, `true`/C_R prefixes, Content-Formats 64/65, error responses (A.2.3), in the application model of kcoap-coap-message (`CoapRequest`, `CoapResponse`) | `EdhocOverCoap`, `EdhocServer.handle()`, `EdhocResource`, `EdhocClientHandshake.run()` |
 | RFC 9668 §3 | EDHOC + OSCORE combined request: message_3 on the first OSCORE request, the EDHOC option, server processing order and errors | `CombinedRequestSecurity`, `CombinedRequestServer`, `EdhocClientHandshake.runCombined()` |
 | RFC 9668 §4 | Connection identifiers usable as OSCORE IDs: C_R unique among sessions and Recipient IDs, never C_I, also under concurrent handshakes | `EdhocServer` |
 | RFC 9528 §9.7 | Pending server sessions bound to the peer that sent message_1, bounded in total and per peer, the oldest evicted past a grace period, expired after MAX_TRANSMIT_WAIT, secrets wiped | `EdhocServer`, `EdhocServerEvent` |

@@ -34,7 +34,7 @@ means the JVM (Android included), `iosArm64`, `iosSimulatorArm64`, `macosArm64`,
 
 | Module | Targets | Third-party libraries it depends on directly |
 |---|---|---|
-| `kcoap-common`, `kcoap-crypto`, `kcoap-cbor`, `kcoap-cose`, `kcoap-transport`, `kcoap-edhoc` | all | the Kotlin standard library only |
+| `kcoap-common`, `kcoap-crypto`, `kcoap-cbor`, `kcoap-cose`, `kcoap-transport`, `kcoap-coap-message`, `kcoap-edhoc` | all | the Kotlin standard library only |
 | `kcoap-coap`, `kcoap-oscore`, `kcoap-edhoc-oscore`, `kcoap-testkit` | all | kotlinx-coroutines-core |
 | `kcoap-crypto-default` | all | cryptography-kotlin (`cryptography-core`, `cryptography-provider-optimal`), kotlinx-coroutines-core |
 | `kcoap-crypto-bc` | JVM | Bouncy Castle (`bcprov-jdk18on`) |
