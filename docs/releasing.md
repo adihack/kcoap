@@ -31,10 +31,12 @@ Before tagging 0.1.0:
 
 - the freeze list above has merged and CI is green on `main`;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
-- a license and the Maven namespace are chosen (below);
-- `./gradlew publishToMavenLocal` works and a sample consumer builds against it;
+- the `dev.kcoap` namespace shows as verified in the Central Portal, and the Maven Central and signing
+  secrets are set ([below](#before-the-first-maven-central-release)); the license is already set;
+- `./gradlew publishToMavenLocal` works, a sample consumer builds against it, and the POMs
+  (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM;
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
-  release matches the CHANGELOG entry.
+  release matches the CHANGELOG entry ([versioning](versioning.md)).
 
 ## What is published
 
@@ -86,16 +88,51 @@ workflow's own token cannot turn it on.
 
 ## Before the first Maven Central release
 
-- **License.** Maven Central rejects artifacts without one. Add a `LICENSE` file and set
-  `kcoap.license.name` and `kcoap.license.url` in `gradle.properties`
-  (for example `Apache-2.0` and `https://www.apache.org/licenses/LICENSE-2.0.txt`).
-- **Namespace.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`), backed by the
-  `kcoap.dev` domain. Register it once in the [Central Portal](https://central.sonatype.com):
-  1. Sign in and choose *Namespaces* → *Add namespace* → `dev.kcoap`.
-  2. Add the verification key that the Portal shows as a DNS `TXT` record on `kcoap.dev`.
-  3. Choose *Verify namespace* once the record resolves (`dig +short TXT kcoap.dev`).
-  4. Generate a user token under *Account* → *Generate user token*. Its username and password become
-     the `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD` repository secrets.
+- **License: done.** kcoap is licensed under the Apache License 2.0. [LICENSE](../LICENSE) and
+  [NOTICE](../NOTICE) are in the repository root; `gradle.properties` sets `kcoap.license.name=Apache-2.0`
+  and `kcoap.license.url=https://www.apache.org/licenses/LICENSE-2.0.txt`; and `kcoap.publishing` writes
+  the license into every POM with distribution `repo`, together with the website (`https://kcoap.dev`),
+  the maintainer, GitHub Issues and the SCM URLs (`build-logic/src/main/kotlin/KcoapProject.kt`). A
+  module without the two properties fails to configure instead of publishing a POM that Maven Central
+  rejects.
+- **Namespace: to do, by the owner.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`),
+  backed by the `kcoap.dev` domain, whose DNS is on Cloudflare. The Central Portal verifies it through a
+  DNS `TXT` record, in the steps below.
+- **User token.** Generate one in the [Central Portal](https://central.sonatype.com) under *Account* →
+  *Generate User Token*. Its username and password become the `MAVEN_CENTRAL_USERNAME` and
+  `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), with the signing key.
+
+### Verifying the dev.kcoap namespace
+
+1. **Central Portal.** Sign in at [central.sonatype.com](https://central.sonatype.com), go to
+   *Namespaces*, choose *Add Namespace* and enter `dev.kcoap`. The new namespace's card shows its
+   **Verification Key**; copy it from the card's menu (*View ID*) or with the clipboard icon. Do not press
+   *Verify Namespace* yet.
+2. **Cloudflare.** In the dashboard, choose `kcoap.dev` → *DNS* → *Records* → *Add record*, fill in the
+   record and save it:
+
+   | Field | Value |
+   |---|---|
+   | Type | `TXT` |
+   | Name | `@` (Cloudflare then shows `kcoap.dev`) |
+   | Content | the Verification Key, exactly as copied, without quotes |
+   | TTL | Auto |
+
+   The Portal looks the key up on the exact domain `kcoap.dev`, so the record goes on the domain itself,
+   not on a subdomain such as `dev.kcoap.dev` or `_sonatype.kcoap.dev`. Other `TXT` records on
+   `kcoap.dev` do not get in the way.
+3. **Check that it resolves** from a public resolver:
+
+   ```bash
+   dig +short TXT kcoap.dev @1.1.1.1    # prints the key in quotes
+   ```
+
+   Without `dig`: `nslookup -type=TXT kcoap.dev 1.1.1.1`.
+4. **Only then press *Verify Namespace*** on the namespace's card, and wait until it shows as verified.
+   If the Portal looks before the record resolves, its resolver may cache the negative answer (an
+   NXDOMAIN or no record) for the zone's negative-caching time, which can delay verification for hours.
+5. **Keep the record** after the namespace is verified. Removing it gains nothing, and it shows how the
+   namespace was verified.
 
 ## Trying a release locally
 
