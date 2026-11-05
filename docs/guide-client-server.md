@@ -127,7 +127,7 @@ with a UDP transport.
 suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
     val listeners = listOf(
         KtorTcpListener.bind("127.0.0.1", tcpPort), // coap+tcp
-        KtorWebSocketListener.start("127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
+        KtorWebSocketListener.start(CIO, "127.0.0.1", webSocketPort), // coap+ws, at /.well-known/coap
     )
     return CoapServer(listeners, scope) {
         resource("hello") { get { CoapResponse.content("Hello over ${peer::class.simpleName}") } }
@@ -145,8 +145,9 @@ suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: I
 
 - Modules: `kcoap-transport-ktor` (TCP on ktor-network), `kcoap-transport-ktor-websocket` (the WebSocket
   client on the ktor client, any engine, browsers included) and `kcoap-transport-ktor-websocket-server`
-  (a standalone CIO server, or `routing { coapOverWebSockets(listener) }` inside your own ktor
-  application).
+  (a standalone server on the ktor engine you pass, such as `io.ktor.server.cio.CIO` from
+  `io.ktor:ktor-server-cio`, or `routing { coapOverWebSockets(listener) }` inside your own ktor
+  application). The server module brings no engine of its own.
 - The client opens a connection when a request needs one, sends its CSM, waits for the server's
   (RFC 8323 §3.3) and reuses the connection for every request to that peer. An idle connection it opened
   is released (§5.5). If a connection closes, its exchanges fail with

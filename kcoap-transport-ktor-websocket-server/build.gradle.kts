@@ -8,10 +8,12 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kcoap-transport-ktor-websocket"))
-            // Applications that run a ktor server mount the CoAP WebSocket endpoint in their own routing.
+            // Applications that run a ktor server mount the CoAP WebSocket endpoint in their own routing;
+            // KtorWebSocketListener.start takes the engine's ApplicationEngineFactory (ktor-server-core).
+            // No engine is a dependency: the application brings the one it runs, such as ktor-server-cio,
+            // and so do the tests.
             api(libs.ktor.server.core)
             api(libs.ktor.server.websockets)
-            implementation(libs.ktor.server.cio)
             // ConnectionListener, Endpoint and LoggerFactory appear in the public API.
             api(project(":kcoap-transport"))
             api(project(":kcoap-common"))

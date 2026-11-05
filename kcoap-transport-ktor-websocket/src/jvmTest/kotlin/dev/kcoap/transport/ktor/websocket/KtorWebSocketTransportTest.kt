@@ -35,7 +35,7 @@ class KtorWebSocketTransportTest {
     /** RFC 8323 §4.1: subprotocol coap at /.well-known/coap, then binary messages both ways. */
     @Test
     fun rfc8323Section4_1MessagesTravelOverTheOpenedWebSocket() = real {
-        val listener = KtorWebSocketListener.start("127.0.0.1", 0)
+        val listener = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
         val connector = KtorWebSocketConnector()
         try {
             val endpoint = listener.localEndpoint!!
@@ -87,14 +87,15 @@ class KtorWebSocketTransportTest {
     /** The CoAP endpoint answers only clients that ask for the subprotocol coap. */
     @Test
     fun rfc8323Section4_1ClientsWithoutTheSubprotocolAreRefused() = real {
-        val listener = KtorWebSocketListener.start("127.0.0.1", 0)
+        val listener = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
         val client = HttpClient { install(WebSockets) }
         try {
             assertFailsWith<Exception> { client.webSocketSession(listener.localEndpoint!!.uri) }
             assertFailsWith<IllegalArgumentException> { KtorWebSocketConnector(HttpClient()) }
             assertFailsWith<IllegalArgumentException> { KtorWebSocketConnector(client).connect(Endpoint.Tcp("127.0.0.1", 1)) }
             assertFailsWith<IllegalArgumentException> { KtorWebSocketListener(CoapScheme.COAP_TCP) }
-            assertFailsWith<IllegalArgumentException> { KtorWebSocketListener.start(port = 70000) }
+            assertFailsWith<IllegalArgumentException> { KtorWebSocketListener.start(CIO, port = 70000) }
+            assertFailsWith<IllegalArgumentException> { KtorWebSocketListener.start(CIO, maxFrameSize = 0) }
             assertEquals("KtorWebSocketConnector", KtorWebSocketConnector(client).toString())
         } finally {
             client.close()

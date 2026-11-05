@@ -22,6 +22,8 @@ kotlin {
             implementation(project(":kcoap-transport-ktor"))
             implementation(project(":kcoap-transport-ktor-websocket"))
             implementation(project(":kcoap-transport-ktor-websocket-server"))
+            // The engine of the WebSocket listener, which the server module leaves to the application.
+            implementation(libs.ktor.server.cio)
         }
     }
 }

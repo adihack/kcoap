@@ -9,7 +9,8 @@ import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.IpLiteral
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnection
 import io.ktor.server.application.install
-import io.ktor.server.cio.CIO
+import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.engine.ApplicationEngineFactory
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.origin
@@ -26,11 +27,12 @@ import kotlinx.coroutines.channels.Channel
 /**
  * Accepts WebSockets for `coap+ws` and `coaps+ws` (RFC 8323 §4) on the ktor server, at
  * `/.well-known/coap` and only with the subprotocol `coap` (§4.1, §8.3). [start] runs a standalone server
- * on ktor's CIO engine; an application that runs its own ktor server mounts the endpoint in its routing
- * with [coapOverWebSockets], with the WebSockets plugin installed and, for `coaps+ws`, behind its TLS.
+ * on the ktor engine the application chooses, such as CIO (`io.ktor:ktor-server-cio`) or Netty; an
+ * application that runs its own ktor server mounts the endpoint in its routing with [coapOverWebSockets],
+ * with the WebSockets plugin installed and, for `coaps+ws`, behind its TLS. This module brings no engine.
  *
  * ```
- * val server = CoapServer(listOf(KtorWebSocketListener.start(port = 8080)), scope) { ... }
+ * val server = CoapServer(listOf(KtorWebSocketListener.start(CIO, port = 8080)), scope) { ... }
  *
  * // or inside an existing ktor application:
  * val listener = KtorWebSocketListener()
@@ -99,11 +101,18 @@ public class KtorWebSocketListener(
         private const val DEFAULT_PORT = 80
 
         /**
-         * Starts a ktor server on the CIO engine that serves CoAP over WebSockets on [host] and [port]
-         * (0 picks a free one). Frames above [maxFrameSize] are refused by the WebSocket layer; set it at
-         * least to the endpoint's Max-Message-Size, above which CoAP itself aborts.
+         * Starts a ktor server on [engineFactory] that serves CoAP over WebSockets on [host] and [port]
+         * (0 picks a free one), with WebSocket pings off (RFC 8323 §4.4). Frames above [maxFrameSize] are
+         * refused by the WebSocket layer; set it at least to the endpoint's Max-Message-Size, above which
+         * CoAP itself aborts.
+         *
+         * The engine is the application's choice and dependency: `io.ktor.server.cio.CIO` from
+         * `io.ktor:ktor-server-cio` runs on the JVM and the native targets, Netty on the JVM.
+         *
+         * @throws IllegalArgumentException for a port outside 0..65535 or a frame size that is not positive.
          */
-        public suspend fun start(
+        public suspend fun <TEngine : ApplicationEngine, TConfiguration : ApplicationEngine.Configuration> start(
+            engineFactory: ApplicationEngineFactory<TEngine, TConfiguration>,
             host: String = "0.0.0.0",
             port: Int = DEFAULT_PORT,
             maxFrameSize: Long = DEFAULT_MAX_FRAME_SIZE,
@@ -112,7 +121,7 @@ public class KtorWebSocketListener(
             require(port in 0..65535) { "Port out of range: $port" }
             require(maxFrameSize > 0) { "Frame size must be positive: $maxFrameSize" }
             val listener = KtorWebSocketListener(CoapScheme.COAP_WS, loggerFactory)
-            val server = embeddedServer(CIO, port = port, host = host) {
+            val server = embeddedServer(engineFactory, port = port, host = host) {
                 install(WebSockets) {
                     // RFC 8323 §4.4: WebSocket pings SHOULD NOT be used; CoAP pings test the connection.
                     pingPeriodMillis = 0

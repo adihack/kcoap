@@ -11,6 +11,7 @@ import dev.kcoap.transport.ktor.KtorTcpConnector
 import dev.kcoap.transport.ktor.KtorTcpListener
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
 import dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener
+import io.ktor.server.cio.CIO
 import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -41,7 +42,7 @@ class ReliableLoopbackTest {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val events: MutableList<EndpointEvent> = Collections.synchronizedList(mutableListOf())
         val tcp = KtorTcpListener.bind("127.0.0.1")
-        val ws = KtorWebSocketListener.start("127.0.0.1", 0)
+        val ws = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
         var stored = ByteArray(0)
         val clock = Clock()
         val server = CoapServer(listOf(tcp, ws), scope) {
