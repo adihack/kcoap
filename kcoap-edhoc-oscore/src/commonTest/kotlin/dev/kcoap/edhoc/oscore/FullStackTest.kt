@@ -109,8 +109,11 @@ class FullStackTest {
             EdhocClientHandshake.over(client, serverUri, peers.initiatorConfig(), crypto, sequenceStore = store)
         val (session, protection) = handshake.runCombined()
         assertEquals(setOf(session.oscore.name), store.names, "the context was derived with the given store")
-        security.install(address, protection)
+        // Installed by URI: the client's own resolver finds the endpoint its requests go to.
+        assertEquals(address, security.install(client, serverUri, protection))
         assertTrue(security.isProtected(address))
+        val unresolvable = CoapUri.parse("coap://edhoc.example")
+        assertFailsWith<IllegalArgumentException>("IpLiterals knows no DNS") { security.install(client, unresolvable, protection) }
 
         val lights = client.get("$base/lights")
         assertEquals("on", lights.payloadAsText())
@@ -192,7 +195,7 @@ class FullStackTest {
         val handshake = EdhocClientHandshake.over(client, CoapUri.parse(base), peers.initiatorConfig(), crypto)
         val (_, protection) = handshake.runCombined()
         val beforeInstall = handed.toList()
-        security.install(address, protection)
+        security.install(client, CoapUri.parse(base), protection)
         assertContentEquals(bigBody, client.get("$base/firmware").payload)
 
         val edhocRequests = beforeInstall.filter { it.first.options.path == "/.well-known/edhoc" }
