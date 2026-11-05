@@ -67,7 +67,13 @@ internal class ClientExchange(
 
     override suspend fun onOutcome(transmission: Transmission, outcome: TransmissionOutcome) {
         when (outcome) {
-            is TransmissionOutcome.Acknowledged -> outcome.piggybackedResponse?.let { onResponse(it) }
+            is TransmissionOutcome.Acknowledged -> {
+                val piggybacked = outcome.piggybackedResponse
+                when {
+                    piggybacked != null -> onResponse(piggybacked)
+                    mode is ResponseMode.Inbox && isOpen -> report(mode.inbox, ExchangeEvent.Acknowledged(this))
+                }
+            }
             TransmissionOutcome.Reset -> end(
                 CoapException("Request rejected with RST by $peer", CoapException.Reason.RESET),
                 ExchangeEvent.Reset(this),

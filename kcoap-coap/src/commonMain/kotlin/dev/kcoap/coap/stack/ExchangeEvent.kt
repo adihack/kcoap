@@ -16,6 +16,15 @@ internal sealed interface ExchangeEvent {
         override fun toString(): String = "Response(${exchange.key.token}, ${message.code})"
     }
 
+    /**
+     * A Confirmable request was acknowledged with an Empty ACK (RFC 7252 §5.2.2): it arrived, and a response
+     * may follow separately. The exchange stays open. A Confirmable block of a Q-Block1 body is answered this
+     * way, and the next block may go (RFC 9177 §7.1).
+     */
+    class Acknowledged(override val exchange: ClientExchange) : ExchangeEvent {
+        override fun toString(): String = "Acknowledged(${exchange.key.token})"
+    }
+
     /** The peer rejected the request with a Reset (RFC 7252 §4.2, §4.3). The exchange has ended. */
     class Reset(override val exchange: ClientExchange) : ExchangeEvent {
         override fun toString(): String = "Reset(${exchange.key.token})"

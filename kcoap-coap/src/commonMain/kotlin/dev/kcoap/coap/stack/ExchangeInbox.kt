@@ -3,7 +3,11 @@ package dev.kcoap.coap.stack
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.time.Duration
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 
 /**
  * The bounded queue that the exchanges of one Q-Block body ([ResponseMode.Inbox]) report into, and that
@@ -36,6 +40,16 @@ internal class ExchangeInbox(val capacity: Int) {
 
     /** The next event, or null when none is queued. */
     fun tryReceive(): ExchangeEvent? = events.tryReceive().getOrNull()
+
+    /**
+     * The next event, waiting at most [timeout] for one; null when none came. Unlike a `receive` inside
+     * `withTimeoutOrNull`, the timeout never takes an event out of the inbox and loses it.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun receive(timeout: Duration): ExchangeEvent? = select {
+        events.onReceive { it }
+        onTimeout(timeout) { null }
+    }
 
     override fun toString(): String = "ExchangeInbox(capacity=$capacity, lost=$lost)"
 
