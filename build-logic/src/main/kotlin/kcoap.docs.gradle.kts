@@ -2,6 +2,8 @@
 //
 //   ./gradlew dokkaGenerate   -> build/dokka/html/index.html
 
+import org.jetbrains.dokka.gradle.engine.plugins.DokkaHtmlPluginParameters
+
 plugins {
     id("org.jetbrains.dokka")
 }
@@ -18,4 +20,8 @@ subprojects {
 
 dokka {
     moduleName.set("kcoap")
+    // The same footer as every module's pages (kcoap.publishing).
+    pluginsConfiguration.withType<DokkaHtmlPluginParameters>().configureEach {
+        footerMessage.set(KcoapProject.DOKKA_FOOTER)
+    }
 }
