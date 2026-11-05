@@ -24,7 +24,6 @@ import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SecurityContextParameters
-import dev.kcoap.oscore.SequenceNumberStore
 import dev.kcoap.testkit.Stress
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
@@ -574,15 +573,5 @@ class EdhocServerSessionsTest {
             data: ByteArray,
             signature: ByteArray,
         ): Boolean = delegate.verify(algorithm, publicKey, data, signature).also { operations++ }
-    }
-
-    /** An ephemeral store that records the context names it serves. */
-    private class RecordingStore : SequenceNumberStore {
-        private val delegate = EphemeralSequenceNumberStore()
-        val names = mutableSetOf<String>()
-
-        override suspend fun load(contextName: String): Long? = delegate.load(contextName).also { names += contextName }
-
-        override suspend fun store(contextName: String, limit: Long) = delegate.store(contextName, limit)
     }
 }

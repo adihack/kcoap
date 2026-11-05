@@ -74,9 +74,12 @@ public fun interface EdhocSessionListener {
  * @param pendingSessionGracePeriod how long a session waiting for message_3 is safe from eviction: by
  *   default 10 s, a round trip and the client's processing of message_2 with time to spare. Give it at least
  *   [pendingSessionLifetime] to never evict, so a full server only refuses.
- * @param sequenceStore holds the Sender Sequence Numbers of every context this server derives, each under
- *   its own name. The ephemeral default fits EDHOC, whose keys are new with every session; pass a durable
- *   store to resume contexts after a restart, as [oscoreParameters] describes.
+ * @param sequenceStore holds the Sender Sequence Numbers of the contexts this server derives, under their
+ *   names "sid=C_I,rid=C_R" ([dev.kcoap.oscore.SecurityContextParameters.name]). By default (null) each
+ *   context gets its own [EphemeralSequenceNumberStore], which fits EDHOC, whose keys are new with every
+ *   session, and goes away with the context. Pass a durable store to resume contexts after a restart, as
+ *   [oscoreParameters] describes. A name is unique only among the contexts in [contexts], so do not share
+ *   a durable store with contexts kept anywhere else.
  * @param timeSource the clock of [pendingSessionLifetime] and [pendingSessionGracePeriod].
  * @param eventListener receives the [EdhocServerEvent]s.
  */
@@ -89,7 +92,7 @@ public class EdhocServer(
     private val maxPendingSessionsPerPeer: Int = 8,
     private val pendingSessionLifetime: Duration = TransmissionParameters.Default.maxTransmitWait,
     private val pendingSessionGracePeriod: Duration = 10.seconds,
-    private val sequenceStore: SequenceNumberStore = EphemeralSequenceNumberStore(),
+    private val sequenceStore: SequenceNumberStore? = null,
     timeSource: TimeSource = TimeSource.Monotonic,
     private val listener: EdhocSessionListener = EdhocSessionListener { _, _ -> },
     eventListener: EdhocServerEventListener = EdhocServerEventListener.None,
@@ -219,7 +222,7 @@ public class EdhocServer(
     }
 
     private suspend fun establish(responder: EdhocResponder, session: EdhocSession): SecurityContext {
-        val context = session.oscoreContext(crypto, sequenceStore)
+        val context = session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
         if (!contexts.addIfAbsent(context)) {
             // Another writer of the repository took this Recipient ID after allocate() found it free: its
             // context stays, this session ends (RFC 9668 §4.1.2).
