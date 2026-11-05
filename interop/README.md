@@ -211,7 +211,8 @@ server over real UDP (ktor-network):
   it tests for Q-Block). With `withMessageSecurity` on, libcoap 4.3.5b protects, or verifies, only the first
   response to a request, pinned as `upstream…` tests: its server logs "OSCORE: PDU could not be encrypted"
   for every block of a Q-Block2 set after the first, so a download gets one block per request (Q-Block1
-  uploads complete, since each block's request gets one response), and its client drops a request's OSCORE
+  uploads complete, since each block's request gets one response, and a client on the defaults reads the
+  stored body back with Inner Block2), and its client drops a request's OSCORE
   association with the first response ("Security Context association not found") and gives up at block 1.
   kcoap against kcoap takes these bodies (`OscoreQBlockEndToEndTest`).
 

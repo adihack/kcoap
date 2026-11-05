@@ -175,13 +175,21 @@ class StackOscoreInteropTest {
         return name
     }
 
-    /** A kcoap client with OSCORE towards [startQBlockServer]'s contexts, blocks of 64 bytes, and [qBlock]. */
-    private suspend fun qBlockClient(qBlock: QBlockClientConfig): Pair<CoapClient, RecordingClientSecurity> {
-        val context = ephemeralContext(
-            SecurityContextParameters(secret.hexToBytes(), senderId = "01".hexToBytes(), recipientId = "02".hexToBytes(), masterSalt = salt.hexToBytes()),
-            crypto,
-        )
-        val recording = RecordingClientSecurity(OscoreClient(context))
+    /** The client's context towards [startQBlockServer]'s. */
+    private suspend fun qBlockClientContext(): SecurityContext = ephemeralContext(
+        SecurityContextParameters(secret.hexToBytes(), senderId = "01".hexToBytes(), recipientId = "02".hexToBytes(), masterSalt = salt.hexToBytes()),
+        crypto,
+    )
+
+    /**
+     * A kcoap client with OSCORE towards [startQBlockServer]'s contexts, blocks of 64 bytes, and [qBlock]. Clients
+     * that share [context] share its Sender Sequence Number, so libcoap sees no replay.
+     */
+    private suspend fun qBlockClient(
+        qBlock: QBlockClientConfig,
+        context: SecurityContext? = null,
+    ): Pair<CoapClient, RecordingClientSecurity> {
+        val recording = RecordingClientSecurity(OscoreClient(context ?: qBlockClientContext()))
         val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(security = recording, blockSize = 64, qBlock = qBlock))
         return client to recording
     }
@@ -225,15 +233,17 @@ class StackOscoreInteropTest {
      * to a request and logs "OSCORE: PDU could not be encrypted" for every further block of a Q-Block2 set, so each
      * request brings one block and the body crawls along on kcoap's NON_RECEIVE_TIMEOUT ladder instead of
      * arriving in sets. Q-Block1 uploads work, as each block's request gets one response (a 2.31 or the final
-     * one). When libcoap protects bursts, the download completes in time and this test fails: then turn it into
-     * a passing K11.
+     * one): libcoap stores the body, read back by a client on the defaults (Inner Block2). When libcoap protects
+     * bursts, the download completes in time and this test fails: then turn it into a passing K11.
      */
     @Test
     fun upstreamLibcoapCannotProtectQBlock2Bursts() = runBlocking {
         assumeDocker()
         val port = freePort()
         val container = startQBlockServer(port)
-        val (client, recording) = qBlockClient(QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true))
+        val context = qBlockClientContext()
+        val (client, recording) = qBlockClient(QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true), context)
+        val (reader, _) = qBlockClient(QBlockClientConfig(QBlockMode.PROBE), context)
         val server = "coap://127.0.0.1:$port"
         val upload = (0 until 3000).joinToString("") { ('A' + it % 26).toString() }
         try {
@@ -253,12 +263,17 @@ class StackOscoreInteropTest {
                 client.put("$server/example_data", upload.encodeToByteArray(), ContentFormat.TEXT_PLAIN) { nonConfirmable() }
             }
             assertTrue(put.code.isSuccess, "PUT answered ${put.code}")
-            assertEquals(47, recording.requests.count { it.options.qBlock1 != null }, "the upload went in Q-Block1")
+            // Every block went in Q-Block1; one may have gone again, on libcoap's 4.08 or a timer.
+            val sent = recording.requests.mapNotNull { it.options.qBlock1?.number }
+            assertTrue(sent.size >= 47 && (0L..46L).all { it in sent }, "the upload went in Q-Block1: $sent")
+            val stored = withTimeout(30.seconds) { reader.get("$server/example_data") { nonConfirmable() } }
+            assertEquals(upload, stored.payloadAsText(), "libcoap stored the body")
         } catch (e: Throwable) {
             System.err.println("libcoap log:\n${run("docker", "logs", container).takeLast(20_000)}")
             throw e
         } finally {
             client.close()
+            reader.close()
         }
     }
 
