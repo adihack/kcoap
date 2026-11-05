@@ -74,9 +74,16 @@ apple() {
 browser() {
     local command="${1:-google-chrome}"
     shift || true
+    # The test writes the browser's results here; Gradle passes a filter that matches nothing silently.
+    local report=kcoap-transport-ktor-websocket/build/browser/report.txt
+    rm -f "$report"
     say "WebSocket js tests in $command against a JVM listener"
     gradle :kcoap-transport-ktor-websocket:jvmTest --tests '*BrowserAgainstJvmListenerTest' \
         "-Pkcoap.browser=$command" "$@"
+    if ! grep -q 'JsWebSocketSubprotocolTest' "$report" 2>/dev/null; then
+        echo "No browser results in $report: BrowserAgainstJvmListenerTest did not run." >&2
+        return 1
+    fi
 }
 
 summary() {
