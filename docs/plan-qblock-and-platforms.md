@@ -666,6 +666,21 @@ public class QBlockServerConfig(
   request, "OSCORE: PDU could not be encrypted"; Q-Block1 uploads complete) and
   `upstreamLibcoapClientCannotVerifyQBlock2Bursts` (its client: "Security Context association not found" at
   block 1). libcoap's own 5 s wait while it tests for Q-Block is recorded in L11.
+  After review: `OscoreClient` passed every unprotected 4.xx and 5.xx on, which a Q-Block body acts on for as
+  long as it lasts, so anyone who saw a token could steer a protected body: have blocks sent again with a
+  4.08, restart it with a 4.13, have it adopt an Echo value, or turn Q-Block under OSCORE off for the peer,
+  for every client of the endpoint, with a 4.02 before any answer (the fail-open of 1.6). Now
+  `UnprotectedResponses` hands a request carrying Inner Q-Block only the unprotected errors that end its
+  body, 4.00, 4.01 and 5.xx without Echo or a block option, and drops every other one as unverified; a Q-Block
+  rejection from a server that does not opt in is an inner, protected 4.02, and an unprotected 4.02 (a server
+  without OSCORE) ends the request as a timeout. Other requests are unchanged. A registration's second
+  non-notification response is rejected instead of going through the window. Tests: `OscoreQBlockTest` (13:
+  every steering response dropped for a Q-Block1 and a Q-Block2 request but passed on to a request without
+  Q-Block, the errors that end a body passed on), `OscoreQBlockEndToEndTest` (12: a 4.02 injected on a GET's
+  token leaves Q-Block on, a 4.08 listing set 0 injected on block 9's token has no block sent twice, the
+  fallback's 4.02 is a protected 2.04 on the wire, and one endpoint shared by a plain and an OSCORE client keeps
+  their probes and capabilities apart); `upstreamLibcoapCannotProtectQBlock2Bursts` reads the upload back
+  with Inner Block2 and allows a block sent again.
 
 **QB-6: Observe with Q-Block**
 - **Scope:**
