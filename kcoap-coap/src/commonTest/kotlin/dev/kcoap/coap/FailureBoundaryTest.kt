@@ -2,6 +2,7 @@ package dev.kcoap.coap
 
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.codec.ReliableMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
@@ -14,14 +15,21 @@ import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.InboundRequest
+import dev.kcoap.coap.stack.ReliableTransportConfig
+import dev.kcoap.coap.stack.RequestHandler
+import dev.kcoap.coap.stack.Signal
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
 import dev.kcoap.log.LogRecord
 import dev.kcoap.log.LogSink
 import dev.kcoap.log.LoggerFactory
+import dev.kcoap.testkit.InMemoryByteStream
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -232,6 +240,56 @@ class FailureBoundaryTest {
         assertFailsWith<MessageSecurityException> { client.get(fixture.uri("/r")) }
         assertEquals(0, client.endpoint.exchangeCount())
         server.close()
+    }
+
+    @Test
+    fun aFailureWhileTheTimersCloseAConnectionIsContainedAndFreesThePeersSlot() = runTest {
+        val fixture = ReliableFixture(this)
+        val records = mutableListOf<LogRecord>()
+        val loggers = LoggerFactory(
+            LogConfig.build {
+                level = LogLevel.ERROR
+                sink = LogSink { records += it }
+            },
+        )
+        // A peer that sends its CSM and then ignores everything, a Release included.
+        val listener = fixture.listen()
+        backgroundScope.launch {
+            while (true) {
+                val connection = listener.accept() as? InMemoryByteStream ?: break
+                connection.write(ReliableMessageCodec.Tcp.encode(Signal.Csm(null, false).toMessage()))
+            }
+        }
+        val reliable = ReliableTransportConfig(idleTimeout = 1.seconds, releaseTimeout = 1.seconds)
+        val config = CoapEndpointConfig(
+            timeSource = testScheduler.timeSource, eventListener = { fixture.events += it }, loggerFactory = loggers, reliable = reliable,
+        )
+        val endpoint = CoapEndpoint(backgroundScope, config, connectors = listOf(fixture.connections.connector))
+        endpoint.requestHandler = object : RequestHandler {
+            override val context: CoroutineContext = EmptyCoroutineContext
+
+            override suspend fun handle(request: InboundRequest) = Unit
+
+            override suspend fun onSessionEnded(peer: Endpoint) = error("a bug while dropping the peer's state")
+
+            override suspend fun onEndpointClosed() = error("a bug while stopping")
+        }
+        val peer = Endpoint.Tcp("127.0.0.1", 5683)
+        endpoint.limits(peer)
+
+        // Idle, the connection is released after 1 s; the peer never closes it, so after releaseTimeout the
+        // connection's timers close it, and the failure surfaces in their processing.
+        delay(5.seconds)
+        assertTrue(records.any { "Timer processing failed" in it.message && it.error?.message == "a bug while dropping the peer's state" })
+        endpoint.limits(peer)
+        assertEquals(2, fixture.events.count { it is EndpointEvent.ConnectionOpened }, "the old connection's slot was freed")
+
+        // Closing runs every step, and closes every connection, although the same bugs strike again.
+        endpoint.close()
+        assertEquals(CoapException.Reason.CLOSED, endpoint.awaitClosed().reason)
+        assertTrue(fixture.connections.connections().all { it.isClosed })
+        assertTrue(records.any { "Failed to stop the server while closing" in it.message })
+        assertTrue(records.any { "Closing the connection to $peer failed" in it.message })
     }
 
     @Test

@@ -617,8 +617,9 @@ public class CoapEndpoint private constructor(
         }
         execute(effects)
         open.forEach { it.fail(cause) }
-        requestHandler?.onEndpointClosed()
-        reliable.close()
+        // Each step runs even when one before it failed, so the endpoint always ends.
+        closingStep("stop the server") { requestHandler?.onEndpointClosed() }
+        closingStep("close the connections") { reliable.close() }
         try {
             transport.close()
         } catch (e: Exception) {
@@ -628,6 +629,16 @@ public class CoapEndpoint private constructor(
         job.cancel()
         closed.complete(cause)
         log.info { "Endpoint closed: ${cause.message}" }
+    }
+
+    private suspend fun closingStep(name: String, step: suspend () -> Unit) {
+        try {
+            step()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "Failed to $name while closing" }
+        }
     }
 
     /** Called under [lock]: throws an exception like [closeCause] once the endpoint is closed. */

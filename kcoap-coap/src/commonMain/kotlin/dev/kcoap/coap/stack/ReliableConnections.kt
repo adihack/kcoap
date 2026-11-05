@@ -302,7 +302,16 @@ internal class ReliableConnections(
         val closed = CoapException("Endpoint closed", CoapException.Reason.CLOSED)
         attempts.forEach { it.result.completeExceptionally(closed) }
         for (listener in listeners) runCatching { listener.close() }
-        for (driver in open) driver.shutdown("endpoint closed", SHUTDOWN_FLUSH_TIMEOUT)
+        for (driver in open) {
+            try {
+                driver.shutdown("endpoint closed", SHUTDOWN_FLUSH_TIMEOUT)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // One connection's cleanup failing must not keep the others open.
+                log.error(e) { "Closing the connection to ${driver.peer} failed" }
+            }
+        }
         for (connector in connectors) runCatching { connector.close() }
     }
 
@@ -326,10 +335,14 @@ internal class ReliableConnections(
     }
 
     override suspend fun onClosed(driver: ConnectionDriver, reason: String) {
-        // Exchanges and observations end before the slot frees, so a new connection never sees their state.
-        endpoint.onConnectionClosed(driver, reason)
-        lock.withLock { if (drivers[driver.peer] === driver) drivers.remove(driver.peer) }
-        driver.retired.complete(Unit)
+        try {
+            // Exchanges and observations end before the slot frees, so a new connection never sees their state.
+            endpoint.onConnectionClosed(driver, reason)
+        } finally {
+            // However that ended: a slot that stayed taken would keep the peer unreachable for good.
+            withContext(NonCancellable) { lock.withLock { if (drivers[driver.peer] === driver) drivers.remove(driver.peer) } }
+            driver.retired.complete(Unit)
+        }
     }
 
     override fun onEvent(event: EndpointEvent) {
