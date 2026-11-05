@@ -87,14 +87,18 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun aTransportThatStopsReceivingStopsTheEndpointQuietly() = runTest {
+    fun aTransportThatCannotReceiveClosesTheEndpointWithItsError() = runTest {
         val fixture = StackFixture(this)
         val transport = FaultyTransport(fixture.transport())
         transport.receiveFailure = IllegalStateException("socket gone")
         val endpoint = CoapEndpoint(transport, backgroundScope, fixture.endpointConfig())
+        endpoint.attach()
         delay(1.seconds)
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, endpoint.closeCause?.reason)
+        assertEquals("socket gone", endpoint.closeCause?.cause?.message)
         assertTrue(endpoint.toString().contains("CoapEndpoint"))
         endpoint.close()
+        assertEquals(CoapException.Reason.TRANSPORT_FAILED, endpoint.awaitClosed().reason, "the first transition stays")
     }
 
     @Test
@@ -131,6 +135,22 @@ class EdgeCaseTest {
     }
 
     @Test
+    fun rfc9175Section4_2EveryEndpointOfOneConfigurationHasItsOwnTokenSequence() = runTest {
+        val fixture = StackFixture(this)
+        val shared = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        assertNull(shared.tokenGenerator)
+        val first = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
+        val second = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
+
+        val a = first.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        val b = second.openExchange(session, CoapMessage.request(CoapCode.GET), true, null, isObservation = false)
+        assertEquals(0, a.token.size, "sequence number 0 of the first endpoint")
+        assertEquals(0, b.token.size, "sequence number 0 of the second endpoint, not 1 of a shared one")
+        a.cancel()
+        b.cancel()
+    }
+
+    @Test
     fun aTokenGeneratorMustStayWithinEightBytes() = runTest {
         val fixture = StackFixture(this)
         val client = fixture.client(endpointConfig = fixture.endpointConfig(tokenGenerator = TokenGenerator { ByteArray(9) }))
@@ -158,26 +178,6 @@ class EdgeCaseTest {
         }
         val client = fixture.client(CoapClientConfig(security = security))
         assertEquals("plain", client.get(fixture.uri(server, "/r")).payloadAsText())
-    }
-
-    @Test
-    fun aFailingResponseProtectionLeavesTheRequestUnanswered() = runTest {
-        val fixture = StackFixture(this)
-        val security = object : ServerMessageSecurity {
-            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint) = object : UnprotectedRequest {
-                override val message: CoapMessage = request
-                override val identity = object : SecurityIdentity {
-                    override val description: String = "anyone"
-                }
-
-                override suspend fun protectResponse(response: CoapMessage): CoapMessage = error("key store unavailable")
-            }
-        }
-        val server = fixture.server(CoapServerConfig(security = security)) { resource("r") { get { CoapResponse.content("x") } } }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 10.seconds))
-
-        val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/r")) }
-        assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
     }
 
     @Test

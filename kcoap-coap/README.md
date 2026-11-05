@@ -61,6 +61,27 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **RFC 9175 Echo**: a 4.01 with Echo is answered once with the Echo value; the security layer can
   answer with a challenge instead of the resource (RFC 8613 Appendix B.1.2).
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
+- **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
+  scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
+  `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at
+  once. Receiving starts when a server attaches or the first request goes out. A send the transport
+  refuses fails at once with `TRANSPORT_FAILED`. The server pipeline is one failure boundary: whatever
+  throws, the client gets an answer (5.00 with Max-Age 0 unless the security layer says otherwise), a
+  failing notification removes its observer, and nothing escapes to the application's exception
+  handler. A request on a connection whose handler was cancelled, by `CoapServer.close()` for example,
+  gets 5.03 (RFC 8323 §3.3).
+- **Resource bounds, RFC 7252 §11.3**: everything a peer can make the endpoint keep is bounded, and a
+  bound reports `EndpointEvent.LimitReached`. `CoapEndpointConfig.maxDeduplicationEntries` (50 000; new
+  messages dropped silently), `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age),
+  `maxExchangesPerPeer` (256; `IDENTIFIERS_EXHAUSTED`), `CoapServerConfig.maxObservers`,
+  `maxObserversPerPeer` and `maxObserversPerResource` (10 000, 32 and 1 000; served without Observe,
+  RFC 7641 §4.1), `ReliableTransportConfig.maxPendingConnections` (128; accepted connections awaiting
+  their CSM) and `maxConnections` (1 024; accepted connections beyond it are closed). Non-confirmable
+  notifications to unauthenticated observers are interspersed with Confirmable ones (RFC 7641 §7).
+- **Threads**: every public type is safe to use from any number of coroutines on any dispatcher; the
+  endpoint runs on the dispatcher of the scope it is given, so on Android or iOS give it one such as
+  `lifecycleScope + Dispatchers.Default`. Under `runTest`, give it `testScheduler.timeSource`: timers
+  wait on the dispatcher's clock and must read the same one (the endpoint warns when they disagree).
 
 - **CoAP over reliable transports, RFC 8323** (`ReliableMessaging`, sans-IO, one per connection, and
   the connection management around it): CSM first from both sides, the peer's required first and
@@ -79,7 +100,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
 TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-and amplification mitigation (RFC 9175 §2.4), Q-Block (RFC 9177).
+and amplification mitigation by address validation (RFC 9175 §2.4; the bounds above cap but do not
+prevent it), rate limiting with 4.29 (RFC 8516), Q-Block (RFC 9177).
 
 ## Verified by
 
@@ -96,4 +118,9 @@ and amplification mitigation (RFC 9175 §2.4), Q-Block (RFC 9177).
   structured error bodies, challenges.
 - Live interop with libcoap v4.3.5b in both directions (`src/jvmTest/.../interop`, see
   `interop/README.md`).
+- Lifecycle, cancellation, failure boundaries and every resource bound per test class
+  (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
+  `TimeSourceContractTest`), on virtual time; `ConcurrencyStressTest` on real threads through
+  `kcoap-testkit`'s `Stress`, on the JVM and Kotlin/Native: close racing requests and collectors, the
+  observer registry, the connection pool, requests racing an idle Release.
 - Line coverage 98% (`./gradlew :kcoap-coap:koverXmlReport`).

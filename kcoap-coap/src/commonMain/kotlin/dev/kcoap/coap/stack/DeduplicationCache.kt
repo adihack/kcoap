@@ -10,16 +10,22 @@ import kotlin.time.Duration
  * A duplicate Confirmable message is answered with the same ACK or RST as the original; a duplicate
  * Non-confirmable message is ignored. Entries live for EXCHANGE_LIFETIME (Confirmable) or NON_LIFETIME
  * (Non-confirmable) after arrival. Each kind has its own queue, ordered by arrival and so by expiry.
+ * At most [maxEntries] are kept; [hasRoom] tells whether a new message may add one.
  */
 internal class DeduplicationCache(
     private val exchangeLifetime: Duration,
     private val nonLifetime: Duration,
+    private val maxEntries: Int = Int.MAX_VALUE,
 ) {
     private val entries = HashMap<MessageKey, InboundEntry>()
     private val confirmableExpiries = ArrayDeque<InboundEntry>()
     private val nonConfirmableExpiries = ArrayDeque<InboundEntry>()
 
-    /** Confirmable messages delivered upwards and not answered yet; they get an Empty ACK at [InboundEntry.ackDeadline]. */
+    /**
+     * Confirmable messages delivered upwards and not answered yet; they get an Empty ACK at
+     * [InboundEntry.ackDeadline]. In arrival order, which is deadline order, since every deadline is the
+     * arrival plus the same delay.
+     */
     val pending: MutableSet<InboundEntry> = LinkedHashSet()
 
     operator fun get(key: MessageKey): InboundEntry? = entries[key]
@@ -30,6 +36,13 @@ internal class DeduplicationCache(
         entries[key] = entry
         (if (confirmable) confirmableExpiries else nonConfirmableExpiries).addLast(entry)
         return entry
+    }
+
+    /** Whether a new entry fits, after dropping those expired by [now]. */
+    fun hasRoom(now: Duration): Boolean {
+        if (entries.size < maxEntries) return true
+        prune(now)
+        return entries.size < maxEntries
     }
 
     fun forget(peer: Endpoint) {

@@ -14,6 +14,15 @@ import dev.kcoap.transport.Endpoint
  *
  * The CoAP stack assigns the token and Message ID before protecting a request, and keeps them: OSCORE
  * does not protect either, and responses are matched by token.
+ *
+ * **Concurrency and cancellation.** The stack calls every method here and on [ProtectedRequest],
+ * [ServerMessageSecurity] and [UnprotectedRequest] from many coroutines at once, on any dispatcher: one
+ * per request, one per notification, and the receive loops. Implementations must be safe for that, as
+ * kcoap-oscore is with a `Mutex` for the sender and one for the recipient state of each security context.
+ * Any call may be cancelled, when its request is cancelled, its server stops or its endpoint closes, and a
+ * cancelled call must leave replay and sequence-number state consistent: a sequence number it took stays
+ * used and is never handed out again (RFC 8613 §7.2.1), and a replay window either accepted the message or
+ * is unchanged.
  */
 public interface ClientMessageSecurity {
     /** Protects [request] for [peer], or returns null to send it unprotected. */
@@ -27,7 +36,7 @@ public interface ProtectedRequest {
 
     /**
      * Verifies and decrypts a response to this request. Called once per response, so also for every
-     * Observe notification.
+     * Observe notification, possibly from different coroutines (see [ClientMessageSecurity]).
      *
      * @throws MessageSecurityException when the response does not verify; the stack drops it.
      */
@@ -64,7 +73,7 @@ public interface UnprotectedRequest {
 
     /**
      * Protects a response to this request. The stack keeps this object for an observation and calls it
-     * for every notification.
+     * for every notification, from the coroutine of each, so calls may overlap (see [ClientMessageSecurity]).
      */
     public suspend fun protectResponse(response: CoapMessage): CoapMessage
 }

@@ -4,6 +4,9 @@ import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.NotificationOrder
 import dev.kcoap.coap.client.ObserveCancellation
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
@@ -246,6 +249,44 @@ class ObserveTest {
         job.cancel()
     }
 
+    private suspend fun kotlinx.coroutines.test.TestScope.notificationTypes(security: ServerMessageSecurity?): List<CoapMessageType> {
+        val fixture = StackFixture(this)
+        val resource = NonCounter()
+        val config = CoapServerConfig(security = security, nonConfirmableNotificationInterval = kotlin.time.Duration.ZERO)
+        val server = fixture.server(config) { add(resource) }
+        val client = fixture.client()
+        val received = Channel<String>(Channel.UNLIMITED)
+        val job = launch { client.observe(fixture.uri(server, "/non")).collect { received.send(it.payloadAsText()) } }
+        assertEquals("0", received.receive())
+        for (value in 1..10) {
+            resource.value = value
+            resource.notifyObservers()
+            assertEquals("$value", received.receive())
+        }
+        job.cancel()
+        return fixture.traffic.filter { it.from == fixture.address(server.endpoint) }.mapNotNull { it.message?.type }.drop(1)
+    }
+
+    @Test
+    fun rfc7641Section7NonConfirmableNotificationsToAnUnauthenticatedClientAreInterspersedWithConfirmableOnes() = runTest {
+        assertEquals(List(8) { CoapMessageType.NON } + CoapMessageType.CON + CoapMessageType.NON, notificationTypes(security = null))
+    }
+
+    @Test
+    fun rfc7641Section7AnAuthenticatedClientGetsNonConfirmableNotificationsOnly() = runTest {
+        val identified = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint) = object : UnprotectedRequest {
+                override val message: CoapMessage = request
+                override val identity = object : SecurityIdentity {
+                    override val description: String = "authenticated"
+                }
+
+                override suspend fun protectResponse(response: CoapMessage): CoapMessage = response
+            }
+        }
+        assertEquals(List(10) { CoapMessageType.NON }, notificationTypes(identified))
+    }
+
     @Test
     fun rfc7959Section2_6LargeNotificationsAreCompletedWithBlock2() = runTest {
         val fixture = StackFixture(this)
@@ -311,7 +352,8 @@ class ObserveTest {
     @Test
     fun aResetRegistrationFailsTheFlow() = runTest {
         val fixture = StackFixture(this)
-        val plain = fixture.endpoint()
+        // An endpoint without a server that receives: it resets requests (RFC 7252 §4.2).
+        val plain = fixture.endpoint().also { it.attach() }
         val client = fixture.client()
         val address = fixture.address(plain)
 

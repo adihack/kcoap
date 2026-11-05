@@ -18,66 +18,138 @@ import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
  * The lists of observers of a server's resources (RFC 7641 §4.1), keyed by client endpoint and token.
- * Lock free for readers; changes replace the whole map.
+ *
+ * Changes take one [Mutex], never held across a suspension; events are reported after it is released.
+ * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
+ * replaced on every change of that resource, so notifying the observers of a resource touches only them.
+ * Once [close]d, after the server stopped, it takes no new observers. It keeps at most
+ * [CoapServerConfig.maxObservers], [CoapServerConfig.maxObserversPerPeer] per client endpoint and
+ * [CoapServerConfig.maxObserversPerResource] per resource.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class ObservationRegistry(private val server: CoapServer) {
-    private val entries = AtomicReference<Map<ExchangeKey, ServerObservation>>(emptyMap())
+    /** What [register] did. */
+    enum class Registration {
+        ADDED,
 
-    /** Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST). */
-    fun register(observation: ServerObservation) {
-        val previous = update { it + (observation.key to observation) }[observation.key]
+        /** The server stopped. */
+        CLOSED,
+
+        /** [CoapServerConfig.maxObservers] reached. */
+        TOO_MANY_OBSERVERS,
+
+        /** [CoapServerConfig.maxObserversPerResource] reached. */
+        TOO_MANY_FOR_RESOURCE,
+
+        /** [CoapServerConfig.maxObserversPerPeer] reached. */
+        TOO_MANY_FOR_PEER,
+    }
+
+    private val lock = Mutex()
+    private val byKey = HashMap<ExchangeKey, ServerObservation>()
+
+    /** How many of [byKey] each client endpoint has; under [lock]. */
+    private val perPeer = HashMap<Endpoint, Int>()
+    private var isClosed = false
+
+    /** Each resource's observers; replaced, never changed, under [lock]. */
+    private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
+
+    /**
+     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST), unless the
+     * registry is closed or full; a replacement does not count against the bounds again.
+     */
+    suspend fun register(observation: ServerObservation): Registration {
+        val config = server.config
+        val previous = lock.withLock {
+            if (isClosed) return Registration.CLOSED
+            val previous = byKey[observation.key]
+            if (previous == null && byKey.size >= config.maxObservers) return Registration.TOO_MANY_OBSERVERS
+            // The key includes the peer, so a replacement is the same client's and leaves its count as it is.
+            if (previous == null && (perPeer[observation.peer] ?: 0) >= config.maxObserversPerPeer) return Registration.TOO_MANY_FOR_PEER
+            if (previous?.resource !== observation.resource && observersOf(observation.resource).size >= config.maxObserversPerResource) {
+                return Registration.TOO_MANY_FOR_RESOURCE
+            }
+            byKey[observation.key] = observation
+            if (previous == null) perPeer[observation.peer] = (perPeer[observation.peer] ?: 0) + 1
+            previous?.let(::unindex)
+            index(observation)
+            previous
+        }
         previous?.deactivate()
         server.endpoint.report(EndpointEvent.ObserverAdded(observation.peer, observation.resource.path))
+        return Registration.ADDED
     }
 
     /** RFC 7641 §3.6 deregistration, or §3.5 cancellation by Reset. */
-    fun remove(peer: Endpoint, token: ByteArray, reason: String) {
-        entries.load()[ExchangeKey(peer, token.toHex())]?.let { remove(it, reason) }
+    suspend fun remove(peer: Endpoint, token: ByteArray, reason: String) {
+        val observation = lock.withLock { byKey[ExchangeKey(peer, token.toHex())] } ?: return
+        remove(observation, reason)
     }
 
-    fun remove(observation: ServerObservation, reason: String) {
-        var removed = false
-        update { current ->
-            removed = current[observation.key] === observation
-            if (removed) current - observation.key else current
+    suspend fun remove(observation: ServerObservation, reason: String) {
+        val removed = lock.withLock {
+            val registered = byKey[observation.key] === observation
+            if (registered) {
+                byKey.remove(observation.key)
+                val remaining = (perPeer[observation.peer] ?: 1) - 1
+                if (remaining > 0) perPeer[observation.peer] = remaining else perPeer.remove(observation.peer)
+                unindex(observation)
+            }
+            registered
         }
         observation.deactivate()
         if (removed) server.endpoint.report(EndpointEvent.ObserverRemoved(observation.peer, observation.resource.path, reason))
     }
 
     fun changed(resource: ObservableResource) {
-        entries.load().values.filter { it.resource === resource }.forEach { it.schedule() }
+        observersOf(resource).forEach { it.schedule() }
     }
 
-    fun count(resource: ObservableResource): Int = entries.load().values.count { it.resource === resource }
+    fun count(resource: ObservableResource): Int = observersOf(resource).size
+
+    /** How many observers [peer] has, for tests. */
+    internal suspend fun count(peer: Endpoint): Int = lock.withLock { perPeer[peer] ?: 0 }
 
     /** RFC 7641 §3.2: a removed resource sends 4.04 to its observers and forgets them. */
     fun removed(resource: ObservableResource) {
-        entries.load().values.filter { it.resource === resource }.forEach { it.end() }
+        observersOf(resource).forEach { it.end() }
     }
 
     /** RFC 7252 §9.1.1, RFC 8323 §7.4: observations bound to an ended DTLS session or closed connection end with it. */
-    fun sessionEnded(peer: Endpoint) {
-        entries.load().values.filter { it.peer == peer }.forEach { remove(it, "session ended") }
+    suspend fun sessionEnded(peer: Endpoint) {
+        lock.withLock { byKey.values.filter { it.peer == peer } }.forEach { remove(it, "session ended") }
     }
 
-    fun clear() {
-        update { emptyMap() }.values.forEach { it.deactivate() }
-    }
-
-    /** Applies [change] atomically and returns the map before it. */
-    private inline fun update(change: (Map<ExchangeKey, ServerObservation>) -> Map<ExchangeKey, ServerObservation>): Map<ExchangeKey, ServerObservation> {
-        while (true) {
-            val current = entries.load()
-            if (entries.compareAndSet(current, change(current))) return current
+    /** The server stopped: every observer is dropped silently, and no new one is taken. */
+    suspend fun close() {
+        val dropped = lock.withLock {
+            isClosed = true
+            byResource.store(emptyMap())
+            perPeer.clear()
+            byKey.values.toList().also { byKey.clear() }
         }
+        dropped.forEach { it.deactivate() }
+    }
+
+    private fun observersOf(resource: ObservableResource): List<ServerObservation> = byResource.load()[resource].orEmpty()
+
+    /** Called under [lock]. */
+    private fun index(observation: ServerObservation) {
+        val current = byResource.load()
+        byResource.store(current + (observation.resource to (current[observation.resource].orEmpty() + observation)))
+    }
+
+    /** Called under [lock]. */
+    private fun unindex(observation: ServerObservation) {
+        val current = byResource.load()
+        val remaining = current[observation.resource].orEmpty().filter { it !== observation }
+        byResource.store(if (remaining.isEmpty()) current - observation.resource else current + (observation.resource to remaining))
     }
 }
 
@@ -134,6 +206,12 @@ internal class ServerObservation(
 
     private var lastConfirmableAt: Duration = registeredAt
 
+    /** Non-confirmable notifications since the last Confirmable one; under [mutex]. */
+    private var nonConfirmableInRow = 0
+
+    /** Whether message or channel security authenticated the client when it registered. */
+    private val isAuthenticated: Boolean get() = identity != null || peerIdentity != PeerIdentity.None
+
     /** The registration response was sent; a separate one is the first outstanding notification. */
     suspend fun onRegistrationSent(transmission: Transmission?, type: CoapMessageType, now: Duration) {
         val changed = mutex.withLock {
@@ -161,22 +239,32 @@ internal class ServerObservation(
         }
     }
 
-    /** Arranges for a notification with the current state; calls that overlap are coalesced. */
+    /**
+     * Arranges for a notification with the current state; calls that overlap are coalesced. A notification
+     * that cannot be produced, protected or sent (a failing handler aside, which ends the observation with
+     * 5.00) removes the observer instead of escaping: the security layer or its sequence-number store may
+     * fail, or the notification may not fit the datagram.
+     */
     fun schedule() {
         if (!isActive || scheduled) return
         scheduled = true
-        server.endpoint.scope.launch { notifyNow() }
+        server.endpoint.launchGuarded("notify ${resource.path}", onFailure = ::failed) { notifyNow() }
     }
 
     /** Sends a final 4.04 notification and removes the observer (RFC 7641 §3.2). */
     fun end() {
-        server.endpoint.scope.launch {
+        server.endpoint.launchGuarded("send the removal notice of ${resource.path}", onFailure = ::failed) {
             mutex.withLock {
                 if (!isActive) return@withLock
                 server.observations.remove(this@ServerObservation, "resource removed")
                 server.sendRemovalNotice(this@ServerObservation)
             }
         }
+    }
+
+    private suspend fun failed(error: Exception) {
+        scheduled = false
+        server.observations.remove(this, "notification failed: ${error.message}")
     }
 
     fun deactivate() {
@@ -201,18 +289,31 @@ internal class ServerObservation(
         val notification = server.notification(this) ?: return@withLock
         if (current != null && server.endpoint.replaceOutstanding(current, notification)) return@withLock
         val now = server.endpoint.now()
+        // RFC 7641 §7: without client authentication, Non-confirmable notifications MUST be interspersed with
+        // Confirmable ones, whose ACKs confirm that the client still wants them; a spoofed one does not.
         val type = if (resource.notificationType == CoapMessageType.NON &&
-            now - lastConfirmableAt < server.config.confirmableNotificationInterval
+            now - lastConfirmableAt < server.config.confirmableNotificationInterval &&
+            (isAuthenticated || nonConfirmableInRow < UNAUTHENTICATED_NON_CONFIRMABLE_RUN)
         ) {
             CoapMessageType.NON
         } else {
             CoapMessageType.CON
         }
-        if (type == CoapMessageType.CON) lastConfirmableAt = now
+        if (type == CoapMessageType.CON) {
+            lastConfirmableAt = now
+            nonConfirmableInRow = 0
+        } else {
+            nonConfirmableInRow++
+        }
         val slotHold = if (type == CoapMessageType.NON) server.config.nonConfirmableNotificationInterval else null
         // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
         outstanding = server.endpoint.sendSeparately(peer, notification, type, this, slotHold, connection)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"
+
+    private companion object {
+        /** At most this many Non-confirmable notifications in a row to an unauthenticated client (RFC 7641 §7). */
+        const val UNAUTHENTICATED_NON_CONFIRMABLE_RUN = 8
+    }
 }

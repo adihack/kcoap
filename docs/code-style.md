@@ -49,6 +49,15 @@ who knows the RFC can follow the code without guessing.
   bytes and time in, bytes and timers out.
 - No global mutable state, except the logging configuration, which is designed for it.
 - Time and randomness are injected, so tests run on virtual time with fixed keys.
+- Mutable protocol state belongs to one `Mutex` per component, never held across a suspension, and every
+  flag that guards that state is read and written under that `Mutex`.
+- Read-mostly registries use a copy-on-write `AtomicReference`. `@Volatile` is only for values read
+  outside any lock where a stale read is harmless.
+- Cleanup in `finally` or `catch` that suspends (taking a lock, settling a transmission, deregistering)
+  runs in `withContext(NonCancellable)`: cancellation is how applications stop work, and it must leak
+  nothing. Keep lock-guarded sections non-suspending.
+- These rules, and how the CoAP endpoint follows them, are in
+  [architecture.md](architecture.md#the-coap-endpoint-as-built) ("Concurrency rules").
 
 ## Extensibility patterns
 

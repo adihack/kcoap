@@ -20,12 +20,14 @@ import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * A CoAP client on a [CoapEndpoint].
@@ -34,7 +36,14 @@ import kotlinx.coroutines.sync.withLock
  * directions (RFC 7959), separate responses are awaited (RFC 7252 §5.2.2), a 4.01 with Echo is answered
  * once with that Echo value (RFC 9175 §2.3), and message security protects each message
  * ([CoapClientConfig.security]). Error codes are returned as responses; a request that gets no response
- * at all throws [CoapException]. Cancelling the calling coroutine cancels the exchange.
+ * at all throws [CoapException]. Cancelling the calling coroutine cancels the exchange. Once the endpoint
+ * is closed, by [close], by its scope or by a failed transport, every call throws [CoapException] with
+ * [CoapEndpoint.closeCause]'s reason, and every [observe] flow fails with it.
+ *
+ * The client is safe to use from any number of coroutines; it runs on the dispatcher of the endpoint's
+ * scope, so on Android or iOS give it one such as `lifecycleScope + Dispatchers.Default`. Creating it
+ * does not start the endpoint receiving; its first request or ping does, so on an endpoint shared with
+ * a [dev.kcoap.coap.server.CoapServer] the two may be created in either order.
  *
  * The URI's scheme picks the transport: `coap` goes over the endpoint's datagram transport, `coap+tcp`,
  * `coaps+tcp`, `coap+ws` and `coaps+ws` (RFC 8323 §8) over connections that its connectors open on
@@ -83,7 +92,8 @@ public class CoapClient private constructor(
 
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_CLIENT)
     internal val blockwise = BlockwiseClient(this)
-    private val observationLock = Mutex()
+    /** Guards [observations]; internal for tests. */
+    internal val observationLock = Mutex()
     private val observations = HashMap<OperationKey, ClientObservation>()
 
     internal val requestTimeout: Duration get() = config.requestTimeout ?: endpoint.parameters.exchangeLifetime
@@ -242,7 +252,8 @@ public class CoapClient private constructor(
                 },
             )
         } finally {
-            release(observation)
+            // A cancelled collector must still count itself out, or the observation never stops.
+            withContext(NonCancellable) { release(observation) }
         }
     }
 
@@ -364,6 +375,9 @@ public class CoapClient private constructor(
             if (observations[observation.key] === observation) observations.remove(observation.key)
         }
     }
+
+    /** Registrations the client keeps, for tests. */
+    internal suspend fun observationCount(): Int = observationLock.withLock { observations.size }
 
     override fun toString(): String = "CoapClient($endpoint)"
 

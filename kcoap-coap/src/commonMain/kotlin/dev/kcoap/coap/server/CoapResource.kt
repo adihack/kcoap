@@ -19,8 +19,10 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * ```
  *
  * Handlers run concurrently on the server's coroutines, one per request, so a resource must be thread
- * safe. A handler that throws produces 5.00 Internal Server Error. Children can be added and removed at
- * any time, for example to create resources on PUT or POST.
+ * safe. A handler that throws produces 5.00 Internal Server Error, and so does a failure anywhere else in
+ * the server's pipeline, the security layer and the application callbacks behind it included (see
+ * [CoapServer]); a failing notification removes its observer. Children can be added and removed at any
+ * time, for example to create resources on PUT or POST.
  *
  * @property name the Uri-Path segment of this resource; the root has the empty name.
  */

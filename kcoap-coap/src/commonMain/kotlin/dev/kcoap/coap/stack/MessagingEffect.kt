@@ -9,8 +9,12 @@ import dev.kcoap.transport.Endpoint
  * appends effects, and the driver executes them in order.
  */
 internal sealed interface MessagingEffect {
-    /** Send the encoded message [bytes] to [to]. */
-    class Transmit(val to: Endpoint, val bytes: ByteArray) : MessagingEffect
+    /**
+     * Send the encoded message [bytes] to [to]. [transmission] is the Confirmable or Non-confirmable
+     * message they carry, so a send the transport refuses outright can fail it at once; null for ACKs,
+     * Resets and piggybacked responses.
+     */
+    class Transmit(val to: Endpoint, val bytes: ByteArray, val transmission: Transmission? = null) : MessagingEffect
 
     /** A new (not duplicate) request arrived; answer it with [UdpMessaging.respond] or [UdpMessaging.reject]. */
     class DeliverRequest(val from: Endpoint, val message: CoapMessage) : MessagingEffect
@@ -42,7 +46,7 @@ internal sealed interface TransmissionOutcome {
     /** A Non-confirmable message's NSTART slot was released after its hold time. The message stays matchable to a Reset. */
     data object SlotReleased : TransmissionOutcome
 
-    /** The transmission was abandoned: the DTLS session ended or the endpoint closed. */
+    /** The transmission was abandoned: the DTLS session ended, the endpoint closed, or the transport refused it. */
     class Failed(val cause: CoapException) : TransmissionOutcome
 }
 

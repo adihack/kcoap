@@ -32,6 +32,9 @@ internal interface ConnectionOwner {
     /** The endpoint's clock. */
     fun now(): Duration
 
+    /** Checks that the clock advances with the dispatcher's. */
+    val clockCheck: ClockCheck
+
     /** A request arrived on [driver]; answer it with [ConnectionDriver.respond]. */
     suspend fun onRequest(driver: ConnectionDriver, message: CoapMessage, sequence: Long)
 
@@ -104,10 +107,15 @@ internal class ConnectionDriver(
 
     /**
      * Queues the CSM, then starts writing, reading and the timers. The state machine starts first, since
-     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it.
+     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it. A
+     * connection this side opens starts with one exchange counted for its opener, so it is not released
+     * as idle before [handOver].
      */
     suspend fun start() {
-        withMessaging { now -> start(now) }
+        withMessaging { now ->
+            start(now)
+            if (isInitiator) exchangeOpened()
+        }
         writer = scope.launch(CoroutineName("coap-connection-writer")) { writeLoop() }
         scope.launch(CoroutineName("coap-connection-reader")) { readLoop() }
         scope.launch(CoroutineName("coap-connection-timers")) { timerLoop() }
@@ -142,7 +150,8 @@ internal class ConnectionDriver(
     /**
      * Answers the request delivered with [sequence]: RFC 8323 §3.3 requires the response on the same
      * connection. A response for a connection that closed meanwhile is lost, as messages in flight may
-     * be (RFC 8323 §3.4).
+     * be (RFC 8323 §3.4). The request counts as answered however this ends, cancelled included, so Pongs
+     * with Custody and a Release drain never wait for it.
      */
     suspend fun respond(sequence: Long, response: CoapMessage) {
         try {
@@ -151,7 +160,7 @@ internal class ConnectionDriver(
             if (e.reason != CoapException.Reason.CONNECTION_CLOSED) throw e
             log.debug { "Response ${response.code} not sent: ${e.message}" }
         } finally {
-            answered(sequence)
+            withContext(NonCancellable) { answered(sequence) }
         }
     }
 
@@ -160,8 +169,26 @@ internal class ConnectionDriver(
         withMessaging { answered(sequence) }
     }
 
-    suspend fun exchangeOpened() {
-        withMessaging(signal = false) { exchangeOpened() }
+    /**
+     * The opener hands the connection over to the [count] callers that waited for it: each gets an exchange
+     * counted, in one step with dropping the opener's own (see [start]), so the idle Release (RFC 8323 §5.5)
+     * cannot start before they ran, however late a single-threaded event loop resumes them. False when the
+     * connection no longer takes requests; the opener's count goes either way.
+     */
+    suspend fun handOver(count: Int): Boolean = withMessaging {
+        val usable = isEstablished && !isReleasing
+        if (usable) repeat(count) { exchangeOpened() }
+        exchangeClosed(null)
+        usable
+    }
+
+    /**
+     * Counts a new exchange on this connection, if it still takes new requests: checked and counted under
+     * the lock, so an idle Release (RFC 8323 §5.5) cannot start between the two. False when the connection
+     * is being released or is gone; the caller then waits for the next one.
+     */
+    suspend fun reserve(): Boolean = withMessaging(signal = false) {
+        (isEstablished && !isReleasing).also { if (it) exchangeOpened() }
     }
 
     /** An exchange ended; [tokenHex] is its token if no newer exchange took it over. */
@@ -173,16 +200,21 @@ internal class ConnectionDriver(
     suspend fun ping(custody: Boolean, timeout: Duration): Boolean {
         val answer = CompletableDeferred<Boolean>()
         val ping = withMessaging { now -> ping(now, custody).also { pings[it] = answer } }
-        val answered = withTimeoutOrNull(timeout) { answer.await() }
-        if (answered == null) {
-            withContext(NonCancellable) {
-                withMessaging {
-                    cancelPing(ping)
-                    pings.remove(ping)
+        var answered: Boolean? = null
+        try {
+            answered = withTimeoutOrNull(timeout) { answer.await() }
+            return answered == true
+        } finally {
+            // Timed out or cancelled: the ping is forgotten either way, so it holds nothing.
+            if (answered == null) {
+                withContext(NonCancellable) {
+                    withMessaging {
+                        cancelPing(ping)
+                        pings.remove(ping)
+                    }
                 }
             }
         }
-        return answered == true
     }
 
     /** Sends a Release (RFC 8323 §5.5); the peer is expected to close. */
@@ -215,7 +247,9 @@ internal class ConnectionDriver(
                 }
             }
         } finally {
-            execute(effects)
+            // The state machine committed to these effects, which may be another exchange's or the close of
+            // the connection, so they run to the end even when the caller was cancelled meanwhile.
+            if (effects.isNotEmpty()) withContext(NonCancellable) { execute(effects) }
             if (signal) wakeups.trySend(Unit)
         }
         return result
@@ -321,9 +355,18 @@ internal class ConnectionDriver(
             val wait = next?.minus(owner.now())
             when {
                 wait == null -> wakeups.receive()
-                wait.isPositive() -> withTimeoutOrNull(wait) { wakeups.receive() }
+                wait.isPositive() -> {
+                    val before = owner.now()
+                    if (withTimeoutOrNull(wait) { wakeups.receive() } == null) owner.clockCheck.afterTimeout(wait, owner.now() - before)
+                }
             }
-            withMessaging(signal = false) { now -> onTimer(now) }
+            try {
+                withMessaging(signal = false) { now -> onTimer(now) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error(e) { "Timer processing failed" }
+            }
         }
     }
 

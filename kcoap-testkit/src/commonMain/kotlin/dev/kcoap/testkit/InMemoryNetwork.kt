@@ -19,7 +19,9 @@ import kotlinx.coroutines.sync.withLock
  * first ACK is lost". [tap] sees every datagram and what happened to it.
  *
  * Latency needs [scope] to run the delayed deliveries; under `runTest` pass `backgroundScope`, and the
- * delays run on virtual time. Randomness comes from [random], so a seed reproduces a run.
+ * delays run on virtual time. Give the CoAP endpoints on the network `testScheduler.timeSource` as their
+ * `CoapEndpointConfig.timeSource` too: their timers wait on the dispatcher's clock and must read the same
+ * one. Randomness comes from [random], so a seed reproduces a run.
  *
  * ```
  * val network = InMemoryNetwork(backgroundScope, Random(42))

@@ -291,7 +291,8 @@ class RequestResponseTest {
     @Test
     fun rfc7252Section4_2AnEndpointWithoutServerResetsRequests() = runTest {
         val fixture = StackFixture(this)
-        val plain = fixture.endpoint()
+        // An endpoint that receives but has no server to give requests to.
+        val plain = fixture.endpoint().also { it.attach() }
         val client = fixture.client()
 
         val error = assertFailsWith<CoapException> {
@@ -508,7 +509,8 @@ class RequestResponseTest {
         assertEquals(CoapException.Reason.CLOSED, error.reason)
         assertTrue(client.endpoint.isClosed)
         client.endpoint.close()
-        assertFailsWith<IllegalStateException> { client.get("coap://127.0.0.1:9/x") }
+        val after = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.CLOSED, after.reason)
     }
 
     @Test

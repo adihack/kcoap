@@ -114,6 +114,12 @@ error path, so the floor only ever goes up.
 - Name the test after the expectation, or after the RFC section its vector comes from.
 - Use `runTest` for anything that suspends; time-dependent code takes an injected clock or runs on the
   test dispatcher's virtual time.
+- A CoAP endpoint reads "now" from `CoapEndpointConfig.timeSource` and waits with the delays of its
+  scope's dispatcher, so the two must be one clock. Under `runTest`, run the endpoint in
+  `backgroundScope` and pass `CoapEndpointConfig(timeSource = testScheduler.timeSource)` (the test
+  fixtures `StackFixture` and `ReliableFixture` do). With the default `TimeSource.Monotonic` there,
+  retransmissions, lifetimes and request timeouts disagree, and the endpoint logs one warning: "The
+  endpoint's timeSource does not advance with its dispatcher's clock".
 - Cryptography can really suspend (WebCrypto answers through promises). While it does, `runTest` finds
   nothing to run and jumps virtual time to the next timer, so a handshake under CoAP timers would see
   retransmissions and timeouts fire. Tests that run real cryptography under timers wrap the backend in
@@ -121,3 +127,24 @@ error path, so the floor only ever goes up.
 - Choose algorithms by capability, never by target, and keep regexes valid in JavaScript's Unicode
   mode (escape a literal `]`, `{` or `}`).
 - Keep fixed keys and randomness explicit, so a failure reproduces exactly.
+
+## Concurrency stress tests
+
+Virtual time runs everything on one thread, so it never shows a race between threads. Code that is shared
+between coroutines (registries, connection pools, the endpoint's lifecycle) also gets a stress test with
+`kcoap-testkit`'s `Stress` helper, in commonTest, so it runs on a thread pool on the JVM and
+Kotlin/Native and interleaves at suspension points on JS and Wasm:
+
+- `Stress.run(iterations, parallelism, timeout) { ... }` runs the body a bounded number of times on the
+  real `Dispatchers.Default`, several iterations at once, and fails the test when they do not finish
+  within the real-time `timeout`, so a deadlock fails instead of hanging the build. An iteration that
+  throws, or is cancelled from inside (a `withTimeout` in it that expires), fails the run. Each
+  iteration gets a `background` scope for the endpoints it creates, cancelled when it ends.
+- `Stress.race(a, b, ...)` starts several actions at the same moment and returns each one's `Result`, so
+  the test checks that the loser of a race failed the documented way (`CoapException` with `CLOSED`, for
+  example) rather than hanging or leaking.
+- Endpoints under stress use the real clock: the default `TimeSource.Monotonic`, never
+  `testScheduler.timeSource`, because their dispatcher is a real one. Keep the iterations bounded (tens,
+  not thousands) and wait for invariants with `withTimeoutOrNull(...) ?: fail(...)`.
+- `kcoap-coap`'s `ConcurrencyStressTest` shows the pattern: close racing requests, observe collectors,
+  observer churn against the bounds, the connection pool and connection setup.

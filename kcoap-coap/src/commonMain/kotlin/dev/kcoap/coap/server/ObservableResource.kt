@@ -31,7 +31,9 @@ public abstract class ObservableResource(name: String) : CoapResource(name) {
 
     /**
      * Whether notifications go Confirmable or Non-confirmable (RFC 7641 §4.5). Non-confirmable ones are
-     * cheaper for frequent changes; the server still sends a Confirmable one periodically.
+     * cheaper for frequent changes; the server still sends a Confirmable one periodically, and to a client
+     * that neither message nor channel security authenticated at least every ninth notification, whose
+     * ACK shows the client still wants them (RFC 7641 §7).
      */
     public open val notificationType: CoapMessageType get() = CoapMessageType.CON
 

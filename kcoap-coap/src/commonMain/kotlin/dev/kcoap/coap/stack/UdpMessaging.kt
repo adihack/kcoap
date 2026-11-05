@@ -33,6 +33,10 @@ import kotlin.time.Duration
  *
  * @param separateResponseDelay how long a Confirmable request may stay unanswered before it gets an Empty
  *   ACK; null leaves that to the upper layer.
+ * @param maxDeduplicationEntries the most received messages remembered; new ones beyond it are dropped
+ *   without state or answer (RFC 7252 §11.3).
+ * @param maxPerPeer the most slot-holding messages outstanding or queued towards one peer; [send] refuses
+ *   more.
  */
 internal class UdpMessaging(
     private val parameters: TransmissionParameters,
@@ -41,11 +45,13 @@ internal class UdpMessaging(
     private val random: Random,
     private val interceptors: List<MessageInterceptor> = emptyList(),
     loggerFactory: LoggerFactory = LoggerFactory.Global,
+    maxDeduplicationEntries: Int = Int.MAX_VALUE,
+    private val maxPerPeer: Int = Int.MAX_VALUE,
 ) {
     private val log: Logger = loggerFactory.logger(LogTags.COAP_MESSAGE)
     private val effects = ArrayList<MessagingEffect>()
     private val messageIds = MessageIdAllocator(random.nextInt(0x10000))
-    private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime)
+    private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime, maxDeduplicationEntries)
 
     /** Our Confirmable messages until they end, and Non-confirmable ones until NON_LIFETIME, by Message ID. */
     private val outbound = HashMap<MessageKey, Transmission>()
@@ -54,6 +60,12 @@ internal class UdpMessaging(
     /** Transmissions with a running timer: Confirmable ones awaiting an ACK, Non-confirmable ones holding a slot. */
     private val timed = LinkedHashSet<Transmission>()
     private val windows = HashMap<Endpoint, PeerWindow>()
+
+    /** The deadline [nextDeadline] last returned, which the timer loop waits for; null while it waits for none. */
+    private var armedDeadline: Duration? = null
+
+    /** Whether a call since [takeWakeup] added a deadline earlier than [armedDeadline]. */
+    private var wakeupNeeded = false
 
     private class PeerWindow {
         var outstanding = 0
@@ -67,18 +79,38 @@ internal class UdpMessaging(
         return taken
     }
 
+    /**
+     * Whether the timer loop must recompute its wait, then clears it: true only when a call since the last
+     * one added a deadline earlier than the one [nextDeadline] last returned. A deadline that goes away or
+     * moves later needs no wakeup, since the loop recomputes after every wait, so most calls, such as a
+     * datagram that adds only a deduplication lifetime, leave the timers alone however many transmissions
+     * are outstanding.
+     */
+    fun takeWakeup(): Boolean = wakeupNeeded.also { wakeupNeeded = false }
+
+    /** Notes a deadline a call added, for [takeWakeup]. */
+    private fun schedule(deadline: Duration) {
+        val armed = armedDeadline
+        if (armed == null || deadline < armed) {
+            armedDeadline = deadline
+            wakeupNeeded = true
+        }
+    }
+
     // ---------------------------------------------------------------- sending
 
     /** A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4). */
     fun allocateMessageId(peer: Endpoint, now: Duration): Int =
-        messageIds.allocate(peer, now, now + parameters.exchangeLifetime)
+        messageIds.allocate(peer, now, now + parameters.exchangeLifetime).also { schedule(now + parameters.exchangeLifetime) }
 
     /**
      * Sends a Confirmable or Non-confirmable [message] whose Message ID came from [allocateMessageId]. A
      * Confirmable message, or a Non-confirmable one with a [slotHold], waits while [peer] has NSTART
      * outstanding interactions.
      *
-     * @throws CoapException with [CoapException.Reason.MESSAGE_TOO_LARGE] if it does not fit a datagram.
+     * @throws CoapException with [CoapException.Reason.MESSAGE_TOO_LARGE] if it does not fit a datagram,
+     *   with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] if [peer] has the most slot-holding messages
+     *   outstanding or queued that the endpoint allows.
      */
     fun send(
         now: Duration,
@@ -91,9 +123,15 @@ internal class UdpMessaging(
             "Only CON and NON messages are sent as transmissions: $message"
         }
         val transmission = Transmission(peer, message, encodeForSending(peer, message), owner, slotHold)
+        val existing = windows[peer]
+        if (transmission.holdsSlot && existing != null && existing.outstanding + existing.queue.size >= maxPerPeer) {
+            // RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue.
+            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
+            throw CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        }
         outbound[MessageKey(peer, message.messageId)] = transmission
         if (transmission.holdsSlot) {
-            val window = windows.getOrPut(peer) { PeerWindow() }
+            val window = existing ?: PeerWindow().also { windows[peer] = it }
             if (window.outstanding >= parameters.nstart) {
                 transmission.state = Transmission.State.QUEUED
                 window.queue.addLast(transmission)
@@ -276,12 +314,14 @@ internal class UdpMessaging(
     private fun onConfirmable(now: Duration, from: Endpoint, message: CoapMessage) {
         val key = MessageKey(from, message.messageId)
         received[key]?.let { return onDuplicate(it) }
+        if (!received.hasRoom(now)) return dropForLimit(from, message)
         val entry = received.add(key, CoapMessageType.CON, now)
+        schedule(entry.expiresAt)
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
             message.isEmpty -> sendReset(entry, "CoAP ping")
             message.isRequest || message.isResponse -> {
-                entry.ackDeadline = separateResponseDelay?.let { now + it }
+                entry.ackDeadline = separateResponseDelay?.let { now + it }?.also(::schedule)
                 received.pending += entry
                 effects += if (message.isRequest) {
                     MessagingEffect.DeliverRequest(from, message)
@@ -303,12 +343,22 @@ internal class UdpMessaging(
             log.warn { "Dropped a Non-confirmable ${message.code} from $from" }
             return
         }
-        received.add(key, CoapMessageType.NON, now)
+        if (!received.hasRoom(now)) return dropForLimit(from, message)
+        schedule(received.add(key, CoapMessageType.NON, now).expiresAt)
         effects += if (message.isRequest) {
             MessagingEffect.DeliverRequest(from, message)
         } else {
             MessagingEffect.DeliverResponse(from, message)
         }
+    }
+
+    /**
+     * RFC 7252 §11.3: with the deduplication cache full, a new message is dropped without state and without
+     * an answer, which might go to a spoofed source; its sender retransmits a Confirmable one.
+     */
+    private fun dropForLimit(from: Endpoint, message: CoapMessage) {
+        debug(from, message.messageId) { "Dropped a new ${message.type}: the deduplication cache is full" }
+        effects += MessagingEffect.Event(EndpointEvent.LimitReached(from, EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES))
     }
 
     private fun onDuplicate(entry: InboundEntry) {
@@ -329,10 +379,12 @@ internal class UdpMessaging(
             if (candidate != null && (next == null || candidate < next!!)) next = candidate
         }
         timed.forEach { consider(it.deadline) }
-        received.pending.forEach { consider(it.ackDeadline) }
+        // Pending entries are in arrival order, and so in deadline order: the first is the earliest.
+        consider(received.pending.firstOrNull()?.ackDeadline)
         consider(received.nextExpiry())
         consider(messageIds.nextExpiry())
         consider(nonConfirmableExpiries.firstOrNull()?.second)
+        armedDeadline = next
         return next
     }
 
@@ -347,7 +399,11 @@ internal class UdpMessaging(
                 effects += MessagingEffect.Completed(transmission, TransmissionOutcome.SlotReleased)
             }
         }
-        for (entry in received.pending.filter { deadline -> deadline.ackDeadline?.let { it <= now } == true }) {
+        while (true) {
+            // In deadline order, so the scan stops at the first entry not due yet.
+            val entry = received.pending.firstOrNull() ?: break
+            val deadline = entry.ackDeadline
+            if (deadline == null || deadline > now) break
             debug(entry.key.peer, entry.key.messageId) { "No response yet; sending an Empty ACK" }
             sendEmptyAck(entry)
         }
@@ -367,6 +423,7 @@ internal class UdpMessaging(
         transmission.retransmissions++
         transmission.timeout *= 2
         transmission.deadline = now + transmission.timeout
+        schedule(transmission.deadline)
         val replacement = transmission.replacement
         if (replacement != null) {
             // RFC 7641 §4.5.2 step 4: new Message ID, counter and timeout retained.
@@ -376,7 +433,7 @@ internal class UdpMessaging(
             transmission.replaceWith(message, encodeForSending(peer, message))
             outbound[MessageKey(peer, messageId)] = transmission
             debug(peer, messageId) { "Superseded MID ${transmission.messageIds[transmission.messageIds.size - 2]}" }
-            transmission.bytes?.let { transmit(peer, message, it) }
+            transmission.bytes?.let { transmit(peer, message, it, transmission) }
             return
         }
         // §4.2: every retransmission stays within MAX_TRANSMIT_SPAN, even if one is missed.
@@ -388,7 +445,7 @@ internal class UdpMessaging(
         effects += MessagingEffect.Event(
             EndpointEvent.Retransmitted(peer, transmission.message.messageId, transmission.retransmissions),
         )
-        transmission.bytes?.let { effects += MessagingEffect.Transmit(peer, it) }
+        transmission.bytes?.let { effects += MessagingEffect.Transmit(peer, it, transmission) }
     }
 
     private fun pruneNonConfirmable(now: Duration) {
@@ -419,9 +476,17 @@ internal class UdpMessaging(
         effects += MessagingEffect.Event(EndpointEvent.SessionEnded(peer))
     }
 
-    /** Fails every transmission; the endpoint is closing. */
-    fun close() {
-        failAll(CoapException("Endpoint closed", CoapException.Reason.CLOSED)) { true }
+    /**
+     * The transport refused to carry [transmission] at all, a local error no retransmission fixes: it fails
+     * at once with [cause] instead of timing out after MAX_TRANSMIT_WAIT as if the peer were silent.
+     */
+    fun abandon(now: Duration, transmission: Transmission, cause: CoapException) {
+        finish(now, transmission, TransmissionOutcome.Failed(cause))
+    }
+
+    /** Fails every transmission with [cause]; the endpoint is closing. */
+    fun close(cause: CoapException = CoapException("Endpoint closed", CoapException.Reason.CLOSED)) {
+        failAll(cause) { true }
     }
 
     private fun failAll(cause: CoapException, predicate: (Transmission) -> Boolean) {
@@ -451,18 +516,22 @@ internal class UdpMessaging(
         transmission.firstSentAt = now
         val messageId = transmission.message.messageId
         messageIds.extend(peer, messageId, now + parameters.exchangeLifetime)
+        schedule(now + parameters.exchangeLifetime)
         if (transmission.isConfirmable) {
             transmission.timeout = initialTimeout()
             transmission.deadline = now + transmission.timeout
             timed += transmission
+            schedule(transmission.deadline)
         } else {
             nonConfirmableExpiries.addLast(MessageKey(peer, messageId) to now + parameters.nonLifetime)
+            schedule(now + parameters.nonLifetime)
             transmission.slotHold?.let {
                 transmission.deadline = now + it
                 timed += transmission
+                schedule(transmission.deadline)
             }
         }
-        transmission.bytes?.let { transmit(peer, transmission.message, it) }
+        transmission.bytes?.let { transmit(peer, transmission.message, it, transmission) }
     }
 
     /** §4.2: a random duration between ACK_TIMEOUT and ACK_TIMEOUT × ACK_RANDOM_FACTOR. */
@@ -535,9 +604,9 @@ internal class UdpMessaging(
         return bytes
     }
 
-    private fun transmit(peer: Endpoint, message: CoapMessage, bytes: ByteArray) {
+    private fun transmit(peer: Endpoint, message: CoapMessage, bytes: ByteArray, transmission: Transmission? = null) {
         if (log.isEnabled(LogLevel.TRACE)) log.trace { "Sending $message to $peer: ${log.payload(bytes)}" }
-        effects += MessagingEffect.Transmit(peer, bytes)
+        effects += MessagingEffect.Transmit(peer, bytes, transmission)
     }
 
     private inline fun debug(peer: Endpoint, messageId: Int, message: () -> String) {

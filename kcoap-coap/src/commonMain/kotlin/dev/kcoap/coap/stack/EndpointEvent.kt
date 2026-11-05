@@ -105,6 +105,45 @@ public sealed interface EndpointEvent {
         override fun toString(): String = "ConnectionClosed(peer=$peer, reason=$reason)"
     }
 
+    /**
+     * A resource bound was reached, so the endpoint dropped or refused something [peer] sent or asked for
+     * instead of keeping more state (RFC 7252 §11.3). [limit] says which bound and so what happened; the
+     * configuration property it names documents both.
+     */
+    public class LimitReached(override val peer: Endpoint, public val limit: Limit) : EndpointEvent {
+        /** The bounds an endpoint keeps. */
+        public enum class Limit {
+            /** [CoapEndpointConfig.maxDeduplicationEntries]: a new message was dropped. */
+            DEDUPLICATION_ENTRIES,
+
+            /** [CoapEndpointConfig.maxConcurrentRequests]: a request was answered with 5.03, or dropped. */
+            CONCURRENT_REQUESTS,
+
+            /**
+             * [CoapEndpointConfig.maxExchangesPerPeer]: a request failed, or a separate response or
+             * notification was not sent.
+             */
+            EXCHANGES_PER_PEER,
+
+            /** `CoapServerConfig.maxObservers`: a registration was served without Observe. */
+            OBSERVERS,
+
+            /** `CoapServerConfig.maxObserversPerResource`: a registration was served without Observe. */
+            OBSERVERS_PER_RESOURCE,
+
+            /** `CoapServerConfig.maxObserversPerPeer`: a registration was served without Observe. */
+            OBSERVERS_PER_PEER,
+
+            /** [ReliableTransportConfig.maxPendingConnections]: an accepted connection was closed. */
+            PENDING_CONNECTIONS,
+
+            /** [ReliableTransportConfig.maxConnections]: an accepted connection was closed. */
+            CONNECTIONS,
+        }
+
+        override fun toString(): String = "LimitReached(peer=$peer, limit=$limit)"
+    }
+
     /** A client was added to the observers of [path] (RFC 7641 §4.1). */
     public class ObserverAdded(override val peer: Endpoint, public val path: String) : EndpointEvent {
         override fun toString(): String = "ObserverAdded(peer=$peer, path=$path)"

@@ -8,9 +8,11 @@ import kotlin.uuid.Uuid
 
 /**
  * Chooses tokens for new requests (RFC 7252 §5.3.1). The endpoint asks again when a token is already in
- * use towards the same peer, so a generator only needs to make collisions unlikely. An endpoint calls
- * its generator under its own lock, so a generator need not be thread safe, but must not be shared
- * between endpoints if it keeps state.
+ * use towards the same peer, so a generator only needs to make collisions unlikely.
+ *
+ * **Thread safety.** An endpoint calls its generator under its own lock, so a generator need not be thread
+ * safe, but one that keeps state, such as [sessionSequence], must not be shared between endpoints. Leave
+ * [CoapEndpointConfig.tokenGenerator] null and every endpoint creates its own.
  */
 public fun interface TokenGenerator {
     /** A token of 0 to 8 bytes for a new request to [peer]. */
