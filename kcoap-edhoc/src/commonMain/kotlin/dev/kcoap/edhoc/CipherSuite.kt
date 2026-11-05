@@ -6,6 +6,7 @@ import dev.kcoap.crypto.AeadAlgorithm.A256GCM
 import dev.kcoap.crypto.AeadAlgorithm.AES_CCM_16_128_128
 import dev.kcoap.crypto.AeadAlgorithm.AES_CCM_16_64_128
 import dev.kcoap.crypto.AeadAlgorithm.CHACHA20_POLY1305
+import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.EcdhCurve
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.HashAlgorithm.SHAKE256
@@ -14,6 +15,7 @@ import dev.kcoap.crypto.HashAlgorithm.SHA_384
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.supports
 
 /**
  * The EDHOC key exchange algorithm of a cipher suite (RFC 9528 §3.6).
@@ -122,6 +124,20 @@ public class CipherSuite private constructor(
 
     /** RFC 9528 §8: implementations MUST support cipher suites 2 and 3. */
     public val isMandatoryToImplement: Boolean get() = value == 2 || value == 3
+
+    /**
+     * Whether [backend] runs everything this suite can need on the platform it is on: both AEADs, the
+     * ephemeral key exchange and the signature algorithm. Platforms differ (WebCrypto has no
+     * ChaCha20/Poly1305, so suites 4 and 5 are not supported there), so an Initiator or Responder
+     * should offer only suites for which this is true. Each check asks the backend for the algorithm,
+     * which costs a key pair or two.
+     */
+    public suspend fun isSupportedBy(backend: CryptoBackend): Boolean =
+        isImplemented &&
+            backend.supports(edhocAead) &&
+            backend.supports(appAead) &&
+            backend.supports(keyExchange.ephemeralKeyType) &&
+            backend.supports(signature)
 
     /** Whether the value is in the private-use range -24..-21 of RFC 9528 §10.2. */
     public val isPrivateUse: Boolean get() = value in -24..-21
