@@ -47,9 +47,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * and its responses, notifications and failures stay with it (RFC 8323 §3.3, §7.4).
  *
  * The endpoint runs its coroutines in [scope] and inherits its dispatcher. It starts receiving and
- * accepting once a [dev.kcoap.coap.server.CoapServer] or [dev.kcoap.coap.client.CoapClient] is attached
- * (or the first request or ping goes out), so a server's resources are in place before the first request
- * arrives. On Android or iOS pass a scope such as `lifecycleScope + Dispatchers.Default` to keep the
+ * accepting once a [dev.kcoap.coap.server.CoapServer] is attached or the first request or ping goes out,
+ * so a server's resources are in place before the first request arrives, whichever of a server and a
+ * [dev.kcoap.coap.client.CoapClient] sharing the endpoint is created first. On Android or iOS pass a scope such as `lifecycleScope + Dispatchers.Default` to keep the
  * receive loop, timers and handlers off the main thread.
  *
  * **Lifecycle.** An endpoint ends exactly once, in one terminal transition, whichever way it ends: [close],
@@ -165,7 +165,7 @@ public class CoapEndpoint private constructor(
     /** Completes once the terminal transition is done. */
     private val closed = CompletableDeferred<CoapException>()
 
-    /** Completes when a server or client attaches; only then does the endpoint receive and accept. */
+    /** Completes when a server attaches or the first request goes out; only then does the endpoint receive. */
     private val attached = CompletableDeferred<Unit>()
 
     init {
@@ -192,8 +192,8 @@ public class CoapEndpoint private constructor(
     }
 
     /**
-     * Starts receiving and accepting, once: called when a server or client attaches, and before the first
-     * request or ping. Until then datagrams and connections wait in the transports.
+     * Starts receiving and accepting, once: called when a server attaches, and before the first request or
+     * ping. Until then datagrams and connections wait in the transports.
      */
     internal fun attach() {
         attached.complete(Unit)

@@ -291,8 +291,8 @@ class RequestResponseTest {
     @Test
     fun rfc7252Section4_2AnEndpointWithoutServerResetsRequests() = runTest {
         val fixture = StackFixture(this)
-        // A client alone on the endpoint: it receives, but has no server to give requests to.
-        val plain = fixture.client().endpoint
+        // An endpoint that receives but has no server to give requests to.
+        val plain = fixture.endpoint().also { it.attach() }
         val client = fixture.client()
 
         val error = assertFailsWith<CoapException> {

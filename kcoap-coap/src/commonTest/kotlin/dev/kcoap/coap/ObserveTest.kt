@@ -352,8 +352,8 @@ class ObserveTest {
     @Test
     fun aResetRegistrationFailsTheFlow() = runTest {
         val fixture = StackFixture(this)
-        // A client alone on the endpoint: it receives, but resets requests, having no server.
-        val plain = fixture.client().endpoint
+        // An endpoint without a server that receives: it resets requests (RFC 7252 §4.2).
+        val plain = fixture.endpoint().also { it.attach() }
         val client = fixture.client()
         val address = fixture.address(plain)
 

@@ -64,7 +64,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at
-  once. Receiving starts when a server or client attaches. A send the transport refuses fails at once
+  once. Receiving starts when a server attaches or the first request goes out. A send the transport refuses fails at once
   with `TRANSPORT_FAILED`. The server pipeline is one failure boundary: whatever throws, the client gets
   an answer (5.00 with Max-Age 0 unless the security layer says otherwise), a failing notification
   removes its observer, and nothing escapes to the application's exception handler.

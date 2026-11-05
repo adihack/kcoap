@@ -41,7 +41,9 @@ import kotlinx.coroutines.withContext
  * [CoapEndpoint.closeCause]'s reason, and every [observe] flow fails with it.
  *
  * The client is safe to use from any number of coroutines; it runs on the dispatcher of the endpoint's
- * scope, so on Android or iOS give it one such as `lifecycleScope + Dispatchers.Default`.
+ * scope, so on Android or iOS give it one such as `lifecycleScope + Dispatchers.Default`. Creating it
+ * does not start the endpoint receiving; its first request or ping does, so on an endpoint shared with
+ * a [dev.kcoap.coap.server.CoapServer] the two may be created in either order.
  *
  * The URI's scheme picks the transport: `coap` goes over the endpoint's datagram transport, `coap+tcp`,
  * `coaps+tcp`, `coap+ws` and `coaps+ws` (RFC 8323 §8) over connections that its connectors open on
@@ -96,10 +98,6 @@ public class CoapClient private constructor(
 
     internal val requestTimeout: Duration get() = config.requestTimeout ?: endpoint.parameters.exchangeLifetime
     internal val securityReserve: Int get() = if (config.security != null) config.securityReserve else 0
-
-    init {
-        endpoint.attach()
-    }
 
     // ---------------------------------------------------------------- methods
 

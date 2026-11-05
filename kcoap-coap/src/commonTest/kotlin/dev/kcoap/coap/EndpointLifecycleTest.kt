@@ -127,6 +127,16 @@ class EndpointLifecycleTest {
 
     @Test
     fun aRequestQueuedBeforeTheServerExistsIsServed() = runTest {
+        requestQueuedBeforeTheServer(clientFirst = false)
+    }
+
+    @Test
+    fun aRequestQueuedBeforeTheServerIsServedWhenTheSharedEndpointsClientCameFirst() = runTest {
+        // Creating a client starts nothing; its first request would.
+        requestQueuedBeforeTheServer(clientFirst = true)
+    }
+
+    private suspend fun TestScope.requestQueuedBeforeTheServer(clientFirst: Boolean) {
         val fixture = StackFixture(this)
         val transport = fixture.transport()
         val peer = fixture.transport()
@@ -140,6 +150,7 @@ class EndpointLifecycleTest {
 
         // The endpoint exists before its server; it must not answer the waiting request with a Reset.
         val endpoint = CoapEndpoint(transport, backgroundScope, fixture.endpointConfig())
+        if (clientFirst) CoapClient(endpoint)
         runCurrent()
         CoapServer(endpoint) { resource("hello") { get { CoapResponse.content("Hello") } } }
 

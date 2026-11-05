@@ -93,7 +93,8 @@ committed to them and they may belong to other exchanges. Request handlers, mess
 transports therefore run without the lock; each inbound request gets its own coroutine, up to
 `maxConcurrentRequests`. The receive loop and a timer loop run in the scope the endpoint was given, on
 its dispatcher (on Android or iOS a scope such as `lifecycleScope + Dispatchers.Default`), and start once
-a server or client attaches, so a server's resources are in place before the first request. Client-side
+a server attaches or the first request or ping goes out, so a server's resources are in place before the
+first request, whichever of a server and a client sharing the endpoint is created first. Client-side
 response verification (OSCORE) runs on the receive loop, before the response is queued, so a forged
 notification cannot push out a genuine one; message-security backends should be fast or offload their
 own work.
