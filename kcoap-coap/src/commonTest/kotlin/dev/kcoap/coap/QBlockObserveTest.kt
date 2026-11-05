@@ -693,6 +693,70 @@ class QBlockObserveTest {
         }
     }
 
+    /**
+     * The acceptance of QB-6 where a body outlasts the change interval: a client that sends no Continue gets each
+     * 24-block body in three sets NON_TIMEOUT_RANDOM apart, about 5 s, while the resource changes every second. No
+     * body is cut short: each goes out whole on the observation's token before the next one starts, and the changes
+     * meanwhile fold into the next body, which carries the state at its start (RFC 9177 §4.5, RFC 7641 §4.5).
+     */
+    @Test
+    fun rfc9177Section4_5ABodyThatOutlastsTheChangesIsNeverCutShortAndTheNextCarriesTheLatestState() = runTest {
+        val size = 24 * 64 - 10
+        val setup = setup({ body(size, it) }, blockSize = 64)
+        val peer = QBlockPeer.of(setup.fixture, setup.server)
+        val registration = peer.send(
+            CoapMessage.request(CoapCode.GET) {
+                type = CoapMessageType.NON
+                token = peer.token()
+                options {
+                    uriPath("obs")
+                    observe(0)
+                    qBlock2(BlockOption(0, true, 2))
+                }
+            },
+        )
+        // The client sends nothing but the ACKs a Confirmable body (RFC 7641 §4.5) would need.
+        backgroundScope.launch {
+            while (true) peer.next(1.minutes)?.let { if (it.type == CoapMessageType.CON) peer.acknowledge(it) }
+        }
+        val changes = mutableListOf(setup.fixture.now to 0)
+        repeat(30) {
+            delay(1.seconds)
+            setup.resource.change()
+            changes += setup.fixture.now to setup.resource.version
+        }
+        delay(20.seconds)
+
+        val server = setup.fixture.address(setup.server.endpoint)
+        val runs = mutableListOf<MutableList<Pair<Duration, CoapMessage>>>()
+        for (wire in setup.fixture.traffic) {
+            val message = wire.message?.takeIf { wire.from == server && it.hasToken(registration.token) } ?: continue
+            val last = runs.lastOrNull()
+            val etag = message.options.etags.single()
+            if (last != null && last.first().second.options.etags.single().contentEquals(etag)) {
+                last += wire.at to message
+            } else {
+                runs += mutableListOf(wire.at to message)
+            }
+        }
+        val etags = runs.map { it.first().second.options.etags.single().toList() }
+        assertEquals(etags.distinct(), etags, "no body interleaves with another")
+        val versions = runs.map { run ->
+            assertEquals((0L..23L).toList(), run.map { it.second.options.qBlock2!!.number }, "whole, in order")
+            val start = run.first().first
+            val payload = run.flatMap { it.second.payload.toList() }
+            // The handler runs at the start of the body; a change at that very instant may come before or after it.
+            val before = changes.lastOrNull { it.first < start }
+            val at = changes.lastOrNull { it.first <= start }
+            val candidates = listOfNotNull(before, at).map { it.second }.distinct()
+            candidates.single { body(size, it).toList() == payload }
+        }
+        assertEquals(versions.sorted().distinct(), versions, "every body newer than the one before")
+        assertTrue(versions.size in 5..12, "changes fold into the next body: ${versions.size} bodies for 31 states")
+        assertEquals(setup.resource.version, versions.last(), "the latest state arrives (RFC 7641 §4.5)")
+        assertEquals(1, setup.resource.observerCount)
+    }
+
     /** RFC 9177 §4.5, Figure 18: Confirmable notification bodies, every block acknowledged, Observe on each. */
     @Test
     fun rfc9177Figure18ConfirmableNotificationBodies() = runTest {
