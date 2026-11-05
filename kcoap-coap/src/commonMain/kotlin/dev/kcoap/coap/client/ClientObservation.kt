@@ -29,7 +29,9 @@ import kotlinx.coroutines.withContext
  * protection are the security layer's job (RFC 8613 §4.1.3.5.2), whose verified notifications are all
  * passed on. An unverified response, an error without message security (RFC 8613 §8.2), fails a registration
  * that has no verified answer yet with [CoapException.Reason.UNVERIFIED_RESPONSE] and is dropped afterwards, so
- * it never ends an observation or has the registration sent again with its Echo value (ADR 0008). On a reliable transport, which delivers in order, the Observe value MUST be ignored and every
+ * it never ends an observation or has the registration sent again with its Echo value (ADR 0008); a
+ * notification whose Block2 follow-up gets only an unverified answer is dropped too, and the observation waits
+ * for the next. On a reliable transport, which delivers in order, the Observe value MUST be ignored and every
  * notification is passed on (RFC 8323 §7.1). Large notifications are completed with Block2 requests
  * (RFC 7959 §2.6). A response without Observe, or a non-2.xx one, ends the observation (§3.2).
  *
@@ -159,7 +161,7 @@ internal class ClientObservation(
         }
         established = true
         if (!isReliable) order.accept(first.options.observe!!, client.endpoint.now())
-        mutableEvents.emit(Event.Notification(client.blockwise.complete(peer, registration, first, confirmable)))
+        whole(first)?.let { mutableEvents.emit(Event.Notification(it)) }
         while (true) {
             // A notification with an unrecognized critical option ends the exchange with BAD_RESPONSE: the
             // endpoint rejected it (RFC 7252 §5.4.1), see afterRejection for how that reaches the server.
@@ -178,8 +180,21 @@ internal class ClientObservation(
                 log.debug { "Dropped a stale notification $value (RFC 7641 §3.4)" }
                 continue
             }
-            mutableEvents.emit(Event.Notification(client.blockwise.complete(peer, registration, notification, confirmable)))
+            whole(notification)?.let { mutableEvents.emit(Event.Notification(it)) }
         }
+    }
+
+    /**
+     * The notification [notification] of the established observation, completed with Block2 requests
+     * (RFC 7959 §2.6); null when one of them got only an unverified answer, which ends neither the observation
+     * nor reaches its collectors (ADR 0008): that notification is dropped, and the next change brings a fresh one.
+     */
+    private suspend fun whole(notification: CoapMessage): CoapResponse? = try {
+        client.blockwise.complete(peer, registration, notification, confirmable)
+    } catch (e: CoapException) {
+        if (e.reason != CoapException.Reason.UNVERIFIED_RESPONSE) throw e
+        log.warn { "Dropped a notification whose Block2 request got an unverified ${e.response?.code}" }
+        null
     }
 
     /**
@@ -214,15 +229,17 @@ internal class ClientObservation(
 
     /**
      * The endpoint rejected a response to the registration (RFC 7252 §5.4.1) when [cause] is
-     * [CoapException.Reason.BAD_RESPONSE], which ended the exchange. Over UDP the endpoint's Reset ends the
-     * observation on the server (RFC 7641 §3.6), or a later notification gets one, its token being
-     * forgotten. A reliable transport has no Reset, so there the client MUST deregister (RFC 8323 §7.4), or
-     * the server notifies for as long as the connection lasts; it does so at once, whatever the collectors
-     * do. A rejected registration response may have registered the client as well, and a deregistration
-     * that finds no observer is an ordinary GET, so it deregisters after that too.
+     * [CoapException.Reason.BAD_RESPONSE], which ended the exchange, or took one it could not verify
+     * ([CoapException.Reason.UNVERIFIED_RESPONSE], ADR 0008) in place of the server's answer. Over UDP the
+     * endpoint's Reset ends the observation on the server (RFC 7641 §3.6), or a later notification gets one,
+     * its token being forgotten. A reliable transport has no Reset, so there the client MUST deregister
+     * (RFC 8323 §7.4), or the server notifies for as long as the connection lasts; it does so at once, whatever
+     * the collectors do. A rejected registration response may have registered the client as well, and so may
+     * the server's answer that an unverified error from a party on the path came ahead of; a deregistration that
+     * finds no observer is an ordinary GET, so it deregisters after those too.
      */
     private fun afterRejection(cause: Throwable) {
-        if (!isReliable || cause !is CoapException || cause.reason != CoapException.Reason.BAD_RESPONSE) return
+        if (!isReliable || cause !is CoapException || cause.reason !in DEREGISTERING_FAILURES) return
         val rejected = qBlockToken ?: exchange?.token ?: return
         log.debug { "Deregistering after a rejected response (RFC 8323 §7.4)" }
         client.endpoint.launchGuarded("deregister a rejected observation") {
@@ -280,5 +297,8 @@ internal class ClientObservation(
 
     private companion object {
         const val BUFFER = 64
+
+        /** The failures of a registration after which the server may still have the client as an observer. */
+        val DEREGISTERING_FAILURES = setOf(CoapException.Reason.BAD_RESPONSE, CoapException.Reason.UNVERIFIED_RESPONSE)
     }
 }

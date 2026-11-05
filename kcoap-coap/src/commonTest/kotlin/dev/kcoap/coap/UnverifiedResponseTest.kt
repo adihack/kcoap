@@ -8,7 +8,13 @@ import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.security.ResponseVerification
+import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.RawPeer
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
@@ -23,6 +29,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -176,6 +183,48 @@ class UnverifiedResponseTest {
     }
 
     @Test
+    fun adr0008AForgedUnprotected401WithEchoToANonConfirmableObserveRegistrationIsNotRepeated() = runTest {
+        val s = setup()
+        val pending = async { runCatching { s.client.observe(s.peer.uri("/counter")) { nonConfirmable() }.toList() } }
+        val registration = s.peer.receive()
+        assertEquals(CoapMessageType.NON, registration.type)
+        assertEquals(0L, registration.options.observe)
+
+        s.peer.send(forged401(registration))
+
+        assertUnverified(pending.await().exceptionOrNull())
+        s.peer.assertNoRequest()
+    }
+
+    @Test
+    fun adr0008AnUnverifiedAnswerToTheBlock2RequestOfANotificationDropsOnlyThatNotification() = runTest {
+        val s = setup()
+        val pending = async { s.client.observe(s.peer.uri("/counter")).take(2).toList() }
+        val registration = s.peer.receive()
+        s.peer.send(answer(registration, CoapCode.CONTENT, isProtected = true) {
+            options { observe(1) }
+            payload("first")
+        })
+        // RFC 7959 §2.6: a notification too large for one message; the client asks for the rest with Block2.
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "") {
+            options { observe(2); block2(BlockOption(0, true, 0)); oscore(ByteArray(0)) }
+            payload = ByteArray(16)
+        })
+        val followUp = s.peer.receive()
+        assertEquals(1L, followUp.options.block2?.number)
+        assertNull(followUp.options.observe)
+
+        s.peer.send(forged401(followUp))
+
+        // Neither repeated with the Echo value nor the end of the observation: the next notification arrives.
+        s.peer.assertNoRequest()
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "third") {
+            options { observe(3); oscore(ByteArray(0)) }
+        })
+        assertEquals(listOf("first", "third"), pending.await().map { it.payloadAsText() })
+    }
+
+    @Test
     fun adr0008AnUnverifiedErrorNeitherEndsNorReachesAnEstablishedObservation() = runTest {
         val s = setup()
         val pending = async { s.client.observe(s.peer.uri("/counter")).take(2).toList() }
@@ -246,5 +295,126 @@ class UnverifiedResponseTest {
             dev.kcoap.coap.stack.QBlockCapabilities.Capability.UNKNOWN,
             s.client.qBlock!!.support.known(s.peer.address, isProtected = true),
         )
+    }
+
+    @Test
+    fun adr0008AForgedUnprotected401WithEchoToAQBlockObserveRegistrationIsNotRepeated() = runTest {
+        for (type in listOf(CoapMessageType.NON, CoapMessageType.CON)) {
+            val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
+            val s = setup(CoapClientConfig(security = Toy, qBlock = qBlock))
+            val uri = s.peer.uri("/counter")
+            val observation = s.client.observe(uri) { if (type == CoapMessageType.NON) nonConfirmable() }
+            val pending = async { runCatching { observation.toList() } }
+            val registration = s.peer.receive()
+            assertEquals(0L, registration.options.observe, "$type")
+            assertNotNull(registration.options.qBlock2, "$type: it asks for Q-Block2 bodies (RFC 9177 §4.5)")
+
+            s.peer.send(forged401(registration))
+
+            assertUnverified(pending.await().exceptionOrNull())
+            s.peer.assertNoRequest()
+        }
+    }
+
+    @Test
+    fun adr0008UnverifiedErrorsNeitherEndNorReachAnEstablishedQBlockObservation() = runTest {
+        val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
+        val s = setup(CoapClientConfig(security = Toy, blockSize = 16, qBlock = qBlock))
+        val pending = async { s.client.observe(s.peer.uri("/counter")) { nonConfirmable() }.take(2).toList() }
+        val registration = s.peer.receive()
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "first") {
+            options { observe(1); qBlock2(BlockOption(0, false, 0)); etag(byteArrayOf(1)); oscore(ByteArray(0)) }
+        })
+
+        // On the observation's own token, where a verified error would end it (RFC 7641 §3.2).
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "") { code = CoapCode.SERVICE_UNAVAILABLE })
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "") { code = CoapCode.NOT_FOUND })
+        // A body of two blocks whose second one is lost: the client asks for it on a token of its own (§4.4).
+        val head = ByteArray(16) { it.toByte() }
+        val tail = "tail".encodeToByteArray()
+        s.peer.send(s.peer.response(registration, CoapMessageType.NON, "") {
+            options {
+                observe(2)
+                qBlock2(BlockOption(0, true, 0))
+                etag(byteArrayOf(2))
+                size2(20)
+                oscore(ByteArray(0))
+            }
+            payload = head
+        })
+        val missing = s.peer.receive()
+        assertEquals(1L, missing.options.qBlock2?.number, "a request for the missing block")
+        assertTrue(!missing.token.contentEquals(registration.token))
+        s.peer.send(forged401(missing))
+        s.peer.send(s.peer.response(missing, CoapMessageType.NON, "") { code = CoapCode.NOT_FOUND })
+
+        s.peer.send(s.peer.response(missing, CoapMessageType.NON, "") {
+            options { qBlock2(BlockOption(1, false, 0)); etag(byteArrayOf(2)); size2(20); oscore(ByteArray(0)) }
+            payload = tail
+        })
+
+        val bodies = pending.await().map { it.payload.toList() }
+        assertEquals(listOf("first".encodeToByteArray().toList(), (head + tail).toList()), bodies)
+        val requests = s.fixture.sentBy(s.client.endpoint).filter { it.isRequest }
+        assertTrue(requests.none { it.options.echo != null }, "no request took the forged Echo value")
+    }
+
+    /** As the server side of [Toy]: a request with the OSCORE option is protected, and so is every answer to it. */
+    private object ToyServer : ServerMessageSecurity, SecurityIdentity {
+        override val description: String get() = "toy"
+
+        override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
+            if (request.options.oscore == null) return null
+            return object : UnprotectedRequest {
+                override val message = request.toBuilder().options { remove(CoapOptions.OSCORE.number) }.build()
+                override val identity: SecurityIdentity = ToyServer
+
+                override suspend fun protectResponse(response: CoapMessage): CoapMessage =
+                    response.toBuilder().options { oscore(ByteArray(0)) }.build()
+            }
+        }
+    }
+
+    @Test
+    fun rfc8323Section7_4AnUnverifiedAnswerToARegistrationIsFollowedByADeregistration() = runTest {
+        val fixture = ReliableFixture(this)
+        lateinit var counter: ObservableResource
+        fixture.server(config = CoapServerConfig(security = ToyServer)) {
+            counter = resource("counter") {
+                observable()
+                get { CoapResponse.content("tick") }
+            }
+        }
+        // A party on the path, such as a WebSocket proxy, answers the registration before the server's protected
+        // 2.05 with Observe, which therefore never reaches the client: the server has the client as an observer.
+        var forged = false
+        val onPath = object : MessageInterceptor {
+            override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage {
+                if (forged || message.options.observe == null || !message.isResponse) return message
+                forged = true
+                return message.toBuilder().apply {
+                    code = CoapCode.UNAUTHORIZED
+                    payload = ByteArray(0)
+                    options {
+                        remove(CoapOptions.OSCORE.number)
+                        remove(CoapOptions.OBSERVE.number)
+                        remove(CoapOptions.CONTENT_FORMAT.number)
+                        echo(echo)
+                    }
+                }.build()
+            }
+        }
+        val endpointConfig = fixture.endpointConfig(interceptors = listOf(onPath))
+        val client = fixture.client(CoapClientConfig(security = Toy), endpointConfig)
+
+        val failure = runCatching { client.observe(fixture.uri("/counter")).toList() }.exceptionOrNull()
+
+        assertUnverified(failure)
+        runCurrent()
+        // There is no Reset on a connection: the client deregisters (Observe 1, on the token), protected.
+        val deregistration = fixture.sent(CoapCode.GET, byServer = false).last()
+        assertEquals(1L, deregistration.options.observe)
+        assertNotNull(deregistration.options.oscore)
+        assertEquals(0, counter.observerCount, "the server forgot the observer")
     }
 }
