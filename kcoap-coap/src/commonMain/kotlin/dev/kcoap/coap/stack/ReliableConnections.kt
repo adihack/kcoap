@@ -218,17 +218,13 @@ internal class ReliableConnections(
             return withTimeout(config.reliable.connectTimeout) {
                 val connection = connector.connect(peer)
                 check(connection.remote == peer) { "The connector opened a connection to ${connection.remote}, not $peer" }
-                // Registered and started as one step, so no caller ever waits on a driver that never runs.
                 val opened = withContext(NonCancellable) {
                     val created = ConnectionDriver(connection, isInitiator = true, this@ReliableConnections, scope, config)
-                    val registered = lock.withLock { (!isClosed).also { if (it) drivers[peer] = created } }
-                    if (!registered) {
+                    if (registerAndStart(created) { null } != null) {
                         connection.close()
                         throw endpoint.closedError()
                     }
-                    onEvent(EndpointEvent.ConnectionOpened(peer, isInitiator = true))
                     log.debug { "Connected to $peer" }
-                    created.start()
                     created
                 }
                 driver = opened
@@ -266,16 +262,12 @@ internal class ReliableConnections(
             return
         }
         val driver = ConnectionDriver(connection, isInitiator = false, this, scope, config)
-        val refusal = lock.withLock {
+        val refusal = registerAndStart(driver) {
             when {
-                isClosed -> Refusal.CLOSED
                 peer in drivers -> Refusal.DUPLICATE
                 // RFC 7252 §11.3 for connections: established ones cannot pile up either.
                 drivers.size >= config.reliable.maxConnections -> Refusal.FULL
-                else -> {
-                    drivers[peer] = driver
-                    null
-                }
+                else -> null
             }
         }
         if (refusal != null) {
@@ -292,11 +284,25 @@ internal class ReliableConnections(
         // Established or closed, the connection no longer waits for its CSM.
         driver.established.invokeOnCompletion { pendingAccepted.release() }
         log.debug { "Accepted a connection from $peer" }
-        onEvent(EndpointEvent.ConnectionOpened(peer, isInitiator = false))
-        driver.start()
     }
 
-    /** Why [accepted] closes a connection at once. */
+    /**
+     * Registers [driver] for its peer and starts it, in one step under [lock], unless the endpoint is closed
+     * or [refusal] names a reason, which is returned. [close] therefore finds every driver it can see
+     * started, and shuts it down; a driver it closed before its start would have failed that start with
+     * "Already started" and never closed its connection, which only the started writer does.
+     */
+    private suspend fun registerAndStart(driver: ConnectionDriver, refusal: () -> Refusal?): Refusal? = lock.withLock {
+        val reason = if (isClosed) Refusal.CLOSED else refusal()
+        if (reason == null) {
+            drivers[driver.peer] = driver
+            onEvent(EndpointEvent.ConnectionOpened(driver.peer, driver.isInitiator))
+            driver.start()
+        }
+        reason
+    }
+
+    /** Why a new connection is closed at once instead of registered. */
     private enum class Refusal(val reason: String) {
         CLOSED("the endpoint is closed"),
         DUPLICATE("a second connection from the same address"),
