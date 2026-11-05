@@ -548,17 +548,30 @@ public class QBlockServerConfig(
     copy meanwhile is a duplicate and never starts a new partial body; a copy of the last (or completing)
     block gets the final response again, from the cached Q-Block2 body (same ETag) when there was one.
   - Bounds: a new upload beyond `maxPartialBodies` or `maxBodiesPerPeer` gets 5.03 with Max-Age =
-    NON_RECEIVE_TIMEOUT; a body beyond `maxCachedBodies` (or the peer's share) evicts the least recently
-    used one. One sweeper coroutine expires the caches at their earliest expiry, so the state is empty
-    NON_PARTIAL_TIMEOUT after the last use (`QBlockServerTest.rfc9177Section7_2NothingIsLeftAfterNonPartialTimeout`).
-  - Amplification: `mustVerifyAddress` is called with the blocks about to go for each burst (the first set
-    on the request, a Continue's set, a missing-block answer, and each later set on the timer, which stops
-    the body when the address is no longer verified). A challenged new POST or PATCH body keeps its response
-    for the repeat, which `QBlockServer.serve` shapes again.
+    NON_RECEIVE_TIMEOUT; an upload holds only the blocks that arrived (`QBlock1Receiver` joins them on
+    completion), never a buffer of the Size1 it claims; a block that starts at or beyond Size1 gets 4.00
+    before any state exists (row 39). A body beyond `maxCachedBodies` (or the peer's share) evicts the least
+    recently used one that is done sending; one that leaves the cache while it still sends finishes its sets
+    outside it (as many as the cache holds). A GET or FETCH body of one block is not cached. One sweeper
+    coroutine expires the caches at their earliest expiry, so the state is empty NON_PARTIAL_TIMEOUT after
+    the last use (`QBlockServerTest.rfc9177Section7_2NothingIsLeftAfterNonPartialTimeout`).
+  - Requests carrying Q-Block2 of methods other than GET and FETCH: only one without payload continues a
+    cached body (a Continue, missing blocks, or `0/M=1` with the body's Request-Tag); one with a payload is
+    a new request whose handler runs (§4.1: a client offers Q-Block2 for the response that way), and gets
+    4.00 next to a Q-Block2 block above 0. The Figure 12 match without Request-Tag applies only to requests
+    without payload. A request body of one message beyond `maxBodySize` gets 4.13 with Size1, Q-Block2 or not.
+  - Amplification: `mustVerifyAddress` is called for each burst (the first set on the request, a Continue's
+    set, a missing-block answer, and each later set on the timer) with everything sent in answer to that
+    request so far plus the burst, a separate Confirmable block counted with its MAX_RETRANSMIT
+    retransmissions (RFC 9175 §2.4 item 3: the total of the responses). Timer sets beyond the factor stop
+    the body; a Continue is a request of its own, checked for its set. A challenged new POST or PATCH body
+    keeps its response for the repeat, which `QBlockServer.serve` shapes again.
   - Until QB-6 an Observe registration carrying Q-Block2 is served without adding an observer (RFC 7641 §4.1).
+  - The start-up WARN of RFC 9177 §11 also appears, worded for requests without OSCORE, on a server with
+    `security`, since such a server answers those unprotected and lets them use Q-Block.
   - The blocks of a burst are handled concurrently, so on a multi-threaded dispatcher the request that
     completes an upload, or shows a gap, need not be the last to arrive; §4.3 allows any token of the body.
-  - Tests: `KT/QBlockServerTest.kt` (41, a scripted client, `KT/QBlockPeer.kt`, including the refusal half of
+  - Tests: `KT/QBlockServerTest.kt` (57, a scripted client, `KT/QBlockPeer.kt`, including the refusal half of
     Figure 12), `KT/QBlockReliableTest.kt` (4, Custody), `KJ/LibcoapClientAgainstKcoapQBlockTest.kt` (13), with
     `KJ/DroppingTransport.kt` and `Libcoap.wire`. libcoap needed no leniency; its one deviation met here (a
     Continue after an upload repeating `Q-Block1 0/M` without payload) is pinned as an `upstream…` test.

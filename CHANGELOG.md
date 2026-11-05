@@ -71,11 +71,20 @@ adds its entry and migration note below.
   NON_RECEIVE_TIMEOUT ladder, Confirmable ones block by block, and responses to requests carrying Q-Block1
   or Q-Block2 go out as Q-Block2 bodies: sets of MAX_PAYLOADS blocks NON_TIMEOUT_RANDOM apart, Continues and
   requests of missing blocks served from a cache, every block with an ETag of its own body (which replaces
-  the resource's ETag) and Size2. On TCP and WebSockets blocks go back to back and the requests in between
-  count as answered, so a Ping with Custody is not held up. The first burst to an address not yet verified
-  gets a 4.01 with Echo under the default `AmplificationPolicy.Q_BLOCK_BURSTS`. The server warns at start
-  when Q-Block is on without `security` (RFC 9177 §11), and serves an Observe registration that carries
-  Q-Block2 without adding an observer until QB-6. libcoap's `coap-client -L 7` completes uploads and
+  the resource's ETag) and Size2. A request of another method than GET or FETCH that carries a payload is
+  always a new request whose handler runs, also with Q-Block2 `0/M=1`; only payload-less Continues, requests
+  of missing blocks, and `0/M=1` with the cached body's Request-Tag are served from the cache. A body that
+  gives way in the cache while it still sends finishes its sets, bodies done sending give way first, and a
+  GET or FETCH body of one block is not cached. An upload holds only the blocks that arrived, whatever its
+  Size1 claims, and any request body of one message beyond `maxBodySize` gets 4.13, Q-Block2 or not. On TCP
+  and WebSockets blocks go back to back and the requests in between count as answered, so a Ping with
+  Custody is not held up. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`, everything sent in answer
+  to one request to an address not yet verified counts against the factor, later sets and the
+  retransmissions of a Confirmable block included: a first burst beyond it gets a 4.01 with Echo instead,
+  later sets beyond it stop, and a Continue is a request of its own. The server warns at start when Q-Block
+  is on (RFC 9177 §11): without `security`, or for the requests without OSCORE that a server with `security`
+  still answers unprotected. It serves an Observe registration that carries Q-Block2 without adding an
+  observer until QB-6. libcoap's `coap-client -L 7` completes uploads and
   downloads against it over UDP, TCP and WebSockets. New public API besides the configuration:
   `EndpointEvent.QBlockRecovery` (missing blocks asked for, by either side), `EndpointEvent.QBlockFallback`
   (for the client, QB-4), `EndpointEvent.PartialBodyDropped`, and the `EndpointEvent.LimitReached.Limit`

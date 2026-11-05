@@ -171,7 +171,9 @@ a 4.01 with an 8-byte Echo value from the platform CSPRNG (never the injectable 
 piggybacked or Non-confirmable so that nothing is retransmitted, and reports `LimitReached` with
 `AMPLIFICATION_FACTOR`. The value is bound to the address it went to; a request that returns it verifies
 the address for `verifiedAddressLifetime` (1 hour from the verification, not extended by use).
-`AmplificationPolicy` chooses what is checked: Q-Block2 bursts (the default), every response
+`AmplificationPolicy` chooses what is checked: Q-Block2 bursts (the default; everything sent in answer to
+one request counts, each later set and every retransmission of a Confirmable block, and timer-driven sets
+beyond the factor stop until a Continue, a request of its own, asks), every response
 (`ALL_RESPONSES`, which also challenges every Observe registration, since its notifications go on, sends
 every separate response to an unverified address Non-confirmable, since retransmissions would multiply
 it, and keeps the response of each POST or PATCH for the repeat of that request so it does not run
