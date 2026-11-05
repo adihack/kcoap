@@ -23,9 +23,10 @@ import kotlinx.coroutines.withContext
  * In [QBlockMode.PROBE] the first request to a server waits for one Confirmable `GET` of
  * [QBlockClientConfig.probePath] with Q-Block2 0/0/16 (block 0 of 16 bytes, nothing more), which §4.1 requires
  * to be Confirmable and which is the probe libcoap sends. Concurrent requests to the same server share it.
- * - An answer carrying Q-Block1 or Q-Block2, and no Block option next to it, means [Capability.SUPPORTED].
- * - Any other answer means [Capability.UNSUPPORTED]: 4.02 (Bad Option, §4.1), a Reset, a Block2 answer, or
- *   anything else.
+ * - A 2.xx answer carrying Q-Block1 or Q-Block2, and no Block option next to it, means
+ *   [Capability.SUPPORTED].
+ * - Any other answer means [Capability.UNSUPPORTED]: 4.02 (Bad Option, §4.1), even one that repeats the
+ *   Q-Block2 option it rejects, as libcoap's does; a Reset; a Block2 answer; or anything else.
  * - No answer leaves it [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
  *   min(1 minute, [QBlockClientConfig.capabilityLifetime]).
  *
@@ -159,6 +160,8 @@ internal class QBlockSupport(
         val options = response.options
         val hasQBlock = options.qBlock1 != null || options.qBlock2 != null
         return when {
+            // libcoap without Q-Block answers 4.02 and repeats the option it did not recognize.
+            !response.code.isSuccess -> Capability.UNSUPPORTED to "The Q-Block probe was answered ${response.code}"
             !hasQBlock -> Capability.UNSUPPORTED to "The Q-Block probe was answered ${response.code} without Q-Block"
             QBlockCheck.response(response, allowsBert = true) != null ->
                 Capability.UNSUPPORTED to "The Q-Block probe's answer mixes Q-Block and Block options"

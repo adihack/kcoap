@@ -211,6 +211,30 @@ class QBlockSupportTest {
     }
 
     @Test
+    fun rfc9177Section4_1AProbeAnswered402WithTheRejectedOptionMeansNoSupport() = runTest {
+        // libcoap 4.3.5 without -L repeats the Q-Block2 option it rejects in its 4.02.
+        val setup = scripted()
+        setup.server.script = { from, request ->
+            val probe = request.options.path == "/.well-known/core"
+            if (probe) {
+                send(from, CoapMessage.response(request, CoapCode.BAD_OPTION) {
+                    type = CoapMessageType.ACK
+                    messageId = request.messageId
+                    options { qBlock2(BlockOption(0, false, 0)) }
+                    payload("Bad Option")
+                })
+            }
+            probe
+        }
+        setup.server.resources["/small"] = body(40)
+
+        assertContentEquals(body(40), setup.client.get(setup.server.uri("/small")).payload)
+
+        assertEquals(Capability.UNSUPPORTED, setup.client.known(setup.server.address))
+        assertTrue(setup.requests().filter { it.options.path == "/small" }.none { it.hasQBlock() })
+    }
+
+    @Test
     fun rfc9177Section4_1AProbeAnswerMixingBlockAndQBlockMeansNoSupport() = runTest {
         val setup = scripted()
         setup.server.script = { from, request ->
