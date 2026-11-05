@@ -251,8 +251,9 @@ where RFC 7252 and RFC 8323 differ:
   reason, instead of `IllegalArgumentException`: a `coap` request or ping on an endpoint without a datagram
   transport, or a request or ping to an RFC 8323 scheme that no connector serves (a peer whose connection a
   listener accepted is still reached on that connection). The message names the scheme. *Migration:* catch
-  `CoapException` and check `reason`, or configure the transport; a `ping` of such a peer throws instead of
-  returning.
+  `CoapException` and check `reason`, or configure the transport. A `ping` of such a peer now throws
+  `CoapException(TRANSPORT_UNAVAILABLE)` where it threw `IllegalArgumentException`; other connection failures
+  still make it return false.
 - **`EndpointResolver.IpLiterals` is renamed `EndpointResolver.Default`**, which it is, and still takes IP
   literals for every scheme and passes host names to the connectors of RFC 8323 schemes. *Migration:* rename
   the reference; the default `CoapClientConfig` needs nothing.

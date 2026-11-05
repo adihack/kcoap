@@ -629,7 +629,9 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > kcoap-testkit's `InMemoryLink`, with `InMemorySessions` so that a datagram link can be lost as an ended DTLS
 > session, while `ReliableFixture` keeps what needs kcoap-coap (CoAP framing, `CoapClient` and `CoapServer`).
 > The internal endpoint API the tests use (`openExchange`, `leaseBody`, `limits(peer)`) stays, routing to the
-> links. B2 and B3 are unchanged by it.
+> links. B2 and B3 are unchanged by it. Ownership deviation: for the OSCORE over TCP and WebSocket interop, B1
+> adds jvmTest dependencies (the Ktor WebSocket transports and `ktor-server-cio`) to
+> `kcoap-oscore/build.gradle.kts`, which the table above gives to B2; B2 and A3 rebase over those lines.
 
 **WP-B2: Split out kcoap-coap-message**
 

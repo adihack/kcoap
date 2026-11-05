@@ -36,8 +36,17 @@ making it an interface, would duplicate the exchange layer.
   observation sends its next notification then, and a request must not take it for an acknowledgement.
 - The datagram link is one driver per transport (`DatagramLink`, with its own lock, receive and timer loops)
   and hands out an equal `PeerLink` per peer; `ConnectionLink` wraps each `ConnectionDriver`.
-- `DatagramLink` owns `BodyLease`; a lease towards a connection peer is granted at once without opening the
-  connection. The Q-Block drivers take their body mode from the link's capabilities.
+- `DatagramLink` owns `BodyLease`; a lease towards a connection peer is `ConnectionLink.lease`, granted at
+  once without opening the connection, which both the endpoint and `ConnectionLink.leaseBody` hand out. The
+  Q-Block drivers take their body mode from the link's capabilities.
+- Deviation from the Q-Block amendment to B1 (docs/plan-qblock-and-platforms.md), which asked to move
+  `ResponseMode` and the inbox behind `PeerLink` as well: they stay in the exchange layer (`ClientExchange`,
+  `CoapEndpoint.openExchange`). They match responses to a token, which is the same on both links, and a Q-Block
+  body on a connection uses them too (`ExchangeInbox.forReliableBody`); what differs per link is only how a
+  message that was sent ends, which reaches the exchange as a `DeliveryOutcome` from the datagram link alone.
+- File ownership: for the OSCORE over TCP and WebSocket interop (`ReliableOscoreInteropTest`), B1 adds three
+  jvmTest dependencies to `kcoap-oscore/build.gradle.kts` (`kcoap-transport-ktor-websocket`,
+  `kcoap-transport-ktor-websocket-server`, `ktor-server-cio`), a file the ownership table gives to B2.
 - The notification policy is `NotificationPolicy` (`Interspersed` on datagram links, `Untyped` on
   connections), which each observation gets from its registration's link.
 - The endpoint picks the link in one exhaustive `when` on `Endpoint`; a peer without a transport fails with
