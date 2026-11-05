@@ -218,6 +218,18 @@ adds its entry and migration note below.
   macOS and the iOS simulator through the Darwin engine), and in headless Chrome against a JVM listener,
   a new CI job (`scripts/test browser`). Each checks that `coap` is requested and read back from the
   negotiated protocol (RFC 8323 §4.1).
+- Android from API level 26 (Android 8.0) on, through the jvm artifacts (PL-1). `checkAndroidApi`, part of
+  `check` and `scripts/test unit`, runs animal-sniffer over every jvm jar against the API 26 signature and
+  found nothing in kcoap's code. `checkAndroidApiDependencies`, also part of both, runs it over the
+  libraries behind them and fails on any use that `gradle/android-api-dependencies.baseline` does not
+  list; the listed ones are triaged in `samples/android-consumer`. That sample, an app at minSdk 26 that
+  takes kcoap from Maven, is built by a new CI job with AGP, R8 on its release variants, lint and its unit
+  tests. Apps need Kotlin 2.3 or newer and Java 17 bytecode, but no R8 rules of their own and no core
+  library desugaring.
+- `kcoap-crypto-default`'s jvm jar carries R8 and ProGuard rules (`META-INF/proguard`), which AGP applies
+  on its own: without them R8 stops on missing classes when it shrinks an app that does not use
+  `kcoap-crypto-bc`, the Bouncy Castle classes that cryptography-kotlin's JDK provider names and loads
+  only when present (PL-1).
 
 ### Changed (breaking)
 
@@ -467,6 +479,9 @@ Build governance (WP-C1):
 - EDHOC: a crypto backend that lacks a curve, KEM or algorithm no longer fails the handshake as if the peer
   had sent an invalid key or as "Processing message_2 failed"; the diagnostic names what is missing
   ("P_256 is not available in this crypto backend") (WP-A2).
+- The JVM and Android `SequenceNumberStore` recipe in `kcoap-oscore/README.md` reads its file with
+  `Files.readAllBytes`: it called `Files.readString`, which Android has only from API level 33, so on
+  API 26 to 32 every OSCORE context derived with it failed (PL-1).
 
 ### Security
 

@@ -58,6 +58,17 @@ values.
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
 | `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |
+| `ConsumerRulesTest` (JVM) | the jar's R8 rules cover every Bouncy Castle class cryptography-kotlin's JDK provider refers to (below) |
 
-All but the last run on every target: JVM, Linux native, Apple native (on macOS), and Node.js as
+All but the JVM ones run on every target: JVM, Linux native, Apple native (on macOS), and Node.js as
 JavaScript and as Wasm.
+
+## Android and R8
+
+The jvm jar carries R8 and ProGuard rules (`META-INF/proguard/kcoap-crypto-default.pro`), which the
+Android Gradle plugin applies to an app's release build without any rule of the app's own.
+cryptography-kotlin's JDK provider refers to Bouncy Castle and uses it only when `Class.forName` finds it
+at runtime; the rules tell R8 that the classes may be missing, which they are in an app that does not use
+`kcoap-crypto-bc`. Without them R8 fails such an app's release build. The classical flavor of
+[samples/android-consumer](../samples/android-consumer/README.md) shrinks with them in CI.
+
