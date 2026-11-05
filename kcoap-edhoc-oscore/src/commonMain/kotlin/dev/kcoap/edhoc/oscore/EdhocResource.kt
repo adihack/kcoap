@@ -21,5 +21,6 @@ import dev.kcoap.coap.server.ResourceAttributes
 public class EdhocResource(private val edhoc: EdhocServer, name: String = "edhoc") : CoapResource(name) {
     override val attributes: ResourceAttributes = ResourceAttributes(resourceTypes = listOf(EdhocOverCoap.RESOURCE_TYPE))
 
-    override suspend fun handlePost(context: RequestContext): CoapResponse = CoapResponse.of(edhoc.handle(context.request))
+    override suspend fun handlePost(context: RequestContext): CoapResponse =
+        CoapResponse.of(edhoc.handle(context.request, context.peer))
 }

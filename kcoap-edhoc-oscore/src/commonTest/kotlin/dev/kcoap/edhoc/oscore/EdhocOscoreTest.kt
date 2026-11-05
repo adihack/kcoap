@@ -51,7 +51,7 @@ class EdhocOscoreTest {
         val server = EdhocServer(peers.responderConfig(), crypto, contexts, listener = EdhocSessionListener { session, context ->
             established += "${session.role} ${context.recipientId.toHex()}"
         })
-        val handshake = EdhocClientHandshake(peers.initiatorConfig(), crypto) { server.handle(it) }
+        val handshake = EdhocClientHandshake(peers.initiatorConfig(), crypto) { server.handle(it, peer) }
         val session = handshake.run()
 
         val clientContext = session.oscore
@@ -73,7 +73,7 @@ class EdhocOscoreTest {
     fun message4WhenTheProfileUsesIt() = runTest {
         val peers = Peers.create(crypto)
         val server = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository(), sendMessage4 = true)
-        val session = EdhocClientHandshake(peers.initiatorConfig(), crypto) { server.handle(it) }.run(expectMessage4 = true)
+        val session = EdhocClientHandshake(peers.initiatorConfig(), crypto) { server.handle(it, peer) }.run(expectMessage4 = true)
         assertNotNull(session.oscore)
     }
 
@@ -86,7 +86,7 @@ class EdhocOscoreTest {
         val requests = mutableListOf<CoapMessage>()
         val handshake = EdhocClientHandshake(peers.initiatorConfig(listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_1)), crypto) {
             requests += it
-            server.handle(it)
+            server.handle(it, peer)
         }
         val session = handshake.run()
         assertEquals(CipherSuite.SUITE_1, session.edhoc.cipherSuite)
@@ -103,7 +103,7 @@ class EdhocOscoreTest {
         var edhocRequests = 0
         val (session, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) {
             edhocRequests++
-            edhoc.handle(it)
+            edhoc.handle(it, peer)
         }.runCombined()
         assertEquals(1, edhocRequests, "only message_1 goes to the EDHOC resource")
         assertTrue(security.isMessage3Pending())
@@ -153,7 +153,7 @@ class EdhocOscoreTest {
         val contexts = InMemoryContextRepository()
         val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts)
         val server = CombinedRequestServer(edhoc, OscoreServer(contexts))
-        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it) }.runCombined()
+        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it, peer) }.runCombined()
         val good = security.protectRequest(request("x"), peer)!!.message
 
         fun mutate(block: CoapMessage.Builder.() -> Unit) = good.toBuilder().apply(block).build()
@@ -186,7 +186,7 @@ class EdhocOscoreTest {
         val peers = Peers.create(crypto)
         val contexts = InMemoryContextRepository()
         val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts, sendMessage4 = true)
-        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it) }.runCombined()
+        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it, peer) }.runCombined()
         val combined = security.protectRequest(request("x"), peer)!!.message
         val error = assertFailsWith<MessageSecurityException> { CombinedRequestServer(edhoc, OscoreServer(contexts)).unprotectRequest(combined, peer) }
         assertEquals(ContentFormat.EDHOC_CBOR_SEQ, error.contentFormat)
@@ -196,7 +196,7 @@ class EdhocOscoreTest {
     fun laterBlocksDoNotCarryMessage3() = runTest {
         val peers = Peers.create(crypto)
         val edhoc = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository())
-        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it) }.runCombined()
+        val (_, security) = EdhocClientHandshake(peers.initiatorConfig(), crypto) { edhoc.handle(it, peer) }.runCombined()
         val secondBlock = request("big").toBuilder().options { block1(dev.kcoap.coap.BlockOption(1, true, 2)) }.build()
         assertFalse(security.protectRequest(secondBlock, peer)!!.message.options.edhoc, "RFC 9668 §3.2.2 step 2.1")
         assertTrue(security.isMessage3Pending())
@@ -211,12 +211,12 @@ class EdhocOscoreTest {
             this.payload = payload
         }
         for (payload in listOf(ByteArray(0), byteArrayOf(0xF5.toByte()), "1800".hexToBytes(), "f6".hexToBytes(), "41".hexToBytes(), "0a".hexToBytes())) {
-            val response = server.handle(post(payload))
+            val response = server.handle(post(payload), peer)
             assertEquals(CoapCode.BAD_REQUEST, response.code, payload.toHex())
             assertEquals(ContentFormat.EDHOC_CBOR_SEQ, response.options.contentFormat)
         }
         // A broken message_1 is an EDHOC error too.
-        assertEquals(CoapCode.BAD_REQUEST, server.handle(EdhocOverCoap.message1Request("0001".hexToBytes())).code)
+        assertEquals(CoapCode.BAD_REQUEST, server.handle(EdhocOverCoap.message1Request("0001".hexToBytes()), peer).code)
     }
 
     @Test
@@ -224,30 +224,31 @@ class EdhocOscoreTest {
         val peers = Peers.create(crypto)
         val server = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository(), maxPendingSessions = 1)
         val initiator = EdhocInitiator(peers.initiatorConfig(), crypto)
-        val message2 = server.handle(EdhocOverCoap.message1Request(initiator.createMessage1())).payload
+        val message2 = server.handle(EdhocOverCoap.message1Request(initiator.createMessage1()), peer).payload
         initiator.processMessage2(message2)
         initiator.createMessage3() // not sent; it gives the client its session and so C_R
         val responderId = initiator.peerConnectionIdentifier()
         assertEquals(1, server.pendingSessions())
 
         // The client sends an error instead of message_3: the session ends without a reply error.
-        val abort = server.handle(EdhocOverCoap.continuationRequest(responderId, EdhocError.unspecified("bye").encode()))
+        val bye = EdhocError.unspecified("bye").encode()
+        val abort = server.handle(EdhocOverCoap.continuationRequest(responderId, bye), peer)
         assertEquals(CoapCode.CHANGED, abort.code)
         assertEquals(0, server.pendingSessions())
-        val unknown = server.handle(EdhocOverCoap.continuationRequest(responderId, byteArrayOf(0x40)))
+        val unknown = server.handle(EdhocOverCoap.continuationRequest(responderId, byteArrayOf(0x40)), peer)
         assertEquals(CoapCode.BAD_REQUEST, unknown.code)
 
-        // Beyond maxPendingSessions the oldest session is dropped.
+        // Beyond maxPendingSessions a new message_1 is refused; the pending session is kept.
         val first = EdhocInitiator(peers.initiatorConfig(), crypto)
-        first.processMessage2(server.handle(EdhocOverCoap.message1Request(first.createMessage1())).payload)
+        first.processMessage2(server.handle(EdhocOverCoap.message1Request(first.createMessage1()), peer).payload)
         val second = EdhocInitiator(peers.initiatorConfig(), crypto)
-        second.processMessage2(server.handle(EdhocOverCoap.message1Request(second.createMessage1())).payload)
+        val refused = server.handle(EdhocOverCoap.message1Request(second.createMessage1()), peer)
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, refused.code, "RFC 9528 Appendix A.2.3: a server error")
+        assertEquals(ContentFormat.EDHOC_CBOR_SEQ, refused.options.contentFormat)
+        assertEquals("Too many pending EDHOC sessions", EdhocError.decode(refused.payload).diagnostic)
         assertEquals(1, server.pendingSessions())
         val firstMessage3 = first.createMessage3().bytes
-        val dropped = server.handle(EdhocOverCoap.continuationRequest(first.peerConnectionIdentifier(), firstMessage3))
-        assertEquals(CoapCode.BAD_REQUEST, dropped.code)
-        val secondMessage3 = second.createMessage3().bytes
-        val kept = server.handle(EdhocOverCoap.continuationRequest(second.peerConnectionIdentifier(), secondMessage3))
+        val kept = server.handle(EdhocOverCoap.continuationRequest(first.peerConnectionIdentifier(), firstMessage3), peer)
         assertEquals(CoapCode.CHANGED, kept.code)
         assertFailsWith<IllegalArgumentException> { EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository(), maxPendingSessions = 0) }
     }
@@ -265,7 +266,7 @@ class EdhocOscoreTest {
         val server = EdhocServer(peers.responderConfig(), crypto, InMemoryContextRepository())
         var calls = 0
         val failing = EdhocClientHandshake(peers.initiatorConfig(), crypto) { request ->
-            if (++calls == 2) EdhocOverCoap.errorResponse(request, EdhocError.unspecified("no").encode()) else server.handle(request)
+            if (++calls == 2) EdhocOverCoap.errorResponse(request, EdhocError.unspecified("no").encode()) else server.handle(request, peer)
         }
         assertIs<EdhocPeerErrorException>(assertFailsWith<EdhocPeerErrorException> { failing.run() })
 
