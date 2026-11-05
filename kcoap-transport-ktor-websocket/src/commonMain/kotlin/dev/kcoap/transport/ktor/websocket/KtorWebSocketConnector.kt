@@ -20,8 +20,10 @@ import io.ktor.websocket.close
  * Opens WebSockets for `coap+ws` and `coaps+ws` (RFC 8323 §4, §8.3, §8.4) with the ktor client, so the
  * same code runs wherever a ktor engine does. The default client runs on CIO on the JVM and Linux, on
  * Darwin (URLSession, which brings up the cellular radio and honours VPN On Demand) on Apple, and on the
- * runtime's own WebSocket in JS and Wasm. The opening handshake asks for the subprotocol `coap` at
- * `/.well-known/coap` (§4.1) and fails unless the server selects it; `wss` runs on the engine's TLS.
+ * runtime's own WebSocket in JS and Wasm. It names that engine, so another ktor engine the application
+ * links does not replace it; pass an [HttpClient] for a different one. The opening handshake asks for
+ * the subprotocol `coap` at `/.well-known/coap` (§4.1) and fails unless the server selects it; `wss`
+ * runs on the engine's TLS.
  *
  * ```
  * val client = CoapClient(listOf(KtorWebSocketConnector()), scope)
@@ -37,7 +39,7 @@ public class KtorWebSocketConnector private constructor(
     loggerFactory: LoggerFactory,
 ) : Connector {
     /**
-     * A connector on a client of its own, with the platform's default ktor engine and WebSocket pings
+     * A connector on a client of its own, on the platform's engine named above and with WebSocket pings
      * off (RFC 8323 §4.4); [close] closes it.
      */
     public constructor(loggerFactory: LoggerFactory = LoggerFactory.Global) : this(defaultClient(), true, loggerFactory)
@@ -82,10 +84,4 @@ public class KtorWebSocketConnector private constructor(
     }
 
     override fun toString(): String = "KtorWebSocketConnector"
-
-    private companion object {
-        fun defaultClient(): HttpClient = HttpClient {
-            install(WebSockets)
-        }
-    }
 }

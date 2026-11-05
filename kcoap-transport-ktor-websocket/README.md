@@ -1,10 +1,14 @@
 # kcoap-transport-ktor-websocket
 
-The WebSocket client transport for `coap+ws` and `coaps+ws` (RFC 8323 §4) on the ktor client. It is
-common code only and builds for every kcoap target (the UNIVERSAL tier), browsers and Node.js included.
-WebSockets are the one transport a browser allows, so this is how a browser reaches CoAP.
+The WebSocket client transport for `coap+ws` and `coaps+ws` (RFC 8323 §4) on the ktor client. It
+builds for every kcoap target (the UNIVERSAL tier), browsers and Node.js included, and is common code
+except for one line per platform that names the default client's engine. WebSockets are the one
+transport a browser allows, so this is how a browser reaches CoAP.
 
-The default client (`KtorWebSocketConnector()`) runs on the engine this module brings for the platform:
+The default client (`KtorWebSocketConnector()`) runs on the engine this module brings for the platform.
+It names that engine instead of leaving the choice to ktor's lookup, which on native takes whichever
+linked engine registered first: an iOS app that also links ktor-client-cio for its own HTTP calls still
+gets URLSession here.
 
 | Platform | Engine | Why |
 |---|---|---|
@@ -44,7 +48,11 @@ client never depends on ktor-server.
 - `NativeWebSocketLoopbackTest` (native): the default client against the listener on loopback sockets,
   and refused by a server that selects no subprotocol. On macOS and the iOS simulator that is the Darwin
   engine, checked in CI's macOS job (`scripts/test apple`); on Linux it is CIO.
-- `DefaultEngineTest`: the default client's engine on the JVM, Apple and Linux.
+- `DefaultEngineTest`: the default client's engine on the JVM, Apple (in a test binary that links
+  ktor-client-cio too), Linux, and on `js` and `wasmJs` (`webTest`, on Node.js), where an application's
+  `HttpClient()` also finds the Js engine.
+- `KtorWebSocketConnectorTest`: `KtorWebSocketConnector()` builds its client and refuses non-WebSocket
+  endpoints, on every target.
 - `JsWebSocketSubprotocolTest` (js, on Node.js): an npm `ws` server whose `handleProtocols` records the
   offered subprotocols sees `coap` requested alone, and the connector reads `coap` back from the
   negotiated protocol and exchanges a message; a server that selects none is refused.

@@ -206,8 +206,10 @@ WebSocket transports (WP-W1):
 - **The WebSocket client runs on the Darwin engine on iOS and macOS**: `KtorWebSocketConnector()`'s
   default client uses URLSession, which brings up the cellular radio and honours VPN On Demand; CIO's BSD
   sockets did neither. `kcoap-transport-ktor-websocket` depends on `ktor-client-darwin` on Apple, and on
-  `ktor-client-cio` only on the JVM and Linux. *Migration:* none for the connector; an Apple app that
-  used ktor-client-cio through this module adds it itself, and passes its own `HttpClient` to keep CIO.
+  `ktor-client-cio` only on the JVM and Linux. The default client names its engine on every platform
+  (Darwin, CIO, or Js on the web), so a second ktor engine in the application no longer decides it.
+  *Migration:* none for the connector; an Apple app that used ktor-client-cio through this module adds
+  it itself, and passes its own `HttpClient` to keep CIO.
 
 EDHOC server session safety (WP-SEC1):
 

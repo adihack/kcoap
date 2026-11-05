@@ -15,9 +15,10 @@ kotlin {
             // LoggerFactory appears in the public constructors.
             api(project(":kcoap-common"))
         }
-        // The engine behind the default client. On Apple it is Darwin: URLSession brings up the cellular
-        // radio and honours VPN On Demand, which CIO's BSD sockets do not. Browsers and Node.js bring their
-        // own WebSocket (the JS engine, in ktor-client-core).
+        // The engine behind the default client, which each platform's defaultClient() names rather than
+        // leaving it to ktor's lookup. On Apple it is Darwin: URLSession brings up the cellular radio and
+        // honours VPN On Demand, which CIO's BSD sockets do not. Browsers and Node.js bring their own
+        // WebSocket (the Js engine, in ktor-client-core).
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
         }
@@ -36,6 +37,11 @@ kotlin {
             // The default client (Darwin on Apple, CIO on Linux) against the server adapter on CIO.
             implementation(project(":kcoap-transport-ktor-websocket-server"))
             implementation(libs.ktor.server.cio)
+        }
+        appleTest.dependencies {
+            // CIO linked next to Darwin, as in an app that uses it for its own HTTP calls: DefaultEngineTest
+            // shows the default client stays on Darwin.
+            implementation(libs.ktor.client.cio)
         }
         jsTest.dependencies {
             // The Node.js tests run an npm ws server, whose handleProtocols sees the subprotocols offered.
