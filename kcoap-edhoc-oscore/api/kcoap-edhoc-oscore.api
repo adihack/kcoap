@@ -11,16 +11,16 @@ public final class dev/kcoap/edhoc/oscore/CombinedRequestServer : dev/kcoap/coap
 
 public final class dev/kcoap/edhoc/oscore/EdhocClientHandshake {
 	public static final field Companion Ldev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion;
-	public fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Lkotlin/jvm/functions/Function2;)V
-	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/oscore/SequenceNumberStore;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/oscore/SequenceNumberStore;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun run (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun run$default (Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun runCombined (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion {
-	public final fun over (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;)Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;
-	public static synthetic fun over$default (Ldev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion;Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;ILjava/lang/Object;)Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;
+	public final fun over (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/oscore/SequenceNumberStore;)Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;
+	public static synthetic fun over$default (Ldev/kcoap/edhoc/oscore/EdhocClientHandshake$Companion;Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ldev/kcoap/edhoc/EdhocInitiatorConfig;Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/String;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/oscore/SequenceNumberStore;ILjava/lang/Object;)Ldev/kcoap/edhoc/oscore/EdhocClientHandshake;
 }
 
 public final class dev/kcoap/edhoc/oscore/EdhocOscoreSession {
@@ -66,11 +66,53 @@ public final class dev/kcoap/edhoc/oscore/EdhocResource : dev/kcoap/coap/server/
 }
 
 public final class dev/kcoap/edhoc/oscore/EdhocServer {
-	public fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/InMemoryContextRepository;ZILdev/kcoap/edhoc/oscore/EdhocSessionListener;Ldev/kcoap/log/LoggerFactory;)V
-	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/InMemoryContextRepository;ZILdev/kcoap/edhoc/oscore/EdhocSessionListener;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun completeCombined (Ldev/kcoap/edhoc/ConnectionIdentifier;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun handle (Ldev/kcoap/coap/CoapMessage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/InMemoryContextRepository;ZIIJLdev/kcoap/oscore/SequenceNumberStore;Lkotlin/time/TimeSource;Ldev/kcoap/edhoc/oscore/EdhocSessionListener;Ldev/kcoap/edhoc/oscore/EdhocServerEventListener;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocResponderConfig;Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/oscore/InMemoryContextRepository;ZIIJLdev/kcoap/oscore/SequenceNumberStore;Lkotlin/time/TimeSource;Ldev/kcoap/edhoc/oscore/EdhocSessionListener;Ldev/kcoap/edhoc/oscore/EdhocServerEventListener;Ldev/kcoap/log/LoggerFactory;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun completeCombined (Ldev/kcoap/edhoc/ConnectionIdentifier;[BLdev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun handle (Ldev/kcoap/coap/CoapMessage;Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun pendingSessions (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/edhoc/oscore/EdhocServerEvent {
+	public abstract fun getPeer ()Ldev/kcoap/transport/Endpoint;
+}
+
+public final class dev/kcoap/edhoc/oscore/EdhocServerEvent$ContinuationFromAnotherPeer : dev/kcoap/edhoc/oscore/EdhocServerEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/edhoc/ConnectionIdentifier;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getResponderId ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached : dev/kcoap/edhoc/oscore/EdhocServerEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;)V
+	public final fun getLimit ()Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit : java/lang/Enum {
+	public static final field PENDING_SESSIONS Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;
+	public static final field PENDING_SESSIONS_PER_PEER Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;
+	public static fun values ()[Ldev/kcoap/edhoc/oscore/EdhocServerEvent$LimitReached$Limit;
+}
+
+public final class dev/kcoap/edhoc/oscore/EdhocServerEvent$SessionExpired : dev/kcoap/edhoc/oscore/EdhocServerEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/edhoc/ConnectionIdentifier;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getResponderId ()Ldev/kcoap/edhoc/ConnectionIdentifier;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/edhoc/oscore/EdhocServerEventListener {
+	public static final field Companion Ldev/kcoap/edhoc/oscore/EdhocServerEventListener$Companion;
+	public abstract fun onEvent (Ldev/kcoap/edhoc/oscore/EdhocServerEvent;)V
+}
+
+public final class dev/kcoap/edhoc/oscore/EdhocServerEventListener$Companion {
+	public final fun getNone ()Ldev/kcoap/edhoc/oscore/EdhocServerEventListener;
 }
 
 public abstract interface class dev/kcoap/edhoc/oscore/EdhocSessionListener {
