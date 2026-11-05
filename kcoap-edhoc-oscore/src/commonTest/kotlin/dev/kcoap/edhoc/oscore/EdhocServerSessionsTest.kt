@@ -38,6 +38,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -159,6 +160,39 @@ class EdhocServerSessionsTest {
             server2.handle(it, alice)
         }.run()
         assertEquals(2, session2.edhoc.responderConnectionIdentifier.size, "C_R never equals C_I")
+    }
+
+    /**
+     * RFC 9668 §5: two EDHOC resources for two application profiles share the OSCORE contexts. Each server
+     * reserves C_R only among its own sessions, so both can choose the same one; the second context to
+     * arrive must not replace the first.
+     */
+    @Test
+    fun aRecipientIdTakenByAnotherWriterOfTheRepositoryIsNeverReplaced() = runTest {
+        val peers = Peers.create(crypto)
+        val contexts = InMemoryContextRepository()
+        val established = mutableListOf<SecurityContext>()
+        fun server() = EdhocServer(
+            peers.responderConfig(), FixedShortIds(crypto), contexts,
+            listener = { _, context -> established += context },
+        )
+        val first = server()
+        val second = server()
+        val alices = initiator(peers)
+        alices.processMessage2(first.start(alice, alices).payload)
+        val bobs = initiator(peers)
+        bobs.processMessage2(second.start(bob, bobs).payload)
+        val (aliceMessage3, aliceSession) = alices.createMessage3()
+        val (bobMessage3, bobSession) = bobs.createMessage3()
+        val responderId = aliceSession.responderConnectionIdentifier
+        assertEquals(responderId, bobSession.responderConnectionIdentifier, "neither context was in place yet")
+
+        assertEquals(CoapCode.CHANGED, first.continueWith(alice, responderId, aliceMessage3).code)
+        val refused = second.continueWith(bob, responderId, bobMessage3)
+        assertEquals(CoapCode.BAD_REQUEST, refused.code)
+        assertEquals("Connection identifier in use", EdhocError.decode(refused.payload).diagnostic)
+        assertSame(established.single(), contexts.find(responderId.bytes, null), "Alice's context stays")
+        assertEquals(0, second.pendingSessions())
     }
 
     @Test

@@ -41,7 +41,11 @@ public fun interface EdhocSessionListener {
  * C_R is chosen as RFC 9668 §4.1.2 requires: unused by other sessions, different from C_I, and not the
  * Recipient ID of a context in [contexts]. It is reserved in the same locked step that checks it, before
  * message_2 is composed, and stays reserved until the session's OSCORE context is in [contexts], so
- * concurrent handshakes never share a C_R or collide with a context being added.
+ * concurrent handshakes of this server never share a C_R or collide with a context it is adding. The
+ * context is added only if its Recipient ID is still free ([InMemoryContextRepository.addIfAbsent]): when
+ * another writer of [contexts], such as a second EdhocServer for another application profile (RFC 9668
+ * §5) or the application, took it meanwhile, the handshake fails with an EDHOC error instead of replacing
+ * that context.
  *
  * Until message_3 is verified, nothing about the client is authenticated, so the state it can make the
  * server keep is bounded (RFC 9528 §9.7):
@@ -148,7 +152,7 @@ public class EdhocServer(
                 taken.responder.abort(MESSAGE_4_REQUIRED)
                 throw EdhocException(EdhocError.unspecified(MESSAGE_4_REQUIRED))
             }
-            return establish(taken.responder.processMessage3(message3))
+            return establish(taken.responder, taken.responder.processMessage3(message3))
         } finally {
             withContext(NonCancellable) { pending.release(taken.session) }
         }
@@ -200,7 +204,7 @@ public class EdhocServer(
                 log.info { "The client $peer aborted session ${responderId.bytes.toHex()}" }
                 return EdhocOverCoap.completedResponse(request)
             }
-            establish(taken.responder.processMessage3(message))
+            establish(taken.responder, taken.responder.processMessage3(message))
             return if (sendMessage4) {
                 EdhocOverCoap.messageResponse(request, taken.responder.createMessage4())
             } else {
@@ -214,9 +218,16 @@ public class EdhocServer(
         }
     }
 
-    private suspend fun establish(session: EdhocSession): SecurityContext {
+    private suspend fun establish(responder: EdhocResponder, session: EdhocSession): SecurityContext {
         val context = session.oscoreContext(crypto, sequenceStore)
-        contexts.add(context)
+        if (!contexts.addIfAbsent(context)) {
+            // Another writer of the repository took this Recipient ID after allocate() found it free: its
+            // context stays, this session ends (RFC 9668 §4.1.2).
+            log.warn { "Context $context not added: its Recipient ID is in use" }
+            responder.abort(IDENTIFIER_IN_USE)
+            session.destroy()
+            throw EdhocException(EdhocError.unspecified(IDENTIFIER_IN_USE))
+        }
         log.info { "EDHOC session established: $context, suite ${session.cipherSuite.value}" }
         listener.onEstablished(session, context)
         return context
@@ -252,6 +263,7 @@ public class EdhocServer(
         const val MAX_IDENTIFIER_LENGTH = 7
         const val ATTEMPTS_PER_LENGTH = 8
         const val MESSAGE_4_REQUIRED = "This EDHOC profile requires message_4"
+        const val IDENTIFIER_IN_USE = "Connection identifier in use"
 
         /** Also the answer to a continuation from a peer other than the session's (RFC 9528 §9.7). */
         val UNKNOWN_SESSION = EdhocError.unspecified("No EDHOC session for C_R")
