@@ -154,11 +154,12 @@ class QBlockObserveTest {
         missingBlockMBit: Boolean = false,
         observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
         seed: Int = 1,
+        amplification: AmplificationPolicy = AmplificationPolicy.OFF,
     ): Setup {
         val fixture = StackFixture(this, seed)
         val resource = Resource("obs", type, bodies)
         val server = fixture.server(
-            CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true)),
+            CoapServerConfig(amplification = amplification, qBlock = QBlockServerConfig(isEnabled = true)),
             fixture.endpointConfig(parameters = parameters),
         ) { add(resource) }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, missingBlockMBit = missingBlockMBit)
@@ -687,6 +688,44 @@ class QBlockObserveTest {
         assertEquals(listOf(CoapCode.CONTENT, CoapCode.NOT_FOUND), setup.received.map { it.code })
         assertEquals(0, setup.client.observationCount())
         assertNothingLeft(setup)
+    }
+
+    // ---------------------------------------------------------------- the address check (RFC 9175 §2.4)
+
+    /**
+     * RFC 9175 §2.4 item 3, RFC 7641 §7: under the default policy, and under ALL_RESPONSES, a registration with
+     * Q-Block, a GET with Q-Block2 or a FETCH uploaded in Q-Block1, gets a 4.01 with Echo before anything else,
+     * however small its first response: its notification bodies would go to the address for as long as it lasts.
+     * The client repeats it with the Echo value, and a later body of 10 KiB goes to the verified address.
+     */
+    @Test
+    fun rfc9175Section2_4AQBlockRegistrationVerifiesItsAddressBeforeAnyBody() = runTest {
+        val large = body(10 * 1024, 2)
+        for (policy in listOf(AmplificationPolicy.Q_BLOCK_BURSTS, AmplificationPolicy.ALL_RESPONSES)) {
+            for (isFetch in listOf(false, true)) {
+                val name = "$policy, ${if (isFetch) "FETCH in Q-Block1" else "GET"}"
+                val setup = setup({ if (it == 0) "small".encodeToByteArray() else large }, amplification = policy)
+                val get = CoapRequest.Builder(CoapCode.GET, CoapUri.parse(setup.uri)).nonConfirmable().build()
+                setup.observe(this, if (isFetch) fetch(setup, body(2 * 1024 + 100, 1)) else get)
+                delay(20.seconds)
+                setup.resource.change()
+                delay(10.seconds)
+
+                val server = setup.fixture.address(setup.server.endpoint)
+                val wire = setup.fixture.traffic.filter { it.message != null }
+                val verified = wire.indexOfFirst { it.from != server && it.message!!.options.echo != null }
+                assertTrue(verified > 0, "$name: the client returned the Echo value")
+                val before = wire.take(verified).filter { it.from == server }.map { it.message!! }
+                val challenges = before.isNotEmpty() && before.all { it.code == CoapCode.UNAUTHORIZED }
+                assertTrue(challenges, "$name: nothing but 4.01s before the Echo came back: $before")
+                val expected = listOf("small".encodeToByteArray(), large).map { it.toList() }
+                assertEquals(expected, setup.received.map { it.payload.toList() }, name)
+                assertEquals(1, setup.resource.observerCount, name)
+                val notification = setup.fixture.sentBy(setup.server.endpoint).filter { it.options.observe == 1L }
+                val isNon = notification.isNotEmpty() && notification.all { it.type == CoapMessageType.NON }
+                assertTrue(isNon, "$name: Non-confirmable to a verified address")
+            }
+        }
     }
 
     // ---------------------------------------------------------------- the client against a scripted server

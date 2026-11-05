@@ -82,7 +82,8 @@ import kotlinx.coroutines.withContext
  *   a single 16-byte block, stays within the factor. What counts is everything sent in answer to one
  *   request: its first set and every later set on the timer, a separate Confirmable block with all its
  *   retransmissions. Sets that would take it beyond the factor stop; a Continue is a request of its own and
- *   is checked, or challenged, for its set.
+ *   is checked, or challenged, for its set. An Observe registration with Q-Block is challenged before it
+ *   gets here, whatever the size of its response ([CoapServer]).
  * - **Observe** (RFC 7641, RFC 9177 §4.5). A GET or FETCH registration with Q-Block2, or a FETCH one uploaded
  *   with Q-Block1, adds an observer whose notifications are Q-Block2 bodies ([notify]): each change gives one
  *   body with an ETag of its own and the next Observe value on every block, all of them Confirmable or all

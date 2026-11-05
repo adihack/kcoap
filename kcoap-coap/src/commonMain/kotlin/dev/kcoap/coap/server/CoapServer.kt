@@ -304,15 +304,13 @@ public class CoapServer private constructor(
             }
         }
         if (isQBlock) {
-            val asksForWholeBody = options.qBlock2List.singleOrNull()?.let { it.number == 0L && it.more } == true
+            // RFC 7641 §7, RFC 9175 §2.4 item 3: a registration with Q-Block has notification bodies, bursts of their
+            // own, sent to its address for as long as it lasts, so under every policy that checks addresses its
+            // address is verified first, whatever the size of the first response. A FETCH uploaded in Q-Block1 carries
+            // Observe 0 on every block, and each is challenged until one comes back with the Echo value.
             val registers = options.observe == OBSERVE_REGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH) &&
-                (resource as? ObservableResource)?.isObservable == true && asksForWholeBody
-            if (registers && checksAddress && config.amplification == AmplificationPolicy.ALL_RESPONSES &&
-                !addressVerification.verify(peer, echo, now)
-            ) {
-                // RFC 7641 §7, as below: a Q-Block2 registration has notification bodies sent for as long as it lasts.
-                return challenge(peer, now)
-            }
+                (resource as? ObservableResource)?.isObservable == true
+            if (registers && checksAddress && !addressVerification.verify(peer, echo, now)) return challenge(peer, now)
             return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
         }
 
@@ -551,6 +549,20 @@ public class CoapServer private constructor(
         val requestSize = UdpMessageCodec.encode(inbound.message).size
         if (!addressVerification.exceedsLimit(requestSize, responseSize(), isBurst)) return false
         return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
+    }
+
+    /**
+     * Whether the Q-Block2 notification bodies of [observation] go Confirmable, whatever its resource asks
+     * (RFC 9175 §2.4 item 3, RFC 7641 §7): its client is one whose address [CoapServerConfig.amplification]
+     * checks (as [checksAddress] decides for a request), and that address is not verified, or no longer, after
+     * [CoapServerConfig.verifiedAddressLifetime]. A Confirmable body goes block by block as each is acknowledged,
+     * so an address that does not answer gets one block and its retransmissions, not a burst, before the
+     * observer is removed (RFC 7641 §4.5).
+     */
+    internal suspend fun mustConfirmBodies(observation: ServerObservation): Boolean {
+        val checked = config.amplification != AmplificationPolicy.OFF && observation.unprotected == null &&
+            observation.connection == null && observation.peerIdentity == PeerIdentity.None
+        return checked && !addressVerification.verify(observation.peer, null, endpoint.now())
     }
 
     /**

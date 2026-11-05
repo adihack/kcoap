@@ -178,7 +178,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * settled ([OutstandingBody.isSettled]), every block out, and a Non-confirmable body for at least
  * [CoapServerConfig.nonConfirmableNotificationInterval]. Changes meanwhile fold into the next body, and a body
  * is never replaced by a newer one while it goes out, so a resource that changes faster than its bodies go out
- * still has whole bodies reach the client.
+ * still has whole bodies reach the client. A body goes Confirmable, whatever the resource asks, to a client
+ * whose address the server checks and has not verified, or no longer ([CoapServer.mustConfirmBodies]).
  */
 internal class ServerObservation(
     private val server: CoapServer,
@@ -328,7 +329,8 @@ internal class ServerObservation(
             return@withLock
         }
         changedMeanwhile = false
-        val type = nextType(now)
+        // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK.
+        val type = if (qBlockSize != null && server.mustConfirmBodies(this)) CoapMessageType.CON else nextType(now)
         val notification = server.notification(this, type)
         if (notification == null) {
             // A Q-Block2 body went out (or the observation ended meanwhile).

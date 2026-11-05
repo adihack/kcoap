@@ -22,7 +22,10 @@ package dev.kcoap.coap.server
  * ETag does not work on such bodies. A registration for Observe that carries Q-Block2, or a FETCH registration
  * uploaded in Q-Block1, gets its notifications as Q-Block2 bodies (§4.5), Confirmable or Non-confirmable as
  * [ObservableResource.notificationType] and RFC 7641 §4.5 decide: one body per change with the Observe value
- * on every block, never cut short by the next change, which waits until the body went out.
+ * on every block, never cut short by the next change, which waits until the body went out. Under every
+ * [CoapServerConfig.amplification] policy but [AmplificationPolicy.OFF], such a registration from a client
+ * that neither OSCORE nor DTLS authenticated verifies its address with Echo first (RFC 9175 §2.4), and its
+ * bodies go Confirmable once that verification lapses.
  *
  * Memory is bounded: at most [maxPartialBodies] uploads, each up to [CoapServerConfig.maxBodySize] bytes,
  * are assembled at a time, each holding only the blocks that arrived (never what its Size1 claims before

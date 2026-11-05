@@ -34,6 +34,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -744,6 +745,97 @@ class QBlockServerTest {
         val next = f.peer.drain(5.seconds)
         assertEquals(47, next.size)
         assertTrue(next.all { it.hasToken(registration.token) && it.options.observe == 2L })
+    }
+
+    // ---------------------------------------------------------------- Observe and the address check (RFC 9175 §2.4)
+
+    @Test
+    fun rfc9175Section2_4AQBlock2RegistrationIsChallengedByDefaultWhateverTheSizeOfItsResponse() = runTest {
+        val counter = Counter(reply = { CoapResponse.content("small".encodeToByteArray()) })
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn)) { add(counter) }
+        val first = f.peer.send(register(f.peer))
+
+        val challenge = f.peer.drain().single()
+        assertEquals(CoapCode.UNAUTHORIZED, challenge.code)
+        assertTrue(challenge.hasToken(first.token))
+        assertEquals(0, counter.observerCount, "RFC 7641 §7: notification bodies would follow for as long as it lasts")
+
+        val registration = f.peer.send(register(f.peer) { echo(assertNotNull(challenge.options.echo)) })
+        val answer = f.peer.drain().single()
+        assertEquals("small", answer.payloadAsText())
+        assertEquals(0L, answer.options.observe)
+        assertEquals(1, counter.observerCount)
+
+        // Far beyond the factor of the registration: the address is verified now.
+        counter.reply = { CoapResponse.content(big) }
+        counter.change()
+        val notification = f.peer.drain(5.seconds)
+        assertEquals((0L..46L).toList(), notification.numbers())
+        assertTrue(notification.all { it.hasToken(registration.token) && it.options.observe == 1L })
+        assertTrue(notification.all { it.type == CoapMessageType.NON }, "the address is verified")
+    }
+
+    @Test
+    fun rfc9175Section2_4AFetchRegistrationUploadedInQBlock1IsChallengedUnderEveryPolicyThatChecks() = runTest {
+        for (policy in listOf(AmplificationPolicy.Q_BLOCK_BURSTS, AmplificationPolicy.ALL_RESPONSES)) {
+            val resource = object : ObservableResource("query") {
+                override val notificationType: CoapMessageType get() = CoapMessageType.NON
+                override suspend fun handleFetch(context: RequestContext) =
+                    CoapResponse.content(context.payload.reversedArray())
+            }
+            val f = fixture(CoapServerConfig(amplification = policy, qBlock = qBlockOn)) { add(resource) }
+            val query = big.copyOf(200)
+            fun blocks(echo: ByteArray?) = (0L..3L).map { num ->
+                upload(f.peer, num, query, code = CoapCode.FETCH, path = "query") {
+                    observe(0)
+                    echo?.let { echo(it) }
+                }
+            }
+            blocks(echo = null).forEach { f.peer.send(it) }
+
+            val challenges = f.peer.drain()
+            assertEquals(List(4) { CoapCode.UNAUTHORIZED }, challenges.map { it.code }, "$policy: every block of it")
+            assertEquals(0, resource.observerCount, "$policy")
+            assertEquals(0, f.server.qBlock.state().partialBodies, "$policy: nothing of the upload is kept")
+
+            val again = blocks(echo = assertNotNull(challenges.first().options.echo))
+            again.forEach { f.peer.send(it) }
+            val body = f.peer.drain()
+            val onCompleting = body.isNotEmpty() && body.all { it.hasToken(again[3].token) && it.options.observe == 0L }
+            assertTrue(onCompleting, "$policy: $body")
+            assertEquals(1, resource.observerCount, "$policy")
+        }
+    }
+
+    @Test
+    fun rfc9175Section2_4NotificationBodiesGoConfirmableOnceTheAddressIsNoLongerVerified() = runTest {
+        val counter = Counter()
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn, verifiedAddressLifetime = 1.minutes)) { add(counter) }
+        f.peer.send(register(f.peer))
+        val echo = assertNotNull(f.peer.drain().single().options.echo)
+        val registration = f.peer.send(register(f.peer) { echo(echo) })
+        assertTrue(f.peer.drain(5.seconds).all { it.type == CoapMessageType.NON }, "the address is verified")
+        delay(1.minutes)
+
+        // The verification lapsed: the body goes block by block, each acknowledged.
+        counter.change()
+        val acknowledged = mutableListOf<CoapMessage>()
+        while (true) {
+            val block = f.peer.next(5.seconds) ?: break
+            acknowledged += block
+            f.peer.acknowledge(block)
+        }
+        assertEquals((0L..46L).toList(), acknowledged.numbers())
+        assertTrue(acknowledged.all { it.type == CoapMessageType.CON }, "RFC 9175 §2.4: block by block")
+        assertTrue(acknowledged.all { it.hasToken(registration.token) && it.options.observe == 1L })
+
+        // An address that does not acknowledge gets one block and its retransmissions, and the observer goes.
+        counter.change()
+        val unanswered = f.peer.drain(60.seconds)
+        val copies = 1 + TransmissionParameters.Default.maxRetransmit
+        assertEquals(List(copies) { 0L }, unanswered.numbers(), "RFC 7641 §4.5")
+        assertEquals(0, counter.observerCount)
+        assertTrue(f.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "notification not acknowledged" })
     }
 
     @Test
