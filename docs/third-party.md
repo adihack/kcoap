@@ -103,7 +103,10 @@ values, so they are not typed in by hand ([testing](testing.md)).
   [IETF Trust Legal Provisions](https://trustee.ietf.org/license-info) license "Code Components" of
   RFCs under the Revised BSD License, and their list of code components includes "tables of values" and
   CBOR. Whether these test vectors count as code components is **unconfirmed**; read as such, the
-  Revised BSD License asks that the copyright notice and license conditions stay with them.
+  Revised BSD License asks that the copyright notice and license conditions stay with them. The
+  generated files do not carry them yet: their headers name only the RFC and the generator. A
+  follow-up has `tools/gen_vectors.py` and `tools/gen_edhoc_vectors.py` write each RFC's copyright line
+  and a pointer to the IETF Trust Legal Provisions into the files they generate.
 - **NIST** material: software and data developed by NIST employees is not subject to copyright
   protection in the United States. The ACVP-Server README asks users to acknowledge NIST as the source;
   the generated files and this page do.

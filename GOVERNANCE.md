@@ -25,8 +25,9 @@ of its trademarks.
 
 - **Day to day** in issues and pull requests, in public. Anyone may comment; maintainers merge.
 - **Architecture** through ADRs in [docs/adr](docs/adr/README.md). An ADR is proposed in a pull request,
-  discussed there, and accepted when a maintainer merges it. Accepted ADRs are never edited; a later
-  one supersedes them.
+  discussed there, and accepted when a maintainer merges it. An accepted ADR's decision is never
+  changed; a later ADR supersedes it. An "As built" section may be appended to record how it was
+  implemented.
 - **When there is no consensus**, the lead maintainer decides, and records the reasons in the issue,
   the pull request or the ADR.
 - **Security issues** are handled in private, as [SECURITY.md](SECURITY.md) describes, and disclosed
@@ -56,7 +57,7 @@ CI must pass first, and no tag is made before the release freeze list has merged
 | The trademarks kcoap and kcoap.dev ([TRADEMARKS.md](TRADEMARKS.md)) | Adrian Sołtys |
 | The domain kcoap.dev and the website https://kcoap.dev | Adrian Sołtys |
 | The GitHub repository [adihack/kcoap](https://github.com/adihack/kcoap) | Adrian Sołtys |
-| The Maven namespace `dev.kcoap` and the release signing keys | Adrian Sołtys |
+| The Maven namespace `dev.kcoap` (once verified) and the release signing keys (once created) | Adrian Sołtys |
 | Sponsorship accounts, once they exist | Adrian Sołtys, for the project |
 
 If the project moves to a foundation or another legal home, this table changes in the same pull
@@ -65,18 +66,18 @@ request as the move.
 ## Sponsorship money
 
 Sponsorship will come through GitHub Sponsors or Open Collective; neither is set up yet
-([SPONSORS.md](SPONSORS.md)). Money is handled in the open:
+([SPONSORS.md](SPONSORS.md)). The money is handled as follows:
 
 - **It pays for the project**: CI runners and the interop infrastructure, test hardware (phones,
   gateways, boards), independent security review, the domain and the website, and maintainers' time on
   kcoap.
-- **It is accounted for publicly.** With Open Collective every income and expense is public. With
-  GitHub Sponsors, a summary of income and spending is published at least once a year.
+- **How it is reported** will be stated when the account is set up. With Open Collective, every
+  income and expense is public by design.
 - **Sponsors buy no influence.** They get no say over technical decisions, the roadmap, the content of
   reviews, or how and when vulnerabilities are disclosed, and no early or private access to
-  vulnerability information. Recognition is the only thing sponsorship brings.
+  vulnerability information. What sponsors receive beyond recognition will be stated when the
+  sponsorship accounts are set up; it never includes such a say or such access.
 
 ## Changing this document
 
-Changes to this document are proposed in a pull request, stay open for comment for at least seven
-days, and are merged by the lead maintainer.
+Changes to this document are proposed in a pull request and merged by the lead maintainer.

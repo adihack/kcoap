@@ -3,16 +3,16 @@
 kcoap is built in the open and licensed under the [Apache License 2.0](LICENSE). Sponsorship keeps it
 maintained, tested against real peers and real devices, and reviewed by people outside the project.
 
-## Sponsors
+## Current sponsors
 
 kcoap has no sponsors yet. The first ones will be listed here.
 
 ## How to sponsor
 
-Sponsorship starts at **https://kcoap.dev/sponsors**. kcoap will accept sponsorship through
-[GitHub Sponsors](https://github.com/sponsors) or [Open Collective](https://opencollective.com); neither
-is set up yet, and the website will link the one chosen. Until then, or to talk about sponsorship
-first, email Adrian Sołtys at adrian.soltys@seelso.net.
+Sponsorship accounts are not set up yet. kcoap will accept sponsorship through
+[GitHub Sponsors](https://github.com/sponsors) or [Open Collective](https://opencollective.com), and
+https://kcoap.dev/sponsors will link the one chosen. Until then, or to talk about sponsorship first,
+email Adrian Sołtys at adrian.soltys@seelso.net.
 
 ## What funding pays for
 
@@ -25,10 +25,11 @@ first, email Adrian Sołtys at adrian.soltys@seelso.net.
 
 How the money is accounted for is in [GOVERNANCE.md](GOVERNANCE.md#sponsorship-money).
 
-## How sponsors are recognised
+## How sponsors are recognized
 
-Sponsors will be listed in this file, in the README and on https://kcoap.dev. The details, such as
-logos and their sizes, will be announced together with the sponsorship accounts.
+Sponsors will be listed in this file, in the README's Sponsors section and at
+https://kcoap.dev/sponsors. The details, such as logos and their sizes, will be announced together
+with the sponsorship accounts.
 
 ## Independence
 

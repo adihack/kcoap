@@ -54,7 +54,8 @@ catches mistakes that tests against kcoap itself cannot.
   rewriting a finished pull request. Small fixes and documentation can go straight to a pull request.
 - **Record design decisions as ADRs.** A decision that shapes the architecture gets an architecture
   decision record in [docs/adr](docs/adr/README.md): the next number, the format of the existing
-  records, and a row in the index. An accepted record is never edited; a later one supersedes it.
+  records, and a row in the index. An accepted record's decision is never changed; a later record
+  supersedes it. An "As built" section may be appended to record how it was implemented.
 - **Check what is planned.** [docs/checklist.md](docs/checklist.md) tracks every requirement with its
   status, and [docs/roadmap.md](docs/roadmap.md) the order of the work.
 

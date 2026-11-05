@@ -322,9 +322,9 @@ Questions, bug reports and feature requests go to [GitHub Issues](https://github
 
 ## Sponsors
 
-kcoap has no sponsors yet. Sponsorship through GitHub Sponsors or Open Collective is planned;
-[SPONSORS.md](SPONSORS.md) and [kcoap.dev/sponsors](https://kcoap.dev/sponsors) will list sponsors once
-there are any.
+kcoap has no sponsors yet. Sponsorship through GitHub Sponsors or Open Collective is planned, and
+[SPONSORS.md](SPONSORS.md) says what it pays for. Sponsors will be listed in SPONSORS.md, in this
+section and at [kcoap.dev/sponsors](https://kcoap.dev/sponsors).
 
 ## License
 
@@ -333,5 +333,6 @@ kcoap is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOT
 
 Copyright 2026 Adrian Sołtys and the kcoap contributors.
 
-kcoap™ and kcoap.dev™ are trademarks of Adrian Sołtys. The license does not grant permission to use
-them (Apache-2.0, section 6); [TRADEMARKS.md](TRADEMARKS.md) says how the names may be used.
+kcoap™ and kcoap.dev™ are trademarks of Adrian Sołtys. The license grants no permission to use them
+beyond describing the origin of the work (Apache-2.0, section 6); [TRADEMARKS.md](TRADEMARKS.md) says
+how the names may be used.

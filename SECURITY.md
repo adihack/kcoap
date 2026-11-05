@@ -36,7 +36,7 @@ No version has been released yet, so today this means `main`.
 | Security mode | no security; OSCORE with its AEAD and HKDF algorithms; EDHOC with its method, cipher suite and credential type; the EDHOC + OSCORE combined request |
 | What an attacker can do | read, forge or replay messages, impersonate a peer, bypass an access policy, exhaust memory, crash the endpoint |
 | How to reproduce | steps, a test or a small program; the RFC sections involved |
-| Evidence | logs or a packet capture, **without keys**: remove private keys, OSCORE Master Secrets and Salts, and EDHOC secrets. kcoap does not log keys, but TRACE logs contain message bytes, so check them first |
+| Evidence | logs or a packet capture, **without keys**: remove private keys, OSCORE Master Secrets and Salts, and EDHOC secrets. kcoap does not log keys, but TRACE logs contain message bytes, and DEBUG and other log lines can contain the Uri-Path and Uri-Query of OSCORE-protected requests, so check every log first |
 | Credit | how you want to be credited, or that you prefer not to be |
 
 ## What happens next
@@ -68,14 +68,31 @@ There is no bug bounty.
 
 ## Scope
 
-| In scope | Out of scope |
-|---|---|
-| Protocol and crypto handling in the published modules: CoAP message parsing and the endpoint, Block-wise and Q-Block, Observe; OSCORE protection, verification, replay protection and sequence numbers; EDHOC handshakes, credentials and key derivation; the EDHOC to OSCORE glue; access policies and response verification; the crypto backends; how the transports handle untrusted input | the interop harness in `interop/` and the samples in `samples/` |
-| Resource exhaustion or amplification that a remote peer can cause | vulnerabilities in dependencies themselves: report them upstream, and tell us if kcoap's use of a dependency makes them exploitable |
-| | attacks that need control of the device, its keys or its storage |
-| | features documented as not implemented yet in [docs/rfc-compliance.md](docs/rfc-compliance.md), such as DTLS, TLS for `coaps+tcp` and OSCORE Appendix B.2; but a way their absence makes a deployment unsafe that the documentation does not warn about is in scope |
+### In scope
+
+Protocol and crypto handling in the published modules:
+
+- CoAP message parsing and the endpoint
+- Block-wise transfers, Q-Block and Observe
+- OSCORE protection, verification, replay protection and sequence numbers
+- EDHOC handshakes, credentials and key derivation
+- the EDHOC to OSCORE glue
+- access policies and response verification
+- the crypto backends
+- how the transports handle untrusted input
+- resource exhaustion or amplification that a remote peer can cause
 
 A weakness in the CI workflows or the release process should be reported privately too.
+
+### Out of scope
+
+- the interop harness in `interop/` and the samples in `samples/`
+- vulnerabilities in dependencies themselves: report them upstream, and tell us if kcoap's use of a
+  dependency makes them exploitable
+- attacks that need control of the device, its keys or its storage
+- features documented as not implemented yet in [RFC compliance](docs/rfc-compliance.md), such as DTLS,
+  TLS for `coaps+tcp` and OSCORE Appendix B.2. A way their absence makes a deployment unsafe that the
+  documentation does not warn about is in scope.
 
 ## Security design
 

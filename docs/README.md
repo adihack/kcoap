@@ -95,7 +95,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [Security policy](../SECURITY.md) | How to report a vulnerability privately, and what happens next |
 | [Support](../SUPPORT.md) | Where to ask questions and report bugs, and what to expect from one maintainer |
 | [Governance](../GOVERNANCE.md) | Who maintains kcoap and how decisions are made |
-| [Trademarks](../TRADEMARKS.md) | How the names kcoap™ and kcoap.dev™ may be used |
+| [Trademarks](../TRADEMARKS.md) | How the names kcoap and kcoap.dev may be used |
 | [Sponsors](../SPONSORS.md) | How to support kcoap, and its sponsors once there are any |
 | [License](../LICENSE) | The Apache License 2.0 |
 | [Notice](../NOTICE) | The copyright notice that travels with every copy (Apache-2.0, section 4) |
