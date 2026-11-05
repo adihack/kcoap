@@ -57,7 +57,9 @@ import kotlinx.coroutines.sync.withLock
  *   response in the middle of a set, 2.31 with Q-Block1 when a Non-confirmable set is complete, a
  *   Non-confirmable 4.08 with Content-Format 272 listing the missing blocks, at once when a later set arrives
  *   while earlier ones have gaps and on the NON_RECEIVE_TIMEOUT ladder otherwise. The request that completes
- *   the body runs the handler with the whole body and gets the final response. A Reset to a 4.08 discards
+ *   the body runs the handler with the whole body and gets the final response; the blocks of a burst are
+ *   handled concurrently, so on a multi-threaded dispatcher that need not be the last one to arrive, which
+ *   §4.3 allows (any token of the body, preferably the last). A Reset to a 4.08 discards
  *   the body. The final response is remembered for NON_PARTIAL_TIMEOUT, so that a block sent again gets it
  *   again (§4.3: a duplicate is answered as the first was).
  * - **Q-Block2 bodies** (§4.4, §4.7). A 2.01, 2.02, 2.04 or 2.05 with a payload, answering a request that

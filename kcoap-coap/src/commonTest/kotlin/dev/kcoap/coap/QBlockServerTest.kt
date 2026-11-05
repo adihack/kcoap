@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
@@ -19,7 +20,9 @@ import dev.kcoap.log.LogLevel
 import dev.kcoap.log.LogRecord
 import dev.kcoap.log.LogSink
 import dev.kcoap.log.LoggerFactory
+import dev.kcoap.testkit.InMemoryNetwork
 import dev.kcoap.transport.Endpoint
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -53,8 +56,8 @@ class QBlockServerTest {
 
         val events: List<EndpointEvent> get() = stack.events
 
-        suspend fun start(body: ByteArray, routes: dev.kcoap.coap.server.ResourceBuilder.() -> Unit = {}): Fixture {
-            server = stack.server(config) {
+        suspend fun start(body: ByteArray, maxDatagramSize: Int, routes: ResourceBuilder.() -> Unit): Fixture {
+            server = stack.server(config, maxDatagramSize = maxDatagramSize) {
                 resource("big") {
                     get {
                         bigRuns++
@@ -80,8 +83,12 @@ class QBlockServerTest {
         }
     }
 
-    private suspend fun TestScope.fixture(config: CoapServerConfig = on, body: ByteArray = big, routes: dev.kcoap.coap.server.ResourceBuilder.() -> Unit = {}) =
-        Fixture(this, config).start(body, routes)
+    private suspend fun TestScope.fixture(
+        config: CoapServerConfig = on,
+        body: ByteArray = big,
+        maxDatagramSize: Int = InMemoryNetwork.DEFAULT_MAX_DATAGRAM_SIZE,
+        routes: ResourceBuilder.() -> Unit = {},
+    ) = Fixture(this, config).start(body, maxDatagramSize, routes)
 
     private fun block(num: Long, more: Boolean, size: Int = 64) = BlockOption(num, more, BlockOption.sizeExponentFor(size))
 
@@ -281,6 +288,19 @@ class QBlockServerTest {
         val recoveries = f.events.filterIsInstance<EndpointEvent.QBlockRecovery>()
         assertEquals(listOf(listOf(2L, 7L), (3L..9L).toList()), recoveries.map { it.blocks })
         assertTrue(recoveries.all { it.isRequestedByPeer })
+    }
+
+    @Test
+    fun rfc9177Section4_4AFollowUpInAnotherSizeOrBeyondTheBodyGets400() = runTest {
+        val f = fixture()
+        f.peer.send(get(f.peer, block(0, true)))
+        f.peer.drain()
+
+        f.peer.send(get(f.peer, block(2, false, 128)))
+        assertEquals("Q-Block2 size differs from 64 of the body", f.peer.drain().single().payloadAsText())
+        f.peer.send(get(f.peer, block(50, true)))
+        assertEquals("Continue beyond the body", f.peer.drain().single().payloadAsText())
+        assertEquals(1, f.bigRuns)
     }
 
     @Test
@@ -713,6 +733,100 @@ class QBlockServerTest {
         val warnings = records.filter { it.level == LogLevel.WARN }
         assertEquals(1, warnings.size)
         assertTrue("RFC 9177 §11" in warnings.single().message, warnings.single().message)
+    }
+
+    @Test
+    fun rfc9177Section4_3ACopyOfTheLastBlockGetsTheSameResponseBodyAgain() = runTest {
+        val f = fixture()
+        (0L..46L).forEach { f.peer.send(upload(f.peer, it, code = CoapCode.POST)) }
+        val first = f.peer.drain().drop(4)
+        val copy = f.peer.send(upload(f.peer, 46, code = CoapCode.POST))
+
+        val again = f.peer.drain()
+        assertEquals((0L..9L).toList(), again.numbers())
+        assertTrue(again.all { it.hasToken(copy.token) })
+        assertContentEquals(first.first().options.etags.single(), again.first().options.etags.single(), "the same body, from the cache")
+        assertEquals(1, f.stored.size)
+    }
+
+    @Test
+    fun rfc9177Section4_6ABlockWhoseSize1DiffersFromItsBodysGets400() = runTest {
+        val f = fixture()
+        f.peer.send(upload(f.peer, 0))
+        f.peer.send(upload(f.peer, 1) { size1(2999) })
+
+        val answer = assertNotNull(f.peer.next())
+        assertEquals(CoapCode.BAD_REQUEST, answer.code)
+        assertEquals("Size1 2999 differs from 3000 of the body", answer.payloadAsText())
+    }
+
+    @Test
+    fun rfc9177Section7_1AConfirmableBodyStopsWhenABlockIsNeverAcknowledgedAndStaysCached() = runTest {
+        val f = fixture()
+        f.peer.send(get(f.peer, block(0, true), type = CoapMessageType.CON))
+
+        val seen = f.peer.drain(60.seconds)
+        assertEquals(listOf(0L) + List(5) { 1L }, seen.numbers(), "block 1 and its four retransmissions, then nothing")
+        val missing = f.peer.send(get(f.peer, block(5, false)))
+        val five = f.peer.drain().single()
+        assertTrue(five.hasToken(missing.token))
+        assertContentEquals(seen.first().options.etags.single(), five.options.etags.single(), "served from the cache")
+        assertEquals(1, f.bigRuns)
+    }
+
+    @Test
+    fun rfc9175Section2_4ALaterSetToAnAddressNoLongerVerifiedDoesNotGoOut() = runTest {
+        val f = fixture(CoapServerConfig(qBlock = qBlockOn, verifiedAddressLifetime = 1.seconds))
+        f.peer.send(get(f.peer, block(0, true)))
+        val echo = assertNotNull(f.peer.drain().single().options.echo)
+        f.peer.send(get(f.peer, block(0, true)) { echo(echo) })
+        assertEquals((0L..9L).toList(), f.peer.drain().numbers())
+
+        assertEquals(emptyList(), f.peer.drain(10.seconds), "set 1 would be a burst of its own to an address verified too long ago")
+    }
+
+    @Test
+    fun rfc9177Section4_4ABlockSizeThatDoesNotFitIsAnsweredWithTheWholeBodyInSmallerBlocks() = runTest {
+        val f = fixture(maxDatagramSize = 600)
+        f.peer.send(get(f.peer, block(2, false, 1024)))
+
+        val blocks = f.peer.drain()
+        assertEquals((0L..5L).toList(), blocks.numbers())
+        assertTrue(blocks.all { it.options.qBlock2!!.size == 512 })
+        assertContentEquals(big, blocks.fold(ByteArray(0)) { body, block -> body + block.payload })
+    }
+
+    @Test
+    fun closingTheServerDropsEveryBodyAndTimer() = runTest {
+        val f = fixture()
+        f.peer.send(upload(f.peer, 0))
+        f.peer.send(get(f.peer, block(0, true)))
+        f.peer.drain()
+        assertFalse(f.server.qBlock.state().isEmpty)
+
+        f.server.close()
+
+        assertTrue(f.server.qBlock.state().isEmpty, "${f.server.qBlock.state()}")
+    }
+
+    @Test
+    fun theConfigurationRefusesEmptyBoundsAndNamesItsValues() {
+        assertFailsWith<IllegalArgumentException> { QBlockServerConfig(maxPartialBodies = 0) }
+        assertFailsWith<IllegalArgumentException> { QBlockServerConfig(maxCachedBodies = 0) }
+        assertFailsWith<IllegalArgumentException> { QBlockServerConfig(maxBodiesPerPeer = 0) }
+        assertEquals(
+            "QBlockServerConfig(isEnabled=false, withMessageSecurity=false, onReliableTransports=true, " +
+                "maxPartialBodies=64, maxCachedBodies=64, maxBodiesPerPeer=4)",
+            QBlockServerConfig().toString(),
+        )
+        assertTrue("qBlock=true" in on.toString())
+        val peer = Endpoint.Udp("192.0.2.1", 5683)
+        assertEquals(
+            "QBlockRecovery(peer=$peer, requestedByPeer=true, blocks=[2, 7])",
+            EndpointEvent.QBlockRecovery(peer, true, listOf(2, 7)).toString(),
+        )
+        assertEquals("QBlockFallback(peer=$peer, reason=4.02)", EndpointEvent.QBlockFallback(peer, "4.02").toString())
+        assertEquals("PartialBodyDropped(peer=$peer, reason=reset)", EndpointEvent.PartialBodyDropped(peer, "reset").toString())
     }
 
     private object Recipient : SecurityIdentity {
