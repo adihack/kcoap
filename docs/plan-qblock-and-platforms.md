@@ -477,7 +477,7 @@ public class QBlockServerConfig(
   - Edits to `TransmissionParameters.kt`, `CoapOption.kt`, `OptionSet.kt` and `Blockwise.kt`.
   - The ADR `docs/adr/0006-q-block.md`.
   - The five sans-IO test files.
-  - One line in `ROOT/kcoap-coap/build.gradle.kts`: `commonTest` depends on `:kcoap-cbor`.
+  - One line in `ROOT/kcoap-coap/build.gradle.kts`: `jvmTest` depends on `:kcoap-cbor` (on `commonTest`, Kotlin/Wasm 2.4.21 emits an invalid test module).
 - **Accept:**
   - Every Figure 2–20 script matches the RFC's sequence and times; Figure 6 at 4, 12, 28 and 60 s, discard at 124 s.
   - `TransmissionParameters().nonPartialTimeout == 247.seconds`.

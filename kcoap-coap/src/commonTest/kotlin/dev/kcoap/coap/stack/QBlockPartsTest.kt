@@ -1,7 +1,5 @@
 package dev.kcoap.coap.stack
 
-import dev.kcoap.cbor.Cbor
-import dev.kcoap.cbor.CborInt
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
@@ -68,17 +66,6 @@ class QBlockPartsTest {
         assertFailsWith<IllegalArgumentException> { MissingBlocks.encode(listOf(0x100000L)) }
     }
 
-    @Test
-    fun rfc8742MissingBlocksAgreeWithKcoapCbor() {
-        val random = Random(9177)
-        repeat(50) {
-            val numbers = List(random.nextInt(1, 12)) { random.nextLong(0, 0x100000) }.distinct().sorted()
-            val encoded = MissingBlocks.encode(numbers)
-            assertEquals(encoded.toHex(), Cbor.encodeSequence(numbers.map { CborInt(it) }).toHex())
-            assertEquals(numbers, Cbor.decodeSequence(encoded).map { (it as CborInt).value })
-            assertEquals(numbers, MissingBlocks.decode(encoded))
-        }
-    }
 
     // ---------------------------------------------------------------- structural checks, rows 6 to 12 and 39
 
