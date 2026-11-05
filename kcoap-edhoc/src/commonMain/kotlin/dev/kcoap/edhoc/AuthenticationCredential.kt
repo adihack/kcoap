@@ -7,12 +7,15 @@ import dev.kcoap.cose.CoseKeyType
 import dev.kcoap.cose.CwtClaimsSet
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.x509.CertificateFormatException
+import dev.kcoap.crypto.x509.X509Certificate
 
 /**
  * An authentication credential, CRED_I or CRED_R (RFC 9528 §3.5.2): the exact CBOR item EDHOC hashes and
  * MACs, together with the authentication public key it carries.
  *
- * - X.509: CRED_x is the DER certificate as a CBOR byte string (RFC 9360). Use [x509].
+ * - X.509: CRED_x is the DER certificate as a CBOR byte string (RFC 9360), parsed by kcoap-crypto's
+ *   [X509Certificate]. Use [x509].
  * - CCS: CRED_x is the untagged CWT Claims Set with a COSE_Key in its 'cnf' claim; a raw public key is a
  *   CCS too. Use [ccs]; the bytes are kept as given, never re-encoded (RFC 9528 §3.5.2).
  *
@@ -66,7 +69,8 @@ public class AuthenticationCredential private constructor(
          * An X.509 credential from its DER encoding.
          *
          * @param kid the identifier to match ID_CRED_x = { 4 : kid } against, if the deployment uses one.
-         * @throws IllegalArgumentException when the certificate cannot be parsed.
+         * @throws CertificateFormatException when the certificate cannot be parsed or its key is not one
+         *   kcoap supports, for a certificate of this endpoint as for one a peer sent in `x5chain`.
          */
         public fun x509(der: ByteArray, kid: ByteArray? = null): AuthenticationCredential {
             val certificate = X509Certificate.parse(der)

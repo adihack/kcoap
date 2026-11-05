@@ -13,6 +13,7 @@ import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.crypto.x509.CertificateFormatException
 import dev.kcoap.edhoc.vectors.Rfc9529Trace1
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
@@ -175,6 +176,31 @@ class ErrorHandlingTest {
             assertEquals(authenticationFailed.encode().toHex(), failure.errorMessage!!.toHex(), reason)
         }
         assertTrue(failures.getValue("Certificate chain not trusted").cause is CertificateValidationException)
+    }
+
+    /**
+     * A peer's `x5chain` whose certificate kcoap cannot parse ends the session with error code 1: the
+     * parser's [CertificateFormatException] becomes an [EdhocException], never an IllegalArgumentException.
+     */
+    @Test
+    fun aMalformedCertificateFromThePeerEndsTheSession() = runTest {
+        val signer = backend.generateKeyPair(KeyType.ED25519)
+        val ccs = AuthenticationCredential.ccs(CwtClaimsSet("x", Fixtures.coseKey(KeyType.ED25519, signer.publicKey)))
+        val responderCredential = credential(AuthenticationKind.SIGNATURE, KeyType.ED25519, 9)
+        for (certificate in listOf("3000", Rfc9529Trace1.CRED_I.dropLast(2))) {
+            val chain = CredentialIdentifier.X509Chain(listOf(certificate.hex()))
+            val initiatorCredential = LocalCredential.signature(ccs, chain, signer.privateKey)
+            val (initiatorConfig, responderConfig) =
+                Fixtures.configs(method0, CipherSuite.SUITE_0, initiatorCredential, responderCredential)
+            val initiator = EdhocInitiator(initiatorConfig, backend)
+            val responder = EdhocResponder(responderConfig, backend)
+            responder.processMessage1(initiator.createMessage1())
+            initiator.processMessage2(responder.createMessage2())
+            val failure = assertFailsWith<EdhocException> { responder.processMessage3(initiator.createMessage3().bytes) }
+            assertEquals(EdhocError.UNSPECIFIED_ERROR, failure.errorCode, certificate)
+            assertTrue(failure.cause is CertificateFormatException, certificate)
+            assertEquals(EdhocPhase.ABORTED, responder.phase)
+        }
     }
 
     @Test
