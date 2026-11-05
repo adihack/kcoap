@@ -158,9 +158,21 @@ received (a refusal's Max-Age), keeps serving what it has, and reports `Endpoint
 | `CoapServerConfig.maxObservers`, `maxObserversPerPeer`, `maxObserversPerResource` | 10 000, 32, 1 000 | the registration is served without Observe (RFC 7641 §4.1); re-registrations do not count again |
 | `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
 | `ReliableTransportConfig.maxConnections` | 1 024 | an accepted connection beyond it, opened and accepted ones together, is closed at once |
+| `CoapServerConfig.maxVerifiedAddresses` | 10 000 | the address verified longest ago is forgotten, or the oldest outstanding Echo challenge dropped; either address is challenged again when it next needs to be verified |
 
 An observer that neither message nor channel security authenticated gets at most eight Non-confirmable
 notifications in a row, then a Confirmable one, whose ACK shows it still wants them (RFC 7641 §7).
+
+**Address verification** (RFC 9175 §2.4 item 3, §2.6). A server sends a response larger than
+`CoapServerConfig.amplificationFactor` (3) times its request to a client that neither OSCORE nor DTLS
+authenticated, on a datagram transport, only once that client's address is verified. Until then it sends
+a 4.01 with an 8-byte Echo value from the platform CSPRNG (never the injectable `Random`) instead,
+piggybacked or Non-confirmable so that nothing is retransmitted, and reports `LimitReached` with
+`AMPLIFICATION_FACTOR`. The value is bound to the address it went to; a request that returns it verifies
+the address for `verifiedAddressLifetime` (1 hour from the verification, not extended by use).
+`AmplificationPolicy` chooses what is checked: Q-Block2 bursts (the default), every response
+(`ALL_RESPONSES`, which also challenges every Observe registration, since its notifications go on, and
+keeps the response of a POST or PATCH for the repeat so it does not run twice), or nothing (`OFF`).
 
 **Sans-IO where it pays off.** `UdpMessaging` is the part with the subtle timing rules (back-off,
 deduplication lifetimes, NSTART, superseding), so it takes datagrams and time and returns effects, and

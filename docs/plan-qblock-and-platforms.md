@@ -510,6 +510,15 @@ public class QBlockServerConfig(
   - A repeat carrying the Echo is served, and the address stays verified.
   - Exempt: OSCORE, reliable transports, and responses up to 3× the request size.
   - The libcoap `/.well-known/core` probe is never challenged.
+- **Status: done.** `KC/server/AddressVerification.kt` (Echo values per challenged address, verified
+  addresses, responses kept for the repeat of a POST or PATCH) and `KC/server/AmplificationPolicy.kt`;
+  in `CoapServer.kt` the gate is `checksAddress`, `mustVerifyAddress(inbound, request, responseSize, isBurst)`
+  and `challenge`. QB-3 calls `mustVerifyAddress` with `isBurst = true` and the bytes of the set it is
+  about to send, and sends `challenge(...)` instead when it says so. The server-wide
+  `CoapServerConfig.amplification` replaces the planned `QBlockServerConfig.verifyUnauthenticatedPeers`, so
+  L12 runs with the default policy. Under `ALL_RESPONSES` an Observe registration is challenged whatever
+  its size (RFC 7641 §7). Tests: `AmplificationTest`, `AddressVerificationTest`,
+  `LibcoapClientAgainstKcoapAddressVerificationTest`.
 
 **QB-3: Q-Block server**
 - **Scope:**
