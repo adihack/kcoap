@@ -90,6 +90,32 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * The OSCORE client side for the CoAP stack: protects requests with the context [contexts] picks and
  * verifies the responses, including Observe notifications with their replay protection
  * (RFC 8613 §4.1.3.5.2, §7.4.1).
+ *
+ * **Replay of responses** (§7.4). A response is bound to its request, and a request takes one response, so a
+ * second response to the same request is rejected, with or without a Partial IV. Two kinds of request take
+ * several:
+ * - An Observe registration takes notifications: at most one without a Partial IV, the others with a Partial
+ *   IV above the Notification Number (§7.4.1, §8.4.2). A response without an Inner Observe option is verified
+ *   as a non-Observe response (§4.1.3.5.2), so it takes one of those, which ends the observation.
+ * - A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177 §4) takes the responses of its body:
+ *   the blocks of a Q-Block2 set and the sets that follow on its token, or a 2.31, 4.08s and the final
+ *   response on the token of a Q-Block1 block (§4.3, §4.4, §10). At most one of them may reuse the request's
+ *   nonce, without a Partial IV (§8.3 step 3); every other one must carry a Partial IV the request has not
+ *   seen, within [SecurityContextParameters.replayWindowSize] (32 by default, §3.2.2) of the highest it has
+ *   seen. That is an RFC 6347 sliding window per request, like the server's per context, so the blocks of a
+ *   set may arrive in any order. A replayed or too old block is dropped like a response that fails
+ *   verification (§8.4 step 8), and its body asks for it again (RFC 9177 §4.4).
+ *
+ * Several responses to one request fall outside RFC 8613's single-response model, so the CoAP stack uses
+ * Q-Block under OSCORE only where both sides opt in (`QBlockClientConfig.withMessageSecurity` and
+ * `QBlockServerConfig.withMessageSecurity` of kcoap-coap); otherwise protected bodies use Inner Block1 and
+ * Block2 (RFC 7959; RFC 8613 §4.1.3.4.1), one response per block.
+ *
+ * **Unprotected responses** are not authenticated. The unprotected 4.xx and 5.xx errors of OSCORE and of
+ * intermediaries (§8.2) are passed on to a request that takes one response. To a request carrying an Inner
+ * Q-Block option only 4.00, 4.01 and 5.xx are, without Echo or a block option: those end the body, whereas an
+ * unprotected 4.08, 4.13, 4.02, Echo challenge or block would steer it from outside OSCORE (RFC 9177 §11), so
+ * they are dropped like a response that fails verification ([UnprotectedResponses]).
  */
 public class OscoreClient(
     private val contexts: ClientContextResolver,
@@ -117,15 +143,25 @@ public class OscoreClient(
         private val binding: RequestBinding,
     ) : ProtectedRequest {
         private val lock = Mutex()
+
+        /** Whether a response without a Partial IV used the request's nonce (§8.3 step 3), which one may. */
         private var usedRequestNonce = false
+
+        /** How many responses that are not notifications were accepted. */
+        private var responses = 0
         private var notificationNumber: Long = -1
+
+        /** The Partial IVs of the responses to a request that takes several, from the first such response on. */
+        private var responseWindow: ReplayWindow? = null
 
         override suspend fun unprotectResponse(response: CoapMessage): CoapMessage {
             if (response.options.oscore == null) {
-                // OSCORE errors are sent unprotected (RFC 8613 §8.2); pass them on so the application can
-                // react, for example by re-deriving the context. They are not authenticated.
-                if (response.code.isClientError || response.code.isServerError) return response
-                throw MessageSecurityException("Unprotected response to an OSCORE request")
+                // OSCORE errors are sent unprotected (RFC 8613 §8.2) and are not authenticated: only those that
+                // can do no more than end the request are passed on (UnprotectedResponses).
+                val rejection = UnprotectedResponses.rejection(response, takesSeveral = binding.allowsSeveralResponses)
+                    ?: return response
+                log.warn { "Dropped a response: $rejection" }
+                throw MessageSecurityException(rejection)
             }
             val (decrypted, piv) = try {
                 OscoreProtection.unprotectResponse(binding, response)
@@ -136,16 +172,38 @@ public class OscoreClient(
             return lock.withLock { checkFreshness(decrypted, piv) }
         }
 
-        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        /**
+         * §7.4: one response per request, except for the requests that take several (see [OscoreClient]).
+         * Called under [lock] once the response verified, so a forged response changes nothing.
+         */
         private fun checkFreshness(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
-            val isNotification = decrypted.options.observe != null
-            if (!isNotification) {
-                if (!binding.isObserveRegistration && usedRequestNonce) {
-                    throw MessageSecurityException("Second response to a non-Observe request")
-                }
-                usedRequestNonce = usedRequestNonce || piv == null
-                return decrypted
+            if (decrypted.options.observe != null) return checkNotification(decrypted, piv)
+            if (binding.allowsSeveralResponses) {
+                admitOneOfSeveral(piv)
+            } else if (responses > 0) {
+                throw MessageSecurityException("Second response to a request that takes one")
             }
+            responses++
+            if (piv == null) usedRequestNonce = true
+            return decrypted
+        }
+
+        /**
+         * A response to a request that takes several: at most one reuses the request's nonce, and every other
+         * one has a Partial IV that is new in the request's window (RFC 6347 §4.1.2.6).
+         */
+        private fun admitOneOfSeveral(piv: ByteArray?) {
+            if (piv == null) {
+                if (usedRequestNonce) throw MessageSecurityException("Second response without a Partial IV")
+                return
+            }
+            val window = responseWindow
+                ?: ReplayWindow(binding.context.parameters.replayWindowSize).also { responseWindow = it }
+            if (!window.accept(piv.readUnsigned())) throw MessageSecurityException("Replayed or too old response")
+        }
+
+        /** §8.4.2 and §7.4.1: one notification without a Partial IV at most, then strictly newer ones. */
+        private fun checkNotification(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
             if (!binding.isObserveRegistration) throw MessageSecurityException("Notification for a request that did not register")
             if (piv == null) {
                 if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
@@ -206,9 +264,10 @@ public class OscoreServer(
         override val identity: SecurityIdentity = OscoreIdentity(binding.context.recipientId, binding.context.idContext)
 
         /**
-         * The first response reuses the request nonce (RFC 8613 §8.3); later notifications take a new
-         * Partial IV each (§8.3.1), and so does a freshness challenge, whose request may be a replay
-         * (Appendix B.1.2).
+         * The first response reuses the request nonce (RFC 8613 §8.3); every later one takes a new Partial IV
+         * (§8.3 step 3), as notifications must (§8.3.1) and as the further responses of a Q-Block body do
+         * (RFC 9177 §4.3, §4.4: the blocks of a set, 4.08s on the timer), and so does a freshness challenge,
+         * whose request may be a replay (Appendix B.1.2).
          */
         override suspend fun protectResponse(response: CoapMessage): CoapMessage {
             val first = lock.withLock { responses++ == 0 }

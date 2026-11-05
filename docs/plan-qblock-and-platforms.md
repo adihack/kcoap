@@ -641,6 +641,46 @@ public class QBlockServerConfig(
   - A second response to a request without Q-Block is still rejected.
   - Q-Block1 PUT and Q-Block2 GET with 10 % loss pass under OSCORE between two kcoap peers.
   - The libcoap limits are pinned as `upstream…` tests; the defaults pass against libcoap.
+- **Status: done.** `RequestBinding.allowsSeveralResponses` is set for a request whose Inner options carry
+  Q-Block1 or Q-Block2. `OscoreClient` takes several responses to such a request: at most one with the
+  request's nonce, every other with a Partial IV new in a `ReplayWindow` of that request, sized as the
+  context's `replayWindowSize` (32 by default, RFC 8613 §3.2.2) rather than a constant, so it follows the
+  context. Every other request now takes exactly one response: before, a second one (a replay of the first
+  too) was accepted when the first had a Partial IV. An Observe registration takes one non-notification
+  response too (RFC 8613 §4.1.3.5.2); notifications keep the strict high-water mark until QB-6's OSCORE
+  cases. The server needed nothing: every response after the first already took a new Partial IV,
+  and the Q-Block server keeps each request's `UnprotectedRequest`. In kcoap-coap, the seam QB-5 needs:
+  `QBlockClient.rfc7959Reason` lets `withMessageSecurity` take effect (the warning that it did not is gone),
+  and the KDoc of `QBlockClientConfig.withMessageSecurity`, `QBlockServerConfig.withMessageSecurity` and the
+  security SPI (`ProtectedRequest.unprotectResponse`, `UnprotectedRequest.protectResponse`) says what it
+  means; `QBlockSupportTest` turns around with it. Deviation from the plan: the kcoap-to-kcoap bodies run in
+  jvmTest (`OscoreQBlockEndToEndTest`, 9, which replaces `OscoreQBlockClientTest`), since the crypto backend
+  suspends on the platform on JS and Wasm, where virtual time would run ahead of it; the rules run on every
+  target in `OscoreQBlockTest` (commonTest, 10). The end-to-end cases: both sides opting in (NON GET, PUT
+  and a POST answered in Q-Block2, the probe protected too, no Q-Block or Block option outside OSCORE),
+  Confirmable bodies, the client or the server not opting in, a block response recorded and sent again with
+  a fresh Message ID, a restarted server's B.1.2 challenge within the bodies, and 10 seeds at 10 % loss per
+  direction with no genuine response refused. Against libcoap (`StackOscoreInteropTest`): K11 and L11 pass
+  with the defaults; with `withMessageSecurity`, libcoap 4.3.5b protects or verifies only the first
+  response to a request, pinned as `upstreamLibcoapCannotProtectQBlock2Bursts` (its server: one block per
+  request, "OSCORE: PDU could not be encrypted"; Q-Block1 uploads complete) and
+  `upstreamLibcoapClientCannotVerifyQBlock2Bursts` (its client: "Security Context association not found" at
+  block 1). libcoap's own 5 s wait while it tests for Q-Block is recorded in L11.
+  After review: `OscoreClient` passed every unprotected 4.xx and 5.xx on, which a Q-Block body acts on for as
+  long as it lasts, so anyone who saw a token could steer a protected body: have blocks sent again with a
+  4.08, restart it with a 4.13, have it adopt an Echo value, or turn Q-Block under OSCORE off for the peer,
+  for every client of the endpoint, with a 4.02 before any answer (the fail-open of 1.6). Now
+  `UnprotectedResponses` hands a request carrying Inner Q-Block only the unprotected errors that end its
+  body, 4.00, 4.01 and 5.xx without Echo or a block option, and drops every other one as unverified; a Q-Block
+  rejection from a server that does not opt in is an inner, protected 4.02, and an unprotected 4.02 (a server
+  without OSCORE) ends the request as a timeout. Other requests are unchanged. A registration's second
+  non-notification response is rejected instead of going through the window. Tests: `OscoreQBlockTest` (13:
+  every steering response dropped for a Q-Block1 and a Q-Block2 request but passed on to a request without
+  Q-Block, the errors that end a body passed on), `OscoreQBlockEndToEndTest` (12: a 4.02 injected on a GET's
+  token leaves Q-Block on, a 4.08 listing set 0 injected on block 9's token has no block sent twice, the
+  fallback's 4.02 is a protected 2.04 on the wire, and one endpoint shared by a plain and an OSCORE client keeps
+  their probes and capabilities apart); `upstreamLibcoapCannotProtectQBlock2Bursts` reads the upload back
+  with Inner Block2 and allows a block sent again.
 
 **QB-6: Observe with Q-Block**
 - **Scope:**

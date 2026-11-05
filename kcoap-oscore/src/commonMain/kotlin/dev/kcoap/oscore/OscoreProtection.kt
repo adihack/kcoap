@@ -27,6 +27,13 @@ internal class RequestBinding(
     val requestNonce: ByteArray,
     /** Whether the request registered an observation, which allows several responses. */
     val isObserveRegistration: Boolean,
+    /**
+     * Whether the request carried an Inner Q-Block1 or Q-Block2 option (RFC 9177 §4), whose body may bring
+     * several responses to this one request: the blocks of a set, 2.31 and 4.08 (§4.3, §4.4). That falls
+     * outside the single response of RFC 8613 §7.4, so each of them is checked against a replay window of
+     * the request instead ([OscoreClient]).
+     */
+    val allowsSeveralResponses: Boolean,
 )
 
 /** A verified request, and the Echo challenge to answer it with when freshness is not yet proven. */
@@ -60,7 +67,11 @@ internal object OscoreProtection {
             replaceOptions(split.outer.toBuilder().oscore(optionValue.encode()).build())
             payload = ciphertext
         }.build()
-        val binding = RequestBinding(context, senderId, piv, nonce, isObserveRegistration = request.options.observe == 0L)
+        val binding = RequestBinding(
+            context, senderId, piv, nonce,
+            isObserveRegistration = request.options.observe == 0L,
+            allowsSeveralResponses = carriesQBlock(request.options),
+        )
         return protected to binding
     }
 
@@ -82,7 +93,11 @@ internal object OscoreProtection {
         val aad = additionalData(context, requestKid = kid, requestPiv = piv)
         val plaintext = decrypt(context, nonce, request.payload, aad)
         val decrypted = merge(request, parsePlaintext(plaintext))
-        val binding = RequestBinding(context, kid, piv, nonce, isObserveRegistration = decrypted.options.observe == 0L)
+        val binding = RequestBinding(
+            context, kid, piv, nonce,
+            isObserveRegistration = decrypted.options.observe == 0L,
+            allowsSeveralResponses = carriesQBlock(decrypted.options),
+        )
 
         return when (val admission = context.admit(sequence, decrypted.options.echo)) {
             SecurityContext.Admission.Accepted -> VerifiedRequest(decrypted, binding, challengeEcho = null)
@@ -189,6 +204,13 @@ internal object OscoreProtection {
             .toByteArray()
         return CoseStructures.encStructure(protected = ByteArray(0), externalAad = aadArray)
     }
+
+    /**
+     * Whether [options], the Inner options of a request, carry Q-Block1 or Q-Block2. Both are Class E and U
+     * (RFC 9177 §4, Table 2), and this endpoint, not being a proxy, puts them inside (RFC 8613 §4.1).
+     */
+    internal fun carriesQBlock(options: OptionSet): Boolean =
+        CoapOptions.Q_BLOCK1.number in options || CoapOptions.Q_BLOCK2.number in options
 
     /** §5: the Sender Sequence Number without leading zero bytes; 0 encodes as 0x00. */
     internal fun encodePartialIv(sequence: Long): ByteArray =

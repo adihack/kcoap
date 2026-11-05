@@ -36,7 +36,11 @@ public interface ProtectedRequest {
 
     /**
      * Verifies and decrypts a response to this request. Called once per response, so also for every
-     * Observe notification, possibly from different coroutines (see [ClientMessageSecurity]).
+     * Observe notification and for every response of a Q-Block body (RFC 9177 §4.3, §4.4) when
+     * `QBlockClientConfig.withMessageSecurity` lets protected requests use Q-Block, possibly from different
+     * coroutines (see [ClientMessageSecurity]). The stack trusts what this returns: a response returned
+     * without verification, such as an unprotected error, is acted on like a verified one, and in a Q-Block
+     * body for the whole body (a 4.08 has blocks sent again, a 4.02 turns Q-Block off for the peer).
      *
      * @throws MessageSecurityException when the response does not verify; the stack drops it.
      */
@@ -73,7 +77,9 @@ public interface UnprotectedRequest {
 
     /**
      * Protects a response to this request. The stack keeps this object for an observation and calls it
-     * for every notification, from the coroutine of each, so calls may overlap (see [ClientMessageSecurity]).
+     * for every notification, and for a Q-Block body (`QBlockServerConfig.withMessageSecurity`) for every block,
+     * 2.31 and 4.08 it sends in answer to the request (RFC 9177 §4.3, §4.4), from the coroutine of each, so
+     * calls may overlap (see [ClientMessageSecurity]).
      */
     public suspend fun protectResponse(response: CoapMessage): CoapMessage
 }
