@@ -28,6 +28,8 @@ import kotlin.time.Duration
  *   value (RFC 9175 §2.3: SHOULD).
  * @property securityReserve bytes kept free in each message for [security]'s overhead when choosing
  *   block sizes.
+ * @property qBlock whether and how requests use Q-Block (RFC 9177) instead of RFC 7959; off by default.
+ *   [blockSize] and [maxResponseBodySize] apply to Q-Block bodies too.
  */
 public class CoapClientConfig(
     public val security: ClientMessageSecurity? = null,
@@ -38,6 +40,7 @@ public class CoapClientConfig(
     public val observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
     public val echoRetry: Boolean = true,
     public val securityReserve: Int = 64,
+    public val qBlock: QBlockClientConfig = QBlockClientConfig(),
 ) {
     init {
         require(requestTimeout == null || requestTimeout.isPositive()) { "Request timeout must be positive: $requestTimeout" }
@@ -49,7 +52,8 @@ public class CoapClientConfig(
     }
 
     override fun toString(): String =
-        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, blockSize=$blockSize)"
+        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, blockSize=$blockSize, " +
+            "qBlock=${qBlock.mode})"
 }
 
 /** How a [CoapClient] ends an observation whose collector went away (RFC 7641 §3.6). */

@@ -34,7 +34,8 @@ import kotlinx.coroutines.withContext
  * A CoAP client on a [CoapEndpoint].
  *
  * Every call suspends until the whole response is there: block-wise transfers are done in both
- * directions (RFC 7959), separate responses are awaited (RFC 7252 §5.2.2), a 4.01 with Echo is answered
+ * directions (RFC 7959, or Q-Block of RFC 9177 when [CoapClientConfig.qBlock] turns it on and the server
+ * supports it), separate responses are awaited (RFC 7252 §5.2.2), a 4.01 with Echo is answered
  * once with that Echo value (RFC 9175 §2.3), and message security protects each message
  * ([CoapClientConfig.security]). Error codes are returned as responses; a request that gets no response
  * at all throws [CoapException]. Cancelling the calling coroutine cancels the exchange. Once the endpoint
@@ -93,6 +94,9 @@ public class CoapClient private constructor(
 
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_CLIENT)
     internal val blockwise = BlockwiseClient(this)
+
+    /** Q-Block (RFC 9177), when [CoapClientConfig.qBlock] turns it on. */
+    internal val qBlock: QBlockClient? = if (config.qBlock.isEnabled) QBlockClient(this) else null
     /** Guards [observations]; internal for tests. */
     internal val observationLock = Mutex()
     private val observations = HashMap<OperationKey, ClientObservation>()
@@ -103,17 +107,25 @@ public class CoapClient private constructor(
     /**
      * The critical options the client processes in a response: Block1 and Block2 (RFC 7959); OSCORE is gone
      * after verification. The endpoint rejects a response with any other one (RFC 7252 §5.4.1): a separate
-     * response with a Reset, and the request fails with [CoapException.Reason.BAD_RESPONSE].
+     * response with a Reset, and the request fails with [CoapException.Reason.BAD_RESPONSE]. Requests sent
+     * with Q-Block recognize Q-Block1 and Q-Block2 as well ([QBlockClient.RECOGNIZED_OPTIONS]); every other
+     * request rejects them, since a server sends them only to a request that carried one (RFC 9177 §4.1).
      */
     internal val recognizedOptions: Set<Int> = ClientExchange.BLOCKWISE_OPTIONS
 
     // ---------------------------------------------------------------- methods
 
-    /** Sends [request] and returns its whole response. */
+    /**
+     * Sends [request] and returns its whole response: with Q-Block (RFC 9177) where [CoapClientConfig.qBlock]
+     * allows it and the server supports it, otherwise with Block1 and Block2 (RFC 7959) where the body needs
+     * them.
+     */
     public suspend fun request(request: CoapRequest): CoapResponse {
         val peer = config.resolver.resolve(request.uri)
         log.debug { "$request to $peer" }
-        return blockwise.send(peer, message(request), request.isConfirmable)
+        val message = message(request)
+        qBlock?.send(peer, message, request.isConfirmable)?.let { return it }
+        return blockwise.send(peer, message, request.isConfirmable)
     }
 
     /** Sends a [method] request to [uri], set up by [configure]. */
@@ -306,6 +318,7 @@ public class CoapClient private constructor(
 
     /** Closes the endpoint if the client created it. */
     public suspend fun close() {
+        qBlock?.close()
         if (ownsEndpoint) endpoint.close()
     }
 
@@ -324,12 +337,17 @@ public class CoapClient private constructor(
      * One request and its response, without block-wise processing: the exchange layer, message security,
      * and the Echo retry of RFC 9175 §2.3.
      */
-    internal suspend fun exchange(peer: Endpoint, request: CoapMessage, confirmable: Boolean): CoapMessage {
+    internal suspend fun exchange(
+        peer: Endpoint,
+        request: CoapMessage,
+        confirmable: Boolean,
+        recognized: Set<Int> = recognizedOptions,
+    ): CoapMessage {
         var current = request
         var echoed = false
         while (true) {
             val exchange = endpoint.openExchange(
-                peer, current, confirmable, config.security, ResponseMode.Single, recognizedOptions = recognizedOptions,
+                peer, current, confirmable, config.security, ResponseMode.Single, recognizedOptions = recognized,
             )
             val response = endpoint.awaitResponse(exchange, requestTimeout)
             val echo = response.options.echo
