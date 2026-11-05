@@ -521,7 +521,7 @@ public class QBlockServerConfig(
   `CoapServerConfig.amplification` replaces the planned `QBlockServerConfig.verifyUnauthenticatedPeers`, so
   L1–L11 run with `AmplificationPolicy.OFF` and L12 with the default policy. Under `ALL_RESPONSES` an
   Observe registration is challenged whatever its size (RFC 7641 §7), and a separate response to an
-  unverified address is Non-confirmable. Tests: `AmplificationTest`, `AddressVerificationTest`,
+  unverified address is Non-confirmable; since QB-6 one with Q-Block is under the default policy too. Tests: `AmplificationTest`, `AddressVerificationTest`,
   `HeldBackResponsesTest`, `LibcoapClientAgainstKcoapAddressVerificationTest`.
 
 **QB-3: Q-Block server**
@@ -658,26 +658,41 @@ public class QBlockServerConfig(
   `QBlockServer.notify` sends each notification as a `ServedBody` whose blocks go to a `NotificationBody`
   (the observation's token, all of one message type) instead of a request: `QBlockTarget` is now the sender's
   `R`. A block carries the body's Observe value when its target does (a notification, the registration, a
-  Continue's set on it), never on a request for missing blocks. `ServerObservation` keeps its latest `body`
-  as the one outstanding notification until it is settled (every block out, Confirmable ones acknowledged,
-  Non-confirmable ones at least `nonConfirmableNotificationInterval` old, holding a `BodyLease` meanwhile);
-  changes fold into the next body, which ends whatever the older one still had queued. A Reset, a failure
-  or a timeout of any block removes the observer; removing the observer stops its body. Notification bodies
-  are not checked against the amplification factor; under `ALL_RESPONSES` a Q-Block2 registration is
-  challenged as a plain one is. Client: `QBlockClient.observe` runs the registration as a download or
+  Continue's set on it), never on a request for missing blocks. `ServerObservation` keeps an
+  `OutstandingBody` of its latest body, never the body itself, as the one outstanding notification until it is
+  settled (every block out, Confirmable ones acknowledged, Non-confirmable ones at least
+  `nonConfirmableNotificationInterval` old, holding a `BodyLease` meanwhile); changes fold into the next body,
+  which ends whatever the older one still had queued. A Reset, a failure or a timeout of a block that carries
+  Observe removes the observer; a Reset to an answer for missing blocks only drops what that request still had
+  queued (`QBlock2Sender.onReset(now, ref)`). Removing or replacing the observer stops its bodies, and a body
+  whose observer went while it waited for its NSTART slot is not sent. A Q-Block registration from an
+  unauthenticated datagram client is challenged with Echo under every policy but `OFF`, whatever the size of
+  its first response (every block of a FETCH uploaded in Q-Block1 until one carries the Echo value), and its
+  bodies go Confirmable once the verification lapses (`CoapServer.mustConfirmBodies`). A FETCH registration
+  whose 2.05 was lost gets it again, when the client sends the last block again on a new token, on the
+  request that completed the upload, whose token the notifications use (§4.3), and the copy gets nothing.
+  Client: `QBlockClient.observe` runs the registration as a download or
   upload whose first response with Observe, on a request of the registration, names the observation's token;
   once the first body is whole every other token and the lease go, and each later body gets a
   `QBlock2Receiver` of its own (mode from its blocks' type), ordered by `NotificationOrder` once, on its first
-  block, emitted once; a body without Observe is taken only in answer to a request for the body in progress.
-  A Non-confirmable body's follow-ups share one lease. A Q-Block1 registration ends by forgetting its token.
+  block, emitted once; a body without Observe is taken only in answer to a request for the body in progress,
+  and a fresher notification of one message supersedes the body in progress. A Non-confirmable body's
+  follow-ups share one lease, and their tokens go with the body. Follow-ups of a Q-Block1 registration carry
+  its Request-Tag and no payload, also when its 2.05 was one block. A Q-Block1 registration ends by
+  forgetting its token.
   Found on the way: the reader of a connection delivered a whole burst of requests before any handler ran on
   a dispatcher of one thread, so a 320-block upload from kcoap's client met `maxConcurrentRequests` (5.03);
   the reader now yields after each read (`ConnectionDriver`). Deviations from the figures, allowed by the
   RFC: kcoap's client sends the last block of a FETCH again at NON_RECEIVE_TIMEOUT, the moment the server's
   4.08 of Figure 13 goes out; the server answers on the request that completed an upload (Figure 14 uses
-  the last one received). The POST part of the soak runs at 10 % loss: a POST does not repeat its last
-  block, so at 30 % each way about a fifth of the runs fail cleanly. Tests: `QBlockObserveTest` (23),
-  Observe rules in `QBlockServerTest`, `QBlockTest` (5 soaks, 200 runs), `QBlockReliableTest` (+5),
+  the last one received). A POST does not repeat its last block, so at 30 % loss each way about a fifth of
+  the POST runs fail cleanly: that soak asks two in three to complete, the others four in five. Not done, by
+  decision: a Non-confirmable body counts as one notification for RFC 7641 §7's run (counting blocks would
+  make every other large body Confirmable), and its slot is held for `nonConfirmableNotificationInterval`,
+  not PROBING_RATE, since a complete single-set body draws no answer from a compliant client. Tests:
+  `QBlockObserveTest` (29: also a lost 2.05 of a Q-Block1 registration, a body that outlasts the changes
+  without Continues, a Reset to the registration's blocks, the address check), Observe rules in
+  `QBlockServerTest`, `QBlockTest` (6 soaks, 240 runs), `QBlockReliableTest` (+5),
   `KcoapClientAgainstLibcoapQBlockTest.k6…` and `LibcoapClientAgainstKcoapQBlockTest.l6…`. libcoap leaves
   Observe out of the blocks after a Continue (K6) and writes no `-o` file for an observation (L6).
 

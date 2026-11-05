@@ -124,12 +124,21 @@ adds its entry and migration note below.
   notification until every block went out (and, Non-confirmable, for at least
   `nonConfirmableNotificationInterval`, with one NSTART slot towards the client), folds changes meanwhile
   into the next body, so a resource that changes faster than its bodies go out still delivers whole ones,
-  and removes the observer on a Reset to any block or an unacknowledged Confirmable one. A cancelled
-  observation registered with Q-Block1 forgets its token instead of deregistering, since its body sent again
-  would need a new Request-Tag. Behaviour changes for those who turned Q-Block on: a server with
+  and removes the observer on a Reset to any block that carries Observe or an unacknowledged Confirmable
+  one; a Reset to an answer for missing blocks only stops that answer. A FETCH registration uploaded in
+  Q-Block1 whose 2.05 was lost gets it again on the token its notifications use when the client sends the
+  last block again (§4.3). The client releases the tokens of a body's Continues and requests for missing
+  blocks with the body, and a fresher notification of one message supersedes a body still being assembled.
+  A cancelled observation registered with Q-Block1 forgets its token instead of deregistering, since its body
+  sent again would need a new Request-Tag. Behaviour changes for those who turned Q-Block on: a server with
   `QBlockServerConfig.isEnabled` now adds an observer for a registration carrying Q-Block2, which QB-3
   served as a plain request, and a client with `QBlockClientConfig.mode` other than `OFF` now observes with
-  Q-Block, where QB-4 kept observations on RFC 7959. No API change. Tested end to end on Figures 7 to 15
+  Q-Block, where QB-4 kept observations on RFC 7959. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`
+  (and `ALL_RESPONSES`), such a registration from a client that neither OSCORE nor DTLS authenticated now
+  gets a 4.01 with Echo first, whatever the size of its first response, since its notification bodies are
+  bursts no request asks for (RFC 7641 §7, RFC 9175 §2.4); a FETCH uploaded in Q-Block1 gets it for each
+  block until one carries the Echo value. Once the verification lapses (`verifiedAddressLifetime`), its
+  notification bodies go Confirmable. No API change. Tested end to end on Figures 7 to 15
   (`QBlockObserveTest`) and against libcoap both ways (K6, L6). The kcoap-to-kcoap soak of the plan
   (`QBlockTest`: 20 seeds, 10 % and 30 % loss, 3000 B and 20 KiB, PUT, GET and POST) and bodies of 320 blocks
   and notifications over connections (`QBlockReliableTest`) came with it.
