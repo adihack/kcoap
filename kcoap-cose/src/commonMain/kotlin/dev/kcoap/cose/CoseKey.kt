@@ -124,8 +124,9 @@ public class CoseKey(
          * odd y (RFC 9053 §7.1.1, a compressed point). The coordinate is computed with [Sec1], so [y],
          * [rawPublicKey] and [encode] carry it in full.
          *
-         * @throws CborException for a map that is not a COSE_Key kcoap supports, or a sign bit whose x is not
-         *   on the curve.
+         * @throws CborException for a map that is not a COSE_Key kcoap supports, among them an EC2 key
+         *   without crv or y (RFC 9053 §7.1.1) and an OKP key without crv or with a y (§7.2), or a sign bit
+         *   whose x is not on the curve.
          */
         public fun fromCbor(map: CborMap): CoseKey {
             val type = map[LABEL_KTY]?.asInt()?.let(CoseKeyType::fromValue)
@@ -144,6 +145,11 @@ public class CoseKey(
                 is CborBytes -> value.bytes
                 is CborBool -> coordinateWithSignBit(type, curve, x, isOdd = value.value)
                 else -> throw CborException("COSE_Key y must be a byte string or a sign bit")
+            }
+            when {
+                curve == null -> throw CborException("$type COSE_Key without crv")
+                type == CoseKeyType.EC2 && y == null -> throw CborException("EC2 COSE_Key without y")
+                type == CoseKeyType.OKP && y != null -> throw CborException("OKP COSE_Key with y")
             }
             val algorithm = (map[LABEL_ALG] as? CborInt)?.value?.toInt()
             return CoseKey(type, curve, x, y, map[LABEL_KID]?.asBytes(), algorithm)

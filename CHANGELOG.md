@@ -292,6 +292,9 @@ kcoap-crypto as the home of shared crypto blocks (WP-A4):
   `PrivateKey` subclass of your own that an `EphemeralKeySource` or a backend hands to EDHOC gets `destroy()`
   called: override it to release the key, catching what the platform throws (Android's
   `KeyStore.deleteEntry` can), or keep the default, which does nothing.
+- **`CoseKey.fromCbor` throws `CborException`, not `IllegalArgumentException`, for an EC2 map without crv or
+  y and an OKP map without crv or with a y** (RFC 9053 §7.1.1, §7.2), as its documentation says for every
+  map that is not a COSE_Key kcoap supports. *Migration:* catch `CborException` only.
 - **`DtlsSigner` is removed, and `DtlsCredentials.signer` is `localCredential: DtlsLocalCredential?`**
   (kcoap-dtls, which is not published yet). `DtlsLocalCredential(privateKey, subjectPublicKeyInfo,
   certificateChain)` takes a P-256 `PrivateKey` handle, the same kind EDHOC's `LocalCredential` takes, and

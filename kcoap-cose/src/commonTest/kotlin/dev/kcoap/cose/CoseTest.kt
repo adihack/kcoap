@@ -78,6 +78,32 @@ class CoseTest {
     }
 
     /**
+     * RFC 9053 §7.1.1 and §7.2: an EC2 key needs crv and y, an OKP key crv and no y. A map without them is
+     * not a COSE_Key kcoap supports, and fromCbor says so with a CborException, never an
+     * IllegalArgumentException from the constructor.
+     */
+    @Test
+    fun rfc9053Section7KeysWithoutTheirParametersAreCborErrors() {
+        val x = (-2).toCbor() to ByteArray(32).toCbor()
+        val y = (-3).toCbor() to ByteArray(32).toCbor()
+        val ec2 = 1.toCbor() to 2.toCbor()
+        val okp = 1.toCbor() to 1.toCbor()
+        val p256 = (-1).toCbor() to 1.toCbor()
+        val x25519 = (-1).toCbor() to 4.toCbor()
+        val cases = mapOf(
+            "EC2 COSE_Key without y" to CborMap(ec2, p256, x),
+            "EC2 COSE_Key without crv" to CborMap(ec2, x, y),
+            "OKP COSE_Key with y" to CborMap(okp, x25519, x, y),
+            "OKP COSE_Key without crv" to CborMap(okp, x),
+        )
+        for ((diagnostic, map) in cases) {
+            assertEquals(diagnostic, assertFailsWith<CborException>(diagnostic) { CoseKey.fromCbor(map) }.message)
+        }
+        val complete = CoseKey(CoseKeyType.EC2, CoseCurve.P_256, ByteArray(32), ByteArray(32))
+        assertEquals(complete, CoseKey.fromCbor(CborMap(ec2, p256, x, y)))
+    }
+
+    /**
      * RFC 9053 §7.1.1: y as a sign bit, `true` for an odd y. The RFC 9529 §3.4 key PK_R has an even y, so
      * `false` gives it back, and `true` the other point with the same x.
      */
