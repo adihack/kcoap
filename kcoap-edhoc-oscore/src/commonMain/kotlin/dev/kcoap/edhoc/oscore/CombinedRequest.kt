@@ -74,8 +74,9 @@ public class CombinedRequestSecurity(
  * ```
  *
  * Errors follow the RFC: a malformed combined request is answered with 4.00, a failed EDHOC step with
- * an EDHOC error message (Content-Format application/edhoc+cbor-seq), and a failed OSCORE step with the
- * OSCORE errors of RFC 8613 §8.2. A rebuilt request that [oscore] does not take as protected (null) is
+ * an EDHOC error message (Content-Format application/edhoc+cbor-seq) in a 4.00, or in a 5.00 when [edhoc]
+ * failed on its own side (RFC 9528 Appendix A.2.3), and a failed OSCORE step with the OSCORE errors of
+ * RFC 8613 §8.2. A rebuilt request that [oscore] does not take as protected (null) is
  * malformed as well: it carried the EDHOC option without being an OSCORE request.
  */
 public class CombinedRequestServer(
@@ -100,10 +101,10 @@ public class CombinedRequestServer(
         try {
             edhoc.completeCombined(ConnectionIdentifier(kid), message3, peer)
         } catch (e: EdhocException) {
-            val error = e.errorMessage ?: EdhocError.unspecified("EDHOC failed").encode()
+            val error = e.errorMessage ?: EdhocError.unspecified(EdhocServerFailure.DIAGNOSTIC).encode()
             throw MessageSecurityException(
                 "EDHOC processing failed: ${e.message}",
-                CoapCode.BAD_REQUEST,
+                if (e is EdhocServerFailure) CoapCode.INTERNAL_SERVER_ERROR else CoapCode.BAD_REQUEST,
                 diagnostic = null,
                 cause = e,
                 errorPayload = error,

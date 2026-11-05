@@ -1,8 +1,11 @@
 package dev.kcoap.edhoc.oscore
 
 import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.CoapUri
+import dev.kcoap.coap.ContentFormat
+import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
@@ -20,17 +23,23 @@ import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocException
 import dev.kcoap.edhoc.EdhocInitiator
 import dev.kcoap.edhoc.EdhocMessage
+import dev.kcoap.edhoc.EdhocPeerErrorException
+import dev.kcoap.edhoc.EdhocSession
 import dev.kcoap.edhoc.EphemeralKeySource
 import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.InMemoryContextRepository
+import dev.kcoap.oscore.MutableSecurityContextRepository
+import dev.kcoap.oscore.OscoreServer
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SecurityContextParameters
+import dev.kcoap.oscore.SequenceNumberStore
 import dev.kcoap.testkit.Stress
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -577,6 +586,132 @@ class EdhocServerSessionsTest {
         }
     }
 
+    // --- establishing the context, all or nothing --------------------------------------------------------
+
+    /**
+     * A repository that fails as the context is added, as a bounded one refusing when full would, ends the session
+     * with the server error of RFC 9528 Appendix A.2.3: "EDHOC failed" in a 5.00, application/edhoc+cbor-seq, also
+     * through the combined request. No context stays behind, also when the repository added it before failing,
+     * and the listener never runs.
+     */
+    @Test
+    fun aFailingRepositoryEndsTheSessionWithAServerError() = runTest {
+        val peers = Peers.create(crypto)
+        for (addsFirst in listOf(false, true)) {
+            val delegate = InMemoryContextRepository()
+            val failing = object : MutableSecurityContextRepository by delegate {
+                override suspend fun addIfAbsent(context: SecurityContext): Boolean {
+                    if (addsFirst) delegate.addIfAbsent(context)
+                    throw IllegalStateException("The repository is full")
+                }
+            }
+            val established = mutableListOf<SecurityContext>()
+            val server = EdhocServer(peers.responderConfig(), crypto, failing, listener = { _, context -> established += context })
+            val case = "addsFirst = $addsFirst"
+
+            val (response, responderId) = server.completeWith(peers, alice)
+            assertServerError(response, case)
+            assertNull(delegate.find(responderId.bytes, null), case)
+
+            val client = assertFailsWith<EdhocPeerErrorException> { handshake(peers, server, alice).run() }
+            assertEquals(EdhocServerFailure.DIAGNOSTIC, client.error.diagnostic, "the client sees the server error")
+
+            val (session, security) = handshake(peers, server, alice).runCombined()
+            val combined = security.protectRequest(request(), alice)!!.message
+            val failure = assertFailsWith<MessageSecurityException> {
+                CombinedRequestServer(server, OscoreServer(failing)).unprotectRequest(combined, alice)
+            }
+            assertEquals(CoapCode.INTERNAL_SERVER_ERROR, failure.responseCode, case)
+            assertEquals(ContentFormat.EDHOC_CBOR_SEQ, failure.contentFormat, case)
+            assertEquals(EdhocError.unspecified("EDHOC failed"), EdhocError.decode(failure.errorPayload!!), case)
+            assertNull(delegate.find(session.edhoc.responderConnectionIdentifier.bytes, null), case)
+
+            assertEquals(0, server.pendingSessions(), case)
+            assertEquals(emptyList(), established, case)
+        }
+    }
+
+    /**
+     * A handler cancelled while the repository adds the context, after the context got in, sequentially or in an
+     * EDHOC + OSCORE request: the context is taken out again, the place is free, and the listener never runs.
+     */
+    @Test
+    fun cancellingWhileTheContextIsAddedLeavesNoContext() = runTest {
+        val peers = Peers.create(crypto)
+        for (combined in listOf(false, true)) {
+            val delegate = InMemoryContextRepository()
+            val adding = CompletableDeferred<Unit>()
+            val stuck = object : MutableSecurityContextRepository by delegate {
+                override suspend fun addIfAbsent(context: SecurityContext): Boolean {
+                    delegate.addIfAbsent(context)
+                    adding.complete(Unit)
+                    awaitCancellation()
+                }
+            }
+            val established = mutableListOf<SecurityContext>()
+            val server = EdhocServer(peers.responderConfig(), crypto, stuck, listener = { _, context -> established += context })
+            val initiator = initiator(peers)
+            initiator.processMessage2(server.start(alice, initiator).payload)
+            val (message3, session) = initiator.createMessage3()
+            val responderId = session.responderConnectionIdentifier
+
+            val job = launch {
+                if (combined) {
+                    server.completeCombined(responderId, message3, alice)
+                } else {
+                    server.continueWith(alice, responderId, message3)
+                }
+            }
+            adding.await()
+            assertNotNull(delegate.find(responderId.bytes, null), "the context got in")
+            job.cancelAndJoin()
+
+            assertTrue(job.isCancelled)
+            assertNull(delegate.find(responderId.bytes, null), "combined = $combined")
+            assertEquals(0, server.pendingSessions())
+            assertEquals(emptyList(), established)
+        }
+    }
+
+    /**
+     * A listener or a durable sequence number store that fails after message_3 verified ends the session with the
+     * server error too. The context, in place when the listener ran, is removed again, and the session the listener
+     * got is destroyed. With message_4 the client gets the error instead of message_4.
+     */
+    @Test
+    fun aFailingListenerOrSequenceStoreLeavesNoContext() = runTest {
+        val peers = Peers.create(crypto)
+        for (sendMessage4 in listOf(false, true)) {
+            val contexts = InMemoryContextRepository()
+            val sessions = mutableListOf<EdhocSession>()
+            val server = EdhocServer(
+                peers.responderConfig(), crypto, contexts, sendMessage4 = sendMessage4,
+                listener = { session, context ->
+                    assertSame(context, contexts.find(context.recipientId, null), "in place when the listener runs")
+                    sessions += session
+                    throw IllegalStateException("The listener failed")
+                },
+            )
+            val (response, responderId) = server.completeWith(peers, alice)
+            assertServerError(response, "sendMessage4 = $sendMessage4")
+            assertNull(contexts.find(responderId.bytes, null))
+            assertEquals(0, server.pendingSessions())
+            assertFailsWith<IllegalStateException>("the session is destroyed") { sessions.single().oscoreMasterSecret() }
+        }
+
+        val failingStore = object : SequenceNumberStore {
+            override suspend fun load(contextName: String): Long? = null
+
+            override suspend fun store(contextName: String, limit: Long) = throw IllegalStateException("The disk is full")
+        }
+        val contexts = InMemoryContextRepository()
+        val server = EdhocServer(peers.responderConfig(), crypto, contexts, sequenceStore = failingStore)
+        val (response, responderId) = server.completeWith(peers, alice)
+        assertServerError(response, "the store failed")
+        assertNull(contexts.find(responderId.bytes, null))
+        assertEquals(0, server.pendingSessions())
+    }
+
     // --- sequence numbers --------------------------------------------------------------------------------
 
     @Test
@@ -653,6 +788,28 @@ class EdhocServerSessionsTest {
         responderId: ConnectionIdentifier,
         message: ByteArray,
     ): CoapResponse = handle(EdhocOverCoap.continuationRequest(resource, responderId, message).payload, peer)
+
+    /** Runs a session from message_1 to message_3 for [peer]: the answer to message_3, and the session's C_R. */
+    private suspend fun EdhocServer.completeWith(peers: Peers, peer: Endpoint): Pair<CoapResponse, ConnectionIdentifier> {
+        val initiator = initiator(peers)
+        initiator.processMessage2(start(peer, initiator).payload)
+        val (message3, session) = initiator.createMessage3()
+        val responderId = session.responderConnectionIdentifier
+        return continueWith(peer, responderId, message3) to responderId
+    }
+
+    /** RFC 9528 Appendix A.2.3: a server error is an EDHOC error message in a 5.00. */
+    private fun assertServerError(response: CoapResponse, case: String) {
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, response.code, case)
+        assertEquals(ContentFormat.EDHOC_CBOR_SEQ, response.contentFormat, case)
+        assertEquals(EdhocError.unspecified("EDHOC failed"), EdhocError.decode(response.payload), case)
+    }
+
+    private fun request() = CoapMessage.request(CoapCode.GET) {
+        messageId = 1
+        token = byteArrayOf(0x42)
+        options { uriPath("x") }
+    }
 
     /** The server's context for [session] is in [contexts], with the client's IDs swapped (RFC 9528 Table 14). */
     private suspend fun assertServerContextMatches(contexts: InMemoryContextRepository, session: EdhocOscoreSession) {
