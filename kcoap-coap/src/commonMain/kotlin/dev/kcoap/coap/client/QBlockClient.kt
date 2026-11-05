@@ -91,12 +91,14 @@ import kotlinx.coroutines.withContext
  * From then on each notification body is assembled by a [QBlock2Receiver] of its own, whose mode follows the
  * message type of its blocks, and delivered once. A block with a new ETag starts a new body only if it is
  * fresher than every body before it ([Observer.isFresh], RFC 7641 §3.4), which supersedes the body in
- * progress; blocks of bodies delivered, given up or stale are ignored. A block without Observe continues the
- * body of its ETag (libcoap leaves Observe out after a Continue) but starts a body only in answer to a request
- * of the client's own. The Continues and requests for missing blocks of a Non-confirmable notification body
- * hold one lease until the body is delivered or given up (§7.2); a body given up only waits for the next
- * notification. A response without Q-Block2 and without Observe, or an error, ends the observation
- * (RFC 7641 §3.2).
+ * progress, as a fresher notification of one message does; blocks of bodies delivered, given up or stale are
+ * ignored. A block without Observe continues the body of its ETag (libcoap leaves Observe out after a
+ * Continue) but starts a body only in answer to a request of the client's own. The Continues and requests for
+ * missing blocks of a Non-confirmable notification body hold one lease until the body is delivered or given up
+ * (§7.2), and their tokens are released with it; a body given up only waits for the next notification.
+ * Follow-ups of a registration uploaded in Q-Block1 carry the upload's Request-Tag and no payload (§4.7),
+ * whether its 2.05 came in one block or several. A response without Q-Block2 and without Observe, or an error,
+ * ends the observation (RFC 7641 §3.2).
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class QBlockClient(private val client: CoapClient) {
@@ -428,17 +430,17 @@ internal class QBlockClient(private val client: CoapClient) {
         /** The response [message] ended the upload; it arrived on [sequence]. */
         private suspend fun onUploadResponse(sequence: Int, message: CoapMessage) {
             if (isRejection(message)) return
+            // §4.7, Figure 15: every later request for blocks, of this response body or of a notification body of a
+            // registration uploaded so, repeats the method, options and Request-Tag of the upload, without Q-Block1
+            // and payload, also when this response came whole.
+            followUpBase = base.toBuilder().options { requestTag(requestTag) }.build()
             val block = message.options.qBlock2
             when {
                 block != null && (block.number != 0L || block.more) -> {
-                    // §4.7: the response body follows in Q-Block2, asked for with the method, options and
-                    // Request-Tag of the upload, without Q-Block1 and payload.
-                    followUpBase = base.toBuilder().options { requestTag(requestTag) }.build()
                     startReceiver()
                     onBlock(message)
                 }
-                message.options.block2?.more == true ->
-                    outcome = Outcome.Rfc7959(message, base.toBuilder().options { requestTag(requestTag) }.build())
+                message.options.block2?.more == true -> outcome = Outcome.Rfc7959(message, followUpBase)
                 else -> done(message)
             }
             logger.debug { "Upload ended with ${message.code} on request $sequence" }

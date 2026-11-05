@@ -527,6 +527,39 @@ class QBlockObserveTest {
         }
     }
 
+    /**
+     * RFC 9177 §4.7, Figure 15: a FETCH registration uploaded in Q-Block1 whose 2.05 is one block. The Continues and
+     * requests for missing blocks of a later notification body carry the upload's Request-Tag and no payload, so the
+     * server finds the body under the observation, never running its handler again for them.
+     */
+    @Test
+    fun rfc9177Section4_7FollowUpsOfARegistrationAnsweredInOneBlockCarryTheUploadsRequestTagAndNoPayload() = runTest {
+        val query = body(2 * 1024, 1)
+        val notification = body(25 * 1024 + 10, 3)
+        val setup = setup({ if (it == 0) body(100, 2) else notification })
+        setup.drop { message, copy -> !message.isRequest && message.options.qBlock2?.number == 15L && copy == 1 }
+        setup.observe(this, fetch(setup, query))
+        delay(10.seconds)
+        setup.resource.change()
+        delay(30.seconds)
+
+        assertEquals(listOf(body(100, 2), notification).map { it.toList() }, setup.received.map { it.payload.toList() })
+        val sent = setup.fixture.sentBy(setup.client.endpoint)
+        val tag = sent.first { it.options.qBlock1 != null }.options.requestTags.single()
+        val followUps = sent.filter { it.options.qBlock2 != null }
+        val asked = followUps.map { it.options.qBlock2List.first().number }
+        assertEquals(listOf(10L, 15L), asked, "a Continue, and block 15 once set 2 came")
+        assertTrue(
+            followUps.all {
+                it.code == CoapCode.FETCH && it.payloadSize == 0 && it.options.qBlock1 == null &&
+                    it.options.observe == null && it.options.requestTags.single().contentEquals(tag)
+            },
+            "$followUps",
+        )
+        assertEquals(2, setup.resource.queries.size, "the follow-ups found the body")
+        assertEquals(1, setup.client.endpoint.exchangeCount())
+    }
+
     // ---------------------------------------------------------------- acceptance of QB-6
 
     /**
