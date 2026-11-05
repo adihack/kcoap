@@ -68,7 +68,8 @@ class QBlockTest {
         return Run(fixture, server, client, stored)
     }
 
-    private suspend fun TestScope.soak(direction: Direction, lossRate: Double) {
+    /** [completedPerFailed]: how many runs at least complete for every one that fails cleanly. */
+    private suspend fun TestScope.soak(direction: Direction, lossRate: Double, completedPerFailed: Int = 4) {
         var completed = 0
         var failed = 0
         var recoveries = 0
@@ -123,7 +124,8 @@ class QBlockTest {
                 run.server.endpoint.close()
             }
         }
-        assertTrue(completed >= failed * 4, "most runs complete: $completed completed, $failed failed: $failures")
+        val most = completed >= failed * completedPerFailed
+        assertTrue(most, "most runs complete: $completed completed, $failed failed: $failures")
         assertTrue(lost > 0 && recoveries > 0, "datagrams were lost ($lost) and blocks recovered ($recoveries)")
     }
 
@@ -139,12 +141,20 @@ class QBlockTest {
     @Test
     fun rfc9177Section7_2DownloadsSoakWith30PercentLoss() = runTest(timeout = 10.minutes) { soak(Direction.DOWNLOAD, 0.3) }
 
+    @Test
+    fun rfc9177Section4_7UploadsAnsweredWithABodySoakWith10PercentLoss() = runTest(timeout = 10.minutes) {
+        soak(Direction.BOTH, 0.1)
+    }
+
     /**
      * A POST may not be sent again, so its last block is not repeated on silence (ADR 0006) and a lost final
-     * answer costs the whole run: at 30 % loss each way about a fifth of these fail cleanly, so 10 % here.
+     * answer costs the whole run: at 30 % loss each way about a fifth of these fail, cleanly. Every run still ends
+     * whole or with a clean error and leaves nothing behind; two in three complete at least.
      */
     @Test
-    fun rfc9177Section4_7UploadsAnsweredWithABodySoakWith10PercentLoss() = runTest(timeout = 10.minutes) { soak(Direction.BOTH, 0.1) }
+    fun rfc9177Section4_7UploadsAnsweredWithABodySoakWith30PercentLoss() = runTest(timeout = 10.minutes) {
+        soak(Direction.BOTH, 0.3, completedPerFailed = 2)
+    }
 
     private companion object {
         const val SEEDS = 20
