@@ -60,6 +60,8 @@ import kotlin.time.Duration.Companion.seconds
  * @property verifiedAddressLifetime how long an address stays verified after it returned an Echo value,
  *   not extended by use: a NAT may hand the address to another host, and a spoofer must not keep it
  *   verified by sending in its name. RFC 9175 sets no lifetime; it needs the check once per endpoint.
+ * @property qBlock whether and how the server serves Q-Block (RFC 9177); off by default, see
+ *   [QBlockServerConfig].
  */
 public class CoapServerConfig(
     public val security: ServerMessageSecurity? = null,
@@ -77,6 +79,7 @@ public class CoapServerConfig(
     public val amplificationFactor: Int = DEFAULT_AMPLIFICATION_FACTOR,
     public val maxVerifiedAddresses: Int = DEFAULT_MAX_VERIFIED_ADDRESSES,
     public val verifiedAddressLifetime: Duration = DEFAULT_VERIFIED_ADDRESS_LIFETIME,
+    public val qBlock: QBlockServerConfig = QBlockServerConfig(),
 ) {
     init {
         require(maxBlockSize in 16..1024 && maxBlockSize and (maxBlockSize - 1) == 0) {
@@ -117,5 +120,5 @@ public class CoapServerConfig(
 
     override fun toString(): String =
         "CoapServerConfig(security=${security != null}, maxBlockSize=$maxBlockSize, maxBodySize=$maxBodySize, " +
-            "amplification=$amplification)"
+            "amplification=$amplification, qBlock=${qBlock.isEnabled})"
 }
