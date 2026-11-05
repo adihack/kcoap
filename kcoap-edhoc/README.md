@@ -62,10 +62,14 @@ suite and method on every target. Both state machines use it:
 - A backend that turns out to lack an algorithm mid-handshake fails with a diagnostic that names it
   ("P_256 is not available in this crypto backend"), never as a peer's invalid key.
 
-The state machines ask for every session, which costs a lookup with a backend that memoizes its answers,
-as `DefaultCryptoBackend` does. `config.supportedBy(crypto)` (both roles) makes the same choice once, up
-front: it returns the configuration narrowed to the runnable suites and throws `IllegalArgumentException`,
-naming each dropped suite and what it needs, when nothing usable is left.
+The configuration asks the backend once and remembers the answers, so sessions do not ask again. That
+matters for a backend that keeps the probing defaults of `supports`, which generate keys and sign for
+every question: the Responder chooses before it has checked anything of a message_1, and any peer can
+send one. `config.supportedBy(crypto)` (both roles) makes the same choice up front: it returns the
+configuration narrowed to the runnable suites, with the answers, and throws `IllegalArgumentException`,
+naming each dropped suite and what it needs, when nothing usable is left. A server that needs a
+configuration per session, to choose C_R, copies it with `withConnectionIdentifiers(provider)`, which
+keeps the answers too.
 
 | Type | Role |
 |---|---|

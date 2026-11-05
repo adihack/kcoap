@@ -20,6 +20,13 @@ internal class RunnableSuites private constructor(
     /** The dropped suites and what each needs, for diagnostics: "suite 4 needs CHACHA20_POLY1305, ...". */
     fun describeDropped(): String = dropped.joinToString { (suite, reason) -> "suite ${suite.value} $reason" }
 
+    /**
+     * What [of] answers once the configured suites are narrowed to [kept], which must hold every runnable
+     * suite: the same runnable suites, and only the dropped ones that were kept.
+     */
+    fun restrictedTo(kept: Collection<CipherSuite>): RunnableSuites =
+        RunnableSuites(suites, dropped.filter { it.first in kept })
+
     companion object {
         suspend fun of(suites: List<CipherSuite>, crypto: CryptoBackend, method: EdhocMethod): RunnableSuites {
             val runnable = mutableListOf<CipherSuite>()

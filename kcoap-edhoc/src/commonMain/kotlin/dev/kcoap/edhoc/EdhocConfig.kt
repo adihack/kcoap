@@ -47,11 +47,15 @@ public class EdhocInitiatorConfig(
         }
     }
 
+    /** What a crypto backend runs of [cipherSuites], asked once per backend ([RunnableSuitesMemo]). */
+    private val memo = RunnableSuitesMemo()
+
     /**
      * This configuration with only the cipher suites [crypto] runs for [method], in the same order of
      * preference ([CipherSuite.isSupportedBy], docs/adr/0001-crypto-capabilities.md). [EdhocInitiator]
-     * makes the same choice in every session; calling this once where the configuration is set up finds a
-     * backend that cannot run it before any session starts, and shows what will be offered.
+     * makes the same choice, asking the backend once per configuration and remembering the answers, which
+     * the returned configuration keeps for [crypto]. Calling this once where the configuration is set up
+     * finds a backend that cannot run it before any session starts, and shows what will be offered.
      *
      * @throws IllegalArgumentException naming the dropped suites and what each needs, when no suite with a
      *   usable credential is left, or when [initialCipherSuite] is dropped.
@@ -59,14 +63,17 @@ public class EdhocInitiatorConfig(
     public suspend fun supportedBy(crypto: CryptoBackend): EdhocInitiatorConfig {
         val runnable = runnableSuites(crypto)
         problemWith(runnable)?.let { throw IllegalArgumentException(it) }
-        return EdhocInitiatorConfig(
+        val narrowed = EdhocInitiatorConfig(
             method, runnable.suites, credentials, credentialResolver, connectionIdentifiers, eadHandler,
             ephemeralKeys, initialCipherSuite,
         )
+        narrowed.memo.remember(crypto, mapOf(method to runnable.restrictedTo(runnable.suites)))
+        return narrowed
     }
 
+    /** The configured suites [crypto] runs for [method], asked once per backend. */
     internal suspend fun runnableSuites(crypto: CryptoBackend): RunnableSuites =
-        RunnableSuites.of(cipherSuites, crypto, method)
+        memo.answer(crypto, method) { RunnableSuites.of(cipherSuites, crypto, method) }
 
     /** Why the Initiator cannot start with [runnable], or null when it can. */
     internal fun problemWith(runnable: RunnableSuites): String? = when {
@@ -113,11 +120,19 @@ public class EdhocResponderConfig(
     }
 
     /**
+     * What a crypto backend runs of [cipherSuites] per method, asked once per backend ([RunnableSuitesMemo]).
+     * Copies with the same methods, suites and credentials ([withConnectionIdentifiers]) share it.
+     */
+    private var memo = RunnableSuitesMemo()
+
+    /**
      * This configuration with only the cipher suites [crypto] runs for at least one of [methods] with a
      * credential ([CipherSuite.isSupportedBy], docs/adr/0001-crypto-capabilities.md). [EdhocResponder] makes
-     * the same choice, per method, for every message_1, so SUITES_R names only runnable suites and a selected
-     * suite it cannot run gets error code 2 (RFC 9528 §6.3). Calling this once where the configuration is set
-     * up finds a backend that cannot run it before any session starts.
+     * the same choice, per method, when it processes message_1, so SUITES_R names only runnable suites and a
+     * selected suite it cannot run gets error code 2 (RFC 9528 §6.3). Both ask the backend once per
+     * configuration and remember the answers; the returned configuration keeps them for [crypto], so no
+     * message_1 makes the backend answer again. Calling this once where the configuration is set up finds a
+     * backend that cannot run it before any session starts.
      *
      * @throws IllegalArgumentException naming the dropped suites and what each needs, when no method is left
      *   with a runnable suite.
@@ -131,14 +146,29 @@ public class EdhocResponderConfig(
                     "method ${method.value}: ${suites.describeDropped().ifEmpty { "no suite with a credential" }}"
                 }
         }
-        return EdhocResponderConfig(
+        val narrowed = EdhocResponderConfig(
             methods, kept, credentials, credentialResolver, connectionIdentifiers, eadHandler, ephemeralKeys,
         )
+        narrowed.memo.remember(crypto, runnable.mapValues { (_, suites) -> suites.restrictedTo(kept) })
+        return narrowed
     }
 
-    /** The suites usable with [method] ([suitesFor]) that [crypto] runs. */
+    /**
+     * This configuration with C_R chosen by [connectionIdentifiers], for example by a server that allocates
+     * C_R per session. What it learnt of crypto backends ([supportedBy], earlier sessions) is shared with
+     * the copy, so a copy per session does not ask the backend again.
+     */
+    public fun withConnectionIdentifiers(connectionIdentifiers: ConnectionIdentifierProvider): EdhocResponderConfig {
+        val copy = EdhocResponderConfig(
+            methods, cipherSuites, credentials, credentialResolver, connectionIdentifiers, eadHandler, ephemeralKeys,
+        )
+        copy.memo = memo
+        return copy
+    }
+
+    /** The suites usable with [method] ([suitesFor]) that [crypto] runs, asked once per backend. */
     internal suspend fun runnableSuitesFor(method: EdhocMethod, crypto: CryptoBackend): RunnableSuites =
-        RunnableSuites.of(suitesFor(method), crypto, method)
+        memo.answer(crypto, method) { RunnableSuites.of(suitesFor(method), crypto, method) }
 
     /** The suites usable with [method]: compatible with it and with a credential to authenticate. */
     internal fun suitesFor(method: EdhocMethod): List<CipherSuite> =

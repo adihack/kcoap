@@ -19,9 +19,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * ```
  *
  * Only the configured suites that [crypto] runs for the received method are accepted and named in SUITES_R
- * ([CipherSuite.isSupportedBy]): [processMessage1] asks the backend, whose answers are memoized, and
- * answers a selected suite it cannot run with error code 2 and the suites it can (RFC 9528 §6.3).
- * [EdhocResponderConfig.supportedBy] makes the same choice once, up front.
+ * ([CipherSuite.isSupportedBy]), and a selected suite it cannot run is answered with error code 2 and the
+ * suites it can (RFC 9528 §6.3). The configuration asks the backend once and remembers the answers, so
+ * message_1 makes no backend probe, also on a backend that does not memoize its own answers.
+ * [EdhocResponderConfig.supportedBy] makes the same choice up front.
  *
  * Every failure is an [EdhocException] whose [EdhocException.errorMessage], when not null, is the error
  * message to send to the Initiator; the state machine is then [EdhocPhase.ABORTED]. After

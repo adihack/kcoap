@@ -22,10 +22,12 @@ package dev.kcoap.crypto
  * missing capability.
  *
  * The defaults find out by trying: they run each operation once on throwaway keys and count only
- * [UnsupportedAlgorithmException] as a no. That costs key pairs, so a software backend memoizes the
- * answers per instance, and a hardware or secure-element backend overrides the members with static
- * answers, because a probe there could create a persistent key or prompt for a biometric. Callers ask
- * freely (EDHOC asks for every session), and an answer must not change during the backend's lifetime.
+ * [UnsupportedAlgorithmException] as a no. They remember nothing, so every call probes again and costs key
+ * pairs. A software backend therefore memoizes the answers per instance, as `DefaultCryptoBackend` does,
+ * and a hardware or secure-element backend overrides the members with static answers, because a probe
+ * there could create a persistent key or prompt for a biometric. An answer must not change during the
+ * backend's lifetime. Callers cannot rely on the memo: they ask once and keep the answers, as EDHOC keeps
+ * them per configuration and backend instead of asking per session.
  *
  * A decorator (`CryptoBackend by delegate`) forwards `supports` to its delegate, so one that adds
  * algorithms, as `BouncyCastleCryptoBackend` adds ML-KEM and ML-DSA, must also override the matching

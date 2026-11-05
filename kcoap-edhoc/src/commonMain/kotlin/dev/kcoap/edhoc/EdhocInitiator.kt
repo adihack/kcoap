@@ -19,9 +19,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * initiator.processMessage4(transport.receive())  // only if the application profile uses message_4
  * ```
  *
- * Only the configured suites that [crypto] runs for the method are offered ([CipherSuite.isSupportedBy]):
- * [createMessage1] asks the backend, whose answers are memoized, and SUITES_I is a prefix of those suites.
- * [EdhocInitiatorConfig.supportedBy] makes the same choice once, up front.
+ * Only the configured suites that [crypto] runs for the method are offered ([CipherSuite.isSupportedBy]),
+ * and SUITES_I is a prefix of those suites. The configuration asks the backend once, in the first
+ * [createMessage1] or in [EdhocInitiatorConfig.supportedBy], which makes the same choice up front, and
+ * remembers the answers for the sessions after it.
  *
  * Every failure is an [EdhocException]; its [EdhocException.errorMessage], when not null, is the error
  * message to send to the Responder, and the state machine is then [EdhocPhase.ABORTED]. One exception
@@ -84,9 +85,9 @@ public class EdhocInitiator(
 
     /**
      * Composes message_1 (RFC 9528 §5.2.2): SUITES_I up to the selected suite, a fresh ephemeral key pair,
-     * and C_I. SUITES_I holds only suites the crypto backend runs for the method; the first call asks the
-     * backend which ones those are, and fails with an [EdhocException] naming what is missing when no suite
-     * with a credential, or not the configured initial suite, is among them.
+     * and C_I. SUITES_I holds only suites the crypto backend runs for the method, which the configuration
+     * knows after asking the backend once; the first call fails with an [EdhocException] naming what is
+     * missing when no suite with a credential, or not the configured initial suite, is among them.
      */
     public suspend fun createMessage1(): ByteArray {
         val start = expect<State.Start>("createMessage1")
@@ -115,8 +116,8 @@ public class EdhocInitiator(
     }
 
     /**
-     * The suites the crypto backend runs for the method, asked once per Initiator, and the suite the first
-     * message_1 selects.
+     * The suites the crypto backend runs for the method, which the configuration asks once per backend, and
+     * the suite the first message_1 selects.
      */
     private suspend fun firstSelection(): Pair<CipherSuite, List<CipherSuite>> {
         val runnable = config.runnableSuites(crypto)

@@ -136,8 +136,10 @@ public class CipherSuite private constructor(
      *
      * Platforms differ (WebCrypto has no ChaCha20/Poly1305, so suites 4 and 5 do not run there).
      * [EdhocInitiator] and [EdhocResponder] offer and accept only the suites for which this is true, and
-     * it is true exactly when a handshake between them on this backend succeeds. Each question goes to
-     * [CryptoBackend.supports], which backends answer from memory after the first time
+     * it is true exactly when a handshake between them on this backend succeeds. Each call asks
+     * [CryptoBackend.supports] up to six questions. `DefaultCryptoBackend` answers them from memory after the
+     * first time, but a backend that keeps the probing defaults runs a probe for each, so call this once per
+     * backend rather than per session; the state machines remember the answers in their configuration
      * (docs/adr/0001-crypto-capabilities.md).
      */
     public suspend fun isSupportedBy(crypto: CryptoBackend, method: EdhocMethod): Boolean =

@@ -7,6 +7,7 @@ import dev.kcoap.cose.CoseKeyType
 import dev.kcoap.cose.CwtClaimsSet
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
+import dev.kcoap.crypto.AesBlockCipher
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
@@ -265,6 +266,76 @@ internal class RestrictedBackend(
     private fun isMissing(algorithm: SignatureAlgorithm) = algorithm in signatures || algorithm.keyType in keyTypes
 
     private fun unsupported(algorithm: String): Nothing = throw UnsupportedAlgorithmException(algorithm)
+}
+
+/**
+ * The operations of [inner] with the probing defaults of the `supports` members of [CryptoBackend], which
+ * remember nothing: every question runs a probe on throwaway keys, as on a third-party backend that does not
+ * memoize (docs/adr/0001-crypto-capabilities.md). [probes] counts them.
+ */
+internal class ProbingBackend(private val inner: CryptoBackend = DefaultCryptoBackend()) : CryptoBackend {
+    var probes: Int = 0
+        private set
+
+    override suspend fun supports(algorithm: AeadAlgorithm): Boolean {
+        probes++
+        return super.supports(algorithm)
+    }
+
+    override suspend fun supports(type: KeyType): Boolean {
+        probes++
+        return super.supports(type)
+    }
+
+    override suspend fun supports(algorithm: SignatureAlgorithm): Boolean {
+        probes++
+        return super.supports(algorithm)
+    }
+
+    override suspend fun supports(algorithm: KemAlgorithm): Boolean {
+        probes++
+        return super.supports(algorithm)
+    }
+
+    override suspend fun supports(algorithm: HashAlgorithm): Boolean {
+        probes++
+        return super.supports(algorithm)
+    }
+
+    override suspend fun randomBytes(size: Int): ByteArray = inner.randomBytes(size)
+
+    override suspend fun digest(algorithm: HashAlgorithm, data: ByteArray): ByteArray = inner.digest(algorithm, data)
+
+    override suspend fun hmac(algorithm: HashAlgorithm, key: ByteArray, data: ByteArray): ByteArray =
+        inner.hmac(algorithm, key, data)
+
+    override suspend fun aesBlockCipher(key: ByteArray): AesBlockCipher = inner.aesBlockCipher(key)
+
+    override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead = inner.aead(algorithm, key)
+
+    override suspend fun generateKeyPair(type: KeyType): KeyPair = inner.generateKeyPair(type)
+
+    override suspend fun importKeyPair(type: KeyType, privateKey: ByteArray, publicKey: ByteArray): KeyPair =
+        inner.importKeyPair(type, privateKey, publicKey)
+
+    override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray =
+        inner.keyAgreement(privateKey, peerPublicKey)
+
+    override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
+        inner.sign(algorithm, privateKey, data)
+
+    override suspend fun verify(
+        algorithm: SignatureAlgorithm,
+        publicKey: ByteArray,
+        data: ByteArray,
+        signature: ByteArray,
+    ): Boolean = inner.verify(algorithm, publicKey, data, signature)
+
+    override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation =
+        inner.encapsulate(algorithm, publicKey)
+
+    override suspend fun decapsulate(privateKey: PrivateKey, ciphertext: ByteArray): ByteArray =
+        inner.decapsulate(privateKey, ciphertext)
 }
 
 /** Records EAD items and hands out the ones configured per message. */

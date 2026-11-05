@@ -6,7 +6,6 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.ConnectionIdentifier
-import dev.kcoap.edhoc.ConnectionIdentifierProvider
 import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocException
 import dev.kcoap.edhoc.EdhocResponder
@@ -173,16 +172,5 @@ public class EdhocServer(
             } catch (_: Exception) {
                 false
             }
-
-        fun EdhocResponderConfig.withConnectionIdentifiers(provider: ConnectionIdentifierProvider): EdhocResponderConfig =
-            EdhocResponderConfig(
-                methods = methods,
-                cipherSuites = cipherSuites,
-                credentials = credentials,
-                credentialResolver = credentialResolver,
-                connectionIdentifiers = provider,
-                eadHandler = eadHandler,
-                ephemeralKeys = ephemeralKeys,
-            )
     }
 }

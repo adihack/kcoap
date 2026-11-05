@@ -353,6 +353,102 @@ class SuiteNegotiationTest {
         assertContains(noCredential.message!!, "method 0: no suite with a credential")
     }
 
+    // --- asking the backend once ------------------------------------------------------------------------
+
+    /**
+     * A backend that keeps the probing defaults of `supports` generates keys, signs and agrees on a secret
+     * for every question, and the Responder filters before it has checked anything of message_1. So the
+     * configuration asks once per backend, and the copies [EdhocResponderConfig.supportedBy] and
+     * [EdhocResponderConfig.withConnectionIdentifiers] make keep the answers: no message_1 probes the
+     * backend again, accepted or rejected.
+     */
+    @Test
+    fun aResponderProbesABackendThatDoesNotMemoizeOncePerConfiguration() = runTest {
+        val p256 = credential(KeyType.P256, 2)
+        val suites = listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_2)
+        val config = EdhocResponderConfig(setOf(method0), suites, listOf(credential(KeyType.ED25519, 1), p256), nobody)
+        val accepted = EdhocInitiatorConfig(method0, listOf(CipherSuite.SUITE_2), listOf(p256), nobody)
+        val p384 = credential(KeyType.P384, 3)
+        val rejected = EdhocInitiatorConfig(method0, listOf(CipherSuite.SUITE_24), listOf(p384), nobody)
+        suspend fun message1(from: EdhocInitiatorConfig) = EdhocInitiator(from, default).createMessage1()
+
+        val probing = ProbingBackend(default)
+        val narrowed = config.supportedBy(probing)
+        val probes = probing.probes
+        assertTrue(probes > 0, "supportedBy asks the backend")
+        repeat(2) { EdhocResponder(narrowed, probing).processMessage1(message1(accepted)) }
+        assertFailsWith<EdhocException> { EdhocResponder(narrowed, probing).processMessage1(message1(rejected)) }
+        val perSession = narrowed.withConnectionIdentifiers(ConnectionIdentifierProvider.Random)
+        EdhocResponder(perSession, probing).processMessage1(message1(accepted))
+        assertEquals(probes, probing.probes, "no message_1 probes the backend again")
+
+        // Without supportedBy, the first message_1 asks what supportedBy would have, even when it is rejected.
+        val lazily = ProbingBackend(default)
+        assertFailsWith<EdhocException> { EdhocResponder(config, lazily).processMessage1(message1(rejected)) }
+        assertEquals(probes, lazily.probes)
+        repeat(2) { EdhocResponder(config, lazily).processMessage1(message1(accepted)) }
+        assertEquals(probes, lazily.probes, "only the first message_1 probes the backend")
+
+        val other = ProbingBackend(default)
+        EdhocResponder(narrowed, other).processMessage1(message1(accepted))
+        assertEquals(probes, other.probes, "another backend is asked for itself")
+    }
+
+    /** The Initiator too asks a backend that does not memoize once per configuration, not per session. */
+    @Test
+    fun anInitiatorProbesABackendThatDoesNotMemoizeOncePerConfiguration() = runTest {
+        val credentials = listOf(credential(KeyType.ED25519, 1), credential(KeyType.P256, 2))
+        val suites = listOf(CipherSuite.SUITE_0, CipherSuite.SUITE_2)
+        val config = EdhocInitiatorConfig(method0, suites, credentials, nobody)
+        val probing = ProbingBackend(default)
+
+        EdhocInitiator(config, probing).createMessage1()
+        val probes = probing.probes
+        assertTrue(probes > 0, "the first message_1 asks the backend")
+        EdhocInitiator(config, probing).createMessage1()
+        val narrowed = config.supportedBy(probing)
+        repeat(2) { EdhocInitiator(narrowed, probing).createMessage1() }
+        assertEquals(probes, probing.probes, "later sessions and the narrowed configuration do not probe")
+
+        val other = ProbingBackend(default)
+        EdhocInitiator(narrowed, other).createMessage1()
+        assertEquals(probes, other.probes, "another backend is asked for itself")
+    }
+
+    /** The copy takes the new C_R provider and keeps the rest of the configuration. */
+    @Test
+    fun withConnectionIdentifiersReplacesOnlyTheProvider() = runTest {
+        val p256 = credential(KeyType.P256, 2)
+        val ead = RecordingEadHandler()
+        val keys = EphemeralKeySource { crypto, type -> crypto.generateKeyPair(type) }
+        val config = EdhocResponderConfig(
+            setOf(method0), listOf(CipherSuite.SUITE_2), listOf(p256), trusting(p256), eadHandler = ead,
+            ephemeralKeys = keys,
+        )
+        val responderId = ConnectionIdentifier.ofInt(7)
+
+        val copy = config.withConnectionIdentifiers(ConnectionIdentifierProvider.fixed(responderId))
+
+        assertEquals(config.methods, copy.methods)
+        assertEquals(config.cipherSuites, copy.cipherSuites)
+        assertEquals(config.credentials, copy.credentials)
+        assertSame(config.credentialResolver, copy.credentialResolver)
+        assertSame(ead, copy.eadHandler)
+        assertSame(keys, copy.ephemeralKeys)
+        assertSame(ConnectionIdentifierProvider.Random, config.connectionIdentifiers, "the original is unchanged")
+        val initiator = EdhocInitiator(
+            EdhocInitiatorConfig(
+                method0, listOf(CipherSuite.SUITE_2), listOf(p256), trusting(p256),
+                connectionIdentifiers = ConnectionIdentifierProvider.fixed(ConnectionIdentifier.ofInt(1)),
+            ),
+            default,
+        )
+        val responder = EdhocResponder(copy, default)
+        responder.processMessage1(initiator.createMessage1())
+        initiator.processMessage2(responder.createMessage2())
+        assertEquals(responderId, initiator.createMessage3().session.peerConnectionIdentifier)
+    }
+
     // --- helpers -----------------------------------------------------------------------------------------
 
     private val nobody = TrustedCredentials(default, emptyList())

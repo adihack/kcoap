@@ -55,7 +55,9 @@ adds its entry and migration note below.
 - EDHOC negotiates only suites the crypto backend runs (WP-A2): `CipherSuite.isSupportedBy(crypto, method)`;
   `EdhocInitiatorConfig.supportedBy(crypto)` and `EdhocResponderConfig.supportedBy(crypto)`, which narrow a
   configuration once and fail fast; `EdhocPeerErrorException.retryWith`; `Message3`, which
-  `EdhocInitiator.createMessage3()` returns.
+  `EdhocInitiator.createMessage3()` returns. A configuration asks the backend once and remembers the answers,
+  so sessions do not probe it again, also when the backend keeps the probing defaults; the copies that
+  `supportedBy` and the new `EdhocResponderConfig.withConnectionIdentifiers(provider)` make keep them.
 
 ### Changed (breaking)
 
