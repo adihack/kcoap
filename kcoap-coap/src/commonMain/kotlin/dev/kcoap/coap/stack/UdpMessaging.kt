@@ -33,6 +33,10 @@ import kotlin.time.Duration
  *
  * @param separateResponseDelay how long a Confirmable request may stay unanswered before it gets an Empty
  *   ACK; null leaves that to the upper layer.
+ * @param maxDeduplicationEntries the most received messages remembered; new ones beyond it are dropped
+ *   without state or answer (RFC 7252 §11.3).
+ * @param maxPerPeer the most slot-holding messages outstanding or queued towards one peer; [send] refuses
+ *   more.
  */
 internal class UdpMessaging(
     private val parameters: TransmissionParameters,
@@ -41,11 +45,13 @@ internal class UdpMessaging(
     private val random: Random,
     private val interceptors: List<MessageInterceptor> = emptyList(),
     loggerFactory: LoggerFactory = LoggerFactory.Global,
+    maxDeduplicationEntries: Int = Int.MAX_VALUE,
+    private val maxPerPeer: Int = Int.MAX_VALUE,
 ) {
     private val log: Logger = loggerFactory.logger(LogTags.COAP_MESSAGE)
     private val effects = ArrayList<MessagingEffect>()
     private val messageIds = MessageIdAllocator(random.nextInt(0x10000))
-    private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime)
+    private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime, maxDeduplicationEntries)
 
     /** Our Confirmable messages until they end, and Non-confirmable ones until NON_LIFETIME, by Message ID. */
     private val outbound = HashMap<MessageKey, Transmission>()
@@ -78,7 +84,9 @@ internal class UdpMessaging(
      * Confirmable message, or a Non-confirmable one with a [slotHold], waits while [peer] has NSTART
      * outstanding interactions.
      *
-     * @throws CoapException with [CoapException.Reason.MESSAGE_TOO_LARGE] if it does not fit a datagram.
+     * @throws CoapException with [CoapException.Reason.MESSAGE_TOO_LARGE] if it does not fit a datagram,
+     *   with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] if [peer] has the most slot-holding messages
+     *   outstanding or queued that the endpoint allows.
      */
     fun send(
         now: Duration,
@@ -91,9 +99,15 @@ internal class UdpMessaging(
             "Only CON and NON messages are sent as transmissions: $message"
         }
         val transmission = Transmission(peer, message, encodeForSending(peer, message), owner, slotHold)
+        val existing = windows[peer]
+        if (transmission.holdsSlot && existing != null && existing.outstanding + existing.queue.size >= maxPerPeer) {
+            // RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue.
+            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
+            throw CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        }
         outbound[MessageKey(peer, message.messageId)] = transmission
         if (transmission.holdsSlot) {
-            val window = windows.getOrPut(peer) { PeerWindow() }
+            val window = existing ?: PeerWindow().also { windows[peer] = it }
             if (window.outstanding >= parameters.nstart) {
                 transmission.state = Transmission.State.QUEUED
                 window.queue.addLast(transmission)
@@ -276,6 +290,7 @@ internal class UdpMessaging(
     private fun onConfirmable(now: Duration, from: Endpoint, message: CoapMessage) {
         val key = MessageKey(from, message.messageId)
         received[key]?.let { return onDuplicate(it) }
+        if (!received.hasRoom(now)) return dropForLimit(from, message)
         val entry = received.add(key, CoapMessageType.CON, now)
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
@@ -303,12 +318,22 @@ internal class UdpMessaging(
             log.warn { "Dropped a Non-confirmable ${message.code} from $from" }
             return
         }
+        if (!received.hasRoom(now)) return dropForLimit(from, message)
         received.add(key, CoapMessageType.NON, now)
         effects += if (message.isRequest) {
             MessagingEffect.DeliverRequest(from, message)
         } else {
             MessagingEffect.DeliverResponse(from, message)
         }
+    }
+
+    /**
+     * RFC 7252 §11.3: with the deduplication cache full, a new message is dropped without state and without
+     * an answer, which might go to a spoofed source; its sender retransmits a Confirmable one.
+     */
+    private fun dropForLimit(from: Endpoint, message: CoapMessage) {
+        debug(from, message.messageId) { "Dropped a new ${message.type}: the deduplication cache is full" }
+        effects += MessagingEffect.Event(EndpointEvent.LimitReached(from, EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES))
     }
 
     private fun onDuplicate(entry: InboundEntry) {

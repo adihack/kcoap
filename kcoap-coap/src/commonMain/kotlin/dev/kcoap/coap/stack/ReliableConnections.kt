@@ -19,6 +19,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -45,6 +46,9 @@ internal class ReliableConnections(
     private val drivers = HashMap<Endpoint, ConnectionDriver>()
     private val connecting = HashMap<Endpoint, CompletableDeferred<ConnectionDriver>>()
     private val holdOffUntil = HashMap<Endpoint, Duration>()
+
+    /** One permit per accepted connection still waiting for its peer's CSM. */
+    private val pendingAccepted = Semaphore(config.reliable.maxPendingConnections)
     @Volatile
     private var isClosed = false
 
@@ -185,6 +189,13 @@ internal class ReliableConnections(
 
     private suspend fun accepted(connection: Connection) {
         val peer = connection.remote
+        if (!pendingAccepted.tryAcquire()) {
+            // RFC 7252 §11.3 for connections: peers that connect and never send a CSM cannot pile up.
+            log.debug { "Refused a connection from $peer: ${config.reliable.maxPendingConnections} await their CSM" }
+            onEvent(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.PENDING_CONNECTIONS))
+            closeQuietly(connection)
+            return
+        }
         val driver = ConnectionDriver(connection, isInitiator = false, this, scope, config)
         val duplicate = lock.withLock {
             val duplicate = isClosed || peer in drivers
@@ -192,13 +203,26 @@ internal class ReliableConnections(
             duplicate
         }
         if (duplicate) {
+            pendingAccepted.release()
             log.warn { "Refused a second connection from $peer" }
-            connection.close()
+            closeQuietly(connection)
             return
         }
+        // Established or closed, the connection no longer waits for its CSM.
+        driver.established.invokeOnCompletion { pendingAccepted.release() }
         log.debug { "Accepted a connection from $peer" }
         onEvent(EndpointEvent.ConnectionOpened(peer, isInitiator = false))
         driver.start()
+    }
+
+    private suspend fun closeQuietly(connection: Connection) {
+        try {
+            connection.close()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.debug { "Closing a refused connection failed: ${e.message}" }
+        }
     }
 
     /** Releases every connection and closes listeners and connectors. */

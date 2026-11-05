@@ -27,10 +27,25 @@ import kotlinx.coroutines.sync.withLock
  * Changes take one [Mutex], never held across a suspension; events are reported after it is released.
  * Readers ([changed], [count], [removed]) take no lock: they read a snapshot of one resource's observers,
  * replaced on every change of that resource, so notifying the observers of a resource touches only them.
- * Once [close]d, after the server stopped, it takes no new observers.
+ * Once [close]d, after the server stopped, it takes no new observers. It keeps at most
+ * [CoapServerConfig.maxObservers], and [CoapServerConfig.maxObserversPerResource] per resource.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class ObservationRegistry(private val server: CoapServer) {
+    /** What [register] did. */
+    enum class Registration {
+        ADDED,
+
+        /** The server stopped. */
+        CLOSED,
+
+        /** [CoapServerConfig.maxObservers] reached. */
+        TOO_MANY_OBSERVERS,
+
+        /** [CoapServerConfig.maxObserversPerResource] reached. */
+        TOO_MANY_FOR_RESOURCE,
+    }
+
     private val lock = Mutex()
     private val byKey = HashMap<ExchangeKey, ServerObservation>()
     private var isClosed = false
@@ -39,20 +54,26 @@ internal class ObservationRegistry(private val server: CoapServer) {
     private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
 
     /**
-     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST). Returns false,
-     * and adds nothing, once the registry is closed.
+     * Adds an observer, replacing one with the same endpoint and token (RFC 7641 §4.1 MUST), unless the
+     * registry is closed or full; a replacement does not count against the bounds again.
      */
-    suspend fun register(observation: ServerObservation): Boolean {
+    suspend fun register(observation: ServerObservation): Registration {
+        val config = server.config
         val previous = lock.withLock {
-            if (isClosed) return false
-            val previous = byKey.put(observation.key, observation)
+            if (isClosed) return Registration.CLOSED
+            val previous = byKey[observation.key]
+            if (previous == null && byKey.size >= config.maxObservers) return Registration.TOO_MANY_OBSERVERS
+            if (previous?.resource !== observation.resource && observersOf(observation.resource).size >= config.maxObserversPerResource) {
+                return Registration.TOO_MANY_FOR_RESOURCE
+            }
+            byKey[observation.key] = observation
             previous?.let(::unindex)
             index(observation)
             previous
         }
         previous?.deactivate()
         server.endpoint.report(EndpointEvent.ObserverAdded(observation.peer, observation.resource.path))
-        return true
+        return Registration.ADDED
     }
 
     /** RFC 7641 §3.6 deregistration, or §3.5 cancellation by Reset. */

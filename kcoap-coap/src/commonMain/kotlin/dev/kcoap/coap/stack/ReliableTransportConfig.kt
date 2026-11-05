@@ -29,6 +29,10 @@ import kotlin.time.Duration.Companion.seconds
  *   bounds [CoapEndpoint.ping] and keep-alive pings.
  * @property keepAliveInterval send a Ping after this long without receiving anything, and abort the
  *   connection when nothing arrives within [pingTimeout] after it (§3.4, §4.4). Null disables it.
+ * @property maxPendingConnections the most accepted connections whose peer has not sent its CSM yet
+ *   (§3.3), each held for at most [csmTimeout]. A connection beyond it is closed at once and reported as
+ *   [EndpointEvent.LimitReached], so peers that connect and never speak cannot exhaust memory, as RFC 7252
+ *   §11.3 asks of any state an unauthenticated peer can create. Established connections do not count.
  */
 public class ReliableTransportConfig(
     public val maxMessageSize: Long = DEFAULT_MAX_MESSAGE_SIZE,
@@ -39,6 +43,7 @@ public class ReliableTransportConfig(
     public val releaseTimeout: Duration = 5.seconds,
     public val pingTimeout: Duration = 30.seconds,
     public val keepAliveInterval: Duration? = null,
+    public val maxPendingConnections: Int = DEFAULT_MAX_PENDING_CONNECTIONS,
 ) {
     init {
         require(maxMessageSize in MIN_MAX_MESSAGE_SIZE..MAX_MAX_MESSAGE_SIZE) {
@@ -50,6 +55,7 @@ public class ReliableTransportConfig(
         require(!releaseTimeout.isNegative()) { "Release timeout must not be negative: $releaseTimeout" }
         require(pingTimeout.isPositive()) { "Ping timeout must be positive: $pingTimeout" }
         require(keepAliveInterval == null || keepAliveInterval.isPositive()) { "Keep-alive interval must be positive" }
+        require(maxPendingConnections > 0) { "At least one pending connection must be allowed: $maxPendingConnections" }
     }
 
     /** Whether the CSM announces BERT: Block-Wise-Transfer with a Max-Message-Size above 1152 (§5.3.2). */
@@ -68,5 +74,8 @@ public class ReliableTransportConfig(
 
         /** Max-Message-Size is a uint of at most 4 bytes (§5.3.1); kcoap keeps messages within an array. */
         public const val MAX_MAX_MESSAGE_SIZE: Long = Int.MAX_VALUE.toLong()
+
+        /** See [maxPendingConnections]. */
+        public const val DEFAULT_MAX_PENDING_CONNECTIONS: Int = 128
     }
 }

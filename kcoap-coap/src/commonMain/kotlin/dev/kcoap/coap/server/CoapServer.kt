@@ -12,6 +12,7 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.RequestHandler
@@ -303,12 +304,15 @@ public class CoapServer private constructor(
                 this, observable, peer, request.token, effective, unprotected, unprotected?.identity,
                 block2?.size, key, now, inbound.connection, inbound.peerIdentity,
             )
-            if (observations.register(observation)) {
+            val registration = observations.register(observation)
+            if (registration == ObservationRegistry.Registration.ADDED) {
                 response = response.withOptions { observe(observable.nextSequence()) }
             } else {
-                // The server stopped meanwhile; RFC 7641 §4.1 lets it answer as to a plain GET.
+                // RFC 7641 §4.1: a server unwilling or unable to add an observer answers as to a plain GET;
+                // here because it stopped meanwhile, or because the observer bounds are reached (§7).
                 observation = null
                 response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
+                limitOf(registration)?.let { endpoint.report(EndpointEvent.LimitReached(peer, it)) }
             }
         } else if (CoapOptions.OBSERVE.number in response.options) {
             // RFC 7641 §4.1: only a registered observer gets a response with Observe.
@@ -316,6 +320,12 @@ public class CoapServer private constructor(
         }
         block1Control?.let { control -> response = response.withOptions { block1(control) } }
         return Reply(blockwise.serve(key, request.token, block2, response, reserve, now, limits), observation)
+    }
+
+    private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
+        ObservationRegistry.Registration.TOO_MANY_OBSERVERS -> EndpointEvent.LimitReached.Limit.OBSERVERS
+        ObservationRegistry.Registration.TOO_MANY_FOR_RESOURCE -> EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE
+        ObservationRegistry.Registration.ADDED, ObservationRegistry.Registration.CLOSED -> null
     }
 
     /**

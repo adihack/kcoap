@@ -30,6 +30,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -111,8 +112,16 @@ public class CoapEndpoint private constructor(
         config.random,
         config.interceptors,
         config.loggerFactory,
+        config.maxDeduplicationEntries,
+        config.maxExchangesPerPeer,
     )
     private val exchanges = HashMap<ExchangeKey, ClientExchange>()
+
+    /** How many of [exchanges] each peer has, for [CoapEndpointConfig.maxExchangesPerPeer]; under [lock]. */
+    private val exchangesPerPeer = HashMap<Endpoint, Int>()
+
+    /** One permit per running request handler, [CoapEndpointConfig.maxConcurrentRequests] in all. */
+    private val handlerPermits = Semaphore(config.maxConcurrentRequests)
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val clockStart = config.timeSource.markNow()
     private val job = SupervisorJob(scope.coroutineContext[Job])
@@ -244,9 +253,8 @@ public class CoapEndpoint private constructor(
             // Checked under the lock that the terminal transition takes, so no exchange is added after they
             // were all failed: it fails at once instead of waiting for a response that never comes.
             ensureOpen()
-            val exchange = register(peer, token, isObservation)
-            exchange to messaging.allocateMessageId(peer, now())
-        }
+            register(peer, token, isObservation)?.let { it to messaging.allocateMessageId(peer, now()) }
+        } ?: throw tooManyExchanges(peer)
         val plain = request.toBuilder().apply {
             this.type = type
             this.messageId = messageId
@@ -291,8 +299,8 @@ public class CoapEndpoint private constructor(
         val connection = reliable.connectionFor(peer)
         val exchange = lock.withLock {
             ensureOpen()
-            register(peer, token, isObservation).also { it.connection = connection }
-        }
+            register(peer, token, isObservation)?.also { it.connection = connection }
+        } ?: throw tooManyExchanges(peer)
         // Counted at once, cancelled or not: the cleanup below counts it out again.
         withContext(NonCancellable) { connection.exchangeOpened() }
         val plain = request.toBuilder().apply { this.token = exchange.token }.build()
@@ -311,11 +319,38 @@ public class CoapEndpoint private constructor(
     }
 
     /** Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it. */
-    private fun register(peer: Endpoint, token: ByteArray?, isObservation: Boolean): ClientExchange {
+    /**
+     * Called under [lock]: a new exchange with [token] or a fresh one, replacing an exchange that had it;
+     * null when [peer] has [CoapEndpointConfig.maxExchangesPerPeer] already.
+     */
+    private fun register(peer: Endpoint, token: ByteArray?, isObservation: Boolean): ClientExchange? {
+        val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
+        if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
         val exchange = ClientExchange(this, peer, chosen, isObservation, log.with("peer" to peer, "token" to chosen.toHex()))
-        exchanges.put(exchange.key, exchange)?.let { previous -> if (previous !== exchange) previous.markReplaced() }
+        val previous = exchanges.put(exchange.key, exchange)
+        if (previous == null) {
+            exchangesPerPeer[peer] = (exchangesPerPeer[peer] ?: 0) + 1
+        } else if (previous !== exchange) {
+            previous.markReplaced()
+        }
         return exchange
+    }
+
+    /** Called under [lock]: [exchange] leaves the registry. */
+    private fun unregister(exchange: ClientExchange) {
+        exchanges.remove(exchange.key)
+        val remaining = (exchangesPerPeer[exchange.peer] ?: 1) - 1
+        if (remaining > 0) exchangesPerPeer[exchange.peer] = remaining else exchangesPerPeer.remove(exchange.peer)
+    }
+
+    /** RFC 7252 §11.3: the request is refused rather than queued without bound. */
+    private fun tooManyExchanges(peer: Endpoint): CoapException {
+        emit(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
+        return CoapException(
+            "$peer has ${config.maxExchangesPerPeer} exchanges in progress (maxExchangesPerPeer)",
+            CoapException.Reason.IDENTIFIERS_EXHAUSTED,
+        )
     }
 
     private fun requireDatagramTransport(peer: Endpoint) {
@@ -406,7 +441,7 @@ public class CoapEndpoint private constructor(
         val registered = lock.withLock {
             first = !exchange.isForgotten
             exchange.isForgotten = true
-            (exchanges[exchange.key] === exchange).also { if (it) exchanges.remove(exchange.key) }
+            (exchanges[exchange.key] === exchange).also { if (it) unregister(exchange) }
         }
         if (first) exchange.connection?.exchangeClosed(exchange.key.token.takeIf { registered })
     }
@@ -568,6 +603,7 @@ public class CoapEndpoint private constructor(
             closeCause = cause
             messaging.close(cause)
             effects = messaging.takeEffects()
+            exchangesPerPeer.clear()
             exchanges.values.toList().also { exchanges.clear() }
         }
         execute(effects)
@@ -679,8 +715,14 @@ public class CoapEndpoint private constructor(
         launchHandler(handler, InboundRequest(this, from, message))
     }
 
-    private fun launchHandler(handler: RequestHandler, request: InboundRequest) {
-        scope.launch(handler.context + CoroutineName("coap-request")) {
+    /**
+     * Runs [handler] on [request] in a coroutine of its own, while fewer than
+     * [CoapEndpointConfig.maxConcurrentRequests] run; otherwise the request is refused at once, so neither
+     * the receive loop nor the reader of a connection ever waits for a handler.
+     */
+    private suspend fun launchHandler(handler: RequestHandler, request: InboundRequest) {
+        if (!handlerPermits.tryAcquire()) return refuseOverloaded(request)
+        val job = scope.launch(handler.context + CoroutineName("coap-request")) {
             try {
                 handler.handle(request)
             } catch (e: CancellationException) {
@@ -688,6 +730,26 @@ public class CoapEndpoint private constructor(
             } catch (e: Exception) {
                 log.error(e) { "Request handler failed on ${request.message} from ${request.peer}" }
             }
+        }
+        // Also when the coroutine never ran, cancelled with its server before it started.
+        job.invokeOnCompletion { handlerPermits.release() }
+    }
+
+    /**
+     * RFC 7252 §5.9.3.4: 5.03 Service Unavailable, with Max-Age saying when to try again. Piggybacked on the
+     * ACK, it is no larger than the request, so it amplifies nothing (§11.3), and a duplicate of the request
+     * gets the same answer from the deduplication cache. A Non-confirmable request is dropped.
+     */
+    private suspend fun refuseOverloaded(request: InboundRequest) {
+        emit(EndpointEvent.LimitReached(request.peer, EndpointEvent.LimitReached.Limit.CONCURRENT_REQUESTS))
+        log.debug { "Refused a request from ${request.peer}: ${config.maxConcurrentRequests} handlers are running" }
+        if (!request.isConfirmable) return
+        try {
+            request.respond(CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE) { options { maxAge(OVERLOAD_MAX_AGE) } })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.debug { "Could not refuse a request from ${request.peer}: ${e.message}" }
         }
     }
 
@@ -833,6 +895,9 @@ public class CoapEndpoint private constructor(
 
     private companion object {
         const val TOKEN_ATTEMPTS = 16
+
+        /** Seconds after which a client refused for overload may try again. */
+        const val OVERLOAD_MAX_AGE = 2L
     }
 }
 
