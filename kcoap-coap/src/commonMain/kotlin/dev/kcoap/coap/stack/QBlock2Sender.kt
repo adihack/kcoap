@@ -30,6 +30,9 @@ import kotlin.time.Duration
  *   Observe, §4.5), at most MAX_PAYLOADS at once and NON_TIMEOUT_RANDOM between such sets; the next set of
  *   the body then waits another NON_TIMEOUT_RANDOM (§7.2).
  *
+ * Without a Continue, at most one MAX_PAYLOADS_SET goes out per NON_TIMEOUT_RANDOM, missing blocks and sets
+ * of the body alike (§7.2: "a NON_TIMEOUT_RANDOM delay is still observed between each MAX_PAYLOADS_SET").
+ *
  * A Reset to any block stops the body ([onReset]). Not thread safe: the driver serializes all calls.
  */
 internal class QBlock2Sender<R>(
@@ -146,8 +149,14 @@ internal class QBlock2Sender<R>(
     fun onTimer(now: Duration): List<QBlockAction<R>> {
         if (isStopped) return emptyList()
         val actions = ArrayList<QBlockAction<R>>()
-        pendingAt?.let { if (now >= it) sendPending(now, actions) }
-        nextSetAt?.let { if (now >= it) sendSet(now, currentSet + 1, actions) }
+        val pendingDue = pendingAt?.let { now >= it } ?: false
+        if (pendingDue) {
+            sendPending(now, actions)
+            // §7.2: that was a MAX_PAYLOADS_SET, so the next set of the body waits for the pause after it.
+            putOffNextSet(now)
+        } else {
+            nextSetAt?.let { if (now >= it) sendSet(now, currentSet + 1, actions) }
+        }
         return actions
     }
 
@@ -181,8 +190,13 @@ internal class QBlock2Sender<R>(
         inBody.forEach { pending.addLast(it to ref) }
         sendPending(now, actions)
         // §7.2: after the missing blocks, another NON_TIMEOUT_RANDOM before the next set.
-        if (nextSetAt != null) nextSetAt = now + nonTimeoutRandom
+        putOffNextSet(now)
         return actions
+    }
+
+    /** The next set of the body waits NON_TIMEOUT_RANDOM after the last chunk of missing blocks (§7.2). */
+    private fun putOffNextSet(now: Duration) {
+        if (nextSetAt != null) nextSetAt = (pendingAt ?: now) + nonTimeoutRandom
     }
 
     private fun sendPending(now: Duration, actions: MutableList<QBlockAction<R>>) {

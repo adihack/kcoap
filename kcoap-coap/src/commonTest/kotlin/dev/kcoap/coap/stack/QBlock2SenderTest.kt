@@ -91,7 +91,28 @@ class QBlock2SenderTest {
         assertEquals((1..9).map { "$it/1@missing" } + "11/1@missing", actions.sent())
         assertTrue(sender.isSending)
         assertEquals(1.seconds + pause, sender.nextDeadline())
-        assertEquals((12..19).map { "$it/1@missing" } + "21/1@missing" + (10..19).map { "$it/1@get" }, sender.onTimer(1.seconds + pause).sent())
+        val second = sender.onTimer(1.seconds + pause).sent()
+        assertEquals((12..19).map { "$it/1@missing" } + "21/1@missing", second, "§7.2: one set per pause")
+        assertEquals(1.seconds + pause * 2, sender.nextDeadline())
+        assertEquals((10..19).map { "$it/1@get" }, sender.onTimer(1.seconds + pause * 2).sent(), "then the next set of the body")
+    }
+
+    @Test
+    fun rfc9177Section7_2ThreeChunksOfMissingBlocksAndTheNextSetEachWaitAPause() {
+        val sender = sender(size = 40 * 64)
+        sender.start(Duration.ZERO, "get")
+        val missing = followUp(*(1L..9L).map { block(it, false) }.toTypedArray(), block(11, true), block(21, true))
+        val times = mutableListOf(1.seconds to sender.onRequest(1.seconds, missing, "missing").sent().size)
+        while (true) {
+            val at = sender.nextDeadline() ?: break
+            times += at to sender.onTimer(at).sent().size
+        }
+        assertEquals(
+            listOf(1.seconds to 10, 1.seconds + pause to 10, 1.seconds + pause * 2 to 7, 1.seconds + pause * 3 to 10) +
+                listOf(4, 5).map { 1.seconds + pause * it to 10 },
+            times,
+            "at most MAX_PAYLOADS blocks at any instant",
+        )
     }
 
     @Test
