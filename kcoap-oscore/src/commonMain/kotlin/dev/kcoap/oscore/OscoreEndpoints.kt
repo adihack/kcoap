@@ -250,7 +250,10 @@ public class OscoreClient(
         /**
          * A notification to a registration that carried Inner Q-Block (RFC 9177 §4.5; see [OscoreClient]): its
          * Partial IV must be new in the request's window (§7.4.1), and one below the Notification Number must
-         * belong to the freshest body, whose block holds the Notification Number (§4.1.3.5.2).
+         * belong to the freshest body, whose block holds the Notification Number (§4.1.3.5.2). The Partial IV is
+         * recorded as received before freshness is decided, so a stale notification sent again is a replay even
+         * once its body became the freshest ("MUST stop processing notifications with a Partial IV that has been
+         * previously received", §7.4.1).
          */
         private fun checkBodyNotification(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
             val body = bodyOf(decrypted)
@@ -261,11 +264,9 @@ public class OscoreClient(
                 return withObserveValue(decrypted, 0)
             }
             val sequence = piv.readUnsigned()
-            val window = window()
-            if (window.isReplay(sequence)) throw MessageSecurityException("Replayed or stale notification")
+            if (!window().accept(sequence)) throw MessageSecurityException("Replayed or stale notification")
             val isNewest = sequence > notificationNumber
             if (!isNewest && !ofFreshestBody) throw MessageSecurityException("Stale notification of an older body")
-            window.accept(sequence)
             if (isNewest) {
                 notificationNumber = sequence
                 freshestBody = body
@@ -276,12 +277,13 @@ public class OscoreClient(
         /**
          * The notification without a Partial IV reuses the request's nonce, which serves one response (§8.3 step
          * 3, §7.4.1), and counts as the oldest notification (§4.1.3.5.2): unless [isOldest] says it still can be,
-         * a later one came already and it is stale.
+         * a later one came already and it is stale. Either way the nonce counts as received, so the notification
+         * is not taken when it comes again.
          */
         private fun takeRequestNonceForNotification(isOldest: Boolean) {
             if (usedRequestNonce) throw MessageSecurityException("Second notification without a Partial IV")
-            if (!isOldest) throw MessageSecurityException("Stale notification without a Partial IV")
             usedRequestNonce = true
+            if (!isOldest) throw MessageSecurityException("Stale notification without a Partial IV")
         }
 
         /** The ETag of the Q-Block2 body that [message] is a block of (RFC 9177 §4.4), or null for any other message. */

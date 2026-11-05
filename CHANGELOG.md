@@ -171,7 +171,9 @@ adds its entry and migration note below.
   Partial IV received before is refused. Freshness stays by Partial IV (§4.1.3.5.2), per body: a notification
   below the Notification Number passes only as a block of the body (its ETag) that holds the highest Partial
   IV, so replayed blocks, blocks of an older body and older notifications of one message are still dropped.
-  Registrations without Inner Q-Block keep the strict order. A client with message security whose resolver
+  A notification that verifies counts as received even when it is dropped as stale, so it is refused if it
+  comes again after its body became the freshest (§7.4.1). Registrations without Inner Q-Block keep the
+  strict order. A client with message security whose resolver
   leaves a Q-Block registration unprotected orders its bodies by Observe value, as it does other unprotected
   observations. At 10 % loss with 20 to 50 ms of latency every body arrives whole, where the strict rule
   dropped about 130 blocks per run. No API change.

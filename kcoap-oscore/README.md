@@ -126,10 +126,10 @@ B.2 once it is implemented.
 |---|---|
 | §3.2 | Context derivation (HKDF, any COSE AEAD from `kcoap-crypto`) with Master Salt and ID Context; the copies of the Master Secret and Salt and the PRK are wiped afterwards |
 | §3.2.2, §7.4 | Replay window (RFC 6347 sliding window, 32 by default), atomic check and update |
-| §7.4 | One response per request, also when it carries a Partial IV. A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177) takes the several responses of its body: at most one with the request's nonce, every other with a Partial IV new in a replay window of that request, of the context's size. Outside RFC 8613's single-response model, so the CoAP stack uses it only where both sides opt in (`withMessageSecurity`) |
+| §7.4 | One response per request, also when it carries a Partial IV. A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177) takes the several responses of its body: at most one with the request's nonce, every other with a Partial IV new in a replay window of that request, of the context's size. Outside RFC 8613's single-response model, so the CoAP stack uses it only where both sides opt in (`withMessageSecurity`). §7.4.1 for a registration carrying Inner Q-Block (RFC 9177 §4.5), whose notification bodies come one notification per block: its notifications are checked against a replay window of the registration rather than only above the Notification Number, every Partial IV that verified is recorded as received before freshness is decided, and below the Notification Number only blocks of the freshest body (the ETag of the block holding it) pass |
 | §4 | Inner/Outer option split from the option registry; unknown options are Class E |
 | §4.1.3.3 | Proxy-Uri decomposition |
-| §4.1.3.5 | Observe: Inner and Outer, FETCH / 2.05 outer codes, notification Partial IVs, freshness and replay of notifications |
+| §4.1.3.5 | Observe: Inner and Outer, FETCH / 2.05 outer codes, notification Partial IVs, freshness and replay of notifications. Without Inner Q-Block notifications are taken in strictly increasing Partial IV order. With it, freshness is per body (§4.1.3.5.2): the body whose block holds the highest Partial IV is the freshest, and its other blocks are taken in any order. The notification without a Partial IV counts as the oldest, so once a later one was taken it is dropped |
 | §4.2 | Outer Code POST / 2.04 |
 | §5 | COSE_Encrypt0, nonce construction, AAD (Enc_structure over aad_array) |
 | §6 | OSCORE option compression ('kid', 'kid context', Partial IV) |
@@ -152,6 +152,13 @@ Not yet: Appendix B.2
   stack on the in-memory network, both ways, with a replayed block on the wire, an unprotected 4.02 and 4.08
   injected on a body's tokens, a restarted server's B.1.2 challenge and 10 % loss over 10 seeds each way
   (`OscoreQBlockEndToEndTest`).
+- Q-Block2 notification bodies (RFC 9177 §4.5) under OSCORE: the blocks of a body in any order for Q-Block2 and
+  Q-Block1 FETCH registrations, replayed blocks, a block of an older body, a stale whole body, an older
+  notification of one message, a stale notification that is a replay once its body becomes the freshest, the
+  window edge, and the strict order without Q-Block (`OscoreQBlockTest`, every target); through the stack,
+  notification bodies at 10 % loss with 20 to 50 ms of latency over 5 seeds (every body whole, in order, once,
+  no genuine block refused), a held-back older body and a replayed newer one never delivered, and a protected
+  observation that falls back to Inner Block2 when the server does not opt in (`OscoreQBlockEndToEndTest`).
 - Appendix B.1.1 and B.1.2 under simulated restarts:
   - a recording store and AEAD show that every Partial IV is durable before its nonce is used;
   - stores that throw, before or after the write, are cancelled mid-write, or always fail never let a

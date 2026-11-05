@@ -381,6 +381,28 @@ class OscoreQBlockTest {
     }
 
     @Test
+    fun rfc8613Section7_4_1AStaleNotificationIsAReplayOnceItsBodyBecameTheFreshest() = runTest {
+        val (client, server) = clientFor()
+        val exchange = exchange(client, server, qBlockRegistration())
+        val older = exchange.body(etag = 1)
+        val newer = exchange.body(etag = 2)
+        // A block of the older body protected after the newer body: a set of it still going out when the newer
+        // body began, or a server that used its ETag again.
+        val late = exchange.server.protectResponse(notificationBlock(exchange.server.message, etag = 1, num = 5))
+        exchange.client.unprotectResponse(newer[3])
+        assertEquals("Stale notification of an older body", exchange.rejection(older[2]))
+        assertEquals("Stale notification without a Partial IV", exchange.rejection(older[0]))
+
+        // The late block holds the highest Partial IV, so the older body is the freshest again (§4.1.3.5.2), and
+        // its blocks never received are taken.
+        assertEquals(5L, exchange.client.unprotectResponse(late).options.qBlock2!!.number)
+        assertEquals(4L, exchange.client.unprotectResponse(older[4]).options.qBlock2!!.number)
+        // The stale ones verified, so they were received: sent again they are replays, freshest body or not.
+        assertEquals("Replayed or stale notification", exchange.rejection(older[2]))
+        assertEquals("Second notification without a Partial IV", exchange.rejection(older[0]))
+    }
+
+    @Test
     fun rfc7641Section3_4AStaleWholeBodyIsNeverTaken() = runTest {
         val (client, server) = clientFor()
         val exchange = exchange(client, server, qBlockRegistration())

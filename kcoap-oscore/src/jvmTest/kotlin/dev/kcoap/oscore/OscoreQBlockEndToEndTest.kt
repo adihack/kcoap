@@ -359,6 +359,50 @@ class OscoreQBlockEndToEndTest {
     }
 
     /**
+     * RFC 9177 §4.1 for a protected observation: the client opts in to Q-Block under OSCORE without a probe, and the
+     * server takes Q-Block only from unprotected requests. The registration with Inner Q-Block2 is rejected before
+     * it is processed, with an inner 4.02 when Confirmable and a Reset when Non-confirmable, and the observation
+     * registers again with RFC 7959: the bodies arrive whole, the server holds one observer, OSCORE refuses
+     * nothing, and nothing after the rejection carries Q-Block.
+     */
+    @Test
+    fun rfc9177Section4_1AProtectedObservationFallsBackToInnerBlock2WhenTheServerDoesNotOptIn() = runTest {
+        for (confirmable in listOf(false, true)) {
+            val run = if (confirmable) "CON" else "NON"
+            val setup = setup(
+                client = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true),
+                server = QBlockServerConfig(isEnabled = true),
+            )
+            val received = Collections.synchronizedList(mutableListOf<CoapResponse>())
+            val observation = backgroundScope.launch {
+                setup.client.observe(setup.uri("/obs")) { if (!confirmable) nonConfirmable() }.collect { received += it }
+            }
+            delay(10.seconds)
+            setup.observed.change()
+            delay(10.seconds)
+
+            assertEquals((0..1).map { Observed.body(it).toList() }, received.map { it.payload.toList() }, "$run: two bodies, whole")
+            val registrations = setup.inner.filter { it.options.observe == 0L }
+            assertEquals(2, registrations.size, "$run: the Q-Block registration and the RFC 7959 one")
+            assertEquals(BlockOption(0, true, 2), registrations[0].options.qBlock2, "$run: Inner Q-Block2 first")
+            assertTrue(setup.inner.drop(setup.inner.indexOf(registrations[1])).none { it.has(qBlockOptions) }, "$run: no Q-Block after it")
+            assertTrue(setup.inner.any { it.options.block2 != null }, "$run: Inner Block2 carried the bodies")
+            val rejection = setup.fromServer().first()
+            if (confirmable) {
+                assertEquals(CoapCode.CHANGED, rejection.code, "$run: the 4.02 went inside OSCORE, a protected 2.04 on the wire")
+            } else {
+                assertEquals(CoapMessageType.RST, rejection.type, "$run: the Non-confirmable registration got a Reset")
+            }
+            assertTrue(setup.events.any { it is EndpointEvent.QBlockFallback }, "$run")
+            assertEquals(1, setup.observed.observerCount, "$run")
+            assertEquals(emptyList(), setup.rejected.toList(), "$run: OSCORE took every response")
+            assertProtectedOnTheWire(setup)
+            observation.cancel()
+            setup.close()
+        }
+    }
+
+    /**
      * What kept protected observations on RFC 7959 until OSCORE took a notification body's blocks by a window per
      * registration: 10 % loss each way and 20 to 50 ms of latency, which reorders the blocks of a set. Over
      * [OBSERVE_SEEDS] runs every delivered notification is a whole body, once, in order, the latest state arrives,
