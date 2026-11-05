@@ -15,5 +15,11 @@ class ConnectionLinkExchangeTest : ExchangeConformanceTest() {
 
     override val carriesBert: Boolean get() = true
 
+    /** RFC 8323 §7.2: a notification is written and done, with nothing to acknowledge. */
+    override val supersedes: Boolean get() = false
+
+    /** RFC 8323 §3.1 has no Reset, so a client deregisters (§7.4). */
+    override val hasReset: Boolean get() = false
+
     override val lostLinkReason: CoapException.Reason get() = CoapException.Reason.CONNECTION_CLOSED
 }

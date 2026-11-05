@@ -16,5 +16,11 @@ class DatagramLinkExchangeTest : ExchangeConformanceTest() {
     /** RFC 7959 §2.2: SZX 7 is reserved over datagrams. */
     override val carriesBert: Boolean get() = false
 
+    /** RFC 7641 §4.5.2: a Confirmable notification awaits its ACK and is superseded meanwhile. */
+    override val supersedes: Boolean get() = true
+
+    /** RFC 7252 §4.2, RFC 7641 §3.6. */
+    override val hasReset: Boolean get() = true
+
     override val lostLinkReason: CoapException.Reason get() = CoapException.Reason.SESSION_ENDED
 }

@@ -3,6 +3,7 @@ package dev.kcoap.coap
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.EndpointResolver
+import dev.kcoap.coap.client.ObserveCancellation
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.security.ClientMessageSecurity
@@ -31,6 +32,8 @@ import dev.kcoap.log.LoggerFactory
 import dev.kcoap.testkit.InMemoryConnections
 import dev.kcoap.testkit.InMemoryLink
 import dev.kcoap.testkit.InMemoryNetwork
+import dev.kcoap.testkit.InMemorySessions
+import dev.kcoap.testkit.LinkConditions
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import kotlin.random.Random
@@ -39,16 +42,20 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -59,8 +66,8 @@ import kotlinx.coroutines.withTimeout
  * client and server on kcoap-testkit's [InMemoryLink], on virtual time, on every target. Block-wise both ways
  * and within the link's limits, Q-Block both ways, Observe, Echo, Request-Tag, the access policy and
  * unverified responses go through the same code on both; where RFC 7252 and RFC 8323 differ, the subclass
- * says what its link does: whether it carries BERT blocks (RFC 8323 §6), and what a lost link fails its
- * exchanges with.
+ * says what its link does: whether it carries BERT blocks (RFC 8323 §6), whether it supersedes notifications
+ * and has Resets (RFC 7641 §3.6, §4.5.2), and what a lost link fails its exchanges with.
  */
 abstract class ExchangeConformanceTest {
     /**
@@ -78,6 +85,19 @@ abstract class ExchangeConformanceTest {
     protected abstract val carriesBert: Boolean
 
     /**
+     * Whether a notification awaits an acknowledgement, so that a newer state supersedes it (RFC 7641 §4.5.2)
+     * and states that change faster than the acknowledgements come are skipped; on a connection every
+     * notification is written and done (RFC 8323 §7.2).
+     */
+    protected abstract val supersedes: Boolean
+
+    /**
+     * Whether the client answers a notification it does not want with a Reset (RFC 7641 §3.6); RFC 8323 has
+     * none, so on a connection the client always deregisters (§7.4).
+     */
+    protected abstract val hasReset: Boolean
+
+    /**
      * What a lost link fails the exchanges and observations on it with: an ended DTLS session over datagrams
      * (RFC 7252 §9.1.1), a closed connection (RFC 8323 §3.4, §7.4).
      */
@@ -91,16 +111,30 @@ abstract class ExchangeConformanceTest {
         },
     )
 
-    /** A server and a client on one [link]; [sent] and [received] are the client's messages. */
+    /**
+     * A server and a client on one [link], whose datagrams go on [network]; [sent] and [received] are the
+     * client's messages, [serverSent] the server's.
+     */
     private class Setup(
         val link: InMemoryLink,
+        val network: InMemoryNetwork,
         val server: CoapServer,
         val client: CoapClient,
         val side: InMemoryLink.Side,
         val sent: List<CoapMessage>,
         val received: List<CoapMessage>,
+        val serverSent: List<CoapMessage>,
     ) {
         fun uri(path: String): String = link.uri + path
+
+        /** The responses the server sent with an Observe option: the registration's, then the notifications. */
+        fun notifications(): List<CoapMessage> = serverSent.filter { it.isResponse && it.options.observe != null }
+
+        /** Over datagrams, loses what the client sends while [lost]; a connection loses nothing. */
+        fun loseClientDatagrams(lost: Boolean) {
+            val client = (side.transport as? InMemorySessions)?.localEndpoint ?: return
+            network.filter = if (lost) { datagram -> datagram.from != client } else { _ -> true }
+        }
 
         /** The endpoint the client reaches the server at. */
         suspend fun serverPeer(): Endpoint = side.peer(EndpointResolver.Default.resolve(CoapUri.parse(link.uri)))
@@ -113,14 +147,19 @@ abstract class ExchangeConformanceTest {
         client: (EndpointResolver) -> CoapClientConfig = { CoapClientConfig(resolver = it) },
         routes: ResourceBuilder.() -> Unit,
     ): Setup {
-        val link = link(InMemoryNetwork(backgroundScope, Random(1)), InMemoryConnections(chunkSize = 7), maxMessageSize, identity)
+        val network = InMemoryNetwork(backgroundScope, Random(1))
+        val link = link(network, InMemoryConnections(chunkSize = 7), maxMessageSize, identity)
         val reliable = maxMessageSize?.let { ReliableTransportConfig(maxMessageSize = it.toLong()) } ?: ReliableTransportConfig()
         val sent = mutableListOf<CoapMessage>()
         val received = mutableListOf<CoapMessage>()
+        val serverSent = mutableListOf<CoapMessage>()
         val recorder = object : MessageInterceptor {
             override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = message.also { sent += it }
 
             override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage = message.also { received += it }
+        }
+        val serverRecorder = object : MessageInterceptor {
+            override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = message.also { serverSent += it }
         }
         fun config(seed: Int, interceptors: List<MessageInterceptor>) = CoapEndpointConfig(
             timeSource = testScheduler.timeSource,
@@ -130,11 +169,14 @@ abstract class ExchangeConformanceTest {
             reliable = reliable,
         )
         val serverSide = link.server()
-        val serverEndpoint = CoapEndpoint(backgroundScope, config(1, emptyList()), serverSide.transport, serverSide.connectors, serverSide.listeners)
+        val serverEndpoint = CoapEndpoint(backgroundScope, config(1, listOf(serverRecorder)), serverSide.transport, serverSide.connectors, serverSide.listeners)
         val clientSide = link.client()
         val clientEndpoint = CoapEndpoint(backgroundScope, config(2, listOf(recorder)), clientSide.transport, clientSide.connectors, clientSide.listeners)
         val resolver = EndpointResolver { uri -> clientSide.peer(EndpointResolver.Default.resolve(uri)) }
-        return Setup(link, CoapServer(serverEndpoint, server, routes), CoapClient(clientEndpoint, client(resolver)), clientSide, sent, received)
+        return Setup(
+            link, network, CoapServer(serverEndpoint, server, routes), CoapClient(clientEndpoint, client(resolver)), clientSide,
+            sent, received, serverSent,
+        )
     }
 
     private fun body(size: Int, seed: Int = 0): ByteArray = ByteArray(size) { (it * 31 + seed + it / 251).toByte() }
@@ -294,11 +336,13 @@ abstract class ExchangeConformanceTest {
     // ---------------------------------------------------------------- Observe (RFC 7641)
 
     /**
-     * RFC 7641 §4.5: when changes outpace the link, the server supersedes what is not out yet, so states may be
-     * skipped but never arrive out of order, and the latest one always arrives.
+     * RFC 7641 §4.5: when changes come faster than notifications are acknowledged, the server keeps only the
+     * latest state, superseding the outstanding notification over datagrams (§4.5.2) and sending the latest once
+     * its ACK came, so states may be skipped but never arrive out of order, and the latest one always arrives.
+     * A connection acknowledges nothing (RFC 8323 §7.2), so there every state goes out, in order.
      */
     @Test
-    fun rfc7641Section4_5TheLatestStateArrivesAndNoOlderOneAfterIt() = runTest {
+    fun rfc7641Section4_5ChangesThatOutpaceTheLinkSkipStatesButNeverReorderThem() = runTest {
         val counter = Counter()
         val setup = setup { add(counter) }
         val seen = async {
@@ -312,12 +356,67 @@ abstract class ExchangeConformanceTest {
         }
         delay(1.seconds)
         assertEquals(1, counter.observerCount)
+        // Over datagrams an ACK comes 200 ms after its notification went out, while the state changes every 50 ms.
+        setup.network.conditions = LinkConditions(latency = 100.milliseconds)
 
-        repeat(50) { counter.change() }
+        repeat(50) {
+            counter.change()
+            delay(50.milliseconds)
+        }
 
         val values = withTimeout(10.minutes) { seen.await() }
-        assertEquals(50, values.last())
-        assertEquals(values.distinct().sorted(), values, "never an older state after a newer one")
+        assertEquals(50, values.last(), "the latest state arrived")
+        assertTrue(values.zipWithNext().all { (older, newer) -> older < newer }, "never an older state after a newer one: $values")
+        val notifications = setup.notifications().drop(1).map { it.payloadAsText().toInt() }
+        if (supersedes) {
+            assertTrue(notifications.size in 2..<50, "states were skipped, more than once: $notifications")
+        } else {
+            assertEquals((0..50).toList(), values, "every state, in order")
+            assertEquals((1..50).toList(), notifications)
+        }
+    }
+
+    /**
+     * RFC 7641 §4.5.2: a change while a Confirmable notification still awaits its ACK replaces it at its next
+     * retransmission, with a new Message ID, instead of waiting behind it (NSTART 1), so a state superseded in
+     * between never goes out, the newest one does, and the observer stays. A connection has no
+     * acknowledgements and nothing to supersede: every state is written in order (RFC 8323 §7.2).
+     */
+    @Test
+    fun rfc7641Section4_5_2AChangeSupersedesTheNotificationAwaitingItsAcknowledgement() = runTest {
+        val counter = Counter()
+        val setup = setup { add(counter) }
+        val received = Channel<String>(Channel.UNLIMITED)
+        backgroundScope.launch { setup.client.observe(setup.uri("/counter")).collect { received.send(it.payloadAsText()) } }
+        assertEquals("0", received.receive())
+
+        // Over datagrams the client's ACKs are lost for a while, so notification 1 stays outstanding.
+        setup.loseClientDatagrams(true)
+        counter.change()
+        delay(1.seconds)
+        counter.change()
+        delay(100.milliseconds)
+        counter.change()
+        // Notification 1's first timeout, 2 to 3 s after it went out, has passed; no ACK came yet.
+        delay(4.seconds)
+        val beforeAnyAck = setup.notifications().drop(1).map { it.payloadAsText() }
+        setup.loseClientDatagrams(false)
+        delay(30.seconds)
+
+        val states = generateSequence { received.tryReceive().getOrNull() }.toList()
+        val notifications = setup.notifications().drop(1)
+        if (supersedes) {
+            assertEquals(listOf("1", "3"), beforeAnyAck, "the retransmission of 1 carried the newest state")
+            assertEquals(listOf("1", "3"), states, "state 2 was skipped, the latest arrived")
+            assertEquals(listOf("1", "3"), notifications.map { it.payloadAsText() }, "state 2 never went out")
+            assertTrue(notifications.all { it.type == CoapMessageType.CON })
+            assertNotEquals(notifications[0].messageId, notifications[1].messageId, "the replacement has a new Message ID")
+        } else {
+            assertEquals(listOf("1", "2", "3"), beforeAnyAck, "nothing waits for an acknowledgement")
+            assertEquals(listOf("1", "2", "3"), states, "every state, in order")
+            assertEquals(listOf("1", "2", "3"), notifications.map { it.payloadAsText() })
+        }
+        assertEquals(1, counter.observerCount, "the observer stays")
     }
 
     /**
@@ -338,6 +437,35 @@ abstract class ExchangeConformanceTest {
         delay(1.seconds)
         assertEquals(0, counter.observerCount, "the server forgot the observer")
         assertTrue(setup.sent.any { it.isRequest && it.options.observe == 1L }, "a deregistration")
+    }
+
+    /**
+     * RFC 7641 §3.6 with [ObserveCancellation.FORGET]: over datagrams the client only forgets the token and
+     * answers the next notification with a Reset, which ends the observation on the server. A connection has no
+     * Reset, so there the client deregisters with Observe 1 all the same (RFC 8323 §7.4).
+     */
+    @Test
+    fun rfc7641Section3_6AForgottenObservationEndsOnTheServerOnEveryLink() = runTest {
+        val counter = Counter()
+        val forgetting = { resolver: EndpointResolver -> CoapClientConfig(resolver = resolver, observeCancellation = ObserveCancellation.FORGET) }
+        val setup = setup(client = forgetting) { add(counter) }
+        val two = async { setup.client.observe(setup.uri("/counter")).take(2).toList() }
+        delay(1.seconds)
+        counter.change()
+        assertEquals(listOf("0", "1"), two.await().map { it.payloadAsText() })
+        delay(1.seconds)
+
+        val deregistrations = setup.sent.filter { it.isRequest && it.options.observe == 1L }
+        if (hasReset) {
+            assertEquals(emptyList(), deregistrations, "the client only forgot the token")
+            assertEquals(1, counter.observerCount, "the server does not know yet")
+            counter.change()
+            delay(1.seconds)
+            assertTrue(setup.sent.any { it.type == CoapMessageType.RST }, "the next notification was answered with a Reset")
+        } else {
+            assertEquals(1, deregistrations.size, "a deregistration all the same: $deregistrations")
+        }
+        assertEquals(0, counter.observerCount, "the server forgot the observer")
     }
 
     /**
