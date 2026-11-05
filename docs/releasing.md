@@ -20,6 +20,20 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## Release freeze
+
+No `v*` tag until the API-breaking work packages of the refactoring plan have merged
+([target-architecture.md](target-architecture.md), section 4): A1–A5, W1, B1–B3, C1, D1, D2 and C3. T1,
+I1, P1 and C2 do not block a release. Protecting `v*` tags (Settings → Rules → Rulesets) keeps an
+accidental tag from publishing early.
+
+Before tagging 0.1.0:
+
+- the freeze list above has merged and CI is green on `main`;
+- [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
+- a license and the Maven namespace are chosen (below);
+- `./gradlew publishToMavenLocal` works and a sample consumer builds against it.
+
 ## Secrets
 
 Set under Settings → Secrets and variables → Actions. All are optional: without them the release still
