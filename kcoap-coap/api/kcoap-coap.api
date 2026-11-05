@@ -570,12 +570,13 @@ public final class dev/kcoap/coap/client/CoapClient {
 
 public final class dev/kcoap/coap/client/CoapClientConfig {
 	public fun <init> ()V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBlockSize ()Ljava/lang/Integer;
 	public final fun getEchoRetry ()Z
 	public final fun getMaxResponseBodySize ()I
 	public final fun getObserveCancellation ()Ldev/kcoap/coap/client/ObserveCancellation;
+	public final fun getQBlock ()Ldev/kcoap/coap/client/QBlockClientConfig;
 	public final fun getRequestTimeout-FghU774 ()Lkotlin/time/Duration;
 	public final fun getResolver ()Ldev/kcoap/coap/client/EndpointResolver;
 	public final fun getSecurity ()Ldev/kcoap/coap/security/ClientMessageSecurity;
@@ -598,6 +599,29 @@ public final class dev/kcoap/coap/client/ObserveCancellation : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/client/ObserveCancellation;
 	public static fun values ()[Ldev/kcoap/coap/client/ObserveCancellation;
+}
+
+public final class dev/kcoap/coap/client/QBlockClientConfig {
+	public fun <init> ()V
+	public synthetic fun <init> (Ldev/kcoap/coap/client/QBlockMode;Ljava/lang/String;JZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/client/QBlockMode;Ljava/lang/String;JZZZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCapabilityLifetime-UwyO8pc ()J
+	public final fun getMissingBlockMBit ()Z
+	public final fun getMode ()Ldev/kcoap/coap/client/QBlockMode;
+	public final fun getOnReliableTransports ()Z
+	public final fun getProbePath ()Ljava/lang/String;
+	public final fun getWithMessageSecurity ()Z
+	public final fun isEnabled ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/QBlockMode : java/lang/Enum {
+	public static final field ASSUME_SUPPORTED Ldev/kcoap/coap/client/QBlockMode;
+	public static final field OFF Ldev/kcoap/coap/client/QBlockMode;
+	public static final field PROBE Ldev/kcoap/coap/client/QBlockMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/client/QBlockMode;
+	public static fun values ()[Ldev/kcoap/coap/client/QBlockMode;
 }
 
 public final class dev/kcoap/coap/codec/CoapFormatException : java/lang/Exception {
@@ -1035,6 +1059,31 @@ public abstract interface class dev/kcoap/coap/stack/MessageInterceptor {
 public final class dev/kcoap/coap/stack/MessageInterceptor$DefaultImpls {
 	public static fun onReceive (Ldev/kcoap/coap/stack/MessageInterceptor;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
 	public static fun onSend (Ldev/kcoap/coap/stack/MessageInterceptor;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
+}
+
+public abstract interface class dev/kcoap/coap/stack/QBlockClientEvent : dev/kcoap/coap/stack/EndpointEvent {
+}
+
+public final class dev/kcoap/coap/stack/QBlockClientEvent$Fallback : dev/kcoap/coap/stack/QBlockClientEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/QBlockClientEvent$PartialBodyDropped : dev/kcoap/coap/stack/QBlockClientEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/QBlockClientEvent$Recovery : dev/kcoap/coap/stack/QBlockClientEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;ZLjava/util/List;)V
+	public final fun getBlocks ()Ljava/util/List;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getSent ()Z
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/kcoap/coap/stack/ReliableTransportConfig {
