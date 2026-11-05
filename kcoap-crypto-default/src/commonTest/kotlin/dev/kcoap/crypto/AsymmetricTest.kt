@@ -66,7 +66,10 @@ class AsymmetricTest {
         }
     }
 
-    /** EDHOC sends only the x-coordinate of P-256 keys; ECDH must work from a compressed point. */
+    /**
+     * The contract gives the backend uncompressed points, but this one also takes compressed ones, which it
+     * expands with [Sec1] (the platform may not): ECDH agrees from either parity's point.
+     */
     @Test
     fun p256AgreementFromCompressedPoint() = runTest {
         val a = backend.generateKeyPair(KeyType.P256)
@@ -78,6 +81,26 @@ class AsymmetricTest {
                 backend.keyAgreement(a.privateKey, byteArrayOf(prefix.toByte()) + bX),
                 "prefix $prefix",
             )
+        }
+    }
+
+    /**
+     * Fresh keys from the platform, compressed by hand, come back unchanged from [Sec1] with either parity of
+     * y: common code and every platform provider agree on the points (SEC 1 v2 §2.3.4).
+     */
+    @Test
+    fun platformKeysRoundTripThroughSec1Compression() = runTest {
+        for (type in listOf(KeyType.P256, KeyType.P384)) {
+            val parities = mutableSetOf<Boolean>()
+            repeat(16) {
+                val point = backend.generateKeyPair(type).publicKey
+                val coordinateLength = (point.size - 1) / 2
+                val isOdd = point.last().toInt() and 1 == 1
+                parities += isOdd
+                val compressed = byteArrayOf(if (isOdd) 3 else 2) + point.copyOfRange(1, 1 + coordinateLength)
+                assertEquals(point.hex(), Sec1.decompress(type, compressed).hex(), type.name)
+            }
+            assertEquals(setOf(true, false), parities, "$type: 16 random keys should show both parities")
         }
     }
 

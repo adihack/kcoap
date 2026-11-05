@@ -7,6 +7,7 @@ import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.Sec1
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -70,8 +71,10 @@ internal sealed class EphemeralKeyExchange(
 
     /**
      * Ephemeral-ephemeral ECDH. G_X and G_Y are x-coordinates only (RFC 9528 Appendix B); a peer share on
-     * P-256 or P-384 becomes the compressed point `02 || x`, which yields the same shared secret whichever
-     * square root the peer's y is.
+     * P-256 or P-384 is expanded with [Sec1] from the compressed point `02 || x`, which yields the same
+     * shared secret whichever square root the peer's y is. The expansion checks that x is on the curve
+     * (RFC 9528 §9.2) in common code, so every backend sees the uncompressed point its contract asks for
+     * and an invalid share fails the same way on every platform.
      */
     class DiffieHellman(private val curve: EcdhCurve, crypto: CryptoBackend, keys: EphemeralKeySource) :
         EphemeralKeyExchange(crypto, keys) {
@@ -82,8 +85,16 @@ internal sealed class EphemeralKeyExchange(
         }
 
         override suspend fun respond(gX: ByteArray): ResponderShare {
+            // The peer's share is checked before a key pair is spent on it.
+            val peerKey = peerKeyFromShare(gX)
             val pair = ephemeralKeyPair(curve.keyType, curve.name)
-            return ResponderShare(shareOf(pair), agree(pair.privateKey, peerKeyFromShare(gX)), pair.privateKey)
+            val secret = try {
+                agree(pair.privateKey, peerKey)
+            } catch (e: Exception) {
+                pair.privateKey.destroy()
+                throw e
+            }
+            return ResponderShare(shareOf(pair), secret, pair.privateKey)
         }
 
         override suspend fun complete(privateKey: PrivateKey, gY: ByteArray): ByteArray =
@@ -115,8 +126,13 @@ internal sealed class EphemeralKeyExchange(
             }.also { require(it.size == curve.keyLength) { "Ephemeral public key does not fit ${curve.name}" } }
         }
 
+        /** The peer's x-only share as the uncompressed point of its curve (RFC 9528 Appendix B). */
         private fun peerKeyFromShare(share: ByteArray): ByteArray = when (curve.keyType) {
-            KeyType.P256, KeyType.P384 -> byteArrayOf(COMPRESSED_EVEN_Y) + share
+            KeyType.P256, KeyType.P384 -> try {
+                Sec1.decompress(curve.keyType, byteArrayOf(COMPRESSED_EVEN_Y) + share)
+            } catch (e: IllegalArgumentException) {
+                throw EdhocException.unspecified("Invalid public key for ${curve.name}", e)
+            }
             else -> share
         }
     }

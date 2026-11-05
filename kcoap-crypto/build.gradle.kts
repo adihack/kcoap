@@ -11,7 +11,7 @@ kotlin {
             api(project(":kcoap-common"))
         }
         jvmTest.dependencies {
-            // Independent SHAKE256 and KMAC256 for differential tests.
+            // Independent SHAKE256, KMAC256 and SEC1 point decompression for differential tests.
             implementation(libs.bouncycastle.prov)
         }
     }

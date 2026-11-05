@@ -37,8 +37,15 @@ public interface CryptoBackend {
     public suspend fun randomBytes(size: Int): ByteArray
 
     /**
-     * A digest of [HashAlgorithm.outputLength] bytes. Backends without a native SHAKE256 use the
-     * common-code [Shake256].
+     * A digest of [HashAlgorithm.outputLength] bytes.
+     *
+     * For [HashAlgorithm.SHAKE256] that is the first 64 bytes of SHAKE256 (FIPS 202 §6.2), the hash of EDHOC
+     * suite 25 and of the post-quantum suites (RFC 9528 §3.6, draft-ietf-lake-pqsuites). Every backend
+     * answers it, since common code always can: one without a native SHAKE256 returns
+     * `Shake256.digest(data, algorithm.outputLength)` ([Shake256]) rather than throwing
+     * [UnsupportedAlgorithmException]. Its MAC is not here: KMAC256 (NIST SP 800-185), which EDHOC derives
+     * keys with for SHAKE256 suites (RFC 9528 §4.1), is common code on Keccak ([Kmac256]) and never goes
+     * through the backend, just as [Hkdf] is common code on [hmac].
      */
     public suspend fun digest(algorithm: HashAlgorithm, data: ByteArray): ByteArray
 
@@ -76,8 +83,11 @@ public interface CryptoBackend {
     }
 
     /**
-     * Diffie-Hellman: the shared secret of [privateKey] and [peerPublicKey]. For P-256 and P-384 the
-     * peer key may also be a compressed SEC1 point; the result is the x-coordinate either way.
+     * Diffie-Hellman: the shared secret of [privateKey] and [peerPublicKey], in the raw encoding of the
+     * key's [KeyType]. For P-256 and P-384 that is an uncompressed SEC1 point `04 || x || y` of
+     * [KeyType.publicKeyLength] bytes, and the result is the x-coordinate of the shared point (SEC 1 v2
+     * §3.3.1). Callers expand compressed points with [Sec1] first; a backend may accept them too, as
+     * `DefaultCryptoBackend` does, but need not.
      */
     public suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray =
         throw UnsupportedAlgorithmException(privateKey.type.name)
@@ -85,7 +95,11 @@ public interface CryptoBackend {
     public suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
         throw UnsupportedAlgorithmException(algorithm.name)
 
-    /** Returns false for a wrong signature; throws only for unusable input such as a malformed key. */
+    /**
+     * Whether [signature] over [data] verifies under [publicKey], in the raw encoding of
+     * [SignatureAlgorithm.keyType]: an uncompressed SEC1 point for ES256 and ES384, as for [keyAgreement].
+     * Returns false for a wrong signature; throws only for unusable input such as a malformed key.
+     */
     public suspend fun verify(
         algorithm: SignatureAlgorithm,
         publicKey: ByteArray,
