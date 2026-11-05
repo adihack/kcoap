@@ -88,7 +88,7 @@ public class CombinedRequestServer(
 
         // Steps 2 to 5: kid is C_R; complete the EDHOC session and add its OSCORE context.
         try {
-            edhoc.completeCombined(ConnectionIdentifier(kid), message3)
+            edhoc.completeCombined(ConnectionIdentifier(kid), message3, peer)
         } catch (e: EdhocException) {
             val error = e.errorMessage ?: EdhocError.unspecified("EDHOC failed").encode()
             throw MessageSecurityException(

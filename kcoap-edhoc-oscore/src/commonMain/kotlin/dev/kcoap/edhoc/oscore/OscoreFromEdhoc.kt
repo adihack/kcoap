@@ -22,12 +22,12 @@ import dev.kcoap.oscore.SequenceNumberStore
  *
  * Persisting the parameters to resume the context after a restart is safe only when the context had a
  * durable [SequenceNumberStore] from its first derivation, that is when it came from
- * [oscoreContext]`(crypto, durableStore)`. After the restart, derive it from the persisted parameters
- * with [SecurityContext.derive] and that same store, which resumes above every sequence number used
- * before and requires the Echo proof for requests (RFC 8613 Appendix B.1). A context that used the
- * ephemeral store, as those of [EdhocServer] and [EdhocClientHandshake] do, left no record of its
- * sequence numbers: derived again, it would start at 0 and reuse AEAD nonces (RFC 8613 Appendix B.1.1).
- * Run EDHOC again instead.
+ * [oscoreContext]`(crypto, durableStore)`, or from an [EdhocServer] or [EdhocClientHandshake] given that
+ * store as its `sequenceStore`. After the restart, derive it from the persisted parameters with
+ * [SecurityContext.derive] and that same store, which resumes above every sequence number used before and
+ * requires the Echo proof for requests (RFC 8613 Appendix B.1). A context that used the ephemeral store,
+ * the default of all three, left no record of its sequence numbers: derived again, it would start at 0
+ * and reuse AEAD nonces (RFC 8613 Appendix B.1.1). Run EDHOC again instead.
  *
  * @param keyLength the OSCORE key length, by default that of the application AEAD.
  * @param saltLength the OSCORE Master Salt length, 8 by default.
@@ -77,8 +77,8 @@ internal suspend fun EdhocSession.oscoreParametersFrom(
  * Without that, a durable store would make [FreshnessPolicy.AUTO] challenge the first request, which
  * breaks the combined EDHOC + OSCORE request of RFC 9668.
  *
- * Call it once per session. [EdhocServer] and [EdhocClientHandshake] already do, with the ephemeral
- * store, and return or register the result; deriving a second context from the same session gives two
+ * Call it once per session. [EdhocServer] and [EdhocClientHandshake] already do, with their
+ * `sequenceStore`, and return or register the result; deriving a second context from the same session gives two
  * contexts with the same keys that both start at sequence number 0, so their nonces repeat. Only an
  * application that drives [dev.kcoap.edhoc.EdhocInitiator] or [dev.kcoap.edhoc.EdhocResponder] itself
  * derives the context here.

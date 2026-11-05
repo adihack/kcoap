@@ -14,6 +14,17 @@ import dev.kcoap.crypto.CryptoBackend
  * credential: EDHOC answers with error code 3 for a reference it cannot resolve ('kid', 'x5t') and with
  * error code 1 otherwise, since code 3 must not be used for unsupported identifier types (RFC 9528 §6.4).
  * Throw an [EdhocException] to answer with a specific error.
+ *
+ * What the peer learns from the answer:
+ * - Error code 3 tells it whether a 'kid' or 'x5t' reference is known here. That is the interoperable
+ *   behaviour of RFC 9528 §6.4, so it stays on. A resolver that considers it sensitive throws
+ *   `EdhocException(EdhocError.unspecified("Authentication failed"), reason)` instead of returning an
+ *   empty list: the answer to every other authentication failure.
+ * - An untrusted credential sent by value, a trusted one that does not fit the cipher suite, a rejected
+ *   certificate chain and a signature or MAC that does not verify all get that same error code 1
+ *   "Authentication failed"; [EdhocException.message] keeps the reason for this side's logs.
+ * - Response timing can still tell a trusted credential from an untrusted one, because only a trusted
+ *   one gets its signature or MAC checked.
  */
 public fun interface CredentialResolver {
     /** The trusted credentials [identifier] may refer to, most likely first. */
@@ -30,7 +41,22 @@ public fun interface CredentialResolver {
  * - `x5chain` is accepted when its end-entity certificate is trusted, or else when [certificateValidator]
  *   accepts the chain.
  *
- * Identity checks beyond the pinned set (subject names, policies) belong in a custom resolver.
+ * What is trusted with and without a [certificateValidator]:
+ * - Without one, only the pinned credentials are trusted. A chain whose end-entity certificate is not
+ *   pinned fails closed.
+ * - With one, every chain the validator accepts authenticates, whoever its end entity is: the validator
+ *   says the chain leads to a trust anchor, not that this peer may connect. Authorize afterwards, on
+ *   [EdhocSession.peerCredential] (its [AuthenticationCredential.certificate]) and
+ *   [EdhocSession.peerCredentialIdentifier], or in a resolver that wraps this one:
+ *
+ * ```
+ * val resolver = CredentialResolver { id ->
+ *     trusted.resolve(id).filter { it.certificate?.subjectCommonName in allowedNames }
+ * }
+ * ```
+ *
+ * No [CertificateValidator] implementation ships with kcoap yet. A validator that accepts every chain,
+ * such as an empty test stub, makes any certificate authenticate, self-signed ones included.
  */
 public class TrustedCredentials(
     private val crypto: CryptoBackend,
@@ -60,7 +86,7 @@ public class TrustedCredentials(
         try {
             certificateValidator.validate(chain.certificates)
         } catch (e: CertificateValidationException) {
-            throw EdhocException.unspecified("Certificate chain not trusted", e)
+            throw EdhocException.authenticationFailed("Certificate chain not trusted", e)
         }
         return listOf(endEntity)
     }

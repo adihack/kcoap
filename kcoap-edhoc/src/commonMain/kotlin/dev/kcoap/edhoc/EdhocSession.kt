@@ -13,6 +13,9 @@ import dev.kcoap.crypto.CryptoBackend
  *
  * Not thread-safe: [keyUpdate] replaces the keys in place, so callers serialize access. `toString()` never
  * shows key material.
+ *
+ * After [destroy], every call that reads or derives key material throws [IllegalStateException]: the
+ * wiped keys would otherwise derive predictable OSCORE secrets.
  */
 public class EdhocSession internal constructor(
     /** This endpoint's role. */
@@ -36,6 +39,7 @@ public class EdhocSession internal constructor(
     private val keySchedule = KeySchedule(cipherSuite, crypto)
     private var prkOutBytes = prkOut.copyOf()
     private var prkExporterBytes = prkExporter.copyOf()
+    private var isDestroyed = false
 
     /** The connection identifier this endpoint chose, which with OSCORE is its Recipient ID (RFC 9528 §3.3.3). */
     public val ownConnectionIdentifier: ConnectionIdentifier
@@ -45,25 +49,44 @@ public class EdhocSession internal constructor(
     public val peerConnectionIdentifier: ConnectionIdentifier
         get() = if (role == EdhocRole.INITIATOR) responderConnectionIdentifier else initiatorConnectionIdentifier
 
-    /** A copy of PRK_out, the session key (RFC 9528 §4.1.3). Secret: store it only where keys belong. */
-    public fun prkOut(): ByteArray = prkOutBytes.copyOf()
+    /**
+     * A copy of PRK_out, the session key (RFC 9528 §4.1.3). Secret: store it only where keys belong.
+     *
+     * @throws IllegalStateException after [destroy].
+     */
+    public fun prkOut(): ByteArray {
+        checkNotDestroyed()
+        return prkOutBytes.copyOf()
+    }
 
-    /** A copy of PRK_exporter = EDHOC_KDF( PRK_out, 10, h'', hash_length ) (RFC 9528 §4.1.3). Secret. */
-    public fun prkExporter(): ByteArray = prkExporterBytes.copyOf()
+    /**
+     * A copy of PRK_exporter = EDHOC_KDF( PRK_out, 10, h'', hash_length ) (RFC 9528 §4.1.3). Secret.
+     *
+     * @throws IllegalStateException after [destroy].
+     */
+    public fun prkExporter(): ByteArray {
+        checkNotDestroyed()
+        return prkExporterBytes.copyOf()
+    }
 
     /**
      * `EDHOC_Exporter( exporter_label, context, length ) = EDHOC_KDF( PRK_exporter, exporter_label, context,
      * length )` (RFC 9528 §4.2.1). Each (label, context) pair must serve a single purpose.
+     *
+     * @throws IllegalStateException after [destroy].
      */
     public suspend fun exporter(label: Int, context: ByteArray, length: Int): ByteArray {
         require(label >= 0) { "Exporter labels are unsigned, got $label" }
         require(length > 0) { "Exporter output must not be empty" }
+        checkNotDestroyed()
         return keySchedule.kdf(prkExporterBytes, label, context, length)
     }
 
     /**
      * The OSCORE Master Secret, `EDHOC_Exporter( 0, h'', oscore_key_length )` (RFC 9528 Appendix A.1). The
      * default length is the key length of the application AEAD.
+     *
+     * @throws IllegalStateException after [destroy].
      */
     public suspend fun oscoreMasterSecret(length: Int = cipherSuite.appAead.keyLength): ByteArray =
         exporter(EXPORTER_OSCORE_MASTER_SECRET, ByteArray(0), length)
@@ -71,6 +94,8 @@ public class EdhocSession internal constructor(
     /**
      * The OSCORE Master Salt, `EDHOC_Exporter( 1, h'', oscore_salt_length )`, 8 bytes by default
      * (RFC 9528 Appendix A.1).
+     *
+     * @throws IllegalStateException after [destroy].
      */
     public suspend fun oscoreMasterSalt(length: Int = DEFAULT_OSCORE_SALT_LENGTH): ByteArray =
         exporter(EXPORTER_OSCORE_MASTER_SALT, ByteArray(0), length)
@@ -79,8 +104,11 @@ public class EdhocSession internal constructor(
      * EDHOC_KeyUpdate (RFC 9528 Appendix H): PRK_out becomes `EDHOC_KDF( PRK_out, 11, context, hash_length )`
      * and PRK_exporter is derived anew. The old keys are wiped, which is what gives forward secrecy; keys
      * already exported from them are the caller's to delete. Both parties must use the same [context].
+     *
+     * @throws IllegalStateException after [destroy].
      */
     public suspend fun keyUpdate(context: ByteArray) {
+        checkNotDestroyed()
         val newPrkOut = keySchedule.keyUpdate(prkOutBytes, context)
         val newPrkExporter = keySchedule.prkExporter(newPrkOut)
         wipeAll(prkOutBytes, prkExporterBytes)
@@ -88,11 +116,17 @@ public class EdhocSession internal constructor(
         prkExporterBytes = newPrkExporter
     }
 
-    /** Wipes PRK_out and PRK_exporter; the session cannot derive keys afterwards. */
+    /**
+     * Wipes PRK_out and PRK_exporter. Every call that reads or derives keys throws afterwards; calling this
+     * again does nothing.
+     */
     public fun destroy() {
+        isDestroyed = true
         prkOutBytes.wipe()
         prkExporterBytes.wipe()
     }
+
+    private fun checkNotDestroyed() = check(!isDestroyed) { "The EDHOC session was destroyed" }
 
     override fun toString(): String =
         "EdhocSession($role, method ${method.value}, suite ${cipherSuite.value}, " +

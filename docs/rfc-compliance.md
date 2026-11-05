@@ -106,7 +106,7 @@ implemented last; the interfaces and rules around it are in place now (`architec
 | §3.6, §10.2 | Suites 0–6 and 24; 25 registered but not implemented (Ed448) | done |
 | §3.8 | EAD, criticality, padding | done |
 | §4 | Key schedule: HKDF (SHA-2), KMAC256 (SHAKE256), transcript hashes | done |
-| §6 | Error messages, cipher suite negotiation (§6.3) | done |
+| §6 | Error messages, cipher suite negotiation (§6.3) | done; every peer-authentication failure (untrusted or unfitting credential, rejected chain, Signature_or_MAC that does not verify) sends the same code 1 "Authentication failed", the reason stays local (`ErrorHandlingTest.everyPeerAuthenticationFailureSendsTheSameError`) |
 | §7 | Deduplication | left to the transport (RFC 9528 §3.4) |
 | §9.2, §9.8 | Public key validation, all-zero check, field lengths, deterministic CBOR on receipt | done |
 | App. G | Long PLAINTEXT_2 | done |
@@ -129,6 +129,8 @@ unknown critical EAD items) are pinned by `upstream…` tests and listed in `int
 | RFC 9528 App. A.2.2 | Reverse message flow | todo |
 | RFC 9668 §3 | Combined EDHOC + OSCORE request, client and server, error handling | done; Figure 4 byte for byte |
 | RFC 9668 §4 | Connection identifier selection for OSCORE | done (server side) |
+| RFC 9668 §4.1.2 | C_R unique among pending sessions and Recipient IDs, never C_I: reserved in the locked step that checks it, before message_2, and held until the session's OSCORE context is in the repository, so concurrent handshakes of one server never share one; the context is added only if its Recipient ID is still free, so a second server on the same repository (RFC 9668 §5) never replaces one | done (`EdhocServerSessionsTest`: gated races, a stress test on real threads, two servers on one repository) |
+| RFC 9528 §9.7 | Pending server sessions: bound to the peer that sent message_1 (a continuation from another peer is answered as for an unknown C_R and costs no cryptography), bounded in total and per peer (new ones refused with `EdhocServerEvent.LimitReached`, except that a full server evicts the oldest session waiting longer than a grace period, `SessionEvicted`), expired after MAX_TRANSMIT_WAIT and wiped. Echo before message_2 against spoofed floods | done (`EdhocServerSessionsTest`); Echo todo |
 
 ## Drafts (out of scope until published)
 

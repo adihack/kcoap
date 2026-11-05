@@ -111,8 +111,45 @@ both in the configuration and when a Responder receives such a message_1.
 - Received messages must be deterministically encoded CBOR (§3.1, §9.8); public keys and all
   cryptographic field lengths are validated (§9.2, §9.8), including the X25519 all-zero check.
 - Intermediate secrets (G_XY, G_RX, G_IY, PRKs, K_3/IV_3, K_4/IV_4) are wiped after use and software
-  ephemeral keys destroyed (§9.8). Logging: DEBUG for protocol steps, TRACE for message bytes through
-  `Logger.payload`; keys, PRKs and plaintexts are never logged.
+  ephemeral keys destroyed (§9.8). A destroyed `EdhocSession` or `SoftwarePrivateKey` throws
+  `IllegalStateException` instead of handing out the wiped bytes. Logging: DEBUG for protocol steps,
+  TRACE for message bytes through `Logger.payload`; keys, PRKs and plaintexts are never logged.
+
+### What a peer learns from an error
+
+A failed peer authentication sends the same error whatever failed: code 1 with the diagnostic
+"Authentication failed" for an untrusted credential sent by value, a trusted one that does not fit the
+suite, a certificate chain the validator rejects, and a Signature_or_MAC_2 or _3 that does not verify.
+A probing Initiator, which knows K_3 with signature methods, cannot tell which credentials are trusted
+from the answer; `EdhocException.message` and the WARN log keep the precise reason. Errors about the
+peer's own input (malformed messages, wrong lengths, a ciphertext that does not decrypt) stay specific.
+
+Error code 3 still tells the peer whether a 'kid' or 'x5t' reference is known: that is the
+interoperable behaviour of §6.4. A `CredentialResolver` that considers this sensitive throws instead
+of returning an empty list:
+
+```kotlin
+val quiet = CredentialResolver { id ->
+    trusted.resolve(id).ifEmpty { throw EdhocException(EdhocError.unspecified("Authentication failed"), "No credential for $id") }
+}
+```
+
+Response timing can still reveal whether a credential is trusted, because only a trusted one gets its
+signature or MAC checked.
+
+### Certificates: trust and authorization
+
+`TrustedCredentials` without a `CertificateValidator` trusts only the pinned credentials: an `x5chain`
+whose end-entity certificate is not pinned fails closed. With a validator, every chain it accepts
+authenticates, whoever its end entity is, so authorize afterwards: on `EdhocSession.peerCredential`
+(its `certificate`) and `peerCredentialIdentifier`, or in a resolver that wraps the trusted one:
+
+```kotlin
+val authorized = CredentialResolver { id -> trusted.resolve(id).filter { it.certificate?.subjectCommonName in allowedNames } }
+```
+
+No `CertificateValidator` implementation ships yet (see the X.509 item of the
+[roadmap](../docs/roadmap.md)); a stub that accepts everything makes every certificate authenticate.
 
 Not implemented: CWT (`kcwt`) and C509 credentials, `x5u`/`c5u` retrieval, EAD-specific security
 applications, and §7 deduplication (left to the transport). The Responder refuses a C_R equal to C_I,

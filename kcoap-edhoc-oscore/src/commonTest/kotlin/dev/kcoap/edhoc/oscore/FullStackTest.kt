@@ -88,7 +88,11 @@ class FullStackTest {
         val serverUri = CoapUri.parse(base)
 
         assertEquals(CoapCode.UNAUTHORIZED, client.get("$base/lights").code, "no OSCORE yet")
-        val (session, protection) = EdhocClientHandshake.over(client, serverUri, peers.initiatorConfig(), crypto).runCombined()
+        val store = RecordingStore()
+        val handshake =
+            EdhocClientHandshake.over(client, serverUri, peers.initiatorConfig(), crypto, sequenceStore = store)
+        val (session, protection) = handshake.runCombined()
+        assertEquals(setOf(session.oscore.name), store.names, "the context was derived with the given store")
         security.install(address, protection)
         assertTrue(security.isProtected(address))
 

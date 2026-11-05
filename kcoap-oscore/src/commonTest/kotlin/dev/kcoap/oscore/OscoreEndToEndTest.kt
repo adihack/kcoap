@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -210,6 +211,21 @@ class OscoreEndToEndTest {
         assertNull(repository.find(byteArrayOf(0x0a), null))
         repository.remove(otherServer)
         assertSame(serverContext, repository.find(byteArrayOf(0x0a), null))
+    }
+
+    /** `addIfAbsent` never replaces a context, unlike `add`; the key is the Recipient ID with the ID Context. */
+    @Test
+    fun addIfAbsentKeepsTheContextInPlace() = runTest {
+        val (_, first) = pair()
+        val (_, second) = pair()
+        val (_, withIdContext) = pair("c0ffee".hexToBytes())
+        val repository = InMemoryContextRepository()
+        assertTrue(repository.addIfAbsent(first))
+        assertFalse(repository.addIfAbsent(second), "same Recipient ID, no ID Context")
+        assertSame(first, repository.find(byteArrayOf(0x0a), null))
+        assertTrue(repository.addIfAbsent(withIdContext), "same Recipient ID, another ID Context")
+        repository.add(second)
+        assertSame(second, repository.find(byteArrayOf(0x0a), null), "add replaces")
     }
 
     @Test

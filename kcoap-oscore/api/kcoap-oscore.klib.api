@@ -61,6 +61,7 @@ final class dev.kcoap.oscore/InMemoryContextRepository : dev.kcoap.oscore/Securi
     constructor <init>() // dev.kcoap.oscore/InMemoryContextRepository.<init>|<init>(){}[0]
 
     final suspend fun add(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/InMemoryContextRepository.add|add(dev.kcoap.oscore.SecurityContext){}[0]
+    final suspend fun addIfAbsent(dev.kcoap.oscore/SecurityContext): kotlin/Boolean // dev.kcoap.oscore/InMemoryContextRepository.addIfAbsent|addIfAbsent(dev.kcoap.oscore.SecurityContext){}[0]
     final suspend fun find(kotlin/ByteArray, kotlin/ByteArray?): dev.kcoap.oscore/SecurityContext? // dev.kcoap.oscore/InMemoryContextRepository.find|find(kotlin.ByteArray;kotlin.ByteArray?){}[0]
     final suspend fun remove(dev.kcoap.oscore/SecurityContext) // dev.kcoap.oscore/InMemoryContextRepository.remove|remove(dev.kcoap.oscore.SecurityContext){}[0]
 }

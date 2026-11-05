@@ -7,16 +7,63 @@ EDHOC as the key establishment for OSCORE, over CoAP:
 | RFC 9528 App. A.1 | OSCORE context from an EDHOC session: exporter-derived Master Secret and Salt, application AEAD and HKDF, Sender/Recipient IDs from C_R/C_I (Table 14) | `EdhocSession.oscoreParameters()`, `oscoreContext()` |
 | RFC 9528 App. A.2 | EDHOC over CoAP, forward flow: POST to `/.well-known/edhoc`, `true`/C_R prefixes, Content-Formats 64/65, error responses (A.2.3) | `EdhocOverCoap`, `EdhocServer.handle()`, `EdhocClientHandshake.run()` |
 | RFC 9668 §3 | EDHOC + OSCORE combined request: message_3 on the first OSCORE request, the EDHOC option, server processing order and errors | `CombinedRequestSecurity`, `CombinedRequestServer`, `EdhocClientHandshake.runCombined()` |
-| RFC 9668 §4 | Connection identifiers usable as OSCORE IDs: C_R unique among sessions and Recipient IDs, never C_I | `EdhocServer` |
+| RFC 9668 §4 | Connection identifiers usable as OSCORE IDs: C_R unique among sessions and Recipient IDs, never C_I, also under concurrent handshakes | `EdhocServer` |
+| RFC 9528 §9.7 | Pending server sessions bound to the peer that sent message_1, bounded in total and per peer, the oldest evicted past a grace period, expired after MAX_TRANSMIT_WAIT, secrets wiped | `EdhocServer`, `EdhocServerEvent` |
 
 ## Server
 
 ```kotlin
 val contexts = InMemoryContextRepository()                     // shared by EDHOC and OSCORE
-val edhoc = EdhocServer(responderConfig, crypto, contexts)
+val edhoc = EdhocServer(responderConfig, crypto, contexts, eventListener = { metrics.count(it) })
 val security = CombinedRequestServer(edhoc, OscoreServer(contexts))
-// Route POST /.well-known/edhoc to edhoc.handle(request); give `security` to the CoAP server.
+CoapServer(transport, scope, CoapServerConfig(security = security)) {
+    resource(".well-known") { add(EdhocResource(edhoc)) }  // calls edhoc.handle(request, peer)
+}
 ```
+
+Until message_3 verifies, nothing about a client is authenticated, so the server bounds what clients can
+make it keep (RFC 9528 §9.7):
+
+- **C_R** is reserved in the same locked step that checks it is free, before message_2 is composed, and
+  stays reserved until the session's OSCORE context is in the repository: concurrent handshakes of one
+  server never share one, nor collide with a context it is adding (RFC 9668 §4.1.2). The context is added
+  only if its Recipient ID is still free (`InMemoryContextRepository.addIfAbsent`), so when another writer
+  of the repository took it meanwhile (a second `EdhocServer` for another application profile, RFC 9668
+  §5, or the application), the handshake fails with "Connection identifier in use" and that writer's
+  context stays.
+- **Peer binding.** A session continues only for the peer that sent message_1 (for DTLS, the same
+  session in any epoch). A message_3, an error message or a combined request from any other peer gets
+  the answer for an unknown C_R, costs no cryptography and leaves the session waiting
+  (`EdhocServerEvent.ContinuationFromAnotherPeer`). Only this pending state is bound to the address; a
+  client whose address changes between message_1 and message_3 starts again. OSCORE contexts are not
+  bound to addresses.
+- **Bounds.** At most `maxPendingSessions` (64) sessions are in progress, at most
+  `maxPendingSessionsPerPeer` (8) for one peer, where a peer is an address and port (for DTLS, a
+  session). A message_1 beyond the per-peer bound is refused before any processing with an EDHOC error
+  in a 5.00 response (`EdhocServerEvent.LimitReached`).
+- **Eviction.** When all places are taken, the session that has waited longest for message_3 makes room
+  for the new one if it has waited longer than `pendingSessionGracePeriod` (10 s); it is wiped and
+  reported (`EdhocServerEvent.SessionEvicted`). Only when every waiting session is within its grace
+  period is the new message_1 refused as above. A client that answers message_2 within the grace period
+  is never evicted. A grace period of at least `pendingSessionLifetime` turns eviction off.
+- **Expiry.** A session without message_3 after `pendingSessionLifetime` (MAX_TRANSMIT_WAIT, 93 s) is
+  dropped on the injected `timeSource`, its ephemeral key and PRK_3e2m wiped
+  (`EdhocServerEvent.SessionExpired`). A client's error message, and a handler cancelled mid-handshake,
+  wipe them too and give the place back.
+
+What the bounds do not stop is a flood of message_1 from spoofed addresses: each costs a key generation,
+a Diffie-Hellman and a signature, and with the defaults 64 of them per 10 s (6.4 per second) keep new
+clients out while the flood lasts. The defence is an Echo reachability check before message_2 (RFC 9528
+Appendix A.2), which belongs to the CoAP server. Raise `maxPendingSessions` or lower the grace period to
+make that flood dearer; watch `SessionEvicted` and `LimitReached` to see it.
+
+Both `EdhocServer` and `EdhocClientHandshake` take a `sequenceStore` for the contexts they derive. By
+default each context gets its own `EphemeralSequenceNumberStore`, which fits keys that are new with every
+session. Pass a durable store to resume a context after a restart (`oscoreParameters` explains how). The
+store keys its limits by context name, the Sender and Recipient ID pair, which is unique only among the
+contexts of one server: a client gives each server it talks to its own durable store (or one that puts a
+name of the server in front of the context names, used again for the restore), and a server does not
+share its store with contexts outside its repository.
 
 ## Client
 
@@ -37,6 +84,14 @@ independent of the CoAP endpoint and easy to test.
   Appendix A.2.3.
 - OSCORE contexts derived on both sides interoperate. The OSCORE values themselves come from the
   EDHOC exporter, checked against RFC 9529 in `kcoap-edhoc`.
+- Pending sessions (`EdhocServerSessionsTest`): C_R collisions with a session composing message_2 and
+  with one completing, made deterministic with gates, and concurrent handshakes on real threads
+  (`Stress.race`) that all draw the same C_R candidate; both fail without the reservation. Continuations
+  from another peer (message_3, error message, combined request, another DTLS session) leave the session
+  alone and run no cryptography; the bounds refuse before any cryptography, and a full server evicts the
+  oldest session past its grace period; sessions expire on a `TestTimeSource`; a handler cancelled while
+  message_2 is composed or message_3 processed gives back its C_R and place; dropped sessions have their
+  ephemeral keys wiped; a second server on the same repository never replaces a context.
 
 Not yet: the reverse message flow (A.2.2), Block-wise of the combined request beyond the first-block
 rule, and live interop of the combined flow (planned with libedhoc and aiocoap).

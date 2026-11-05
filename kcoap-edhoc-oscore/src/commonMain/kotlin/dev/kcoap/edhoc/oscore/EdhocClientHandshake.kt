@@ -15,8 +15,10 @@ import dev.kcoap.edhoc.EdhocPeerErrorException
 import dev.kcoap.edhoc.EdhocSession
 import dev.kcoap.log.LogTags
 import dev.kcoap.log.LoggerFactory
+import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.OscoreClient
 import dev.kcoap.oscore.SecurityContext
+import dev.kcoap.oscore.SequenceNumberStore
 
 /** A transfer step failed outside EDHOC itself: the server answered with something that is not EDHOC. */
 public class EdhocTransferException(message: String, public val response: CoapMessage? = null) : Exception(message)
@@ -43,12 +45,23 @@ public class EdhocOscoreSession(public val edhoc: EdhocSession, public val oscor
  *
  * Cipher suite negotiation (RFC 9528 §6.3) is handled: when the server answers message_1 with error
  * code 2 naming a suite the Initiator supports, message_1 is sent again with that suite.
+ *
+ * @param sequenceStore holds the Sender Sequence Numbers of the contexts this handshake derives. By default
+ *   (null) each context gets its own [EphemeralSequenceNumberStore], which fits EDHOC, whose keys are new
+ *   with every session, and goes away with the context. Pass a durable store to resume a context after a
+ *   restart, as [oscoreParameters] describes. The store keeps one limit per context name, "sid=C_R,rid=C_I"
+ *   ([dev.kcoap.oscore.SecurityContextParameters.name]), and those names are not unique across servers:
+ *   each server chooses its C_R on its own, and nothing on this side makes C_I unique. Two live contexts
+ *   with one name in one store break its contract and can lead to AEAD nonce reuse after a restore
+ *   (RFC 8613 Appendix B.1.1), so give every server its own durable store, or a store that puts a name
+ *   of the server in front of the context names (and restore with the same one).
  */
 public class EdhocClientHandshake(
     private val config: EdhocInitiatorConfig,
     private val crypto: CryptoBackend,
     private val path: String = EdhocOverCoap.WELL_KNOWN_PATH,
     private val loggers: LoggerFactory = LoggerFactory.Global,
+    private val sequenceStore: SequenceNumberStore? = null,
     private val exchange: suspend (CoapMessage) -> CoapMessage,
 ) {
     private val log = loggers.logger(LogTags.EDHOC).child("client")
@@ -68,7 +81,7 @@ public class EdhocClientHandshake(
             throw EdhocPeerErrorException(EdhocError.decode(response.payload))
         }
         val session = initiator.session!!
-        return EdhocOscoreSession(session, session.oscoreContext(crypto))
+        return EdhocOscoreSession(session, deriveContext(session))
     }
 
     /**
@@ -80,10 +93,13 @@ public class EdhocClientHandshake(
         exchangeMessages1And2(initiator)
         val message3 = initiator.createMessage3().bytes
         val session = initiator.session!!
-        val context = session.oscoreContext(crypto)
+        val context = deriveContext(session)
         val security = CombinedRequestSecurity(OscoreClient(context, loggers), message3)
         return EdhocOscoreSession(session, context) to security
     }
+
+    private suspend fun deriveContext(session: EdhocSession): SecurityContext =
+        session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
 
     private suspend fun exchangeMessages1And2(initiator: EdhocInitiator) {
         repeat(MAX_NEGOTIATION_ROUNDS) {
@@ -117,6 +133,9 @@ public class EdhocClientHandshake(
         /**
          * A handshake carried by [client] to the server at [server] (scheme, host and port; the path of
          * [server] is ignored in favour of [path]).
+         *
+         * @param sequenceStore as for the constructor: null gives each context its own ephemeral store, and
+         *   a durable store must hold the contexts of this one server only.
          */
         public fun over(
             client: CoapClient,
@@ -125,7 +144,8 @@ public class EdhocClientHandshake(
             crypto: CryptoBackend,
             path: String = EdhocOverCoap.WELL_KNOWN_PATH,
             loggers: LoggerFactory = LoggerFactory.Global,
-        ): EdhocClientHandshake = EdhocClientHandshake(config, crypto, path, loggers) { message ->
+            sequenceStore: SequenceNumberStore? = null,
+        ): EdhocClientHandshake = EdhocClientHandshake(config, crypto, path, loggers, sequenceStore) { message ->
             val request = CoapRequest(
                 method = message.code,
                 uri = CoapUri(server.scheme, server.host, server.port, pathSegments = message.options.uriPath),

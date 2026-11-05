@@ -91,7 +91,7 @@ class ProbeTest {
         stub.supports(SignatureAlgorithm.EDDSA)
         stub.supports(KemAlgorithm.ML_KEM_512)
         assertEquals(3, stub.generated.size)
-        for (key in stub.generated) assertTrue(key.encoded().all { it == 0.toByte() }, key.toString())
+        for (key in stub.generated) assertFailsWith<IllegalStateException>(key.toString()) { key.encoded() }
     }
 
     /**
