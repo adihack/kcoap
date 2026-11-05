@@ -1,0 +1,52 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, linuxX64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-transport-ktor>
+final class dev.kcoap.transport.ktor/KtorTcpConnector : dev.kcoap.transport/Connector { // dev.kcoap.transport.ktor/KtorTcpConnector|null[0]
+    constructor <init>(io.ktor.network.selector/SelectorManager? = ..., dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.transport.ktor/KtorTcpConnector.<init>|<init>(io.ktor.network.selector.SelectorManager?;dev.kcoap.log.LoggerFactory){}[0]
+
+    final val schemes // dev.kcoap.transport.ktor/KtorTcpConnector.schemes|{}schemes[0]
+        final fun <get-schemes>(): kotlin.collections/Set<dev.kcoap.transport/CoapScheme> // dev.kcoap.transport.ktor/KtorTcpConnector.schemes.<get-schemes>|<get-schemes>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor/KtorTcpConnector.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor/KtorTcpConnector.close|close(){}[0]
+    final suspend fun connect(dev.kcoap.transport/Endpoint): dev.kcoap.transport/Connection // dev.kcoap.transport.ktor/KtorTcpConnector.connect|connect(dev.kcoap.transport.Endpoint){}[0]
+}
+
+final class dev.kcoap.transport.ktor/KtorTcpListener : dev.kcoap.transport/ConnectionListener { // dev.kcoap.transport.ktor/KtorTcpListener|null[0]
+    final val localEndpoint // dev.kcoap.transport.ktor/KtorTcpListener.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Tcp // dev.kcoap.transport.ktor/KtorTcpListener.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val scheme // dev.kcoap.transport.ktor/KtorTcpListener.scheme|{}scheme[0]
+        final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.transport.ktor/KtorTcpListener.scheme.<get-scheme>|<get-scheme>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor/KtorTcpListener.toString|toString(){}[0]
+    final suspend fun accept(): dev.kcoap.transport/Connection? // dev.kcoap.transport.ktor/KtorTcpListener.accept|accept(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor/KtorTcpListener.close|close(){}[0]
+
+    final object Companion { // dev.kcoap.transport.ktor/KtorTcpListener.Companion|null[0]
+        final suspend fun bind(kotlin/String = ..., kotlin/Int = ..., io.ktor.network.selector/SelectorManager? = ..., dev.kcoap.log/LoggerFactory = ...): dev.kcoap.transport.ktor/KtorTcpListener // dev.kcoap.transport.ktor/KtorTcpListener.Companion.bind|bind(kotlin.String;kotlin.Int;io.ktor.network.selector.SelectorManager?;dev.kcoap.log.LoggerFactory){}[0]
+    }
+}
+
+final class dev.kcoap.transport.ktor/KtorUdpTransport : dev.kcoap.transport/DatagramTransport { // dev.kcoap.transport.ktor/KtorUdpTransport|null[0]
+    final val localEndpoint // dev.kcoap.transport.ktor/KtorUdpTransport.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.transport.ktor/KtorUdpTransport.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val maxDatagramSize // dev.kcoap.transport.ktor/KtorUdpTransport.maxDatagramSize|{}maxDatagramSize[0]
+        final fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.transport.ktor/KtorUdpTransport.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor/KtorUdpTransport.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor/KtorUdpTransport.close|close(){}[0]
+    final suspend fun receive(): dev.kcoap.transport/DatagramEvent // dev.kcoap.transport.ktor/KtorUdpTransport.receive|receive(){}[0]
+    final suspend fun send(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.transport.ktor/KtorUdpTransport.send|send(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+
+    final object Companion { // dev.kcoap.transport.ktor/KtorUdpTransport.Companion|null[0]
+        final const val DEFAULT_MAX_DATAGRAM_SIZE // dev.kcoap.transport.ktor/KtorUdpTransport.Companion.DEFAULT_MAX_DATAGRAM_SIZE|{}DEFAULT_MAX_DATAGRAM_SIZE[0]
+            final fun <get-DEFAULT_MAX_DATAGRAM_SIZE>(): kotlin/Int // dev.kcoap.transport.ktor/KtorUdpTransport.Companion.DEFAULT_MAX_DATAGRAM_SIZE.<get-DEFAULT_MAX_DATAGRAM_SIZE>|<get-DEFAULT_MAX_DATAGRAM_SIZE>(){}[0]
+
+        final suspend fun bind(kotlin/String = ..., kotlin/Int = ..., kotlin/Int = ..., io.ktor.network.selector/SelectorManager? = ..., dev.kcoap.log/LoggerFactory = ...): dev.kcoap.transport.ktor/KtorUdpTransport // dev.kcoap.transport.ktor/KtorUdpTransport.Companion.bind|bind(kotlin.String;kotlin.Int;kotlin.Int;io.ktor.network.selector.SelectorManager?;dev.kcoap.log.LoggerFactory){}[0]
+    }
+}

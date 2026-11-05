@@ -1,0 +1,33 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-transport-ktor-websocket>
+final class dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection : dev.kcoap.transport/MessageConnection { // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection|null[0]
+    constructor <init>(io.ktor.websocket/WebSocketSession, dev.kcoap.transport/Endpoint, dev.kcoap.transport/PeerIdentity = ...) // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.<init>|<init>(io.ktor.websocket.WebSocketSession;dev.kcoap.transport.Endpoint;dev.kcoap.transport.PeerIdentity){}[0]
+
+    final val peerIdentity // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.peerIdentity|{}peerIdentity[0]
+        final fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    final val remote // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.remote|{}remote[0]
+        final fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.remote.<get-remote>|<get-remote>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.close|close(){}[0]
+    final suspend fun receive(): kotlin/ByteArray? // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.receive|receive(){}[0]
+    final suspend fun send(kotlin/ByteArray) // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnection.send|send(kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector : dev.kcoap.transport/Connector { // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector|null[0]
+    constructor <init>(dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.<init>|<init>(dev.kcoap.log.LoggerFactory){}[0]
+    constructor <init>(io.ktor.client/HttpClient, dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.<init>|<init>(io.ktor.client.HttpClient;dev.kcoap.log.LoggerFactory){}[0]
+
+    final val schemes // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.schemes|{}schemes[0]
+        final fun <get-schemes>(): kotlin.collections/Set<dev.kcoap.transport/CoapScheme> // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.schemes.<get-schemes>|<get-schemes>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.close|close(){}[0]
+    final suspend fun connect(dev.kcoap.transport/Endpoint): dev.kcoap.transport/Connection // dev.kcoap.transport.ktor.websocket/KtorWebSocketConnector.connect|connect(dev.kcoap.transport.Endpoint){}[0]
+}

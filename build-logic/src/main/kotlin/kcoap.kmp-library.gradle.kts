@@ -9,7 +9,7 @@
 //  - linuxX64: Linux gateways; runs the common tests as native code on Linux CI.
 //  - js / wasmJs: browsers and Node.js, with WebCrypto under the default crypto backend.
 //
-// The module is published unless kcoap.unpublished comes first.
+// The module is published, with ABI dumps of its public API, unless kcoap.unpublished comes first.
 // Core modules also apply kcoap.core, which keeps their main code in commonMain.
 
 plugins {

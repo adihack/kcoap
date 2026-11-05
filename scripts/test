@@ -2,10 +2,13 @@
 # kcoap test suites, one command each.
 #
 #   scripts/test unit       every unit test on every target this machine can build
-#                           (JVM, Linux native, JS and Wasm on Node.js; Apple targets on macOS)
+#                           (JVM, Linux native, JS and Wasm on Node.js; Apple targets on macOS), and the
+#                           build checks: the build-logic tests, verifyCommonOnly on the core modules,
+#                           checkKotlinAbi against the committed ABI dumps
 #   scripts/test interop    the cross-tests against libcoap and libedhoc (builds their Docker images)
 #   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
-#   scripts/test apple      the common tests on macOS and the iOS simulator (macOS only)
+#   scripts/test apple      the common tests on macOS and the iOS simulator, and checkKotlinAbi with
+#                           the Apple klibs built natively (macOS only)
 #   scripts/test images     only build the pinned libcoap and libedhoc images
 #   scripts/test all        unit, interop and coverage
 #
@@ -35,10 +38,11 @@ build_images() {
     docker build -q -t "$LIBEDHOC_IMAGE" interop/libedhoc
 }
 
-# Unit tests of every target the host can build; Kotlin's allTests skips what it cannot run here.
+# Unit tests of every target the host can build; Kotlin's allTests skips what it cannot run here. The
+# build checks run in the same invocation, so a failing test does not hide an ABI or layout problem.
 unit() {
-    say "Unit tests"
-    gradle allTests -Pkcoap.tests=unit --continue "$@"
+    say "Unit tests and build checks"
+    gradle allTests :build-logic:test verifyCommonOnly checkKotlinAbi -Pkcoap.tests=unit --continue "$@"
 }
 
 interop() {
@@ -59,8 +63,8 @@ apple() {
         echo "The Apple targets build only on macOS." >&2
         exit 1
     fi
-    say "Apple tests (macOS and the iOS simulator)"
-    gradle macosArm64Test iosSimulatorArm64Test --continue "$@"
+    say "Apple tests (macOS and the iOS simulator) and the ABI check with native Apple klibs"
+    gradle macosArm64Test iosSimulatorArm64Test checkKotlinAbi --continue "$@"
 }
 
 summary() {

@@ -1,0 +1,206 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-testkit>
+final enum class dev.kcoap.testkit/DatagramFate : kotlin/Enum<dev.kcoap.testkit/DatagramFate> { // dev.kcoap.testkit/DatagramFate|null[0]
+    enum entry DELIVERED // dev.kcoap.testkit/DatagramFate.DELIVERED|null[0]
+    enum entry DUPLICATED // dev.kcoap.testkit/DatagramFate.DUPLICATED|null[0]
+    enum entry FILTERED // dev.kcoap.testkit/DatagramFate.FILTERED|null[0]
+    enum entry LOST // dev.kcoap.testkit/DatagramFate.LOST|null[0]
+    enum entry UNREACHABLE // dev.kcoap.testkit/DatagramFate.UNREACHABLE|null[0]
+
+    final val entries // dev.kcoap.testkit/DatagramFate.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.testkit/DatagramFate> // dev.kcoap.testkit/DatagramFate.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.testkit/DatagramFate // dev.kcoap.testkit/DatagramFate.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.testkit/DatagramFate> // dev.kcoap.testkit/DatagramFate.values|values#static(){}[0]
+}
+
+sealed interface dev.kcoap.testkit/InMemoryConnection { // dev.kcoap.testkit/InMemoryConnection|null[0]
+    abstract val isAccepted // dev.kcoap.testkit/InMemoryConnection.isAccepted|{}isAccepted[0]
+        abstract fun <get-isAccepted>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryConnection.isAccepted.<get-isAccepted>|<get-isAccepted>(){}[0]
+    abstract val isClosed // dev.kcoap.testkit/InMemoryConnection.isClosed|{}isClosed[0]
+        abstract fun <get-isClosed>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryConnection.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+    abstract val remote // dev.kcoap.testkit/InMemoryConnection.remote|{}remote[0]
+        abstract fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryConnection.remote.<get-remote>|<get-remote>(){}[0]
+
+    abstract fun inject(kotlin/ByteArray) // dev.kcoap.testkit/InMemoryConnection.inject|inject(kotlin.ByteArray){}[0]
+    abstract fun reset() // dev.kcoap.testkit/InMemoryConnection.reset|reset(){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryByteStream : dev.kcoap.testkit/InMemoryConnection, dev.kcoap.transport/ByteStreamConnection { // dev.kcoap.testkit/InMemoryByteStream|null[0]
+    final val isAccepted // dev.kcoap.testkit/InMemoryByteStream.isAccepted|{}isAccepted[0]
+        final fun <get-isAccepted>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryByteStream.isAccepted.<get-isAccepted>|<get-isAccepted>(){}[0]
+    final val isClosed // dev.kcoap.testkit/InMemoryByteStream.isClosed|{}isClosed[0]
+        final fun <get-isClosed>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryByteStream.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+    final val peerIdentity // dev.kcoap.testkit/InMemoryByteStream.peerIdentity|{}peerIdentity[0]
+        final fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.testkit/InMemoryByteStream.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    final val remote // dev.kcoap.testkit/InMemoryByteStream.remote|{}remote[0]
+        final fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryByteStream.remote.<get-remote>|<get-remote>(){}[0]
+
+    final fun inject(kotlin/ByteArray) // dev.kcoap.testkit/InMemoryByteStream.inject|inject(kotlin.ByteArray){}[0]
+    final fun reset() // dev.kcoap.testkit/InMemoryByteStream.reset|reset(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryByteStream.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/InMemoryByteStream.close|close(){}[0]
+    final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // dev.kcoap.testkit/InMemoryByteStream.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final suspend fun write(kotlin/ByteArray) // dev.kcoap.testkit/InMemoryByteStream.write|write(kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryConnectionListener : dev.kcoap.transport/ConnectionListener { // dev.kcoap.testkit/InMemoryConnectionListener|null[0]
+    final val localEndpoint // dev.kcoap.testkit/InMemoryConnectionListener.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryConnectionListener.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val scheme // dev.kcoap.testkit/InMemoryConnectionListener.scheme|{}scheme[0]
+        final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.testkit/InMemoryConnectionListener.scheme.<get-scheme>|<get-scheme>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryConnectionListener.toString|toString(){}[0]
+    final suspend fun accept(): dev.kcoap.transport/Connection? // dev.kcoap.testkit/InMemoryConnectionListener.accept|accept(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/InMemoryConnectionListener.close|close(){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryConnectionRefused : kotlin/Exception { // dev.kcoap.testkit/InMemoryConnectionRefused|null[0]
+    constructor <init>(dev.kcoap.transport/Endpoint) // dev.kcoap.testkit/InMemoryConnectionRefused.<init>|<init>(dev.kcoap.transport.Endpoint){}[0]
+
+    final val peer // dev.kcoap.testkit/InMemoryConnectionRefused.peer|{}peer[0]
+        final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryConnectionRefused.peer.<get-peer>|<get-peer>(){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryConnectionReset : kotlin/Exception { // dev.kcoap.testkit/InMemoryConnectionReset|null[0]
+    constructor <init>(dev.kcoap.transport/Endpoint) // dev.kcoap.testkit/InMemoryConnectionReset.<init>|<init>(dev.kcoap.transport.Endpoint){}[0]
+
+    final val peer // dev.kcoap.testkit/InMemoryConnectionReset.peer|{}peer[0]
+        final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryConnectionReset.peer.<get-peer>|<get-peer>(){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryConnections { // dev.kcoap.testkit/InMemoryConnections|null[0]
+    constructor <init>(kotlin/Int = ...) // dev.kcoap.testkit/InMemoryConnections.<init>|<init>(kotlin.Int){}[0]
+
+    final val connector // dev.kcoap.testkit/InMemoryConnections.connector|{}connector[0]
+        final fun <get-connector>(): dev.kcoap.transport/Connector // dev.kcoap.testkit/InMemoryConnections.connector.<get-connector>|<get-connector>(){}[0]
+
+    final var tap // dev.kcoap.testkit/InMemoryConnections.tap|{}tap[0]
+        final fun <get-tap>(): kotlin/Function3<dev.kcoap.transport/Endpoint, dev.kcoap.transport/Endpoint, kotlin/ByteArray, kotlin/Unit> // dev.kcoap.testkit/InMemoryConnections.tap.<get-tap>|<get-tap>(){}[0]
+        final fun <set-tap>(kotlin/Function3<dev.kcoap.transport/Endpoint, dev.kcoap.transport/Endpoint, kotlin/ByteArray, kotlin/Unit>) // dev.kcoap.testkit/InMemoryConnections.tap.<set-tap>|<set-tap>(kotlin.Function3<dev.kcoap.transport.Endpoint,dev.kcoap.transport.Endpoint,kotlin.ByteArray,kotlin.Unit>){}[0]
+
+    final suspend fun connections(): kotlin.collections/List<dev.kcoap.testkit/InMemoryConnection> // dev.kcoap.testkit/InMemoryConnections.connections|connections(){}[0]
+    final suspend fun listen(kotlin/Int, dev.kcoap.transport/CoapScheme = ..., kotlin/String = ..., dev.kcoap.transport/PeerIdentity = ..., dev.kcoap.transport/PeerIdentity = ...): dev.kcoap.testkit/InMemoryConnectionListener // dev.kcoap.testkit/InMemoryConnections.listen|listen(kotlin.Int;dev.kcoap.transport.CoapScheme;kotlin.String;dev.kcoap.transport.PeerIdentity;dev.kcoap.transport.PeerIdentity){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryDatagram { // dev.kcoap.testkit/InMemoryDatagram|null[0]
+    constructor <init>(dev.kcoap.transport/Endpoint.Udp, dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.testkit/InMemoryDatagram.<init>|<init>(dev.kcoap.transport.Endpoint.Udp;dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+
+    final val bytes // dev.kcoap.testkit/InMemoryDatagram.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // dev.kcoap.testkit/InMemoryDatagram.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val from // dev.kcoap.testkit/InMemoryDatagram.from|{}from[0]
+        final fun <get-from>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.testkit/InMemoryDatagram.from.<get-from>|<get-from>(){}[0]
+    final val to // dev.kcoap.testkit/InMemoryDatagram.to|{}to[0]
+        final fun <get-to>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryDatagram.to.<get-to>|<get-to>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryDatagram.toString|toString(){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryMessageStream : dev.kcoap.testkit/InMemoryConnection, dev.kcoap.transport/MessageConnection { // dev.kcoap.testkit/InMemoryMessageStream|null[0]
+    final val isAccepted // dev.kcoap.testkit/InMemoryMessageStream.isAccepted|{}isAccepted[0]
+        final fun <get-isAccepted>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryMessageStream.isAccepted.<get-isAccepted>|<get-isAccepted>(){}[0]
+    final val isClosed // dev.kcoap.testkit/InMemoryMessageStream.isClosed|{}isClosed[0]
+        final fun <get-isClosed>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryMessageStream.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+    final val peerIdentity // dev.kcoap.testkit/InMemoryMessageStream.peerIdentity|{}peerIdentity[0]
+        final fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.testkit/InMemoryMessageStream.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    final val remote // dev.kcoap.testkit/InMemoryMessageStream.remote|{}remote[0]
+        final fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.testkit/InMemoryMessageStream.remote.<get-remote>|<get-remote>(){}[0]
+
+    final fun inject(kotlin/ByteArray) // dev.kcoap.testkit/InMemoryMessageStream.inject|inject(kotlin.ByteArray){}[0]
+    final fun reset() // dev.kcoap.testkit/InMemoryMessageStream.reset|reset(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryMessageStream.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/InMemoryMessageStream.close|close(){}[0]
+    final suspend fun receive(): kotlin/ByteArray? // dev.kcoap.testkit/InMemoryMessageStream.receive|receive(){}[0]
+    final suspend fun send(kotlin/ByteArray) // dev.kcoap.testkit/InMemoryMessageStream.send|send(kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.testkit/InMemoryNetwork { // dev.kcoap.testkit/InMemoryNetwork|null[0]
+    constructor <init>(kotlinx.coroutines/CoroutineScope? = ..., kotlin.random/Random = ...) // dev.kcoap.testkit/InMemoryNetwork.<init>|<init>(kotlinx.coroutines.CoroutineScope?;kotlin.random.Random){}[0]
+
+    final var conditions // dev.kcoap.testkit/InMemoryNetwork.conditions|{}conditions[0]
+        final fun <get-conditions>(): dev.kcoap.testkit/LinkConditions // dev.kcoap.testkit/InMemoryNetwork.conditions.<get-conditions>|<get-conditions>(){}[0]
+        final fun <set-conditions>(dev.kcoap.testkit/LinkConditions) // dev.kcoap.testkit/InMemoryNetwork.conditions.<set-conditions>|<set-conditions>(dev.kcoap.testkit.LinkConditions){}[0]
+    final var filter // dev.kcoap.testkit/InMemoryNetwork.filter|{}filter[0]
+        final fun <get-filter>(): kotlin/Function1<dev.kcoap.testkit/InMemoryDatagram, kotlin/Boolean> // dev.kcoap.testkit/InMemoryNetwork.filter.<get-filter>|<get-filter>(){}[0]
+        final fun <set-filter>(kotlin/Function1<dev.kcoap.testkit/InMemoryDatagram, kotlin/Boolean>) // dev.kcoap.testkit/InMemoryNetwork.filter.<set-filter>|<set-filter>(kotlin.Function1<dev.kcoap.testkit.InMemoryDatagram,kotlin.Boolean>){}[0]
+    final var tap // dev.kcoap.testkit/InMemoryNetwork.tap|{}tap[0]
+        final fun <get-tap>(): kotlin/Function2<dev.kcoap.testkit/InMemoryDatagram, dev.kcoap.testkit/DatagramFate, kotlin/Unit> // dev.kcoap.testkit/InMemoryNetwork.tap.<get-tap>|<get-tap>(){}[0]
+        final fun <set-tap>(kotlin/Function2<dev.kcoap.testkit/InMemoryDatagram, dev.kcoap.testkit/DatagramFate, kotlin/Unit>) // dev.kcoap.testkit/InMemoryNetwork.tap.<set-tap>|<set-tap>(kotlin.Function2<dev.kcoap.testkit.InMemoryDatagram,dev.kcoap.testkit.DatagramFate,kotlin.Unit>){}[0]
+
+    final suspend fun attach(dev.kcoap.transport/Endpoint.Udp? = ..., kotlin/Int = ...): dev.kcoap.testkit/InMemoryTransport // dev.kcoap.testkit/InMemoryNetwork.attach|attach(dev.kcoap.transport.Endpoint.Udp?;kotlin.Int){}[0]
+
+    final object Companion { // dev.kcoap.testkit/InMemoryNetwork.Companion|null[0]
+        final const val DEFAULT_MAX_DATAGRAM_SIZE // dev.kcoap.testkit/InMemoryNetwork.Companion.DEFAULT_MAX_DATAGRAM_SIZE|{}DEFAULT_MAX_DATAGRAM_SIZE[0]
+            final fun <get-DEFAULT_MAX_DATAGRAM_SIZE>(): kotlin/Int // dev.kcoap.testkit/InMemoryNetwork.Companion.DEFAULT_MAX_DATAGRAM_SIZE.<get-DEFAULT_MAX_DATAGRAM_SIZE>|<get-DEFAULT_MAX_DATAGRAM_SIZE>(){}[0]
+    }
+}
+
+final class dev.kcoap.testkit/InMemoryTransport : dev.kcoap.transport/DatagramTransport { // dev.kcoap.testkit/InMemoryTransport|null[0]
+    final val localEndpoint // dev.kcoap.testkit/InMemoryTransport.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.testkit/InMemoryTransport.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+    final val maxDatagramSize // dev.kcoap.testkit/InMemoryTransport.maxDatagramSize|{}maxDatagramSize[0]
+        final fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.testkit/InMemoryTransport.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
+
+    final var isClosed // dev.kcoap.testkit/InMemoryTransport.isClosed|{}isClosed[0]
+        final fun <get-isClosed>(): kotlin/Boolean // dev.kcoap.testkit/InMemoryTransport.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+
+    final fun inject(dev.kcoap.transport/DatagramEvent) // dev.kcoap.testkit/InMemoryTransport.inject|inject(dev.kcoap.transport.DatagramEvent){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.testkit/InMemoryTransport.toString|toString(){}[0]
+    final suspend fun close() // dev.kcoap.testkit/InMemoryTransport.close|close(){}[0]
+    final suspend fun receive(): dev.kcoap.transport/DatagramEvent // dev.kcoap.testkit/InMemoryTransport.receive|receive(){}[0]
+    final suspend fun send(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.testkit/InMemoryTransport.send|send(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.testkit/LinkConditions { // dev.kcoap.testkit/LinkConditions|null[0]
+    constructor <init>(kotlin/Double = ..., kotlin/Double = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ...) // dev.kcoap.testkit/LinkConditions.<init>|<init>(kotlin.Double;kotlin.Double;kotlin.time.Duration;kotlin.time.Duration){}[0]
+
+    final val duplicationRate // dev.kcoap.testkit/LinkConditions.duplicationRate|{}duplicationRate[0]
+        final fun <get-duplicationRate>(): kotlin/Double // dev.kcoap.testkit/LinkConditions.duplicationRate.<get-duplicationRate>|<get-duplicationRate>(){}[0]
+    final val isImmediate // dev.kcoap.testkit/LinkConditions.isImmediate|{}isImmediate[0]
+        final fun <get-isImmediate>(): kotlin/Boolean // dev.kcoap.testkit/LinkConditions.isImmediate.<get-isImmediate>|<get-isImmediate>(){}[0]
+    final val jitter // dev.kcoap.testkit/LinkConditions.jitter|{}jitter[0]
+        final fun <get-jitter>(): kotlin.time/Duration // dev.kcoap.testkit/LinkConditions.jitter.<get-jitter>|<get-jitter>(){}[0]
+    final val latency // dev.kcoap.testkit/LinkConditions.latency|{}latency[0]
+        final fun <get-latency>(): kotlin.time/Duration // dev.kcoap.testkit/LinkConditions.latency.<get-latency>|<get-latency>(){}[0]
+    final val lossRate // dev.kcoap.testkit/LinkConditions.lossRate|{}lossRate[0]
+        final fun <get-lossRate>(): kotlin/Double // dev.kcoap.testkit/LinkConditions.lossRate.<get-lossRate>|<get-lossRate>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.testkit/LinkConditions.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.testkit/LinkConditions.Companion|null[0]
+        final val Perfect // dev.kcoap.testkit/LinkConditions.Companion.Perfect|{}Perfect[0]
+            final fun <get-Perfect>(): dev.kcoap.testkit/LinkConditions // dev.kcoap.testkit/LinkConditions.Companion.Perfect.<get-Perfect>|<get-Perfect>(){}[0]
+    }
+}
+
+final class dev.kcoap.testkit/StressScope : kotlinx.coroutines/CoroutineScope { // dev.kcoap.testkit/StressScope|null[0]
+    final val background // dev.kcoap.testkit/StressScope.background|{}background[0]
+        final fun <get-background>(): kotlinx.coroutines/CoroutineScope // dev.kcoap.testkit/StressScope.background.<get-background>|<get-background>(){}[0]
+    final val coroutineContext // dev.kcoap.testkit/StressScope.coroutineContext|{}coroutineContext[0]
+        final fun <get-coroutineContext>(): kotlin.coroutines/CoroutineContext // dev.kcoap.testkit/StressScope.coroutineContext.<get-coroutineContext>|<get-coroutineContext>(){}[0]
+    final val iteration // dev.kcoap.testkit/StressScope.iteration|{}iteration[0]
+        final fun <get-iteration>(): kotlin/Int // dev.kcoap.testkit/StressScope.iteration.<get-iteration>|<get-iteration>(){}[0]
+}
+
+final object dev.kcoap.testkit/ByteMutator { // dev.kcoap.testkit/ByteMutator|null[0]
+    final fun mutate(kotlin/ByteArray, kotlin.random/Random): kotlin/ByteArray // dev.kcoap.testkit/ByteMutator.mutate|mutate(kotlin.ByteArray;kotlin.random.Random){}[0]
+}
+
+final object dev.kcoap.testkit/Stress { // dev.kcoap.testkit/Stress|null[0]
+    final const val DEFAULT_ITERATIONS // dev.kcoap.testkit/Stress.DEFAULT_ITERATIONS|{}DEFAULT_ITERATIONS[0]
+        final fun <get-DEFAULT_ITERATIONS>(): kotlin/Int // dev.kcoap.testkit/Stress.DEFAULT_ITERATIONS.<get-DEFAULT_ITERATIONS>|<get-DEFAULT_ITERATIONS>(){}[0]
+    final const val DEFAULT_PARALLELISM // dev.kcoap.testkit/Stress.DEFAULT_PARALLELISM|{}DEFAULT_PARALLELISM[0]
+        final fun <get-DEFAULT_PARALLELISM>(): kotlin/Int // dev.kcoap.testkit/Stress.DEFAULT_PARALLELISM.<get-DEFAULT_PARALLELISM>|<get-DEFAULT_PARALLELISM>(){}[0]
+
+    final val DEFAULT_TIMEOUT // dev.kcoap.testkit/Stress.DEFAULT_TIMEOUT|{}DEFAULT_TIMEOUT[0]
+        final fun <get-DEFAULT_TIMEOUT>(): kotlin.time/Duration // dev.kcoap.testkit/Stress.DEFAULT_TIMEOUT.<get-DEFAULT_TIMEOUT>|<get-DEFAULT_TIMEOUT>(){}[0]
+
+    final suspend fun <#A1: kotlin/Any?> race(kotlin/Array<out kotlin.coroutines/SuspendFunction0<#A1>>...): kotlin.collections/List<kotlin/Result<#A1>> // dev.kcoap.testkit/Stress.race|race(kotlin.Array<out|kotlin.coroutines.SuspendFunction0<0:0>>...){0§<kotlin.Any?>}[0]
+    final suspend fun run(kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.coroutines/SuspendFunction1<dev.kcoap.testkit/StressScope, kotlin/Unit>) // dev.kcoap.testkit/Stress.run|run(kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.coroutines.SuspendFunction1<dev.kcoap.testkit.StressScope,kotlin.Unit>){}[0]
+}

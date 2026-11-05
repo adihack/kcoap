@@ -1,0 +1,212 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-common>
+open annotation class dev.kcoap.common/ExperimentalKcoapApi : kotlin/Annotation { // dev.kcoap.common/ExperimentalKcoapApi|null[0]
+    constructor <init>() // dev.kcoap.common/ExperimentalKcoapApi.<init>|<init>(){}[0]
+}
+
+open annotation class dev.kcoap.common/InternalKcoapApi : kotlin/Annotation { // dev.kcoap.common/InternalKcoapApi|null[0]
+    constructor <init>() // dev.kcoap.common/InternalKcoapApi.<init>|<init>(){}[0]
+}
+
+final enum class dev.kcoap.log/LogLevel : kotlin/Enum<dev.kcoap.log/LogLevel> { // dev.kcoap.log/LogLevel|null[0]
+    enum entry DEBUG // dev.kcoap.log/LogLevel.DEBUG|null[0]
+    enum entry ERROR // dev.kcoap.log/LogLevel.ERROR|null[0]
+    enum entry INFO // dev.kcoap.log/LogLevel.INFO|null[0]
+    enum entry OFF // dev.kcoap.log/LogLevel.OFF|null[0]
+    enum entry TRACE // dev.kcoap.log/LogLevel.TRACE|null[0]
+    enum entry WARN // dev.kcoap.log/LogLevel.WARN|null[0]
+
+    final val entries // dev.kcoap.log/LogLevel.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.log/LogLevel> // dev.kcoap.log/LogLevel.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val letter // dev.kcoap.log/LogLevel.letter|{}letter[0]
+        final fun <get-letter>(): kotlin/Char // dev.kcoap.log/LogLevel.letter.<get-letter>|<get-letter>(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.log/LogLevel // dev.kcoap.log/LogLevel.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.log/LogLevel> // dev.kcoap.log/LogLevel.values|values#static(){}[0]
+}
+
+abstract fun interface dev.kcoap.log/LogFormatter { // dev.kcoap.log/LogFormatter|null[0]
+    abstract fun format(dev.kcoap.log/LogRecord): kotlin/String // dev.kcoap.log/LogFormatter.format|format(dev.kcoap.log.LogRecord){}[0]
+
+    final object Companion { // dev.kcoap.log/LogFormatter.Companion|null[0]
+        final val Default // dev.kcoap.log/LogFormatter.Companion.Default|{}Default[0]
+            final fun <get-Default>(): dev.kcoap.log/LogFormatter // dev.kcoap.log/LogFormatter.Companion.Default.<get-Default>|<get-Default>(){}[0]
+    }
+}
+
+abstract fun interface dev.kcoap.log/LogSink { // dev.kcoap.log/LogSink|null[0]
+    abstract fun write(dev.kcoap.log/LogRecord) // dev.kcoap.log/LogSink.write|write(dev.kcoap.log.LogRecord){}[0]
+
+    final object Companion { // dev.kcoap.log/LogSink.Companion|null[0]
+        final val None // dev.kcoap.log/LogSink.Companion.None|{}None[0]
+            final fun <get-None>(): dev.kcoap.log/LogSink // dev.kcoap.log/LogSink.Companion.None.<get-None>|<get-None>(){}[0]
+    }
+}
+
+final class dev.kcoap.log/CompositeSink : dev.kcoap.log/LogSink { // dev.kcoap.log/CompositeSink|null[0]
+    constructor <init>(kotlin.collections/List<dev.kcoap.log/LogSink>) // dev.kcoap.log/CompositeSink.<init>|<init>(kotlin.collections.List<dev.kcoap.log.LogSink>){}[0]
+
+    final fun write(dev.kcoap.log/LogRecord) // dev.kcoap.log/CompositeSink.write|write(dev.kcoap.log.LogRecord){}[0]
+}
+
+final class dev.kcoap.log/ConsoleSink : dev.kcoap.log/LogSink { // dev.kcoap.log/ConsoleSink|null[0]
+    constructor <init>(dev.kcoap.log/LogFormatter = ...) // dev.kcoap.log/ConsoleSink.<init>|<init>(dev.kcoap.log.LogFormatter){}[0]
+
+    final fun write(dev.kcoap.log/LogRecord) // dev.kcoap.log/ConsoleSink.write|write(dev.kcoap.log.LogRecord){}[0]
+}
+
+final class dev.kcoap.log/LogConfig { // dev.kcoap.log/LogConfig|null[0]
+    final val clock // dev.kcoap.log/LogConfig.clock|{}clock[0]
+        final fun <get-clock>(): kotlin.time/Clock // dev.kcoap.log/LogConfig.clock.<get-clock>|<get-clock>(){}[0]
+    final val level // dev.kcoap.log/LogConfig.level|{}level[0]
+        final fun <get-level>(): dev.kcoap.log/LogLevel // dev.kcoap.log/LogConfig.level.<get-level>|<get-level>(){}[0]
+    final val payloadDumps // dev.kcoap.log/LogConfig.payloadDumps|{}payloadDumps[0]
+        final fun <get-payloadDumps>(): kotlin/Boolean // dev.kcoap.log/LogConfig.payloadDumps.<get-payloadDumps>|<get-payloadDumps>(){}[0]
+    final val sink // dev.kcoap.log/LogConfig.sink|{}sink[0]
+        final fun <get-sink>(): dev.kcoap.log/LogSink // dev.kcoap.log/LogConfig.sink.<get-sink>|<get-sink>(){}[0]
+
+    final fun levelFor(kotlin/String): dev.kcoap.log/LogLevel // dev.kcoap.log/LogConfig.levelFor|levelFor(kotlin.String){}[0]
+    final fun toBuilder(): dev.kcoap.log/LogConfig.Builder // dev.kcoap.log/LogConfig.toBuilder|toBuilder(){}[0]
+
+    final class Builder { // dev.kcoap.log/LogConfig.Builder|null[0]
+        constructor <init>() // dev.kcoap.log/LogConfig.Builder.<init>|<init>(){}[0]
+
+        final var clock // dev.kcoap.log/LogConfig.Builder.clock|{}clock[0]
+            final fun <get-clock>(): kotlin.time/Clock // dev.kcoap.log/LogConfig.Builder.clock.<get-clock>|<get-clock>(){}[0]
+            final fun <set-clock>(kotlin.time/Clock) // dev.kcoap.log/LogConfig.Builder.clock.<set-clock>|<set-clock>(kotlin.time.Clock){}[0]
+        final var level // dev.kcoap.log/LogConfig.Builder.level|{}level[0]
+            final fun <get-level>(): dev.kcoap.log/LogLevel // dev.kcoap.log/LogConfig.Builder.level.<get-level>|<get-level>(){}[0]
+            final fun <set-level>(dev.kcoap.log/LogLevel) // dev.kcoap.log/LogConfig.Builder.level.<set-level>|<set-level>(dev.kcoap.log.LogLevel){}[0]
+        final var payloadDumps // dev.kcoap.log/LogConfig.Builder.payloadDumps|{}payloadDumps[0]
+            final fun <get-payloadDumps>(): kotlin/Boolean // dev.kcoap.log/LogConfig.Builder.payloadDumps.<get-payloadDumps>|<get-payloadDumps>(){}[0]
+            final fun <set-payloadDumps>(kotlin/Boolean) // dev.kcoap.log/LogConfig.Builder.payloadDumps.<set-payloadDumps>|<set-payloadDumps>(kotlin.Boolean){}[0]
+        final var sink // dev.kcoap.log/LogConfig.Builder.sink|{}sink[0]
+            final fun <get-sink>(): dev.kcoap.log/LogSink // dev.kcoap.log/LogConfig.Builder.sink.<get-sink>|<get-sink>(){}[0]
+            final fun <set-sink>(dev.kcoap.log/LogSink) // dev.kcoap.log/LogConfig.Builder.sink.<set-sink>|<set-sink>(dev.kcoap.log.LogSink){}[0]
+
+        final fun build(): dev.kcoap.log/LogConfig // dev.kcoap.log/LogConfig.Builder.build|build(){}[0]
+        final fun clearLevel(kotlin/String): dev.kcoap.log/LogConfig.Builder // dev.kcoap.log/LogConfig.Builder.clearLevel|clearLevel(kotlin.String){}[0]
+        final fun level(kotlin/String, dev.kcoap.log/LogLevel): dev.kcoap.log/LogConfig.Builder // dev.kcoap.log/LogConfig.Builder.level|level(kotlin.String;dev.kcoap.log.LogLevel){}[0]
+    }
+
+    final object Companion { // dev.kcoap.log/LogConfig.Companion|null[0]
+        final val Default // dev.kcoap.log/LogConfig.Companion.Default|{}Default[0]
+            final fun <get-Default>(): dev.kcoap.log/LogConfig // dev.kcoap.log/LogConfig.Companion.Default.<get-Default>|<get-Default>(){}[0]
+
+        final fun build(kotlin/Function1<dev.kcoap.log/LogConfig.Builder, kotlin/Unit>): dev.kcoap.log/LogConfig // dev.kcoap.log/LogConfig.Companion.build|build(kotlin.Function1<dev.kcoap.log.LogConfig.Builder,kotlin.Unit>){}[0]
+    }
+}
+
+final class dev.kcoap.log/LogRecord { // dev.kcoap.log/LogRecord|null[0]
+    constructor <init>(kotlin.time/Instant, dev.kcoap.log/LogLevel, kotlin/String, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Throwable? = ...) // dev.kcoap.log/LogRecord.<init>|<init>(kotlin.time.Instant;dev.kcoap.log.LogLevel;kotlin.String;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Throwable?){}[0]
+
+    final val error // dev.kcoap.log/LogRecord.error|{}error[0]
+        final fun <get-error>(): kotlin/Throwable? // dev.kcoap.log/LogRecord.error.<get-error>|<get-error>(){}[0]
+    final val fields // dev.kcoap.log/LogRecord.fields|{}fields[0]
+        final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // dev.kcoap.log/LogRecord.fields.<get-fields>|<get-fields>(){}[0]
+    final val level // dev.kcoap.log/LogRecord.level|{}level[0]
+        final fun <get-level>(): dev.kcoap.log/LogLevel // dev.kcoap.log/LogRecord.level.<get-level>|<get-level>(){}[0]
+    final val message // dev.kcoap.log/LogRecord.message|{}message[0]
+        final fun <get-message>(): kotlin/String // dev.kcoap.log/LogRecord.message.<get-message>|<get-message>(){}[0]
+    final val tag // dev.kcoap.log/LogRecord.tag|{}tag[0]
+        final fun <get-tag>(): kotlin/String // dev.kcoap.log/LogRecord.tag.<get-tag>|<get-tag>(){}[0]
+    final val timestamp // dev.kcoap.log/LogRecord.timestamp|{}timestamp[0]
+        final fun <get-timestamp>(): kotlin.time/Instant // dev.kcoap.log/LogRecord.timestamp.<get-timestamp>|<get-timestamp>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.log/LogRecord.toString|toString(){}[0]
+}
+
+final class dev.kcoap.log/Logger { // dev.kcoap.log/Logger|null[0]
+    final val config // dev.kcoap.log/Logger.config|{}config[0]
+        final fun <get-config>(): dev.kcoap.log/LogConfig // dev.kcoap.log/Logger.config.<get-config>|<get-config>(){}[0]
+    final val tag // dev.kcoap.log/Logger.tag|{}tag[0]
+        final fun <get-tag>(): kotlin/String // dev.kcoap.log/Logger.tag.<get-tag>|<get-tag>(){}[0]
+
+    final fun child(kotlin/String): dev.kcoap.log/Logger // dev.kcoap.log/Logger.child|child(kotlin.String){}[0]
+    final fun emit(dev.kcoap.log/LogLevel, kotlin/String, kotlin/Throwable?) // dev.kcoap.log/Logger.emit|emit(dev.kcoap.log.LogLevel;kotlin.String;kotlin.Throwable?){}[0]
+    final fun isEnabled(dev.kcoap.log/LogLevel): kotlin/Boolean // dev.kcoap.log/Logger.isEnabled|isEnabled(dev.kcoap.log.LogLevel){}[0]
+    final fun payload(kotlin/ByteArray): kotlin/String // dev.kcoap.log/Logger.payload|payload(kotlin.ByteArray){}[0]
+    final fun with(kotlin/Array<out kotlin/Pair<kotlin/String, kotlin/Any?>>...): dev.kcoap.log/Logger // dev.kcoap.log/Logger.with|with(kotlin.Array<out|kotlin.Pair<kotlin.String,kotlin.Any?>>...){}[0]
+    final inline fun debug(kotlin/Throwable? = ..., kotlin/Function0<kotlin/String>) // dev.kcoap.log/Logger.debug|debug(kotlin.Throwable?;kotlin.Function0<kotlin.String>){}[0]
+    final inline fun error(kotlin/Throwable? = ..., kotlin/Function0<kotlin/String>) // dev.kcoap.log/Logger.error|error(kotlin.Throwable?;kotlin.Function0<kotlin.String>){}[0]
+    final inline fun info(kotlin/Throwable? = ..., kotlin/Function0<kotlin/String>) // dev.kcoap.log/Logger.info|info(kotlin.Throwable?;kotlin.Function0<kotlin.String>){}[0]
+    final inline fun trace(kotlin/Throwable? = ..., kotlin/Function0<kotlin/String>) // dev.kcoap.log/Logger.trace|trace(kotlin.Throwable?;kotlin.Function0<kotlin.String>){}[0]
+    final inline fun warn(kotlin/Throwable? = ..., kotlin/Function0<kotlin/String>) // dev.kcoap.log/Logger.warn|warn(kotlin.Throwable?;kotlin.Function0<kotlin.String>){}[0]
+}
+
+final class dev.kcoap.log/LoggerFactory { // dev.kcoap.log/LoggerFactory|null[0]
+    constructor <init>(dev.kcoap.log/LogConfig) // dev.kcoap.log/LoggerFactory.<init>|<init>(dev.kcoap.log.LogConfig){}[0]
+    constructor <init>(kotlin/Function0<dev.kcoap.log/LogConfig>) // dev.kcoap.log/LoggerFactory.<init>|<init>(kotlin.Function0<dev.kcoap.log.LogConfig>){}[0]
+
+    final fun logger(kotlin/String): dev.kcoap.log/Logger // dev.kcoap.log/LoggerFactory.logger|logger(kotlin.String){}[0]
+
+    final object Companion { // dev.kcoap.log/LoggerFactory.Companion|null[0]
+        final val Global // dev.kcoap.log/LoggerFactory.Companion.Global|{}Global[0]
+            final fun <get-Global>(): dev.kcoap.log/LoggerFactory // dev.kcoap.log/LoggerFactory.Companion.Global.<get-Global>|<get-Global>(){}[0]
+    }
+}
+
+final class dev.kcoap.log/RingBufferSink : dev.kcoap.log/LogSink { // dev.kcoap.log/RingBufferSink|null[0]
+    constructor <init>(kotlin/Int) // dev.kcoap.log/RingBufferSink.<init>|<init>(kotlin.Int){}[0]
+
+    final val capacity // dev.kcoap.log/RingBufferSink.capacity|{}capacity[0]
+        final fun <get-capacity>(): kotlin/Int // dev.kcoap.log/RingBufferSink.capacity.<get-capacity>|<get-capacity>(){}[0]
+    final val dropped // dev.kcoap.log/RingBufferSink.dropped|{}dropped[0]
+        final fun <get-dropped>(): kotlin/Long // dev.kcoap.log/RingBufferSink.dropped.<get-dropped>|<get-dropped>(){}[0]
+
+    final fun clear() // dev.kcoap.log/RingBufferSink.clear|clear(){}[0]
+    final fun dump(dev.kcoap.log/LogFormatter = ...): kotlin/String // dev.kcoap.log/RingBufferSink.dump|dump(dev.kcoap.log.LogFormatter){}[0]
+    final fun snapshot(): kotlin.collections/List<dev.kcoap.log/LogRecord> // dev.kcoap.log/RingBufferSink.snapshot|snapshot(){}[0]
+    final fun write(dev.kcoap.log/LogRecord) // dev.kcoap.log/RingBufferSink.write|write(dev.kcoap.log.LogRecord){}[0]
+}
+
+final object dev.kcoap.common/Hex { // dev.kcoap.common/Hex|null[0]
+    final fun decode(kotlin/String): kotlin/ByteArray // dev.kcoap.common/Hex.decode|decode(kotlin.String){}[0]
+    final fun encode(kotlin/ByteArray): kotlin/String // dev.kcoap.common/Hex.encode|encode(kotlin.ByteArray){}[0]
+}
+
+final object dev.kcoap.log/KcoapLogging { // dev.kcoap.log/KcoapLogging|null[0]
+    final val config // dev.kcoap.log/KcoapLogging.config|{}config[0]
+        final fun <get-config>(): dev.kcoap.log/LogConfig // dev.kcoap.log/KcoapLogging.config.<get-config>|<get-config>(){}[0]
+
+    final fun configure(kotlin/Function1<dev.kcoap.log/LogConfig.Builder, kotlin/Unit>) // dev.kcoap.log/KcoapLogging.configure|configure(kotlin.Function1<dev.kcoap.log.LogConfig.Builder,kotlin.Unit>){}[0]
+    final fun logger(kotlin/String): dev.kcoap.log/Logger // dev.kcoap.log/KcoapLogging.logger|logger(kotlin.String){}[0]
+    final fun reset() // dev.kcoap.log/KcoapLogging.reset|reset(){}[0]
+    final fun use(dev.kcoap.log/LogConfig) // dev.kcoap.log/KcoapLogging.use|use(dev.kcoap.log.LogConfig){}[0]
+}
+
+final object dev.kcoap.log/LogTags { // dev.kcoap.log/LogTags|null[0]
+    final const val COAP // dev.kcoap.log/LogTags.COAP|{}COAP[0]
+        final fun <get-COAP>(): kotlin/String // dev.kcoap.log/LogTags.COAP.<get-COAP>|<get-COAP>(){}[0]
+    final const val COAP_CLIENT // dev.kcoap.log/LogTags.COAP_CLIENT|{}COAP_CLIENT[0]
+        final fun <get-COAP_CLIENT>(): kotlin/String // dev.kcoap.log/LogTags.COAP_CLIENT.<get-COAP_CLIENT>|<get-COAP_CLIENT>(){}[0]
+    final const val COAP_EXCHANGE // dev.kcoap.log/LogTags.COAP_EXCHANGE|{}COAP_EXCHANGE[0]
+        final fun <get-COAP_EXCHANGE>(): kotlin/String // dev.kcoap.log/LogTags.COAP_EXCHANGE.<get-COAP_EXCHANGE>|<get-COAP_EXCHANGE>(){}[0]
+    final const val COAP_MESSAGE // dev.kcoap.log/LogTags.COAP_MESSAGE|{}COAP_MESSAGE[0]
+        final fun <get-COAP_MESSAGE>(): kotlin/String // dev.kcoap.log/LogTags.COAP_MESSAGE.<get-COAP_MESSAGE>|<get-COAP_MESSAGE>(){}[0]
+    final const val COAP_SERVER // dev.kcoap.log/LogTags.COAP_SERVER|{}COAP_SERVER[0]
+        final fun <get-COAP_SERVER>(): kotlin/String // dev.kcoap.log/LogTags.COAP_SERVER.<get-COAP_SERVER>|<get-COAP_SERVER>(){}[0]
+    final const val CRYPTO // dev.kcoap.log/LogTags.CRYPTO|{}CRYPTO[0]
+        final fun <get-CRYPTO>(): kotlin/String // dev.kcoap.log/LogTags.CRYPTO.<get-CRYPTO>|<get-CRYPTO>(){}[0]
+    final const val DTLS // dev.kcoap.log/LogTags.DTLS|{}DTLS[0]
+        final fun <get-DTLS>(): kotlin/String // dev.kcoap.log/LogTags.DTLS.<get-DTLS>|<get-DTLS>(){}[0]
+    final const val EDHOC // dev.kcoap.log/LogTags.EDHOC|{}EDHOC[0]
+        final fun <get-EDHOC>(): kotlin/String // dev.kcoap.log/LogTags.EDHOC.<get-EDHOC>|<get-EDHOC>(){}[0]
+    final const val OSCORE // dev.kcoap.log/LogTags.OSCORE|{}OSCORE[0]
+        final fun <get-OSCORE>(): kotlin/String // dev.kcoap.log/LogTags.OSCORE.<get-OSCORE>|<get-OSCORE>(){}[0]
+    final const val TRANSPORT // dev.kcoap.log/LogTags.TRANSPORT|{}TRANSPORT[0]
+        final fun <get-TRANSPORT>(): kotlin/String // dev.kcoap.log/LogTags.TRANSPORT.<get-TRANSPORT>|<get-TRANSPORT>(){}[0]
+}
+
+final fun (dev.kcoap.log/LogSink).dev.kcoap.log/atLeast(dev.kcoap.log/LogLevel): dev.kcoap.log/LogSink // dev.kcoap.log/atLeast|atLeast@dev.kcoap.log.LogSink(dev.kcoap.log.LogLevel){}[0]
+final fun (dev.kcoap.log/LogSink).dev.kcoap.log/plus(dev.kcoap.log/LogSink): dev.kcoap.log/LogSink // dev.kcoap.log/plus|plus@dev.kcoap.log.LogSink(dev.kcoap.log.LogSink){}[0]
+final fun (kotlin/ByteArray).dev.kcoap.common/toHex(): kotlin/String // dev.kcoap.common/toHex|toHex@kotlin.ByteArray(){}[0]
+final fun (kotlin/ByteArray).dev.kcoap.common/wipe() // dev.kcoap.common/wipe|wipe@kotlin.ByteArray(){}[0]
+final fun (kotlin/String).dev.kcoap.common/hexToBytes(): kotlin/ByteArray // dev.kcoap.common/hexToBytes|hexToBytes@kotlin.String(){}[0]
+final fun dev.kcoap.common/constantTimeEquals(kotlin/ByteArray, kotlin/ByteArray): kotlin/Boolean // dev.kcoap.common/constantTimeEquals|constantTimeEquals(kotlin.ByteArray;kotlin.ByteArray){}[0]

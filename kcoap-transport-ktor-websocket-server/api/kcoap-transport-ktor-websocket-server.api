@@ -1,0 +1,22 @@
+public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener : dev/kcoap/transport/ConnectionListener {
+	public static final field Companion Ldev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion;
+	public static final field DEFAULT_MAX_FRAME_SIZE J
+	public fun <init> ()V
+	public fun <init> (Ldev/kcoap/transport/CoapScheme;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/CoapScheme;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun accept (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$WebSocket;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion {
+	public final fun start (Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun start$default (Ldev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener$Companion;Ljava/lang/String;IJLdev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/transport/ktor/websocket/server/KtorWebSocketListenerKt {
+	public static final fun coapOverWebSockets (Lio/ktor/server/routing/Route;Ldev/kcoap/transport/ktor/websocket/server/KtorWebSocketListener;)V
+}
+

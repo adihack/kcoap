@@ -1,0 +1,40 @@
+public final class dev/kcoap/transport/ktor/KtorTcpConnector : dev/kcoap/transport/Connector {
+	public fun <init> ()V
+	public fun <init> (Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun connect (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getSchemes ()Ljava/util/Set;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTcpListener : dev/kcoap/transport/ConnectionListener {
+	public static final field Companion Ldev/kcoap/transport/ktor/KtorTcpListener$Companion;
+	public fun accept (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Tcp;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTcpListener$Companion {
+	public final fun bind (Ljava/lang/String;ILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun bind$default (Ldev/kcoap/transport/ktor/KtorTcpListener$Companion;Ljava/lang/String;ILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/transport/ktor/KtorUdpTransport : dev/kcoap/transport/DatagramTransport {
+	public static final field Companion Ldev/kcoap/transport/ktor/KtorUdpTransport$Companion;
+	public static final field DEFAULT_MAX_DATAGRAM_SIZE I
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorUdpTransport$Companion {
+	public final fun bind (Ljava/lang/String;IILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun bind$default (Ldev/kcoap/transport/ktor/KtorUdpTransport$Companion;Ljava/lang/String;IILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+

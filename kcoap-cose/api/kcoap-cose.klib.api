@@ -1,0 +1,143 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-cose>
+final enum class dev.kcoap.cose/CoseCurve : kotlin/Enum<dev.kcoap.cose/CoseCurve> { // dev.kcoap.cose/CoseCurve|null[0]
+    enum entry ED25519 // dev.kcoap.cose/CoseCurve.ED25519|null[0]
+    enum entry P_256 // dev.kcoap.cose/CoseCurve.P_256|null[0]
+    enum entry P_384 // dev.kcoap.cose/CoseCurve.P_384|null[0]
+    enum entry X25519 // dev.kcoap.cose/CoseCurve.X25519|null[0]
+    enum entry X448 // dev.kcoap.cose/CoseCurve.X448|null[0]
+
+    final val entries // dev.kcoap.cose/CoseCurve.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.cose/CoseCurve> // dev.kcoap.cose/CoseCurve.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val keyType // dev.kcoap.cose/CoseCurve.keyType|{}keyType[0]
+        final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.cose/CoseCurve.keyType.<get-keyType>|<get-keyType>(){}[0]
+    final val value // dev.kcoap.cose/CoseCurve.value|{}value[0]
+        final fun <get-value>(): kotlin/Int // dev.kcoap.cose/CoseCurve.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.cose/CoseCurve // dev.kcoap.cose/CoseCurve.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.cose/CoseCurve> // dev.kcoap.cose/CoseCurve.values|values#static(){}[0]
+
+    final object Companion { // dev.kcoap.cose/CoseCurve.Companion|null[0]
+        final fun fromValue(kotlin/Int): dev.kcoap.cose/CoseCurve? // dev.kcoap.cose/CoseCurve.Companion.fromValue|fromValue(kotlin.Int){}[0]
+    }
+}
+
+final enum class dev.kcoap.cose/CoseKeyType : kotlin/Enum<dev.kcoap.cose/CoseKeyType> { // dev.kcoap.cose/CoseKeyType|null[0]
+    enum entry AKP // dev.kcoap.cose/CoseKeyType.AKP|null[0]
+    enum entry EC2 // dev.kcoap.cose/CoseKeyType.EC2|null[0]
+    enum entry OKP // dev.kcoap.cose/CoseKeyType.OKP|null[0]
+
+    final val entries // dev.kcoap.cose/CoseKeyType.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.cose/CoseKeyType> // dev.kcoap.cose/CoseKeyType.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // dev.kcoap.cose/CoseKeyType.value|{}value[0]
+        final fun <get-value>(): kotlin/Int // dev.kcoap.cose/CoseKeyType.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.cose/CoseKeyType // dev.kcoap.cose/CoseKeyType.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.cose/CoseKeyType> // dev.kcoap.cose/CoseKeyType.values|values#static(){}[0]
+
+    final object Companion { // dev.kcoap.cose/CoseKeyType.Companion|null[0]
+        final fun fromValue(kotlin/Int): dev.kcoap.cose/CoseKeyType? // dev.kcoap.cose/CoseKeyType.Companion.fromValue|fromValue(kotlin.Int){}[0]
+    }
+}
+
+final class dev.kcoap.cose/CoseKey { // dev.kcoap.cose/CoseKey|null[0]
+    constructor <init>(dev.kcoap.cose/CoseKeyType, dev.kcoap.cose/CoseCurve?, kotlin/ByteArray, kotlin/ByteArray? = ..., kotlin/ByteArray? = ..., kotlin/Int? = ...) // dev.kcoap.cose/CoseKey.<init>|<init>(dev.kcoap.cose.CoseKeyType;dev.kcoap.cose.CoseCurve?;kotlin.ByteArray;kotlin.ByteArray?;kotlin.ByteArray?;kotlin.Int?){}[0]
+
+    final val algorithm // dev.kcoap.cose/CoseKey.algorithm|{}algorithm[0]
+        final fun <get-algorithm>(): kotlin/Int? // dev.kcoap.cose/CoseKey.algorithm.<get-algorithm>|<get-algorithm>(){}[0]
+    final val curve // dev.kcoap.cose/CoseKey.curve|{}curve[0]
+        final fun <get-curve>(): dev.kcoap.cose/CoseCurve? // dev.kcoap.cose/CoseKey.curve.<get-curve>|<get-curve>(){}[0]
+    final val keyType // dev.kcoap.cose/CoseKey.keyType|{}keyType[0]
+        final fun <get-keyType>(): dev.kcoap.cose/CoseKeyType // dev.kcoap.cose/CoseKey.keyType.<get-keyType>|<get-keyType>(){}[0]
+    final val kid // dev.kcoap.cose/CoseKey.kid|{}kid[0]
+        final fun <get-kid>(): kotlin/ByteArray? // dev.kcoap.cose/CoseKey.kid.<get-kid>|<get-kid>(){}[0]
+    final val x // dev.kcoap.cose/CoseKey.x|{}x[0]
+        final fun <get-x>(): kotlin/ByteArray // dev.kcoap.cose/CoseKey.x.<get-x>|<get-x>(){}[0]
+    final val y // dev.kcoap.cose/CoseKey.y|{}y[0]
+        final fun <get-y>(): kotlin/ByteArray? // dev.kcoap.cose/CoseKey.y.<get-y>|<get-y>(){}[0]
+
+    final fun encode(): kotlin/ByteArray // dev.kcoap.cose/CoseKey.encode|encode(){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.cose/CoseKey.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.cose/CoseKey.hashCode|hashCode(){}[0]
+    final fun rawPublicKey(): kotlin/ByteArray // dev.kcoap.cose/CoseKey.rawPublicKey|rawPublicKey(){}[0]
+    final fun toCbor(): dev.kcoap.cbor/CborMap // dev.kcoap.cose/CoseKey.toCbor|toCbor(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cose/CoseKey.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.cose/CoseKey.Companion|null[0]
+        final const val LABEL_AKP_PUB // dev.kcoap.cose/CoseKey.Companion.LABEL_AKP_PUB|{}LABEL_AKP_PUB[0]
+            final fun <get-LABEL_AKP_PUB>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_AKP_PUB.<get-LABEL_AKP_PUB>|<get-LABEL_AKP_PUB>(){}[0]
+        final const val LABEL_ALG // dev.kcoap.cose/CoseKey.Companion.LABEL_ALG|{}LABEL_ALG[0]
+            final fun <get-LABEL_ALG>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_ALG.<get-LABEL_ALG>|<get-LABEL_ALG>(){}[0]
+        final const val LABEL_CRV // dev.kcoap.cose/CoseKey.Companion.LABEL_CRV|{}LABEL_CRV[0]
+            final fun <get-LABEL_CRV>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_CRV.<get-LABEL_CRV>|<get-LABEL_CRV>(){}[0]
+        final const val LABEL_KID // dev.kcoap.cose/CoseKey.Companion.LABEL_KID|{}LABEL_KID[0]
+            final fun <get-LABEL_KID>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_KID.<get-LABEL_KID>|<get-LABEL_KID>(){}[0]
+        final const val LABEL_KTY // dev.kcoap.cose/CoseKey.Companion.LABEL_KTY|{}LABEL_KTY[0]
+            final fun <get-LABEL_KTY>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_KTY.<get-LABEL_KTY>|<get-LABEL_KTY>(){}[0]
+        final const val LABEL_X // dev.kcoap.cose/CoseKey.Companion.LABEL_X|{}LABEL_X[0]
+            final fun <get-LABEL_X>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_X.<get-LABEL_X>|<get-LABEL_X>(){}[0]
+        final const val LABEL_Y // dev.kcoap.cose/CoseKey.Companion.LABEL_Y|{}LABEL_Y[0]
+            final fun <get-LABEL_Y>(): kotlin/Int // dev.kcoap.cose/CoseKey.Companion.LABEL_Y.<get-LABEL_Y>|<get-LABEL_Y>(){}[0]
+
+        final fun fromCbor(dev.kcoap.cbor/CborMap): dev.kcoap.cose/CoseKey // dev.kcoap.cose/CoseKey.Companion.fromCbor|fromCbor(dev.kcoap.cbor.CborMap){}[0]
+    }
+}
+
+final class dev.kcoap.cose/CwtClaimsSet { // dev.kcoap.cose/CwtClaimsSet|null[0]
+    constructor <init>(kotlin/String?, dev.kcoap.cose/CoseKey) // dev.kcoap.cose/CwtClaimsSet.<init>|<init>(kotlin.String?;dev.kcoap.cose.CoseKey){}[0]
+
+    final val confirmationKey // dev.kcoap.cose/CwtClaimsSet.confirmationKey|{}confirmationKey[0]
+        final fun <get-confirmationKey>(): dev.kcoap.cose/CoseKey // dev.kcoap.cose/CwtClaimsSet.confirmationKey.<get-confirmationKey>|<get-confirmationKey>(){}[0]
+    final val encoded // dev.kcoap.cose/CwtClaimsSet.encoded|{}encoded[0]
+        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.cose/CwtClaimsSet.encoded.<get-encoded>|<get-encoded>(){}[0]
+    final val subject // dev.kcoap.cose/CwtClaimsSet.subject|{}subject[0]
+        final fun <get-subject>(): kotlin/String? // dev.kcoap.cose/CwtClaimsSet.subject.<get-subject>|<get-subject>(){}[0]
+
+    final fun toCbor(): dev.kcoap.cbor/CborMap // dev.kcoap.cose/CwtClaimsSet.toCbor|toCbor(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.cose/CwtClaimsSet.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.cose/CwtClaimsSet.Companion|null[0]
+        final const val CLAIM_CNF // dev.kcoap.cose/CwtClaimsSet.Companion.CLAIM_CNF|{}CLAIM_CNF[0]
+            final fun <get-CLAIM_CNF>(): kotlin/Int // dev.kcoap.cose/CwtClaimsSet.Companion.CLAIM_CNF.<get-CLAIM_CNF>|<get-CLAIM_CNF>(){}[0]
+        final const val CLAIM_SUBJECT // dev.kcoap.cose/CwtClaimsSet.Companion.CLAIM_SUBJECT|{}CLAIM_SUBJECT[0]
+            final fun <get-CLAIM_SUBJECT>(): kotlin/Int // dev.kcoap.cose/CwtClaimsSet.Companion.CLAIM_SUBJECT.<get-CLAIM_SUBJECT>|<get-CLAIM_SUBJECT>(){}[0]
+        final const val CNF_COSE_KEY // dev.kcoap.cose/CwtClaimsSet.Companion.CNF_COSE_KEY|{}CNF_COSE_KEY[0]
+            final fun <get-CNF_COSE_KEY>(): kotlin/Int // dev.kcoap.cose/CwtClaimsSet.Companion.CNF_COSE_KEY.<get-CNF_COSE_KEY>|<get-CNF_COSE_KEY>(){}[0]
+
+        final fun decode(kotlin/ByteArray): dev.kcoap.cose/CwtClaimsSet // dev.kcoap.cose/CwtClaimsSet.Companion.decode|decode(kotlin.ByteArray){}[0]
+    }
+}
+
+final object dev.kcoap.cose/CoseHeader { // dev.kcoap.cose/CoseHeader|null[0]
+    final const val ALG // dev.kcoap.cose/CoseHeader.ALG|{}ALG[0]
+        final fun <get-ALG>(): kotlin/Long // dev.kcoap.cose/CoseHeader.ALG.<get-ALG>|<get-ALG>(){}[0]
+    final const val CONTENT_TYPE // dev.kcoap.cose/CoseHeader.CONTENT_TYPE|{}CONTENT_TYPE[0]
+        final fun <get-CONTENT_TYPE>(): kotlin/Long // dev.kcoap.cose/CoseHeader.CONTENT_TYPE.<get-CONTENT_TYPE>|<get-CONTENT_TYPE>(){}[0]
+    final const val CRIT // dev.kcoap.cose/CoseHeader.CRIT|{}CRIT[0]
+        final fun <get-CRIT>(): kotlin/Long // dev.kcoap.cose/CoseHeader.CRIT.<get-CRIT>|<get-CRIT>(){}[0]
+    final const val IV // dev.kcoap.cose/CoseHeader.IV|{}IV[0]
+        final fun <get-IV>(): kotlin/Long // dev.kcoap.cose/CoseHeader.IV.<get-IV>|<get-IV>(){}[0]
+    final const val KCCS // dev.kcoap.cose/CoseHeader.KCCS|{}KCCS[0]
+        final fun <get-KCCS>(): kotlin/Long // dev.kcoap.cose/CoseHeader.KCCS.<get-KCCS>|<get-KCCS>(){}[0]
+    final const val KCWT // dev.kcoap.cose/CoseHeader.KCWT|{}KCWT[0]
+        final fun <get-KCWT>(): kotlin/Long // dev.kcoap.cose/CoseHeader.KCWT.<get-KCWT>|<get-KCWT>(){}[0]
+    final const val KID // dev.kcoap.cose/CoseHeader.KID|{}KID[0]
+        final fun <get-KID>(): kotlin/Long // dev.kcoap.cose/CoseHeader.KID.<get-KID>|<get-KID>(){}[0]
+    final const val PARTIAL_IV // dev.kcoap.cose/CoseHeader.PARTIAL_IV|{}PARTIAL_IV[0]
+        final fun <get-PARTIAL_IV>(): kotlin/Long // dev.kcoap.cose/CoseHeader.PARTIAL_IV.<get-PARTIAL_IV>|<get-PARTIAL_IV>(){}[0]
+    final const val X5CHAIN // dev.kcoap.cose/CoseHeader.X5CHAIN|{}X5CHAIN[0]
+        final fun <get-X5CHAIN>(): kotlin/Long // dev.kcoap.cose/CoseHeader.X5CHAIN.<get-X5CHAIN>|<get-X5CHAIN>(){}[0]
+    final const val X5T // dev.kcoap.cose/CoseHeader.X5T|{}X5T[0]
+        final fun <get-X5T>(): kotlin/Long // dev.kcoap.cose/CoseHeader.X5T.<get-X5T>|<get-X5T>(){}[0]
+}
+
+final object dev.kcoap.cose/CoseStructures { // dev.kcoap.cose/CoseStructures|null[0]
+    final fun encStructure(kotlin/ByteArray, kotlin/ByteArray, kotlin/String = ...): kotlin/ByteArray // dev.kcoap.cose/CoseStructures.encStructure|encStructure(kotlin.ByteArray;kotlin.ByteArray;kotlin.String){}[0]
+    final fun sigStructure(kotlin/ByteArray, kotlin/ByteArray, kotlin/ByteArray, kotlin/String = ...): kotlin/ByteArray // dev.kcoap.cose/CoseStructures.sigStructure|sigStructure(kotlin.ByteArray;kotlin.ByteArray;kotlin.ByteArray;kotlin.String){}[0]
+}

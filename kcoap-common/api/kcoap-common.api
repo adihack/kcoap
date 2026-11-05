@@ -1,0 +1,176 @@
+public final class dev/kcoap/common/BytesKt {
+	public static final fun constantTimeEquals ([B[B)Z
+	public static final fun wipe ([B)V
+}
+
+public abstract interface annotation class dev/kcoap/common/ExperimentalKcoapApi : java/lang/annotation/Annotation {
+}
+
+public final class dev/kcoap/common/Hex {
+	public static final field INSTANCE Ldev/kcoap/common/Hex;
+	public final fun decode (Ljava/lang/String;)[B
+	public final fun encode ([B)Ljava/lang/String;
+}
+
+public final class dev/kcoap/common/HexKt {
+	public static final fun hexToBytes (Ljava/lang/String;)[B
+	public static final fun toHex ([B)Ljava/lang/String;
+}
+
+public abstract interface annotation class dev/kcoap/common/InternalKcoapApi : java/lang/annotation/Annotation {
+}
+
+public final class dev/kcoap/log/CompositeSink : dev/kcoap/log/LogSink {
+	public fun <init> (Ljava/util/List;)V
+	public fun write (Ldev/kcoap/log/LogRecord;)V
+}
+
+public final class dev/kcoap/log/ConsoleSink : dev/kcoap/log/LogSink {
+	public fun <init> ()V
+	public fun <init> (Ldev/kcoap/log/LogFormatter;)V
+	public synthetic fun <init> (Ldev/kcoap/log/LogFormatter;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun write (Ldev/kcoap/log/LogRecord;)V
+}
+
+public final class dev/kcoap/log/KcoapLogging {
+	public static final field INSTANCE Ldev/kcoap/log/KcoapLogging;
+	public final fun configure (Lkotlin/jvm/functions/Function1;)V
+	public final fun getConfig ()Ldev/kcoap/log/LogConfig;
+	public final fun logger (Ljava/lang/String;)Ldev/kcoap/log/Logger;
+	public final fun reset ()V
+	public final fun use (Ldev/kcoap/log/LogConfig;)V
+}
+
+public final class dev/kcoap/log/LogConfig {
+	public static final field Companion Ldev/kcoap/log/LogConfig$Companion;
+	public final fun getClock ()Lkotlin/time/Clock;
+	public final fun getLevel ()Ldev/kcoap/log/LogLevel;
+	public final fun getPayloadDumps ()Z
+	public final fun getSink ()Ldev/kcoap/log/LogSink;
+	public final fun levelFor (Ljava/lang/String;)Ldev/kcoap/log/LogLevel;
+	public final fun toBuilder ()Ldev/kcoap/log/LogConfig$Builder;
+}
+
+public final class dev/kcoap/log/LogConfig$Builder {
+	public final fun build ()Ldev/kcoap/log/LogConfig;
+	public final fun clearLevel (Ljava/lang/String;)Ldev/kcoap/log/LogConfig$Builder;
+	public final fun getClock ()Lkotlin/time/Clock;
+	public final fun getLevel ()Ldev/kcoap/log/LogLevel;
+	public final fun getPayloadDumps ()Z
+	public final fun getSink ()Ldev/kcoap/log/LogSink;
+	public final fun level (Ljava/lang/String;Ldev/kcoap/log/LogLevel;)Ldev/kcoap/log/LogConfig$Builder;
+	public final fun setClock (Lkotlin/time/Clock;)V
+	public final fun setLevel (Ldev/kcoap/log/LogLevel;)V
+	public final fun setPayloadDumps (Z)V
+	public final fun setSink (Ldev/kcoap/log/LogSink;)V
+}
+
+public final class dev/kcoap/log/LogConfig$Companion {
+	public final fun build (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/log/LogConfig;
+	public final fun getDefault ()Ldev/kcoap/log/LogConfig;
+}
+
+public abstract interface class dev/kcoap/log/LogFormatter {
+	public static final field Companion Ldev/kcoap/log/LogFormatter$Companion;
+	public abstract fun format (Ldev/kcoap/log/LogRecord;)Ljava/lang/String;
+}
+
+public final class dev/kcoap/log/LogFormatter$Companion {
+	public final fun getDefault ()Ldev/kcoap/log/LogFormatter;
+}
+
+public final class dev/kcoap/log/LogLevel : java/lang/Enum {
+	public static final field DEBUG Ldev/kcoap/log/LogLevel;
+	public static final field ERROR Ldev/kcoap/log/LogLevel;
+	public static final field INFO Ldev/kcoap/log/LogLevel;
+	public static final field OFF Ldev/kcoap/log/LogLevel;
+	public static final field TRACE Ldev/kcoap/log/LogLevel;
+	public static final field WARN Ldev/kcoap/log/LogLevel;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getLetter ()C
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/log/LogLevel;
+	public static fun values ()[Ldev/kcoap/log/LogLevel;
+}
+
+public final class dev/kcoap/log/LogRecord {
+	public fun <init> (Lkotlin/time/Instant;Ldev/kcoap/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Lkotlin/time/Instant;Ldev/kcoap/log/LogLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getError ()Ljava/lang/Throwable;
+	public final fun getFields ()Ljava/util/Map;
+	public final fun getLevel ()Ldev/kcoap/log/LogLevel;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getTag ()Ljava/lang/String;
+	public final fun getTimestamp ()Lkotlin/time/Instant;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/log/LogSink {
+	public static final field Companion Ldev/kcoap/log/LogSink$Companion;
+	public abstract fun write (Ldev/kcoap/log/LogRecord;)V
+}
+
+public final class dev/kcoap/log/LogSink$Companion {
+	public final fun getNone ()Ldev/kcoap/log/LogSink;
+}
+
+public final class dev/kcoap/log/LogSinkKt {
+	public static final fun atLeast (Ldev/kcoap/log/LogSink;Ldev/kcoap/log/LogLevel;)Ldev/kcoap/log/LogSink;
+	public static final fun plus (Ldev/kcoap/log/LogSink;Ldev/kcoap/log/LogSink;)Ldev/kcoap/log/LogSink;
+}
+
+public final class dev/kcoap/log/LogTags {
+	public static final field COAP Ljava/lang/String;
+	public static final field COAP_CLIENT Ljava/lang/String;
+	public static final field COAP_EXCHANGE Ljava/lang/String;
+	public static final field COAP_MESSAGE Ljava/lang/String;
+	public static final field COAP_SERVER Ljava/lang/String;
+	public static final field CRYPTO Ljava/lang/String;
+	public static final field DTLS Ljava/lang/String;
+	public static final field EDHOC Ljava/lang/String;
+	public static final field INSTANCE Ldev/kcoap/log/LogTags;
+	public static final field OSCORE Ljava/lang/String;
+	public static final field TRANSPORT Ljava/lang/String;
+}
+
+public final class dev/kcoap/log/Logger {
+	public final fun child (Ljava/lang/String;)Ldev/kcoap/log/Logger;
+	public final fun debug (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)V
+	public static synthetic fun debug$default (Ldev/kcoap/log/Logger;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)V
+	public final fun emit (Ldev/kcoap/log/LogLevel;Ljava/lang/String;Ljava/lang/Throwable;)V
+	public final fun error (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)V
+	public static synthetic fun error$default (Ldev/kcoap/log/Logger;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)V
+	public final fun getConfig ()Ldev/kcoap/log/LogConfig;
+	public final fun getTag ()Ljava/lang/String;
+	public final fun info (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)V
+	public static synthetic fun info$default (Ldev/kcoap/log/Logger;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)V
+	public final fun isEnabled (Ldev/kcoap/log/LogLevel;)Z
+	public final fun payload ([B)Ljava/lang/String;
+	public final fun trace (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)V
+	public static synthetic fun trace$default (Ldev/kcoap/log/Logger;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)V
+	public final fun warn (Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;)V
+	public static synthetic fun warn$default (Ldev/kcoap/log/Logger;Ljava/lang/Throwable;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)V
+	public final fun with ([Lkotlin/Pair;)Ldev/kcoap/log/Logger;
+}
+
+public final class dev/kcoap/log/LoggerFactory {
+	public static final field Companion Ldev/kcoap/log/LoggerFactory$Companion;
+	public fun <init> (Ldev/kcoap/log/LogConfig;)V
+	public fun <init> (Lkotlin/jvm/functions/Function0;)V
+	public final fun logger (Ljava/lang/String;)Ldev/kcoap/log/Logger;
+}
+
+public final class dev/kcoap/log/LoggerFactory$Companion {
+	public final fun getGlobal ()Ldev/kcoap/log/LoggerFactory;
+}
+
+public final class dev/kcoap/log/RingBufferSink : dev/kcoap/log/LogSink {
+	public fun <init> (I)V
+	public final fun clear ()V
+	public final fun dump (Ldev/kcoap/log/LogFormatter;)Ljava/lang/String;
+	public static synthetic fun dump$default (Ldev/kcoap/log/RingBufferSink;Ldev/kcoap/log/LogFormatter;ILjava/lang/Object;)Ljava/lang/String;
+	public final fun getCapacity ()I
+	public final fun getDropped ()J
+	public final fun snapshot ()Ljava/util/List;
+	public fun write (Ldev/kcoap/log/LogRecord;)V
+}
+

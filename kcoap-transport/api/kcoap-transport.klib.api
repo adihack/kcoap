@@ -1,0 +1,353 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-transport>
+final enum class dev.kcoap.transport/ChannelSecurityKind : kotlin/Enum<dev.kcoap.transport/ChannelSecurityKind> { // dev.kcoap.transport/ChannelSecurityKind|null[0]
+    enum entry DTLS // dev.kcoap.transport/ChannelSecurityKind.DTLS|null[0]
+    enum entry NONE // dev.kcoap.transport/ChannelSecurityKind.NONE|null[0]
+    enum entry TLS // dev.kcoap.transport/ChannelSecurityKind.TLS|null[0]
+
+    final val entries // dev.kcoap.transport/ChannelSecurityKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.transport/ChannelSecurityKind> // dev.kcoap.transport/ChannelSecurityKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.transport/ChannelSecurityKind // dev.kcoap.transport/ChannelSecurityKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.transport/ChannelSecurityKind> // dev.kcoap.transport/ChannelSecurityKind.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.transport/CoapScheme : kotlin/Enum<dev.kcoap.transport/CoapScheme> { // dev.kcoap.transport/CoapScheme|null[0]
+    enum entry COAP // dev.kcoap.transport/CoapScheme.COAP|null[0]
+    enum entry COAPS // dev.kcoap.transport/CoapScheme.COAPS|null[0]
+    enum entry COAPS_TCP // dev.kcoap.transport/CoapScheme.COAPS_TCP|null[0]
+    enum entry COAPS_WS // dev.kcoap.transport/CoapScheme.COAPS_WS|null[0]
+    enum entry COAP_TCP // dev.kcoap.transport/CoapScheme.COAP_TCP|null[0]
+    enum entry COAP_WS // dev.kcoap.transport/CoapScheme.COAP_WS|null[0]
+
+    final val defaultPort // dev.kcoap.transport/CoapScheme.defaultPort|{}defaultPort[0]
+        final fun <get-defaultPort>(): kotlin/Int // dev.kcoap.transport/CoapScheme.defaultPort.<get-defaultPort>|<get-defaultPort>(){}[0]
+    final val entries // dev.kcoap.transport/CoapScheme.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.transport/CoapScheme> // dev.kcoap.transport/CoapScheme.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val kind // dev.kcoap.transport/CoapScheme.kind|{}kind[0]
+        final fun <get-kind>(): dev.kcoap.transport/TransportKind // dev.kcoap.transport/CoapScheme.kind.<get-kind>|<get-kind>(){}[0]
+    final val reference // dev.kcoap.transport/CoapScheme.reference|{}reference[0]
+        final fun <get-reference>(): kotlin/String // dev.kcoap.transport/CoapScheme.reference.<get-reference>|<get-reference>(){}[0]
+    final val scheme // dev.kcoap.transport/CoapScheme.scheme|{}scheme[0]
+        final fun <get-scheme>(): kotlin/String // dev.kcoap.transport/CoapScheme.scheme.<get-scheme>|<get-scheme>(){}[0]
+    final val security // dev.kcoap.transport/CoapScheme.security|{}security[0]
+        final fun <get-security>(): dev.kcoap.transport/ChannelSecurityKind // dev.kcoap.transport/CoapScheme.security.<get-security>|<get-security>(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.transport/CoapScheme // dev.kcoap.transport/CoapScheme.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.transport/CoapScheme> // dev.kcoap.transport/CoapScheme.values|values#static(){}[0]
+
+    final object Companion { // dev.kcoap.transport/CoapScheme.Companion|null[0]
+        final const val ALPN // dev.kcoap.transport/CoapScheme.Companion.ALPN|{}ALPN[0]
+            final fun <get-ALPN>(): kotlin/String // dev.kcoap.transport/CoapScheme.Companion.ALPN.<get-ALPN>|<get-ALPN>(){}[0]
+        final const val WEBSOCKET_PATH // dev.kcoap.transport/CoapScheme.Companion.WEBSOCKET_PATH|{}WEBSOCKET_PATH[0]
+            final fun <get-WEBSOCKET_PATH>(): kotlin/String // dev.kcoap.transport/CoapScheme.Companion.WEBSOCKET_PATH.<get-WEBSOCKET_PATH>|<get-WEBSOCKET_PATH>(){}[0]
+        final const val WEBSOCKET_SUBPROTOCOL // dev.kcoap.transport/CoapScheme.Companion.WEBSOCKET_SUBPROTOCOL|{}WEBSOCKET_SUBPROTOCOL[0]
+            final fun <get-WEBSOCKET_SUBPROTOCOL>(): kotlin/String // dev.kcoap.transport/CoapScheme.Companion.WEBSOCKET_SUBPROTOCOL.<get-WEBSOCKET_SUBPROTOCOL>|<get-WEBSOCKET_SUBPROTOCOL>(){}[0]
+
+        final fun fromScheme(kotlin/String): dev.kcoap.transport/CoapScheme? // dev.kcoap.transport/CoapScheme.Companion.fromScheme|fromScheme(kotlin.String){}[0]
+    }
+}
+
+final enum class dev.kcoap.transport/SecurityMode : kotlin/Enum<dev.kcoap.transport/SecurityMode> { // dev.kcoap.transport/SecurityMode|null[0]
+    enum entry CERTIFICATE // dev.kcoap.transport/SecurityMode.CERTIFICATE|null[0]
+    enum entry NO_SEC // dev.kcoap.transport/SecurityMode.NO_SEC|null[0]
+    enum entry PRE_SHARED_KEY // dev.kcoap.transport/SecurityMode.PRE_SHARED_KEY|null[0]
+    enum entry RAW_PUBLIC_KEY // dev.kcoap.transport/SecurityMode.RAW_PUBLIC_KEY|null[0]
+
+    final val entries // dev.kcoap.transport/SecurityMode.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.transport/SecurityMode> // dev.kcoap.transport/SecurityMode.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val isMandatoryToImplement // dev.kcoap.transport/SecurityMode.isMandatoryToImplement|{}isMandatoryToImplement[0]
+        final fun <get-isMandatoryToImplement>(): kotlin/Boolean // dev.kcoap.transport/SecurityMode.isMandatoryToImplement.<get-isMandatoryToImplement>|<get-isMandatoryToImplement>(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/SecurityMode.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.transport/SecurityMode> // dev.kcoap.transport/SecurityMode.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.transport/SessionEndReason : kotlin/Enum<dev.kcoap.transport/SessionEndReason> { // dev.kcoap.transport/SessionEndReason|null[0]
+    enum entry ALERT // dev.kcoap.transport/SessionEndReason.ALERT|null[0]
+    enum entry CLOSED_BY_PEER // dev.kcoap.transport/SessionEndReason.CLOSED_BY_PEER|null[0]
+    enum entry CLOSED_LOCALLY // dev.kcoap.transport/SessionEndReason.CLOSED_LOCALLY|null[0]
+    enum entry REPLACED // dev.kcoap.transport/SessionEndReason.REPLACED|null[0]
+    enum entry TIMEOUT // dev.kcoap.transport/SessionEndReason.TIMEOUT|null[0]
+
+    final val entries // dev.kcoap.transport/SessionEndReason.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.transport/SessionEndReason> // dev.kcoap.transport/SessionEndReason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.transport/SessionEndReason // dev.kcoap.transport/SessionEndReason.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.transport/SessionEndReason> // dev.kcoap.transport/SessionEndReason.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.transport/TransportKind : kotlin/Enum<dev.kcoap.transport/TransportKind> { // dev.kcoap.transport/TransportKind|null[0]
+    enum entry BYTE_STREAM // dev.kcoap.transport/TransportKind.BYTE_STREAM|null[0]
+    enum entry DATAGRAM // dev.kcoap.transport/TransportKind.DATAGRAM|null[0]
+    enum entry MESSAGE_STREAM // dev.kcoap.transport/TransportKind.MESSAGE_STREAM|null[0]
+
+    final val entries // dev.kcoap.transport/TransportKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.transport/TransportKind> // dev.kcoap.transport/TransportKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.transport/TransportKind // dev.kcoap.transport/TransportKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.transport/TransportKind> // dev.kcoap.transport/TransportKind.values|values#static(){}[0]
+}
+
+abstract interface dev.kcoap.transport/ByteStreamConnection : dev.kcoap.transport/Connection { // dev.kcoap.transport/ByteStreamConnection|null[0]
+    abstract val peerIdentity // dev.kcoap.transport/ByteStreamConnection.peerIdentity|{}peerIdentity[0]
+        abstract fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.transport/ByteStreamConnection.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    abstract val remote // dev.kcoap.transport/ByteStreamConnection.remote|{}remote[0]
+        abstract fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport/ByteStreamConnection.remote.<get-remote>|<get-remote>(){}[0]
+
+    abstract suspend fun close() // dev.kcoap.transport/ByteStreamConnection.close|close(){}[0]
+    abstract suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // dev.kcoap.transport/ByteStreamConnection.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    abstract suspend fun write(kotlin/ByteArray) // dev.kcoap.transport/ByteStreamConnection.write|write(kotlin.ByteArray){}[0]
+}
+
+abstract interface dev.kcoap.transport/ConnectionListener { // dev.kcoap.transport/ConnectionListener|null[0]
+    abstract val scheme // dev.kcoap.transport/ConnectionListener.scheme|{}scheme[0]
+        abstract fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.transport/ConnectionListener.scheme.<get-scheme>|<get-scheme>(){}[0]
+
+    abstract suspend fun accept(): dev.kcoap.transport/Connection? // dev.kcoap.transport/ConnectionListener.accept|accept(){}[0]
+    abstract suspend fun close() // dev.kcoap.transport/ConnectionListener.close|close(){}[0]
+}
+
+abstract interface dev.kcoap.transport/Connector { // dev.kcoap.transport/Connector|null[0]
+    abstract val schemes // dev.kcoap.transport/Connector.schemes|{}schemes[0]
+        abstract fun <get-schemes>(): kotlin.collections/Set<dev.kcoap.transport/CoapScheme> // dev.kcoap.transport/Connector.schemes.<get-schemes>|<get-schemes>(){}[0]
+
+    abstract suspend fun connect(dev.kcoap.transport/Endpoint): dev.kcoap.transport/Connection // dev.kcoap.transport/Connector.connect|connect(dev.kcoap.transport.Endpoint){}[0]
+    open suspend fun close() // dev.kcoap.transport/Connector.close|close(){}[0]
+}
+
+abstract interface dev.kcoap.transport/DatagramSecurity { // dev.kcoap.transport/DatagramSecurity|null[0]
+    abstract val modes // dev.kcoap.transport/DatagramSecurity.modes|{}modes[0]
+        abstract fun <get-modes>(): kotlin.collections/Set<dev.kcoap.transport/SecurityMode> // dev.kcoap.transport/DatagramSecurity.modes.<get-modes>|<get-modes>(){}[0]
+
+    abstract fun secure(dev.kcoap.transport/DatagramTransport): dev.kcoap.transport/DatagramTransport // dev.kcoap.transport/DatagramSecurity.secure|secure(dev.kcoap.transport.DatagramTransport){}[0]
+}
+
+abstract interface dev.kcoap.transport/DatagramTransport { // dev.kcoap.transport/DatagramTransport|null[0]
+    abstract val maxDatagramSize // dev.kcoap.transport/DatagramTransport.maxDatagramSize|{}maxDatagramSize[0]
+        abstract fun <get-maxDatagramSize>(): kotlin/Int // dev.kcoap.transport/DatagramTransport.maxDatagramSize.<get-maxDatagramSize>|<get-maxDatagramSize>(){}[0]
+
+    abstract suspend fun close() // dev.kcoap.transport/DatagramTransport.close|close(){}[0]
+    abstract suspend fun receive(): dev.kcoap.transport/DatagramEvent // dev.kcoap.transport/DatagramTransport.receive|receive(){}[0]
+    abstract suspend fun send(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.transport/DatagramTransport.send|send(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+}
+
+abstract interface dev.kcoap.transport/MessageConnection : dev.kcoap.transport/Connection { // dev.kcoap.transport/MessageConnection|null[0]
+    abstract val peerIdentity // dev.kcoap.transport/MessageConnection.peerIdentity|{}peerIdentity[0]
+        abstract fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.transport/MessageConnection.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    abstract val remote // dev.kcoap.transport/MessageConnection.remote|{}remote[0]
+        abstract fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport/MessageConnection.remote.<get-remote>|<get-remote>(){}[0]
+
+    abstract suspend fun close() // dev.kcoap.transport/MessageConnection.close|close(){}[0]
+    abstract suspend fun receive(): kotlin/ByteArray? // dev.kcoap.transport/MessageConnection.receive|receive(){}[0]
+    abstract suspend fun send(kotlin/ByteArray) // dev.kcoap.transport/MessageConnection.send|send(kotlin.ByteArray){}[0]
+}
+
+sealed interface dev.kcoap.transport/Connection { // dev.kcoap.transport/Connection|null[0]
+    abstract val peerIdentity // dev.kcoap.transport/Connection.peerIdentity|{}peerIdentity[0]
+        abstract fun <get-peerIdentity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.transport/Connection.peerIdentity.<get-peerIdentity>|<get-peerIdentity>(){}[0]
+    abstract val remote // dev.kcoap.transport/Connection.remote|{}remote[0]
+        abstract fun <get-remote>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport/Connection.remote.<get-remote>|<get-remote>(){}[0]
+
+    abstract suspend fun close() // dev.kcoap.transport/Connection.close|close(){}[0]
+}
+
+sealed interface dev.kcoap.transport/DatagramEvent { // dev.kcoap.transport/DatagramEvent|null[0]
+    final class Received : dev.kcoap.transport/DatagramEvent { // dev.kcoap.transport/DatagramEvent.Received|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.transport/DatagramEvent.Received.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
+
+        final val datagram // dev.kcoap.transport/DatagramEvent.Received.datagram|{}datagram[0]
+            final fun <get-datagram>(): kotlin/ByteArray // dev.kcoap.transport/DatagramEvent.Received.datagram.<get-datagram>|<get-datagram>(){}[0]
+        final val from // dev.kcoap.transport/DatagramEvent.Received.from|{}from[0]
+            final fun <get-from>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport/DatagramEvent.Received.from.<get-from>|<get-from>(){}[0]
+    }
+
+    final class SessionEnded : dev.kcoap.transport/DatagramEvent { // dev.kcoap.transport/DatagramEvent.SessionEnded|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint.Secure, dev.kcoap.transport/SessionEndReason) // dev.kcoap.transport/DatagramEvent.SessionEnded.<init>|<init>(dev.kcoap.transport.Endpoint.Secure;dev.kcoap.transport.SessionEndReason){}[0]
+
+        final val endpoint // dev.kcoap.transport/DatagramEvent.SessionEnded.endpoint|{}endpoint[0]
+            final fun <get-endpoint>(): dev.kcoap.transport/Endpoint.Secure // dev.kcoap.transport/DatagramEvent.SessionEnded.endpoint.<get-endpoint>|<get-endpoint>(){}[0]
+        final val reason // dev.kcoap.transport/DatagramEvent.SessionEnded.reason|{}reason[0]
+            final fun <get-reason>(): dev.kcoap.transport/SessionEndReason // dev.kcoap.transport/DatagramEvent.SessionEnded.reason.<get-reason>|<get-reason>(){}[0]
+    }
+}
+
+sealed interface dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint|null[0]
+    final class Opaque : dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint.Opaque|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // dev.kcoap.transport/Endpoint.Opaque.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val address // dev.kcoap.transport/Endpoint.Opaque.address|{}address[0]
+            final fun <get-address>(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.address.<get-address>|<get-address>(){}[0]
+        final val link // dev.kcoap.transport/Endpoint.Opaque.link|{}link[0]
+            final fun <get-link>(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.link.<get-link>|<get-link>(){}[0]
+
+        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.component1|component1(){}[0]
+        final fun component2(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): dev.kcoap.transport/Endpoint.Opaque // dev.kcoap.transport/Endpoint.Opaque.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Opaque.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Opaque.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.toString|toString(){}[0]
+    }
+
+    final class Secure : dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint.Secure|null[0]
+        constructor <init>(dev.kcoap.transport/SessionId, kotlin/Int, dev.kcoap.transport/Endpoint, dev.kcoap.transport/PeerIdentity) // dev.kcoap.transport/Endpoint.Secure.<init>|<init>(dev.kcoap.transport.SessionId;kotlin.Int;dev.kcoap.transport.Endpoint;dev.kcoap.transport.PeerIdentity){}[0]
+
+        final val epoch // dev.kcoap.transport/Endpoint.Secure.epoch|{}epoch[0]
+            final fun <get-epoch>(): kotlin/Int // dev.kcoap.transport/Endpoint.Secure.epoch.<get-epoch>|<get-epoch>(){}[0]
+        final val identity // dev.kcoap.transport/Endpoint.Secure.identity|{}identity[0]
+            final fun <get-identity>(): dev.kcoap.transport/PeerIdentity // dev.kcoap.transport/Endpoint.Secure.identity.<get-identity>|<get-identity>(){}[0]
+        final val session // dev.kcoap.transport/Endpoint.Secure.session|{}session[0]
+            final fun <get-session>(): dev.kcoap.transport/SessionId // dev.kcoap.transport/Endpoint.Secure.session.<get-session>|<get-session>(){}[0]
+        final val via // dev.kcoap.transport/Endpoint.Secure.via|{}via[0]
+            final fun <get-via>(): dev.kcoap.transport/Endpoint // dev.kcoap.transport/Endpoint.Secure.via.<get-via>|<get-via>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Secure.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Secure.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Secure.toString|toString(){}[0]
+    }
+
+    final class Tcp : dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint.Tcp|null[0]
+        constructor <init>(kotlin/String, kotlin/Int, kotlin/Boolean = ...) // dev.kcoap.transport/Endpoint.Tcp.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Boolean){}[0]
+
+        final val host // dev.kcoap.transport/Endpoint.Tcp.host|{}host[0]
+            final fun <get-host>(): kotlin/String // dev.kcoap.transport/Endpoint.Tcp.host.<get-host>|<get-host>(){}[0]
+        final val port // dev.kcoap.transport/Endpoint.Tcp.port|{}port[0]
+            final fun <get-port>(): kotlin/Int // dev.kcoap.transport/Endpoint.Tcp.port.<get-port>|<get-port>(){}[0]
+        final val scheme // dev.kcoap.transport/Endpoint.Tcp.scheme|{}scheme[0]
+            final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.transport/Endpoint.Tcp.scheme.<get-scheme>|<get-scheme>(){}[0]
+        final val usesTls // dev.kcoap.transport/Endpoint.Tcp.usesTls|{}usesTls[0]
+            final fun <get-usesTls>(): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.usesTls.<get-usesTls>|<get-usesTls>(){}[0]
+
+        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Tcp.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // dev.kcoap.transport/Endpoint.Tcp.component2|component2(){}[0]
+        final fun component3(): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Int = ..., kotlin/Boolean = ...): dev.kcoap.transport/Endpoint.Tcp // dev.kcoap.transport/Endpoint.Tcp.copy|copy(kotlin.String;kotlin.Int;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Tcp.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Tcp.toString|toString(){}[0]
+    }
+
+    final class Udp : dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint.Udp|null[0]
+        constructor <init>(kotlin/String, kotlin/Int) // dev.kcoap.transport/Endpoint.Udp.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+        final val host // dev.kcoap.transport/Endpoint.Udp.host|{}host[0]
+            final fun <get-host>(): kotlin/String // dev.kcoap.transport/Endpoint.Udp.host.<get-host>|<get-host>(){}[0]
+        final val port // dev.kcoap.transport/Endpoint.Udp.port|{}port[0]
+            final fun <get-port>(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.port.<get-port>|<get-port>(){}[0]
+
+        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Udp.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Int = ...): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.transport/Endpoint.Udp.copy|copy(kotlin.String;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Udp.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Udp.toString|toString(){}[0]
+    }
+
+    final class WebSocket : dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint.WebSocket|null[0]
+        constructor <init>(kotlin/String) // dev.kcoap.transport/Endpoint.WebSocket.<init>|<init>(kotlin.String){}[0]
+
+        final val scheme // dev.kcoap.transport/Endpoint.WebSocket.scheme|{}scheme[0]
+            final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.transport/Endpoint.WebSocket.scheme.<get-scheme>|<get-scheme>(){}[0]
+        final val uri // dev.kcoap.transport/Endpoint.WebSocket.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // dev.kcoap.transport/Endpoint.WebSocket.uri.<get-uri>|<get-uri>(){}[0]
+        final val usesTls // dev.kcoap.transport/Endpoint.WebSocket.usesTls|{}usesTls[0]
+            final fun <get-usesTls>(): kotlin/Boolean // dev.kcoap.transport/Endpoint.WebSocket.usesTls.<get-usesTls>|<get-usesTls>(){}[0]
+
+        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.WebSocket.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): dev.kcoap.transport/Endpoint.WebSocket // dev.kcoap.transport/Endpoint.WebSocket.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.WebSocket.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.WebSocket.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.WebSocket.toString|toString(){}[0]
+
+        final object Companion { // dev.kcoap.transport/Endpoint.WebSocket.Companion|null[0]
+            final fun of(kotlin/String, kotlin/Int, kotlin/Boolean = ...): dev.kcoap.transport/Endpoint.WebSocket // dev.kcoap.transport/Endpoint.WebSocket.Companion.of|of(kotlin.String;kotlin.Int;kotlin.Boolean){}[0]
+        }
+    }
+}
+
+sealed interface dev.kcoap.transport/PeerIdentity { // dev.kcoap.transport/PeerIdentity|null[0]
+    abstract val mode // dev.kcoap.transport/PeerIdentity.mode|{}mode[0]
+        abstract fun <get-mode>(): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/PeerIdentity.mode.<get-mode>|<get-mode>(){}[0]
+
+    final class Certificate : dev.kcoap.transport/PeerIdentity { // dev.kcoap.transport/PeerIdentity.Certificate|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/ByteArray>) // dev.kcoap.transport/PeerIdentity.Certificate.<init>|<init>(kotlin.collections.List<kotlin.ByteArray>){}[0]
+
+        final val chain // dev.kcoap.transport/PeerIdentity.Certificate.chain|{}chain[0]
+            final fun <get-chain>(): kotlin.collections/List<kotlin/ByteArray> // dev.kcoap.transport/PeerIdentity.Certificate.chain.<get-chain>|<get-chain>(){}[0]
+        final val mode // dev.kcoap.transport/PeerIdentity.Certificate.mode|{}mode[0]
+            final fun <get-mode>(): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/PeerIdentity.Certificate.mode.<get-mode>|<get-mode>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/PeerIdentity.Certificate.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/PeerIdentity.Certificate.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/PeerIdentity.Certificate.toString|toString(){}[0]
+    }
+
+    final class PreSharedKey : dev.kcoap.transport/PeerIdentity { // dev.kcoap.transport/PeerIdentity.PreSharedKey|null[0]
+        constructor <init>(kotlin/ByteArray) // dev.kcoap.transport/PeerIdentity.PreSharedKey.<init>|<init>(kotlin.ByteArray){}[0]
+
+        final val identity // dev.kcoap.transport/PeerIdentity.PreSharedKey.identity|{}identity[0]
+            final fun <get-identity>(): kotlin/ByteArray // dev.kcoap.transport/PeerIdentity.PreSharedKey.identity.<get-identity>|<get-identity>(){}[0]
+        final val mode // dev.kcoap.transport/PeerIdentity.PreSharedKey.mode|{}mode[0]
+            final fun <get-mode>(): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/PeerIdentity.PreSharedKey.mode.<get-mode>|<get-mode>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/PeerIdentity.PreSharedKey.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/PeerIdentity.PreSharedKey.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/PeerIdentity.PreSharedKey.toString|toString(){}[0]
+    }
+
+    final class RawPublicKey : dev.kcoap.transport/PeerIdentity { // dev.kcoap.transport/PeerIdentity.RawPublicKey|null[0]
+        constructor <init>(kotlin/ByteArray) // dev.kcoap.transport/PeerIdentity.RawPublicKey.<init>|<init>(kotlin.ByteArray){}[0]
+
+        final val mode // dev.kcoap.transport/PeerIdentity.RawPublicKey.mode|{}mode[0]
+            final fun <get-mode>(): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/PeerIdentity.RawPublicKey.mode.<get-mode>|<get-mode>(){}[0]
+        final val subjectPublicKeyInfo // dev.kcoap.transport/PeerIdentity.RawPublicKey.subjectPublicKeyInfo|{}subjectPublicKeyInfo[0]
+            final fun <get-subjectPublicKeyInfo>(): kotlin/ByteArray // dev.kcoap.transport/PeerIdentity.RawPublicKey.subjectPublicKeyInfo.<get-subjectPublicKeyInfo>|<get-subjectPublicKeyInfo>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/PeerIdentity.RawPublicKey.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/PeerIdentity.RawPublicKey.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/PeerIdentity.RawPublicKey.toString|toString(){}[0]
+    }
+
+    final object None : dev.kcoap.transport/PeerIdentity { // dev.kcoap.transport/PeerIdentity.None|null[0]
+        final val mode // dev.kcoap.transport/PeerIdentity.None.mode|{}mode[0]
+            final fun <get-mode>(): dev.kcoap.transport/SecurityMode // dev.kcoap.transport/PeerIdentity.None.mode.<get-mode>|<get-mode>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/PeerIdentity.None.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.transport/PeerIdentity.None.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.transport/PeerIdentity.None.toString|toString(){}[0]
+    }
+}
+
+final class dev.kcoap.transport/SessionEndedException : kotlin/Exception { // dev.kcoap.transport/SessionEndedException|null[0]
+    constructor <init>(dev.kcoap.transport/Endpoint.Secure, dev.kcoap.transport/SessionEndReason) // dev.kcoap.transport/SessionEndedException.<init>|<init>(dev.kcoap.transport.Endpoint.Secure;dev.kcoap.transport.SessionEndReason){}[0]
+
+    final val endpoint // dev.kcoap.transport/SessionEndedException.endpoint|{}endpoint[0]
+        final fun <get-endpoint>(): dev.kcoap.transport/Endpoint.Secure // dev.kcoap.transport/SessionEndedException.endpoint.<get-endpoint>|<get-endpoint>(){}[0]
+    final val reason // dev.kcoap.transport/SessionEndedException.reason|{}reason[0]
+        final fun <get-reason>(): dev.kcoap.transport/SessionEndReason // dev.kcoap.transport/SessionEndedException.reason.<get-reason>|<get-reason>(){}[0]
+}
+
+final class dev.kcoap.transport/SessionId { // dev.kcoap.transport/SessionId|null[0]
+    constructor <init>(kotlin/Long) // dev.kcoap.transport/SessionId.<init>|<init>(kotlin.Long){}[0]
+
+    final val value // dev.kcoap.transport/SessionId.value|{}value[0]
+        final fun <get-value>(): kotlin/Long // dev.kcoap.transport/SessionId.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Long // dev.kcoap.transport/SessionId.component1|component1(){}[0]
+    final fun copy(kotlin/Long = ...): dev.kcoap.transport/SessionId // dev.kcoap.transport/SessionId.copy|copy(kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/SessionId.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.transport/SessionId.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.transport/SessionId.toString|toString(){}[0]
+}
+
+final object dev.kcoap.transport/IpLiteral { // dev.kcoap.transport/IpLiteral|null[0]
+    final fun canonical(kotlin/String): kotlin/String? // dev.kcoap.transport/IpLiteral.canonical|canonical(kotlin.String){}[0]
+    final fun format(kotlin/ByteArray): kotlin/String // dev.kcoap.transport/IpLiteral.format|format(kotlin.ByteArray){}[0]
+    final fun parse(kotlin/String): kotlin/ByteArray? // dev.kcoap.transport/IpLiteral.parse|parse(kotlin.String){}[0]
+}

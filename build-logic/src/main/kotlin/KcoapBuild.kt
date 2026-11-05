@@ -8,6 +8,7 @@ import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsTargetDsl
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
@@ -41,7 +42,7 @@ enum class KcoapTargets {
 
 /**
  * kcoap's plumbing between its own modules (`dev.kcoap.common.InternalKcoapApi`). Every kcoap module
- * opts in; applications would have to opt in explicitly.
+ * opts in, and the ABI dumps leave it out; applications would have to opt in explicitly.
  */
 const val INTERNAL_API_MARKER: String = "dev.kcoap.common.InternalKcoapApi"
 
@@ -50,7 +51,8 @@ const val UNPUBLISHED_PLUGIN: String = "kcoap.unpublished"
 
 /**
  * Settings shared by every kcoap library module: targets, explicit API, the internal-API opt-in, JVM
- * level and test setup. Then, unless [UNPUBLISHED_PLUGIN] was applied first, publishing.
+ * level and test setup. Then, unless [UNPUBLISHED_PLUGIN] was applied first, publishing and the ABI
+ * dumps of the public API.
  */
 fun Project.configureKcoapLibrary(targets: KcoapTargets) {
     group = providers.gradleProperty("kcoap.group").get()
@@ -133,6 +135,29 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
     // must already be applied: it fails the build if publishing comes first.
     if (!pluginManager.hasPlugin(UNPUBLISHED_PLUGIN)) {
         pluginManager.apply("kcoap.publishing")
+        multiplatform.validateAbi()
+    }
+}
+
+/**
+ * Turns on the Kotlin Gradle plugin's ABI validation: `checkKotlinAbi` (part of `check`) compares the
+ * public API with the dumps committed under `api/`, and `updateKotlinAbi` rewrites them. The dumps cover
+ * the JVM class files and the klibs of every other target. Declarations marked [INTERNAL_API_MARKER]
+ * are left out.
+ *
+ * A host that cannot build a target keeps that target's entries from the committed klib dump instead
+ * of dropping them, so a dump updated on Linux still lists the Apple targets. Linux builds Apple klibs
+ * today (klib cross-compilation); docs/releasing.md says how to refresh them on macOS when it cannot.
+ */
+@OptIn(ExperimentalAbiValidation::class)
+private fun KotlinMultiplatformExtension.validateAbi() {
+    abiValidation {
+        keepLocallyUnsupportedTargets.set(true)
+        filters {
+            exclude {
+                annotatedWith.add(INTERNAL_API_MARKER)
+            }
+        }
     }
 }
 

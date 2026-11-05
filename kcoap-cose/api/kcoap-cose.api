@@ -1,0 +1,101 @@
+public final class dev/kcoap/cose/CoseCurve : java/lang/Enum {
+	public static final field Companion Ldev/kcoap/cose/CoseCurve$Companion;
+	public static final field ED25519 Ldev/kcoap/cose/CoseCurve;
+	public static final field P_256 Ldev/kcoap/cose/CoseCurve;
+	public static final field P_384 Ldev/kcoap/cose/CoseCurve;
+	public static final field X25519 Ldev/kcoap/cose/CoseCurve;
+	public static final field X448 Ldev/kcoap/cose/CoseCurve;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getValue ()I
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/cose/CoseCurve;
+	public static fun values ()[Ldev/kcoap/cose/CoseCurve;
+}
+
+public final class dev/kcoap/cose/CoseCurve$Companion {
+	public final fun fromValue (I)Ldev/kcoap/cose/CoseCurve;
+}
+
+public final class dev/kcoap/cose/CoseHeader {
+	public static final field ALG J
+	public static final field CONTENT_TYPE J
+	public static final field CRIT J
+	public static final field INSTANCE Ldev/kcoap/cose/CoseHeader;
+	public static final field IV J
+	public static final field KCCS J
+	public static final field KCWT J
+	public static final field KID J
+	public static final field PARTIAL_IV J
+	public static final field X5CHAIN J
+	public static final field X5T J
+}
+
+public final class dev/kcoap/cose/CoseKey {
+	public static final field Companion Ldev/kcoap/cose/CoseKey$Companion;
+	public static final field LABEL_AKP_PUB I
+	public static final field LABEL_ALG I
+	public static final field LABEL_CRV I
+	public static final field LABEL_KID I
+	public static final field LABEL_KTY I
+	public static final field LABEL_X I
+	public static final field LABEL_Y I
+	public fun <init> (Ldev/kcoap/cose/CoseKeyType;Ldev/kcoap/cose/CoseCurve;[B[B[BLjava/lang/Integer;)V
+	public synthetic fun <init> (Ldev/kcoap/cose/CoseKeyType;Ldev/kcoap/cose/CoseCurve;[B[B[BLjava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun encode ()[B
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAlgorithm ()Ljava/lang/Integer;
+	public final fun getCurve ()Ldev/kcoap/cose/CoseCurve;
+	public final fun getKeyType ()Ldev/kcoap/cose/CoseKeyType;
+	public final fun getKid ()[B
+	public final fun getX ()[B
+	public final fun getY ()[B
+	public fun hashCode ()I
+	public final fun rawPublicKey ()[B
+	public final fun toCbor ()Ldev/kcoap/cbor/CborMap;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/cose/CoseKey$Companion {
+	public final fun fromCbor (Ldev/kcoap/cbor/CborMap;)Ldev/kcoap/cose/CoseKey;
+}
+
+public final class dev/kcoap/cose/CoseKeyType : java/lang/Enum {
+	public static final field AKP Ldev/kcoap/cose/CoseKeyType;
+	public static final field Companion Ldev/kcoap/cose/CoseKeyType$Companion;
+	public static final field EC2 Ldev/kcoap/cose/CoseKeyType;
+	public static final field OKP Ldev/kcoap/cose/CoseKeyType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()I
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/cose/CoseKeyType;
+	public static fun values ()[Ldev/kcoap/cose/CoseKeyType;
+}
+
+public final class dev/kcoap/cose/CoseKeyType$Companion {
+	public final fun fromValue (I)Ldev/kcoap/cose/CoseKeyType;
+}
+
+public final class dev/kcoap/cose/CoseStructures {
+	public static final field INSTANCE Ldev/kcoap/cose/CoseStructures;
+	public final fun encStructure ([B[BLjava/lang/String;)[B
+	public static synthetic fun encStructure$default (Ldev/kcoap/cose/CoseStructures;[B[BLjava/lang/String;ILjava/lang/Object;)[B
+	public final fun sigStructure ([B[B[BLjava/lang/String;)[B
+	public static synthetic fun sigStructure$default (Ldev/kcoap/cose/CoseStructures;[B[B[BLjava/lang/String;ILjava/lang/Object;)[B
+}
+
+public final class dev/kcoap/cose/CwtClaimsSet {
+	public static final field CLAIM_CNF I
+	public static final field CLAIM_SUBJECT I
+	public static final field CNF_COSE_KEY I
+	public static final field Companion Ldev/kcoap/cose/CwtClaimsSet$Companion;
+	public fun <init> (Ljava/lang/String;Ldev/kcoap/cose/CoseKey;)V
+	public final fun getConfirmationKey ()Ldev/kcoap/cose/CoseKey;
+	public final fun getEncoded ()[B
+	public final fun getSubject ()Ljava/lang/String;
+	public final fun toCbor ()Ldev/kcoap/cbor/CborMap;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/cose/CwtClaimsSet$Companion {
+	public final fun decode ([B)Ldev/kcoap/cose/CwtClaimsSet;
+}
+

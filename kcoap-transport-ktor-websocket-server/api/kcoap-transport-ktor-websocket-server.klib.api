@@ -1,0 +1,30 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, linuxX64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-transport-ktor-websocket-server>
+final class dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener : dev.kcoap.transport/ConnectionListener { // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener|null[0]
+    constructor <init>(dev.kcoap.transport/CoapScheme = ..., dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.<init>|<init>(dev.kcoap.transport.CoapScheme;dev.kcoap.log.LoggerFactory){}[0]
+
+    final val scheme // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.scheme|{}scheme[0]
+        final fun <get-scheme>(): dev.kcoap.transport/CoapScheme // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.scheme.<get-scheme>|<get-scheme>(){}[0]
+
+    final var localEndpoint // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.localEndpoint|{}localEndpoint[0]
+        final fun <get-localEndpoint>(): dev.kcoap.transport/Endpoint.WebSocket? // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.localEndpoint.<get-localEndpoint>|<get-localEndpoint>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.toString|toString(){}[0]
+    final suspend fun accept(): dev.kcoap.transport/Connection? // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.accept|accept(){}[0]
+    final suspend fun close() // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.close|close(){}[0]
+
+    final object Companion { // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.Companion|null[0]
+        final const val DEFAULT_MAX_FRAME_SIZE // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.Companion.DEFAULT_MAX_FRAME_SIZE|{}DEFAULT_MAX_FRAME_SIZE[0]
+            final fun <get-DEFAULT_MAX_FRAME_SIZE>(): kotlin/Long // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.Companion.DEFAULT_MAX_FRAME_SIZE.<get-DEFAULT_MAX_FRAME_SIZE>|<get-DEFAULT_MAX_FRAME_SIZE>(){}[0]
+
+        final suspend fun start(kotlin/String = ..., kotlin/Int = ..., kotlin/Long = ..., dev.kcoap.log/LoggerFactory = ...): dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener // dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener.Companion.start|start(kotlin.String;kotlin.Int;kotlin.Long;dev.kcoap.log.LoggerFactory){}[0]
+    }
+}
+
+final fun (io.ktor.server.routing/Route).dev.kcoap.transport.ktor.websocket.server/coapOverWebSockets(dev.kcoap.transport.ktor.websocket.server/KtorWebSocketListener) // dev.kcoap.transport.ktor.websocket.server/coapOverWebSockets|coapOverWebSockets@io.ktor.server.routing.Route(dev.kcoap.transport.ktor.websocket.server.KtorWebSocketListener){}[0]
