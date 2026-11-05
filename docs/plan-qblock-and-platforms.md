@@ -547,6 +547,28 @@ public class QBlockServerConfig(
   - The soak passes for 20 seeds with no leaked exchanges (`endpoint` exchange count is 0).
   - No message ever carries both Block and Q-Block options; a property check over all `traffic`.
   - Probe results are cached and invalidated as specified.
+- **Status: done.** `KC/client/QBlockClientConfig.kt` (`QBlockMode`, `QBlockClientConfig`),
+  `KC/client/QBlockSupport.kt` (probe, single-flight, cache per peer and protection),
+  `KC/client/QBlockClient.kt` (the driver of `QBlock1Sender` and `QBlock2Receiver` over inbox exchanges and
+  the body lease) and `KC/stack/QBlockClientEvent.kt` (`Fallback`, `Recovery`, `PartialBodyDropped`, a
+  sealed `EndpointEvent` subtype in a file of its own, so it merges with QB-3's events). The endpoint
+  reports an Empty ACK to an inbox exchange (`ExchangeEvent.Acknowledged`), waits on an inbox without
+  losing events to a timeout (`ExchangeInbox.receive(timeout)`) and tells clients when a peer's session
+  ends (`addPeerEndedListener`). Changes to the cores, each with tests: `QBlock1Sender` releases the tokens
+  a 4.08 shows arrived and those of acknowledged Confirmable blocks while later blocks are unsent (the soak
+  ran into `maxExchangesPerPeer` without it); `QBlock2Receiver` sends the Continue when a requested missing
+  block completes the highest set (K2). Deviations from the plan: a 4.02 or Reset before any other answer
+  sends the request again with RFC 7959 instead of returning or failing; in ASSUME_SUPPORTED mode such a
+  rejection marks the peer UNSUPPORTED for the capability lifetime; a Non-confirmable download without any
+  answer is sent again on the NON_RECEIVE_TIMEOUT ladder if its method may be repeated. Tests:
+  `QBlockClientTest`, `QBlockSupportTest`, `QBlockClientSoakTest` (soak, lease, rebinding, abandonment) on a
+  server scripted from the QB-1 server cores (`KT/QBlockTestServer.kt`), `RebindingTransportTest`, and
+  `KJ/KcoapClientAgainstLibcoapQBlockTest.kt` (K1–K5, K7–K10, K12; libcoap deviations pinned as
+  `upstreamLibcoap…` tests: a plain 4.08 for three gaps, no ETag after its 8 s cache expired, only block 0 of
+  a 2.01 body; K5 pins its 4.02 that repeats Q-Block2). K9 (b) passes: libcoap sends block 0 of the echoed
+  body and answers the client's request for blocks 1–2. A server-side `DroppingTransport` is not added; the
+  client test drops datagrams in a `LossyTransport` nested in its test class, so it does not clash with
+  QB-3's.
 
 **QB-5: OSCORE with Q-Block**
 - **Scope:**

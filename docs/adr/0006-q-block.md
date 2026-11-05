@@ -34,8 +34,11 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   application asks for bursts with a Non-confirmable request.
 - **Separate probe, no stickiness.** A client in PROBE mode asks a peer once with a Confirmable
   `GET /.well-known/core` carrying Q-Block2 0/0/16, the probe libcoap sends, and caches the answer per peer
-  and protection. The server answers with Q-Block2 only when the request carries Q-Block1 or Q-Block2,
-  never because the peer used Q-Block before (libcoap's per-session stickiness is not copied).
+  and protection. Only a 2.xx answer with Q-Block counts as support: libcoap without Q-Block answers 4.02
+  and repeats the Q-Block2 option it rejects. A 4.02 or a Reset before any other answer to a body sends the
+  request again with RFC 7959, since the server did not process it. The server answers with Q-Block2 only
+  when the request carries Q-Block1 or Q-Block2, never because the peer used Q-Block before (libcoap's
+  per-session stickiness is not copied).
 - **ETag counter.** Every Q-Block2 body gets its own 4-byte ETag from a counter with a random start, which
   replaces an application ETag (§4.4 requires one unique per transmitted body).
 - **Tokens.** The final response to an upload goes on the request that completed the body. The client
@@ -43,7 +46,11 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   accepts the final response on any token of the body, as §4.3 allows (Figure 14 uses another token than
   Figure 5). A 4.08 therefore goes on the request of the highest block that arrived, or, once a 2.31 was
   sent, on the 2.31's request until a higher block arrives: a resent block below the highest one can
-  complete a set, and its 2.31 releases the highest block's token.
+  complete a set, and its 2.31 releases the highest block's token. Once a later set has arrived the server
+  sends no 2.31 for a set it completes late, so the client also releases, on a 4.08, the tokens of the
+  blocks up to its request that it does not list, and, for a Confirmable body, the token of a block
+  acknowledged while later blocks are unsent: neither can carry the final response. Without that a long
+  body over a lossy path held a token per block and ran into `maxExchangesPerPeer` (found by the soak).
 - **2.31 always carries Q-Block1** with the last NUM of the set, M set, because libcoap's client truncates
   the upload without it.
 - **Block 0 is asked for again as `0/M=1`** by GET and FETCH: libcoap runs the handler again for NUM 0.
