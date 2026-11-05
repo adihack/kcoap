@@ -92,13 +92,19 @@ public interface CryptoBackend {
     public suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray =
         throw UnsupportedAlgorithmException(privateKey.type.name)
 
+    /**
+     * A signature over [data] with [privateKey], whose type must be [SignatureAlgorithm.keyType]. ECDSA
+     * signatures are raw `r || s` of [SignatureAlgorithm.signatureLength] bytes, as COSE uses them (RFC 9053
+     * §2.1); [EcdsaSignatureCodec] converts them to DER for X.509 and DTLS.
+     */
     public suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
         throw UnsupportedAlgorithmException(algorithm.name)
 
     /**
      * Whether [signature] over [data] verifies under [publicKey], in the raw encoding of
      * [SignatureAlgorithm.keyType]: an uncompressed SEC1 point for ES256 and ES384, as for [keyAgreement].
-     * Returns false for a wrong signature; throws only for unusable input such as a malformed key.
+     * ECDSA signatures are raw `r || s` ([EcdsaSignatureCodec] converts DER). Returns false for a wrong
+     * signature; throws only for unusable input such as a malformed key.
      */
     public suspend fun verify(
         algorithm: SignatureAlgorithm,
