@@ -153,6 +153,7 @@ class QBlockClientTest {
         val recovery = setup.fixture.events.filterIsInstance<QBlockClientEvent.Recovery>().single()
         assertEquals(listOf(2L, 7L), recovery.blocks)
         assertTrue(!recovery.sent)
+        assertEquals("QBlockClientEvent.Recovery(peer=${setup.server.address}, sent=false, blocks=[2, 7])", recovery.toString())
         setup.assertNothingLeft()
     }
 
