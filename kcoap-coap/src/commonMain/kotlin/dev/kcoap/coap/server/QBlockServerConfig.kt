@@ -36,10 +36,12 @@ package dev.kcoap.coap.server
  *   [dev.kcoap.coap.stack.EndpointEvent.LimitReached] with `PARTIAL_BODIES`.
  * @property maxCachedBodies the most Q-Block2 bodies kept for requests of missing blocks and Continues, and
  *   separately the most completed uploads remembered so that a block sent again gets the final response
- *   again (§4.3); the one used longest ago gives way (`CACHED_BODIES`).
+ *   again (§4.3); the one used longest ago gives way (`CACHED_BODIES`), among bodies first the one used
+ *   longest ago that has sent all its sets. A body that gives way while still sending keeps sending its sets,
+ *   up to as many such bodies again. A GET or FETCH body of one block is not kept: the handler runs again.
  * @property maxBodiesPerPeer the most uploads one client endpoint may have in progress, and the most response
- *   bodies kept for it: a further upload gets 5.03 with Max-Age, a further body replaces the client's oldest
- *   (`BODIES_PER_PEER`).
+ *   bodies kept for it: a further upload gets 5.03 with Max-Age, a further body replaces the client's oldest,
+ *   as for [maxCachedBodies] (`BODIES_PER_PEER`).
  */
 public class QBlockServerConfig(
     public val isEnabled: Boolean = false,

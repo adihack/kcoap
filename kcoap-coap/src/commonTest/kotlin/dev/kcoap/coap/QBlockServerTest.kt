@@ -812,6 +812,76 @@ class QBlockServerTest {
         assertEquals(listOf(Limit.BODIES_PER_PEER to f.peer.address, Limit.CACHED_BODIES to f.peer.address), limits)
     }
 
+    /** Every message until none has come for [quiet], by the token it answers. */
+    private suspend fun QBlockPeer.collect(quiet: Duration = 4.seconds): Map<List<Byte>, List<CoapMessage>> {
+        val messages = mutableListOf<CoapMessage>()
+        while (true) messages += next(quiet) ?: break
+        return messages.groupBy { it.token.toList() }
+    }
+
+    @Test
+    fun rfc9177Section7_2BodiesDoneSendingGiveWayFirstSoADownloadKeepsItsSets() = runTest {
+        val small = ByteArray(100) { it.toByte() }
+        val f = fixture { repeat(4) { resource("small-$it") { get { CoapResponse.content(small) } } } }
+        val download = f.peer.send(get(f.peer, block(0, true)))
+        // Four bodies of two blocks each while /big still sends: with the default of four per peer, the
+        // oldest of those that are done sending gives way, never the download.
+        repeat(4) { f.peer.send(get(f.peer, block(0, true), path = "small-$it")) }
+
+        val received = f.peer.collect()
+        assertEquals((0L..46L).toList(), received.getValue(download.token.toList()).numbers())
+        assertEquals(5, received.size)
+        assertEquals(1, f.bigRuns)
+        assertEquals(listOf(Limit.BODIES_PER_PEER), f.events.filterIsInstance<EndpointEvent.LimitReached>().map { it.limit })
+        assertEquals(4, f.server.qBlock.state().servedBodies)
+    }
+
+    @Test
+    fun rfc9177Section7_2ABodyReplacedWhileItSendsFinishesItsSets() = runTest {
+        val f = fixture()
+        val first = f.peer.send(get(f.peer, block(0, true)))
+        val second = f.peer.send(get(f.peer, block(0, true)))
+        f.peer.drain()
+        val busy = f.server.qBlock.state()
+        assertEquals(1, busy.servedBodies, "follow-ups find the newer body")
+        assertEquals(1, busy.sendingBodies, "the older one still sends")
+
+        val received = f.peer.collect()
+        assertEquals((10L..46L).toList(), received.getValue(first.token.toList()).numbers())
+        assertEquals((10L..46L).toList(), received.getValue(second.token.toList()).numbers())
+        assertEquals(0, f.server.qBlock.state().sendingBodies, "gone once done")
+    }
+
+    @Test
+    fun cachedBodiesThatStillSendAreBoundedToo() = runTest {
+        val config = CoapServerConfig(
+            amplification = AmplificationPolicy.OFF,
+            qBlock = QBlockServerConfig(isEnabled = true, maxCachedBodies = 1, maxBodiesPerPeer = 1),
+        )
+        val f = fixture(config)
+        val requests = List(3) { f.peer.send(get(f.peer, block(0, true))) }
+
+        val received = f.peer.collect()
+        assertEquals((0L..9L).toList(), received.getValue(requests[0].token.toList()).numbers(), "stopped for the third")
+        assertEquals(47, received.getValue(requests[1].token.toList()).size)
+        assertEquals(47, received.getValue(requests[2].token.toList()).size)
+        assertEquals(listOf(Limit.CACHED_BODIES to f.peer.address), f.events.filterIsInstance<EndpointEvent.LimitReached>().map { it.limit to it.peer })
+    }
+
+    @Test
+    fun rfc9177Section4_4AGetBodyOfOneBlockIsNotKeptAndRunsAgainForItsBlock() = runTest {
+        val f = fixture(body = "tiny".encodeToByteArray())
+        f.peer.send(get(f.peer, block(0, true)))
+        assertEquals("tiny", f.peer.drain().single().payloadAsText())
+        assertEquals(0, f.server.qBlock.state().servedBodies)
+
+        val again = f.peer.send(get(f.peer, block(0, false)))
+        val answer = f.peer.drain().single()
+        assertTrue(answer.hasToken(again.token))
+        assertEquals("tiny", answer.payloadAsText())
+        assertEquals(2, f.bigRuns)
+    }
+
     @Test
     fun rfc9175Section2_4ABurstToAnUnverifiedAddressWaitsForEchoButTheProbeDoesNot() = runTest {
         val f = fixture(CoapServerConfig(qBlock = qBlockOn))
@@ -984,8 +1054,9 @@ class QBlockServerTest {
         val f = fixture()
         f.peer.send(upload(f.peer, 0))
         f.peer.send(get(f.peer, block(0, true)))
+        f.peer.send(get(f.peer, block(0, true)))
         f.peer.drain()
-        assertFalse(f.server.qBlock.state().isEmpty)
+        assertEquals(1, f.server.qBlock.state().sendingBodies)
 
         f.server.close()
 

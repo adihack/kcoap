@@ -71,8 +71,13 @@ internal class QBlock2Sender<R>(
     var isStopped: Boolean = false
         private set
 
-    /** Whether blocks are still to go out by themselves: a later set, queued missing blocks or CON blocks. */
-    val isSending: Boolean get() = !isStopped && (nextSetAt != null || pending.isNotEmpty() || nextUnsent < count)
+    /**
+     * Whether blocks are still to go out by themselves: a later set, queued missing blocks, or the rest of a
+     * started Confirmable body. A body that never started, whose first request asked only for some blocks,
+     * sends nothing by itself.
+     */
+    val isSending: Boolean
+        get() = !isStopped && (nextSetAt != null || pending.isNotEmpty() || (mode == BodyMode.CON && original != null && nextUnsent < count))
 
     /** Starts sending the body as the response to [ref]. */
     fun start(now: Duration, ref: R): List<QBlockAction<R>> {

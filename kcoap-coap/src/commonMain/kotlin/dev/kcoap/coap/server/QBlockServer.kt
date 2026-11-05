@@ -82,9 +82,12 @@ import kotlinx.coroutines.sync.withLock
  *   is checked, or challenged, for its set.
  * - **Teardown** ([forget], [close]). A peer's session or connection ending drops its bodies and timers.
  *
- * Bodies are bounded by [QBlockServerConfig]; every body with a deadline has one timer coroutine, and one more
- * expires the caches, so after NON_PARTIAL_TIMEOUT without traffic nothing is left. All state is under one
- * [Mutex], never held across a suspension; messages go out after it is released.
+ * Bodies are bounded by [QBlockServerConfig]. Room in the cache is made from the bodies done sending first;
+ * one that leaves it while still sending, to a newer body of its operation or because every other one is
+ * sending too, finishes its sets without being found by follow-ups (at most as many as the cache holds). A
+ * GET or FETCH body of one block is not cached at all. Every body with a deadline has one timer coroutine,
+ * and one more expires the caches, so after NON_PARTIAL_TIMEOUT without traffic nothing is left. All state is
+ * under one [Mutex], never held across a suspension; messages go out after it is released.
  */
 internal class QBlockServer(
     private val server: CoapServer,
@@ -107,6 +110,13 @@ internal class QBlockServer(
     private val lock = Mutex()
     private val partials = LinkedHashMap<OperationKey, PartialBody>()
     private val served = ExpiringCache<OperationKey, ServedBody>(qBlock.maxCachedBodies, timing.nonPartialTimeout)
+
+    /**
+     * Bodies that left [served] while they were still sending, to a newer body of their operation or for
+     * room: no request finds them any more, but their client gets the rest of the sets it is waiting for. At
+     * most [QBlockServerConfig.maxCachedBodies], the oldest stopping for a new one; each goes once it is done.
+     */
+    private val sending = LinkedHashSet<ServedBody>()
     private val completed = ExpiringCache<OperationKey, CompletedBody>(qBlock.maxCachedBodies, timing.nonPartialTimeout)
     private var nextETag = random.nextInt()
     private var sweeper: Job? = null
@@ -459,7 +469,8 @@ internal class QBlockServer(
         val reply = lock.withLock {
             val sender = QBlock2Sender<QBlockRequest>(response.payloadSize, size, mode, timing, timing.drawNonTimeoutRandom(random))
             val body = ServedBody(key, response, nextETag(), sender)
-            store(body, now, evicted)
+            // A GET or FETCH body of one block is not kept: asking for it again runs the handler, as cheaply.
+            if (!isSafe(ref.request.code) || sender.count > 1) store(body, now, evicted)
             Reply.Body(body, first(body, ref, now).also { schedule(body) }, isNew = true)
         }
         evicted.forEach { (peer, limit) -> endpoint.report(EndpointEvent.LimitReached(peer, limit)) }
@@ -496,22 +507,53 @@ internal class QBlockServer(
         return if (whole) body.sender.start(now, ref) else body.sender.onRequest(now, ref.request, ref)
     }
 
-    /** Under [lock]: caches [body] in place of an older one for its operation, within the bounds. */
+    /**
+     * Under [lock]: caches [body] in place of an older one for its operation, within the bounds. Room is made
+     * from the bodies used longest ago that are done sending first; none leaving the cache is cut off while
+     * it still sends ([retire]).
+     */
     private fun store(body: ServedBody, now: Duration, evicted: MutableList<Pair<Endpoint, Limit>>) {
         served.prune(now).forEach { it.drop() }
-        served.remove(body.key)?.drop()
+        served.remove(body.key)?.let { retire(it, evicted) }
         val own = served.entryList.filter { it.first.peer == body.peer }
         if (own.size >= qBlock.maxBodiesPerPeer) {
-            served.remove(own.first().first)?.drop()
+            retire(checkNotNull(served.remove(idlest(own).key)), evicted)
             evicted += body.peer to Limit.BODIES_PER_PEER
         }
         if (served.size >= qBlock.maxCachedBodies) {
-            val oldest = served.entryList.first().first
-            served.remove(oldest)?.drop()
-            evicted += oldest.peer to Limit.CACHED_BODIES
+            val victim = checkNotNull(served.remove(idlest(served.entryList).key))
+            retire(victim, evicted)
+            evicted += victim.peer to Limit.CACHED_BODIES
         }
         served.put(body.key, body, now)
         ensureSweeper()
+    }
+
+    /** The body used longest ago among [entries] that is done sending, else the one used longest ago. */
+    private fun idlest(entries: List<Pair<OperationKey, ServedBody>>): ServedBody =
+        (entries.firstOrNull { !it.second.sender.isSending } ?: entries.first()).second
+
+    /**
+     * Under [lock]: [body] has left [served]. One that is done sending goes; one still sending finishes its
+     * sets from [sending], where the oldest gives way when it is full.
+     */
+    private fun retire(body: ServedBody, evicted: MutableList<Pair<Endpoint, Limit>>) {
+        if (!body.sender.isSending) {
+            body.drop()
+            return
+        }
+        if (sending.size >= qBlock.maxCachedBodies) {
+            val oldest = sending.first()
+            sending.remove(oldest)
+            oldest.drop()
+            evicted += oldest.peer to Limit.CACHED_BODIES
+        }
+        sending += body
+    }
+
+    /** Under [lock]: a body of [sending] goes once it has nothing left to send. */
+    private fun settle(body: ServedBody) {
+        if (!body.sender.isSending && sending.remove(body)) body.drop()
     }
 
     /** Under [lock]: §4.4 wants an ETag unique for every transmitted body; 4 bytes from a counter with a random start. */
@@ -587,7 +629,10 @@ internal class QBlockServer(
             if (body.isDropped) return
             val now = endpoint.now()
             keepAlive(body, now)
-            event(body.sender, now).also { schedule(body) }
+            event(body.sender, now).also {
+                schedule(body)
+                settle(body)
+            }
         }
         execute(body, actions)
     }
@@ -599,7 +644,10 @@ internal class QBlockServer(
             body.timer = null
             body.timerAt = null
             keepAlive(body, now)
-            body.sender.onTimer(now).also { schedule(body) }
+            body.sender.onTimer(now).also {
+                schedule(body)
+                settle(body)
+            }
         }
         // A later set adds to what the request it answers has had, which must stay within the factor until the
         // address is verified (RFC 9175 §2.4 item 3); beyond, the sets stop, and a Continue is a request of its own.
@@ -617,6 +665,7 @@ internal class QBlockServer(
                 lock.withLock {
                     body.sender.onReset(endpoint.now())
                     schedule(body)
+                    settle(body)
                 }
                 return
             }
@@ -691,6 +740,10 @@ internal class QBlockServer(
             val uploads = partials.values.filter { it.peer == peer }
             uploads.forEach { removePartial(it) }
             served.removeAll { it.peer == peer }.forEach { it.drop() }
+            sending.filter { it.peer == peer }.forEach {
+                sending.remove(it)
+                it.drop()
+            }
             completed.removeAll { it.peer == peer }
             if (served.size == 0 && completed.size == 0) {
                 sweeper?.cancel()
@@ -707,27 +760,41 @@ internal class QBlockServer(
             partials.values.forEach { it.drop() }
             partials.clear()
             served.removeAll { true }.forEach { it.drop() }
+            sending.forEach { it.drop() }
+            sending.clear()
             completed.removeAll { true }
             sweeper?.cancel()
             sweeper = null
         }
     }
 
-    /** What the server holds, for tests: [partialBytes] is the payload the partial bodies hold. */
-    class State(val partialBodies: Int, val partialBytes: Long, val servedBodies: Int, val completedBodies: Int, val timers: Int) {
-        val isEmpty: Boolean get() = partialBodies == 0 && servedBodies == 0 && completedBodies == 0 && timers == 0
+    /**
+     * What the server holds, for tests: [partialBytes] is the payload the partial bodies hold, [sendingBodies]
+     * the bodies that left the cache but still send.
+     */
+    class State(
+        val partialBodies: Int,
+        val partialBytes: Long,
+        val servedBodies: Int,
+        val sendingBodies: Int,
+        val completedBodies: Int,
+        val timers: Int,
+    ) {
+        val isEmpty: Boolean
+            get() = partialBodies == 0 && servedBodies == 0 && sendingBodies == 0 && completedBodies == 0 && timers == 0
 
         override fun toString(): String =
             "State(partialBodies=$partialBodies, partialBytes=$partialBytes, servedBodies=$servedBodies, " +
-                "completedBodies=$completedBodies, timers=$timers)"
+                "sendingBodies=$sendingBodies, completedBodies=$completedBodies, timers=$timers)"
     }
 
     suspend fun state(): State = lock.withLock {
-        val bodies = partials.values + served.entryList.map { it.second }
+        val bodies = partials.values + served.entryList.map { it.second } + sending
         State(
             partials.size,
             partials.values.sumOf { it.receiver.heldBytes },
             served.size,
+            sending.size,
             completed.size,
             bodies.count { it.timer?.isActive == true } + (if (sweeper?.isActive == true) 1 else 0),
         )

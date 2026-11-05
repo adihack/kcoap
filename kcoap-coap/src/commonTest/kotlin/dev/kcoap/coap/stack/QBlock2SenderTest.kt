@@ -170,6 +170,16 @@ class QBlock2SenderTest {
     }
 
     @Test
+    fun rfc9177Section4_4ABodyThatNeverStartedSendsNothingByItself() {
+        for (mode in listOf(BodyMode.NON, BodyMode.CON)) {
+            val sender = sender(mode = mode)
+            assertEquals(listOf("0/1@probe"), sender.onRequest(Duration.ZERO, followUp(block(0, false)), "probe").sent(), "$mode")
+            assertFalse(sender.isSending, "$mode: only the block asked for")
+            assertNull(sender.nextDeadline())
+        }
+    }
+
+    @Test
     fun rfc9177AppendixBReliableBlocksGoBackToBack() {
         val sender = sender(mode = BodyMode.RELIABLE)
         assertEquals(26, sender.start(Duration.ZERO, "get").sent().size)
