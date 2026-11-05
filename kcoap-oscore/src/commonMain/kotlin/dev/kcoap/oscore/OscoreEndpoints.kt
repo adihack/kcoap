@@ -35,8 +35,21 @@ public class InMemoryContextRepository : SecurityContextRepository {
     private val lock = Mutex()
     private val contexts = mutableMapOf<String, SecurityContext>()
 
+    /** Adds [context], replacing any context with the same Recipient ID and ID Context. */
     public suspend fun add(context: SecurityContext) {
         lock.withLock { contexts[key(context.recipientId, context.idContext)] = context }
+    }
+
+    /**
+     * Adds [context] unless a context with the same Recipient ID and ID Context is present, in one step, and
+     * returns whether it did. A writer that must never replace another's context, such as an EDHOC server
+     * sharing the repository with other writers, uses this instead of [add].
+     */
+    public suspend fun addIfAbsent(context: SecurityContext): Boolean = lock.withLock {
+        val key = key(context.recipientId, context.idContext)
+        if (key in contexts) return@withLock false
+        contexts[key] = context
+        true
     }
 
     public suspend fun remove(context: SecurityContext) {
