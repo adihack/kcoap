@@ -5,7 +5,9 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * A backend that implements only the required symmetric primitives, as an OSCORE-only deployment
@@ -37,6 +39,24 @@ class BackendDefaultsTest {
         assertFailsWith<UnsupportedAlgorithmException> { minimal.verify(SignatureAlgorithm.EDDSA, ByteArray(32), ByteArray(0), ByteArray(64)) }
         assertFailsWith<UnsupportedAlgorithmException> { minimal.encapsulate(KemAlgorithm.ML_KEM_768, ByteArray(1184)) }
         assertFailsWith<UnsupportedAlgorithmException> { minimal.decapsulate(key, ByteArray(1088)) }
+    }
+
+    /** The capability checks ask the backend, so they report exactly what it implements. */
+    @Test
+    fun capabilitiesFollowWhatTheBackendImplements() = runTest {
+        assertTrue(minimal.supports(AeadAlgorithm.AES_CCM_16_64_128))
+        assertFalse(minimal.supports(AeadAlgorithm.A128GCM))
+        assertFalse(minimal.supports(KeyType.X25519))
+        assertFalse(minimal.supports(SignatureAlgorithm.EDDSA))
+
+        val signing = object : CryptoBackend by minimal {
+            override suspend fun generateKeyPair(type: KeyType) = KeyPair(ByteArray(type.publicKeyLength), SoftwarePrivateKey(type, ByteArray(32)))
+            override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
+                if (algorithm == SignatureAlgorithm.EDDSA) ByteArray(64) else throw UnsupportedAlgorithmException(algorithm.name)
+        }
+        assertTrue(signing.supports(KeyType.P256))
+        assertTrue(signing.supports(SignatureAlgorithm.EDDSA))
+        assertFalse(signing.supports(SignatureAlgorithm.ES256), "a key pair alone does not make the signature algorithm")
     }
 
     @Test
