@@ -16,6 +16,11 @@ applications built on it.
   reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw
   bytes to one side, `reset` breaks a connection, `tap` sees every write. TLS is not simulated; a
   listener reports the identities it is given.
+- `Stress`: concurrency stress tests on real threads. `Stress.run` repeats a body a bounded number of
+  times on `Dispatchers.Default`, several iterations at once, within a real-time timeout, and gives each
+  iteration a `background` scope that ends with it; `Stress.race` starts several actions at the same
+  moment and keeps each outcome. On the JVM and Kotlin/Native that is a thread pool; on JS and Wasm the
+  event loop, so the same common test still interleaves at suspension points.
 
 Delays run on coroutine time: under `runTest`, pass `backgroundScope` to the network and
 `testScheduler.timeSource` to the CoAP endpoint, and retransmissions, lifetimes and latency all run
@@ -42,4 +47,18 @@ kotlinx-coroutines and is only useful in tests, so applications depend on it wit
 `testImplementation` and do not ship it. It depends on `kcoap-transport` only, so `kcoap-coap`'s own
 tests can use it without a dependency cycle.
 
-Verified by `InMemoryNetworkTest` and by every end-to-end test of `kcoap-coap`.
+Stress tests leave virtual time: endpoints under `Stress.run` use the real clock
+(`TimeSource.Monotonic`, the default), because their dispatcher is a real one.
+
+```kotlin
+@Test
+fun closeRacesRequests() = runTest {
+    Stress.run(iterations = 50) {
+        val client = CoapClient(network.attach(), background)
+        Stress.race({ client.get(uri) }, { client.close() })
+    }
+}
+```
+
+Verified by `InMemoryNetworkTest`, `InMemoryConnectionsTest`, `StressTest` and by every end-to-end test
+of `kcoap-coap`.
