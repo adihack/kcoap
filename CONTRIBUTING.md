@@ -191,7 +191,9 @@ agreement. By adding a `Signed-off-by` line to a commit you certify, in short, t
 contribution or otherwise have the right to submit it under kcoap's open source license, and that a
 public record of it, your sign-off included, is kept. Read the [full text](DCO) once; it is short.
 
-**Every commit needs a sign-off whose name and email match the commit's author.**
+**Every commit needs a sign-off in the form `Name <email>` whose email is the commit's author email.**
+The check compares the emails without regard to case; it does not compare names, so use the same name
+as your commits' author.
 
 ```text
 Signed-off-by: Your Name <you@example.org>
@@ -210,11 +212,15 @@ Notes:
 - Sign off with the name you use publicly. Anonymous contributions cannot be accepted.
 - If you commit with GitHub's private `noreply` email, sign off with that same address.
 - Commits made in GitHub's web editor need the line too: add it to the commit message.
-- Merge commits are not checked. Commits from before the DCO was adopted are exempt
-  (`.github/dco-baseline`).
+- A merge commit needs a sign-off too when it resolves a conflict or brings in anything its parents do
+  not have. A merge that git would make on its own is skipped. Rebasing instead of merging avoids the
+  question ([pull requests](#pull-requests)).
+- Commits from before the DCO was adopted are exempt (`.github/dco-baseline`).
 - Check your branch before you push: `scripts/check-dco upstream/main HEAD`.
 
-The **DCO** workflow runs the same check on every pull request and names each commit that fails.
+The **DCO** workflow runs the same check on every pull request and names each commit that fails. It
+runs from the base branch, so changes to the workflow or to `scripts/check-dco` in a pull request take
+effect only after it has merged.
 
 ## Pull requests
 

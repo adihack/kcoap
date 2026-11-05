@@ -1,2 +1,8 @@
 # The maintainers who review changes, by path; see GOVERNANCE.md. The last matching pattern wins.
 * @adihack
+
+# The CI workflows and the DCO check decide what may merge, so they stay with the lead maintainer
+# when there are more maintainers.
+/.github/ @adihack
+/scripts/check-dco @adihack
+/scripts/check-dco-test @adihack

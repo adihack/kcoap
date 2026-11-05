@@ -3,16 +3,23 @@
 #
 #   scripts/check-dco <base-sha> <head-sha>
 #
-# Every non-merge commit reachable from <head-sha> but not from <base-sha> must carry a Signed-off-by
-# trailer whose email is the commit's author email, compared without regard to case (CONTRIBUTING.md,
-# "Developer Certificate of Origin"). Trailers are parsed by git, so a "Signed-off-by:" line in the
-# middle of the message does not count.
+# Every commit reachable from <head-sha> but not from <base-sha> must carry a Signed-off-by trailer of
+# the form "Name <email>" whose email is the commit's author email, compared without regard to case
+# (CONTRIBUTING.md, "Developer Certificate of Origin"). Only the email is compared, not the name.
+# Trailers are parsed by git, so a "Signed-off-by:" line in the middle of the message does not count.
+#
+# A merge commit is skipped only when it adds nothing to its parents: re-merging them with git gives
+# exactly its tree (git show --remerge-diff prints nothing; git 2.36 or newer). A merge that resolves a
+# conflict, adds or drops content, or has more than two parents is checked like any other commit.
 #
 # History from before the DCO was adopted is exempt: .github/dco-baseline names one commit (its first
 # line that is neither blank nor a comment, a full SHA), and that commit and its ancestors are not
-# checked. The file is read from <base-sha>, so a pull request cannot exempt its own commits by editing
-# it. Only when <base-sha> has no such file, as for the pull request that adds it, is it read from
-# <head-sha>. A baseline that is not a commit of this repository is ignored with a warning.
+# checked. The file is read from <base-sha>. Only when <base-sha> has no such file is it read from
+# <head-sha>, which lets a branch be checked against a base from before the DCO (such as main before
+# PR #1 merges); it also lets that branch exempt its own commits, so it is no guard there. In CI the
+# DCO workflow runs on pull_request_target: the workflow, this script and the baseline all come from
+# the base branch, which has the baseline whenever it has the workflow, so a pull request can change
+# none of them. A baseline that is not a commit of this repository is ignored with a warning.
 #
 # Exit status: 0 when every commit passes or there is none to check, 1 when a commit fails, 2 for
 # invalid arguments. Needs nothing but bash and git.
@@ -20,6 +27,9 @@ set -euo pipefail
 
 contributing=https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md#developer-certificate-of-origin
 baseline_path=.github/dco-baseline
+
+# A sign-off value: a name without < or >, then one address in angle brackets, and nothing after it.
+signoff_re='^([^<>]*[^<>[:space:]])[[:space:]]+<[[:space:]]*([^<>[:space:]]+@[^<>[:space:]]+)[[:space:]]*>$'
 
 if [ "$#" -ne 2 ]; then
   echo "usage: scripts/check-dco <base-sha> <head-sha>" >&2
@@ -54,6 +64,17 @@ first_entry() {
   return 0
 }
 
+# True when <commit> is a merge of two parents whose tree is exactly what git's re-merge gives. Any
+# error, such as a git without --remerge-diff, counts as false, so the merge is then checked.
+is_clean_merge() {
+  local commit=$1 parents remerge
+  parents=$(git log -1 --format=%P "$commit")
+  set -- $parents
+  [ "$#" -eq 2 ] || return 1
+  remerge=$(git show --remerge-diff --no-ext-diff --no-color --format= "$commit" 2>/dev/null) || return 1
+  [ -z "$remerge" ]
+}
+
 # The baseline: from the base commit's tree, or from the head commit's when the base has no such file.
 baseline=
 baseline_source=
@@ -82,7 +103,7 @@ range=("$head" "^$base")
 if [ -n "$baseline" ]; then
   range+=("^$baseline")
 fi
-commits=$(git rev-list --no-merges --reverse "${range[@]}")
+commits=$(git rev-list --reverse "${range[@]}")
 
 if [ -z "$commits" ]; then
   echo "No commits to check."
@@ -90,48 +111,65 @@ if [ -z "$commits" ]; then
 fi
 
 checked=0
+skipped=0
 failed=0
 while IFS= read -r commit; do
-  checked=$((checked + 1))
   short=$(git rev-parse --short "$commit")
   subject=$(git log -1 --format=%s "$commit")
+
+  if is_clean_merge "$commit"; then
+    printf '%s  SKIP  %s (a merge that adds nothing to its parents)\n' "$short" "$subject"
+    skipped=$((skipped + 1))
+    continue
+  fi
+
+  checked=$((checked + 1))
   author=$(git log -1 --format=%ae "$commit")
   signoffs=$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly,unfold)' "$commit")
 
-  emails=()
+  values=()
   match=false
   while IFS= read -r value; do
     [ -n "$value" ] || continue
-    email=${value##*<}
-    email=${email%%>*}
-    emails+=("$email")
-    if [ "$(lowercase "$email")" = "$(lowercase "$author")" ]; then
+    values+=("$value")
+    if [[ "$value" =~ $signoff_re ]] && [[ "$author" == *@* ]] &&
+      [ "$(lowercase "${BASH_REMATCH[2]}")" = "$(lowercase "$author")" ]; then
       match=true
     fi
   done <<<"$signoffs"
 
   if [ "$match" = true ]; then
     printf '%s  OK    %s\n' "$short" "$subject"
-  elif [ "${#emails[@]}" -eq 0 ]; then
+  elif [[ "$author" != *@* ]]; then
+    printf '%s  FAIL  %s (the author email "%s" is not an address)\n' "$short" "$subject" "$author"
+    failed=$((failed + 1))
+  elif [ "${#values[@]}" -eq 0 ]; then
     printf '%s  FAIL  %s (no Signed-off-by trailer)\n' "$short" "$subject"
     failed=$((failed + 1))
   else
-    found=$(printf '%s, ' "${emails[@]}")
-    printf '%s  FAIL  %s (no Signed-off-by with the author email %s; signed off by %s)\n' \
-      "$short" "$subject" "$author" "${found%, }"
+    found=$(printf '%s; ' "${values[@]}")
+    printf '%s  FAIL  %s (no "Signed-off-by: Name <%s>"; found: %s)\n' \
+      "$short" "$subject" "$author" "${found%; }"
     failed=$((failed + 1))
   fi
 done <<<"$commits"
 
+skipped_note=
+if [ "$skipped" -eq 1 ]; then
+  skipped_note=", 1 clean merge skipped"
+elif [ "$skipped" -gt 1 ]; then
+  skipped_note=", $skipped clean merges skipped"
+fi
+
 if [ "$failed" -eq 0 ]; then
-  echo "Every commit is signed off by its author ($checked checked)."
+  echo "Every commit is signed off by its author ($checked checked$skipped_note)."
   exit 0
 fi
 
 full_base=$(git rev-parse "$base")
 cat <<EOF
 
-Commits without a sign-off by their author: $failed of $checked.
+Commits without a sign-off by their author: $failed of $checked$skipped_note.
 
 Every commit needs a "Signed-off-by: Name <email>" trailer whose email is the commit's author email,
 which certifies the Developer Certificate of Origin (the DCO file). To sign off every commit of the
@@ -144,6 +182,7 @@ branch and update the pull request:
 clone does not have it.)
 
 git adds the sign-off with your configured user.name and user.email, so they must match the author of
-each commit. Details: $contributing
+each commit. A merge that resolves a conflict or adds content needs a sign-off too; rebasing instead of
+merging avoids such merges. Details: $contributing
 EOF
 exit 1

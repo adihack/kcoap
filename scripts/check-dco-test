@@ -100,17 +100,76 @@ expect fail "failing commits in a range fail the range" "$r" "$base" "$several" 
 
 expect pass "an empty range passes" "$r" "$several" "$several" "No commits to check"
 
-# Merge commits are ignored.
+# Sign-offs are parsed strictly: a name, then one address in angle brackets, and nothing after it.
+bare=$(author "$r" "$alice" "Address only" "Signed-off-by: alice@example.org")
+expect fail "a sign-off without a name fails" "$r" "$several" "$bare" "found: alice@example.org"
+
+behalf=$(author "$r" "$alice" "On behalf" \
+  "Signed-off-by: Mallory Example <mallory@example.org> (on behalf of <alice@example.org>)")
+expect fail "a sign-off with text after its address fails" "$r" "$bare" "$behalf" "on behalf of"
+
+nested=$(author "$r" "$alice" "Address in the name" \
+  "Signed-off-by: Mallory Example <mallory@example.org> <alice@example.org>")
+expect fail "a sign-off whose name holds another address fails" "$r" "$behalf" "$nested" \
+  "FAIL  Address in the name"
+
+spaced=$(author "$r" "$alice" "Spaces in the brackets" "Signed-off-by: Alice Example < alice@example.org >")
+expect pass "a sign-off with spaces inside the angle brackets passes" "$r" "$nested" "$spaced"
+
+nobody=$(author "$r" "Nobody <>" "No author email" "Signed-off-by: Nobody <>")
+expect fail "a commit whose author email is empty fails" "$r" "$spaced" "$nobody" "not an address"
+
+# Merge commits: one that adds nothing to its parents is skipped, any other is checked.
 r=$(new_repo merges)
 base=$(git -C "$r" rev-parse HEAD)
 git -C "$r" checkout -q -b topic
 author "$r" "$alice" "Topic work" "Signed-off-by: $alice" >/dev/null
+printf 'topic\n' >"$r/topic.txt"
+git -C "$r" add topic.txt
+author "$r" "$alice" "Topic file" "Signed-off-by: $alice" >/dev/null
 git -C "$r" checkout -q main
 author "$r" "$bob" "Main work" "Signed-off-by: $bob" >/dev/null
+fork=$(git -C "$r" rev-parse HEAD)
 GIT_AUTHOR_NAME="Bob Example" GIT_AUTHOR_EMAIL="bob@example.org" \
   git -C "$r" merge -q --no-ff --no-edit -m "Merge topic without a sign-off" topic
 merged=$(git -C "$r" rev-parse HEAD)
-expect pass "a merge commit without a sign-off is ignored" "$r" "$base" "$merged"
+expect pass "a merge that adds nothing, without a sign-off, is skipped" "$r" "$base" "$merged" "SKIP"
+
+git -C "$r" reset -q --hard "$fork"
+git -C "$r" merge -q --no-ff --no-commit topic >/dev/null 2>&1
+printf 'not in either parent\n' >"$r/evil.kt"
+git -C "$r" add evil.kt
+evil=$(author "$r" "Mallory Example <mallory@example.org>" "Merge topic and add a file" "")
+expect fail "a merge that adds content needs a sign-off" "$r" "$base" "$evil" \
+  "FAIL  Merge topic and add a file"
+
+git -C "$r" reset -q --hard "$fork"
+git -C "$r" merge -q --no-ff --no-commit topic >/dev/null 2>&1
+printf 'not in either parent\n' >"$r/evil.kt"
+git -C "$r" add evil.kt
+signed_evil=$(author "$r" "$bob" "Merge topic and add a file" "Signed-off-by: $bob")
+expect pass "a merge that adds content passes with its author's sign-off" "$r" "$base" "$signed_evil" "OK"
+
+git -C "$r" reset -q --hard "$fork"
+printf 'main\n' >"$r/topic.txt"
+git -C "$r" add topic.txt
+author "$r" "$bob" "Main file" "Signed-off-by: $bob" >/dev/null
+git -C "$r" merge -q --no-ff --no-edit topic >/dev/null 2>&1 || true
+printf 'resolved\n' >"$r/topic.txt"
+git -C "$r" add topic.txt
+resolved=$(author "$r" "$bob" "Merge topic and resolve a conflict" "")
+expect fail "a merge that resolves a conflict needs a sign-off" "$r" "$base" "$resolved" \
+  "FAIL  Merge topic and resolve a conflict"
+
+git -C "$r" reset -q --hard "$fork"
+git -C "$r" checkout -q -b other "$base"
+author "$r" "$alice" "Other work" "Signed-off-by: $alice" >/dev/null
+git -C "$r" checkout -q main
+GIT_AUTHOR_NAME="Bob Example" GIT_AUTHOR_EMAIL="bob@example.org" \
+  git -C "$r" merge -q --no-ff --no-edit -m "Merge two branches at once" topic other >/dev/null
+octopus=$(git -C "$r" rev-parse HEAD)
+expect fail "a merge of more than two parents needs a sign-off" "$r" "$base" "$octopus" \
+  "FAIL  Merge two branches at once"
 
 # A baseline in the base exempts its ancestors.
 r=$(new_repo baseline-in-base)
