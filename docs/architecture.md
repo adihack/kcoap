@@ -143,6 +143,7 @@ serving what it has, and reports `EndpointEvent.LimitReached`:
 | `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response or notification queued behind NSTART is not sent |
 | `CoapServerConfig.maxObservers`, `maxObserversPerPeer`, `maxObserversPerResource` | 10 000, 32, 1 000 | the registration is served without Observe (RFC 7641 §4.1); re-registrations do not count again |
 | `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
+| `ReliableTransportConfig.maxConnections` | 1 024 | an accepted connection beyond it, opened and accepted ones together, is closed at once |
 
 An observer that neither message nor channel security authenticated gets at most eight Non-confirmable
 notifications in a row, then a Confirmable one, whose ACK shows it still wants them (RFC 7641 §7).

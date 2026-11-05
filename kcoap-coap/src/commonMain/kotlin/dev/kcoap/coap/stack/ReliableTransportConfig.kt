@@ -33,6 +33,10 @@ import kotlin.time.Duration.Companion.seconds
  *   (§3.3), each held for at most [csmTimeout]. A connection beyond it is closed at once and reported as
  *   [EndpointEvent.LimitReached], so peers that connect and never speak cannot exhaust memory, as RFC 7252
  *   §11.3 asks of any state an unauthenticated peer can create. Established connections do not count.
+ * @property maxConnections the most connections the endpoint keeps at once, those it opened and those it
+ *   accepted. Each holds a reader, a writer, timers and buffers, and every source port is a peer of its own,
+ *   so an accepted connection beyond it is closed at once and reported as [EndpointEvent.LimitReached],
+ *   however it got past [maxPendingConnections]. Connections this endpoint opens are not refused.
  */
 public class ReliableTransportConfig(
     public val maxMessageSize: Long = DEFAULT_MAX_MESSAGE_SIZE,
@@ -44,6 +48,7 @@ public class ReliableTransportConfig(
     public val pingTimeout: Duration = 30.seconds,
     public val keepAliveInterval: Duration? = null,
     public val maxPendingConnections: Int = DEFAULT_MAX_PENDING_CONNECTIONS,
+    public val maxConnections: Int = DEFAULT_MAX_CONNECTIONS,
 ) {
     init {
         require(maxMessageSize in MIN_MAX_MESSAGE_SIZE..MAX_MAX_MESSAGE_SIZE) {
@@ -56,6 +61,7 @@ public class ReliableTransportConfig(
         require(pingTimeout.isPositive()) { "Ping timeout must be positive: $pingTimeout" }
         require(keepAliveInterval == null || keepAliveInterval.isPositive()) { "Keep-alive interval must be positive" }
         require(maxPendingConnections > 0) { "At least one pending connection must be allowed: $maxPendingConnections" }
+        require(maxConnections > 0) { "At least one connection must be allowed: $maxConnections" }
     }
 
     /** Whether the CSM announces BERT: Block-Wise-Transfer with a Max-Message-Size above 1152 (§5.3.2). */
@@ -77,5 +83,8 @@ public class ReliableTransportConfig(
 
         /** See [maxPendingConnections]. */
         public const val DEFAULT_MAX_PENDING_CONNECTIONS: Int = 128
+
+        /** See [maxConnections]. */
+        public const val DEFAULT_MAX_CONNECTIONS: Int = 1024
     }
 }

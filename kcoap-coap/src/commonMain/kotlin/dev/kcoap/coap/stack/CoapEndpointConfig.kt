@@ -15,8 +15,7 @@ import kotlin.time.TimeSource
  * the endpoint into an amplifier against the address it names. At a bound the endpoint therefore drops or
  * refuses only the extra work, never answers with more than it received, keeps serving what it already
  * has, and reports [EndpointEvent.LimitReached] so the condition can be counted. The server's observer
- * bounds are in `CoapServerConfig`, the bound on connections that never finish their CSM exchange in
- * [ReliableTransportConfig].
+ * bounds are in `CoapServerConfig`, the bounds on connections in [ReliableTransportConfig].
  *
  * @property parameters RFC 7252 §4.8 transmission parameters, for datagram transports.
  * @property separateResponseDelay how long a Confirmable request may wait for its response before the

@@ -64,17 +64,19 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at
-  once. Receiving starts when a server attaches or the first request goes out. A send the transport refuses fails at once
-  with `TRANSPORT_FAILED`. The server pipeline is one failure boundary: whatever throws, the client gets
-  an answer (5.00 with Max-Age 0 unless the security layer says otherwise), a failing notification
-  removes its observer, and nothing escapes to the application's exception handler.
+  once. Receiving starts when a server attaches or the first request goes out. A send the transport
+  refuses fails at once with `TRANSPORT_FAILED`. The server pipeline is one failure boundary: whatever
+  throws, the client gets an answer (5.00 with Max-Age 0 unless the security layer says otherwise), a
+  failing notification removes its observer, and nothing escapes to the application's exception
+  handler. A request on a connection whose handler was cancelled, by `CoapServer.close()` for example,
+  gets 5.03 (RFC 8323 §3.3).
 - **Resource bounds, RFC 7252 §11.3**: everything a peer can make the endpoint keep is bounded, and a
   bound reports `EndpointEvent.LimitReached`. `CoapEndpointConfig.maxDeduplicationEntries` (50 000; new
   messages dropped silently), `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age),
   `maxExchangesPerPeer` (256; `IDENTIFIERS_EXHAUSTED`), `CoapServerConfig.maxObservers`,
   `maxObserversPerPeer` and `maxObserversPerResource` (10 000, 32 and 1 000; served without Observe,
-  RFC 7641 §4.1),
-  `ReliableTransportConfig.maxPendingConnections` (128; accepted connections awaiting their CSM). Non-confirmable
+  RFC 7641 §4.1), `ReliableTransportConfig.maxPendingConnections` (128; accepted connections awaiting
+  their CSM) and `maxConnections` (1 024; accepted connections beyond it are closed). Non-confirmable
   notifications to unauthenticated observers are interspersed with Confirmable ones (RFC 7641 §7).
 - **Threads**: every public type is safe to use from any number of coroutines on any dispatcher; the
   endpoint runs on the dispatcher of the scope it is given, so on Android or iOS give it one such as

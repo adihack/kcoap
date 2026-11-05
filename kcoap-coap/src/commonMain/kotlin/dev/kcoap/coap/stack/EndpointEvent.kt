@@ -136,6 +136,9 @@ public sealed interface EndpointEvent {
 
             /** [ReliableTransportConfig.maxPendingConnections]: an accepted connection was closed. */
             PENDING_CONNECTIONS,
+
+            /** [ReliableTransportConfig.maxConnections]: an accepted connection was closed. */
+            CONNECTIONS,
         }
 
         override fun toString(): String = "LimitReached(peer=$peer, limit=$limit)"

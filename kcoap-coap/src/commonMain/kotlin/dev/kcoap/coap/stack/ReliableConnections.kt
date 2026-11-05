@@ -266,14 +266,26 @@ internal class ReliableConnections(
             return
         }
         val driver = ConnectionDriver(connection, isInitiator = false, this, scope, config)
-        val duplicate = lock.withLock {
-            val duplicate = isClosed || peer in drivers
-            if (!duplicate) drivers[peer] = driver
-            duplicate
+        val refusal = lock.withLock {
+            when {
+                isClosed -> Refusal.CLOSED
+                peer in drivers -> Refusal.DUPLICATE
+                // RFC 7252 §11.3 for connections: established ones cannot pile up either.
+                drivers.size >= config.reliable.maxConnections -> Refusal.FULL
+                else -> {
+                    drivers[peer] = driver
+                    null
+                }
+            }
         }
-        if (duplicate) {
+        if (refusal != null) {
             pendingAccepted.release()
-            log.warn { "Refused a second connection from $peer" }
+            if (refusal == Refusal.FULL) {
+                log.debug { "Refused a connection from $peer: ${config.reliable.maxConnections} connections are open" }
+                onEvent(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.CONNECTIONS))
+            } else {
+                log.warn { "Refused a connection from $peer: ${refusal.reason}" }
+            }
             closeQuietly(connection)
             return
         }
@@ -282,6 +294,13 @@ internal class ReliableConnections(
         log.debug { "Accepted a connection from $peer" }
         onEvent(EndpointEvent.ConnectionOpened(peer, isInitiator = false))
         driver.start()
+    }
+
+    /** Why [accepted] closes a connection at once. */
+    private enum class Refusal(val reason: String) {
+        CLOSED("the endpoint is closed"),
+        DUPLICATE("a second connection from the same address"),
+        FULL("the connection bound is reached"),
     }
 
     private suspend fun closeQuietly(connection: Connection) {

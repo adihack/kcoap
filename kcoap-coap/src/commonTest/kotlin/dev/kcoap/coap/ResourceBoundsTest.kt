@@ -280,6 +280,28 @@ class ResourceBoundsTest {
     }
 
     @Test
+    fun rfc8323EstablishedAcceptedConnectionsAreBoundedToo() = runTest {
+        val fixture = ReliableFixture(this)
+        val server = fixture.server(endpointConfig = fixture.endpointConfig(reliable = ReliableTransportConfig(maxConnections = 1))) {
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        val first = fixture.client()
+        assertEquals("ok", first.get(fixture.uri("/r")).payloadAsText())
+
+        // Every source port is a peer of its own; one more established connection is one too many.
+        val refused = fixture.connections.connector.connect(Endpoint.Tcp("127.0.0.1", 5683)) as InMemoryByteStream
+        delay(100)
+        assertTrue(refused.isClosed, "beyond the bound: closed at once")
+        assertEquals(1, fixture.limits(Limit.CONNECTIONS))
+        assertEquals("ok", first.get(fixture.uri("/r")).payloadAsText(), "the connection within the bound keeps serving")
+
+        first.endpoint.close()
+        delay(1.seconds)
+        assertEquals("ok", fixture.client().get(fixture.uri("/r")).payloadAsText(), "the place came back")
+        server.close()
+    }
+
+    @Test
     fun boundsMustAllowAtLeastOne() {
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxDeduplicationEntries = 0) }
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxConcurrentRequests = 0) }
@@ -288,6 +310,7 @@ class ResourceBoundsTest {
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerResource = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerPeer = 0) }
         assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxPendingConnections = 0) }
+        assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxConnections = 0) }
         val defaults = CoapEndpointConfig()
         assertEquals(50_000, defaults.maxDeduplicationEntries)
         assertEquals(256, defaults.maxConcurrentRequests)
@@ -296,5 +319,6 @@ class ResourceBoundsTest {
         assertEquals(1_000, CoapServerConfig().maxObserversPerResource)
         assertEquals(32, CoapServerConfig().maxObserversPerPeer)
         assertEquals(128, ReliableTransportConfig().maxPendingConnections)
+        assertEquals(1024, ReliableTransportConfig().maxConnections)
     }
 }
