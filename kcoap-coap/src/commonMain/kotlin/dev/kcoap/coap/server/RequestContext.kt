@@ -12,7 +12,7 @@ import dev.kcoap.transport.PeerIdentity
  * A request as a resource handler sees it: verified by message security, reassembled from Block1
  * transfers, and with who sent it.
  *
- * Authorize on either identity (architecture rule 4): [peerIdentity] is what DTLS authenticated for the
+ * Authorize on either identity (architecture rule 4): [peerIdentity] is what DTLS or TLS authenticated for the
  * hop, [securityIdentity] what OSCORE authenticated end to end.
  */
 public class RequestContext internal constructor(
@@ -25,6 +25,8 @@ public class RequestContext internal constructor(
     /** The resource the request is for. */
     public val resource: CoapResource,
     private val inbound: InboundRequest?,
+    /** What channel security authenticated for the hop: DTLS for [Endpoint.Secure] peers, TLS on connections. */
+    public val peerIdentity: PeerIdentity,
 ) {
     /** The request method. */
     public val method: CoapCode get() = request.code
@@ -43,9 +45,6 @@ public class RequestContext internal constructor(
 
     /** Uri-Query values, decoded. */
     public val query: List<String> get() = request.options.uriQuery
-
-    /** The DTLS identity for [Endpoint.Secure] peers, [PeerIdentity.None] for plain ones. */
-    public val peerIdentity: PeerIdentity get() = (peer as? Endpoint.Secure)?.identity ?: PeerIdentity.None
 
     /** True when the handler runs to produce an Observe notification rather than to answer a request. */
     public val isNotification: Boolean get() = inbound == null

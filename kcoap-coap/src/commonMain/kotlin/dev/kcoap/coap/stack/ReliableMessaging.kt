@@ -353,10 +353,13 @@ internal class ReliableMessaging(
         openExchanges++
     }
 
-    /** The exchange with [tokenHex] ended; a request it sent no longer waits for a response. */
-    fun exchangeClosed(tokenHex: String) {
+    /**
+     * An exchange ended; a request it sent with [tokenHex] no longer waits for a response. Null when a newer
+     * exchange took over the token, which still waits.
+     */
+    fun exchangeClosed(tokenHex: String?) {
         if (openExchanges > 0) openExchanges--
-        awaitingResponse.remove(tokenHex)
+        if (tokenHex != null) awaitingResponse.remove(tokenHex)
         checkDrained()
     }
 

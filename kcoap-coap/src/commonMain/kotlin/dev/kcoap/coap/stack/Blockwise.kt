@@ -5,22 +5,85 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOption
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.OptionSet
-import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.codec.MessageCodec
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 
-/** Block-wise transfer helpers shared by client and server (RFC 7959). */
+/**
+ * What one message to a peer may be: at most [maxMessageSize] bytes in [codec]'s framing. That is the
+ * transport's datagram size for UDP (architecture rule 3), the peer's Max-Message-Size on a connection
+ * (RFC 8323 §5.3.1).
+ */
+internal class MessageLimits(
+    val maxMessageSize: Int,
+    private val codec: MessageCodec,
+    /** RFC 8323 §6: both CSMs indicated BERT, so one message may carry several 1024-byte blocks. */
+    val allowsBert: Boolean,
+    /** On a reliable transport SZX 7 means BERT; on datagrams it is reserved (RFC 7959 §2.2). */
+    val isReliable: Boolean,
+) {
+    /** The encoded size of [message]. */
+    fun size(message: CoapMessage): Int = codec.encode(message).size
+
+    /** Whether [message] fits with [reserve] bytes to spare for message security. */
+    fun fits(message: CoapMessage, reserve: Int): Boolean = size(message) + reserve <= maxMessageSize
+
+    /**
+     * Payload bytes that fit next to [header] (its payload is ignored) and [reserve]: the header, token,
+     * options and payload marker come off, and on a stream the 4 bytes the length field can grow by.
+     */
+    fun payloadRoom(header: CoapMessage, reserve: Int): Int {
+        val bare = size(header.toBuilder().apply { payload = ByteArray(0) }.build())
+        return maxMessageSize - reserve - bare - 1 - (if (isReliable) LENGTH_GROWTH else 0)
+    }
+
+    override fun toString(): String = "MessageLimits(maxMessageSize=$maxMessageSize, bert=$allowsBert)"
+
+    private companion object {
+        /** RFC 8323 §3.2: the extended length takes at most 4 bytes. */
+        const val LENGTH_GROWTH = 4
+    }
+}
+
+/**
+ * How a body is cut into blocks: [chunk] payload bytes per message, numbered in units of [unit] bytes.
+ * Plain blocks are 16 to 1024 bytes (RFC 7959 §2.2); a BERT block (SZX 7, RFC 8323 §6) is a multiple of
+ * 1024 bytes numbered in 1024-byte units.
+ */
+internal class BlockSizing private constructor(val chunk: Int, val sizeExponent: Int) {
+    val isBert: Boolean get() = sizeExponent == BERT_EXPONENT
+
+    val unit: Int get() = if (isBert) Blockwise.MAX_BLOCK_SIZE else chunk
+
+    /** The Block option for the block at [offset]. */
+    fun option(offset: Long, more: Boolean): BlockOption = BlockOption(offset / unit, more, sizeExponent)
+
+    override fun toString(): String = if (isBert) "BERT($chunk)" else "$chunk"
+
+    companion object {
+        private const val BERT_EXPONENT = 7
+
+        fun of(size: Int): BlockSizing = BlockSizing(size, BlockOption.sizeExponentFor(size))
+
+        fun bert(chunk: Int): BlockSizing {
+            require(chunk > 0 && chunk % Blockwise.MAX_BLOCK_SIZE == 0) { "BERT blocks are multiples of 1024 bytes: $chunk" }
+            return BlockSizing(chunk, BERT_EXPONENT)
+        }
+    }
+}
+
+/** Block-wise transfer helpers shared by client and server (RFC 7959, RFC 8323 §6). */
 internal object Blockwise {
     const val MIN_BLOCK_SIZE: Int = 16
     const val MAX_BLOCK_SIZE: Int = 1024
 
     /**
-     * The largest block size (16..1024, RFC 7959 §2.2) whose payload fits a datagram of [maxDatagramSize]
-     * next to [header], the message without payload, plus [reserve] bytes for message security. Null if
-     * not even 16 bytes fit. Architecture rule 3: sizes come from the transport, never from a constant.
+     * The largest block size (16..1024, RFC 7959 §2.2) whose payload fits a message within [limits] next
+     * to [header], the message without payload, plus [reserve] bytes for message security. Null if not
+     * even 16 bytes fit. Architecture rule 3: sizes come from the transport, never from a constant.
      */
-    fun fittingBlockSize(maxDatagramSize: Int, header: CoapMessage, reserve: Int, limit: Int = MAX_BLOCK_SIZE): Int? {
-        val available = maxDatagramSize - payloadOffset(header) - reserve
+    fun fittingBlockSize(limits: MessageLimits, header: CoapMessage, reserve: Int, limit: Int = MAX_BLOCK_SIZE): Int? {
+        val available = limits.payloadRoom(header, reserve)
         var size = limit
         while (size >= MIN_BLOCK_SIZE) {
             if (size <= available) return size
@@ -29,20 +92,24 @@ internal object Blockwise {
         return null
     }
 
-    /** Whether [message] fits a datagram of [maxDatagramSize] with [reserve] bytes to spare. */
-    fun fits(message: CoapMessage, maxDatagramSize: Int, reserve: Int): Boolean =
-        UdpMessageCodec.encode(message).size + reserve <= maxDatagramSize
+    /**
+     * BERT blocks for a peer that indicated BERT (RFC 8323 §5.3.2, §6): as many 1024-byte blocks per
+     * message as its Max-Message-Size takes next to [header], or null when BERT is not possible.
+     */
+    fun bertSizing(limits: MessageLimits, header: CoapMessage, reserve: Int): BlockSizing? {
+        if (!limits.allowsBert) return null
+        val blocks = limits.payloadRoom(header, reserve) / MAX_BLOCK_SIZE
+        return if (blocks >= 1) BlockSizing.bert(blocks * MAX_BLOCK_SIZE) else null
+    }
 
-    /** Bytes before the payload: header, token, options and the payload marker. */
-    private fun payloadOffset(header: CoapMessage): Int =
-        UdpMessageCodec.encode(header.toBuilder().apply { payload = ByteArray(0) }.build()).size + 1
+    /** Whether [message] fits a message within [limits] with [reserve] bytes to spare. */
+    fun fits(message: CoapMessage, limits: MessageLimits, reserve: Int): Boolean = limits.fits(message, reserve)
 
-    /** The block [number] of [body] in blocks of [size], and whether more follow. Null if beyond the end. */
-    fun slice(body: ByteArray, number: Long, size: Int): Pair<ByteArray, Boolean>? {
-        val start = number * size
-        if (start > body.size || (start == body.size.toLong() && number > 0)) return null
-        val end = minOf(body.size.toLong(), start + size).toInt()
-        return body.copyOfRange(start.toInt(), end) to (end < body.size)
+    /** The [length] bytes of [body] from [offset], and whether more follow. Null if beyond the end. */
+    fun slice(body: ByteArray, offset: Long, length: Int): Pair<ByteArray, Boolean>? {
+        if (offset > body.size || (offset == body.size.toLong() && offset > 0)) return null
+        val end = minOf(body.size.toLong(), offset + length).toInt()
+        return body.copyOfRange(offset.toInt(), end) to (end < body.size)
     }
 
     fun block(number: Long, more: Boolean, size: Int): BlockOption =

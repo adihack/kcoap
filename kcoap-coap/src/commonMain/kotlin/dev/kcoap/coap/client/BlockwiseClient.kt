@@ -6,7 +6,9 @@ import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.CoapResponse
+import dev.kcoap.coap.stack.BlockSizing
 import dev.kcoap.coap.stack.Blockwise
+import dev.kcoap.coap.stack.MessageLimits
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.common.ByteArrayBuilder
 import dev.kcoap.common.minimalUnsignedBytes
@@ -30,7 +32,7 @@ internal class BlockwiseClient(private val client: CoapClient) {
     /** Sends [request] (code, options, payload) and returns the whole response. */
     suspend fun send(peer: Endpoint, request: CoapMessage, confirmable: Boolean): CoapResponse {
         val reserve = client.securityReserve
-        val maxDatagram = client.endpoint.maxDatagramSize
+        val limits = client.endpoint.limits(peer)
         // §2.4 early negotiation: propose the configured block size for the response.
         val early = config.blockSize?.takeIf { request.payloadSize == 0 }
         val single = if (early != null) {
@@ -39,20 +41,30 @@ internal class BlockwiseClient(private val client: CoapClient) {
             request
         }
         val needsBlock1 = request.payloadSize > 0 &&
-            (!Blockwise.fits(single, maxDatagram, reserve) || request.payloadSize > (config.blockSize ?: Int.MAX_VALUE))
+            (!Blockwise.fits(single, limits, reserve) || request.payloadSize > (config.blockSize ?: Int.MAX_VALUE))
         if (!needsBlock1) {
             val response = client.exchange(peer, single, confirmable)
             // RFC 7959 §2.9.3: 4.13 to a request without Block1 is a hint to try Block1.
             if (response.code == CoapCode.REQUEST_ENTITY_TOO_LARGE && request.payloadSize > Blockwise.MIN_BLOCK_SIZE) {
-                return upload(peer, request, confirmable, response.options.block1?.size)
+                return upload(peer, request, confirmable, response.options.block1?.size, limits)
             }
             return complete(peer, single, response, confirmable)
         }
-        return upload(peer, request, confirmable, config.blockSize)
+        return upload(peer, request, confirmable, config.blockSize, limits)
     }
 
-    /** RFC 7959 §2.5: the body in Block1 blocks, in order, adapting to the server's preferred size. */
-    private suspend fun upload(peer: Endpoint, request: CoapMessage, confirmable: Boolean, preferredSize: Int?): CoapResponse {
+    /**
+     * RFC 7959 §2.5: the body in Block1 blocks, in order, adapting to the server's preferred size. To a
+     * peer that indicated BERT, without a configured or [preferredSize], the blocks are BERT blocks of as
+     * many kibibytes as its Max-Message-Size takes (RFC 8323 §6).
+     */
+    private suspend fun upload(
+        peer: Endpoint,
+        request: CoapMessage,
+        confirmable: Boolean,
+        preferredSize: Int?,
+        limits: MessageLimits,
+    ): CoapResponse {
         val body = request.payload
         val key = OperationKey(peer, null, request.code.value, Blockwise.operationOptions(request.options))
         val tag = acquireTag(key)
@@ -65,28 +77,32 @@ internal class BlockwiseClient(private val client: CoapClient) {
                 block1(BlockOption(BlockOption.MAX_NUMBER, true, 6))
                 size1(body.size.toLong())
             }.build()
-            var size = Blockwise.fittingBlockSize(
-                client.endpoint.maxDatagramSize, header, client.securityReserve, preferredSize ?: Blockwise.MAX_BLOCK_SIZE,
-            ) ?: throw CoapException("Request options leave no room for a block", CoapException.Reason.MESSAGE_TOO_LARGE)
+            val reserve = client.securityReserve
+            val bert = if (preferredSize == null) Blockwise.bertSizing(limits, header, reserve) else null
+            var sizing = bert ?: Blockwise.fittingBlockSize(limits, header, reserve, preferredSize ?: Blockwise.MAX_BLOCK_SIZE)
+                ?.let(BlockSizing::of)
+                ?: throw CoapException("Request options leave no room for a block", CoapException.Reason.MESSAGE_TOO_LARGE)
             var offset = 0
             var restarted = false
             while (true) {
-                val number = (offset / size).toLong()
-                val end = minOf(body.size, offset + size)
+                val end = minOf(body.size, offset + sizing.chunk)
                 val more = end < body.size
+                val option = sizing.option(offset.toLong(), more)
                 val block = base.toBuilder().apply {
                     payload = body.copyOfRange(offset, end)
                     options {
-                        block1(Blockwise.block(number, more, size))
-                        if (number == 0L) size1(body.size.toLong())
+                        block1(option)
+                        if (offset == 0) size1(body.size.toLong())
                         if (!more && config.blockSize != null) block2(Blockwise.block(0, false, config.blockSize))
                     }
                 }.build()
                 val response = client.exchange(peer, block, confirmable)
                 val control = response.options.block1
-                if (response.code == CoapCode.REQUEST_ENTITY_TOO_LARGE && control != null && control.size < size && !restarted) {
+                if (response.code == CoapCode.REQUEST_ENTITY_TOO_LARGE && control != null && !control.isBert &&
+                    control.size < sizing.chunk && !restarted
+                ) {
                     // §2.9.3: 4.13 with a smaller SZX is a hint to start over with that size.
-                    size = control.size
+                    sizing = BlockSizing.of(control.size)
                     offset = 0
                     restarted = true
                     continue
@@ -94,8 +110,9 @@ internal class BlockwiseClient(private val client: CoapClient) {
                 if (!more) return complete(peer, base, response, confirmable)
                 val continues = response.code == CoapCode.CONTINUE || (response.code.isSuccess && control?.more == false)
                 if (!continues) return CoapResponse.of(response)
-                // §2.3: use the server's preferred size from now on; the block number scales with it.
-                if (control != null && control.size < size && !control.isBert) size = control.size
+                // §2.3: use the server's preferred size from now on; the block number scales with it. A plain
+                // SZX in answer to BERT blocks asks for plain blocks (RFC 8323 §6).
+                if (control != null && !control.isBert && control.size < sizing.chunk) sizing = BlockSizing.of(control.size)
                 offset = end
             }
         } finally {
@@ -121,21 +138,27 @@ internal class BlockwiseClient(private val client: CoapClient) {
             if (!canRestart || restarts++ >= MAX_RESTARTS) {
                 throw CoapException("The representation changed during a Block2 transfer", CoapException.Reason.BLOCKWISE_FAILED)
             }
-            head = client.exchange(peer, followUp(request, 0, head.options.block2?.size ?: Blockwise.MAX_BLOCK_SIZE), confirmable)
+            val again = head.options.block2?.let { BlockOption(0, false, it.sizeExponent) } ?: Blockwise.block(0, false, Blockwise.MAX_BLOCK_SIZE)
+            head = client.exchange(peer, followUp(request, again), confirmable)
             if (head.options.block2?.more != true) return withoutBlockOptions(head, head.payload)
         }
     }
 
-    /** The whole body following [head], or null when an ETag changed. */
+    /**
+     * The whole body following [head], or null when an ETag changed. Each follow-up asks for the next block
+     * in the size of the last one; after a BERT block that is BERT again, at the block number the payload
+     * so far reaches in 1024-byte units (RFC 8323 §6).
+     */
     private suspend fun download(peer: Endpoint, request: CoapMessage, head: CoapMessage, confirmable: Boolean): CoapResponse? {
         val announced = head.options.size2
         if (announced != null && announced > config.maxResponseBodySize) throw tooLarge(announced)
         val etag = head.options.etags.firstOrNull()?.toHex()
         val body = ByteArrayBuilder(maxOf(head.payloadSize, (announced ?: 0).toInt()))
         body.append(head.payload)
-        var size = head.options.block2!!.size
+        var last = head.options.block2!!
         while (true) {
-            val response = client.exchange(peer, followUp(request, (body.size / size).toLong(), size), confirmable)
+            val next = BlockOption(body.size.toLong() / last.size, false, last.sizeExponent)
+            val response = client.exchange(peer, followUp(request, next), confirmable)
             if (!response.isResponse || !response.code.isSuccess) {
                 throw CoapException("Block2 transfer failed with ${response.code}", CoapException.Reason.BLOCKWISE_FAILED)
             }
@@ -148,18 +171,18 @@ internal class BlockwiseClient(private val client: CoapClient) {
             body.append(response.payload)
             if (body.size > config.maxResponseBodySize) throw tooLarge(body.size.toLong())
             if (!block.more) return withoutBlockOptions(head, body.toByteArray())
-            size = block.size
+            last = block
         }
     }
 
-    private fun followUp(request: CoapMessage, number: Long, size: Int): CoapMessage = request.toBuilder().apply {
+    private fun followUp(request: CoapMessage, control: BlockOption): CoapMessage = request.toBuilder().apply {
         // §2.4: further requests repeat the options with the Block2 control option (M = 0).
         payload = if (request.code == CoapCode.FETCH) request.payload else ByteArray(0)
         options {
             remove(CoapOptions.BLOCK1.number)
             remove(CoapOptions.SIZE1.number)
             remove(CoapOptions.OBSERVE.number)
-            block2(Blockwise.block(number, false, size))
+            block2(control)
         }
     }.build()
 

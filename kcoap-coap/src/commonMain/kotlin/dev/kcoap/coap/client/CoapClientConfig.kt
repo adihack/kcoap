@@ -2,6 +2,7 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.transport.ChannelSecurityKind
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.IpLiteral
 import dev.kcoap.transport.TransportKind
@@ -16,11 +17,13 @@ import kotlin.time.Duration
  *   from sending; null waits EXCHANGE_LIFETIME. A Confirmable request without ACK fails earlier, after
  *   MAX_TRANSMIT_WAIT.
  * @property blockSize the block size for Block1 uploads and the Block2 size proposed in requests
- *   (early negotiation, RFC 7959 §2.4); null uses the largest size the datagram fits and lets the
- *   server choose the response block size.
+ *   (early negotiation, RFC 7959 §2.4); null uses the largest size the datagram (or the server's
+ *   Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and lets the server
+ *   choose the response block size. Set, it also turns BERT off.
  * @property maxResponseBodySize the largest body assembled from Block2 transfers.
  * @property resolver turns the host of a URI into a transport [Endpoint].
- * @property observeCancellation what a cancelled observation does (RFC 7641 §3.6).
+ * @property observeCancellation what a cancelled observation does (RFC 7641 §3.6). Over reliable
+ *   transports the client always deregisters (RFC 8323 §7.4).
  * @property echoRetry whether a 4.01 with Echo is answered by repeating the request once with that Echo
  *   value (RFC 9175 §2.3: SHOULD).
  * @property securityReserve bytes kept free in each message for [security]'s overhead when choosing
@@ -65,17 +68,28 @@ public fun interface EndpointResolver {
 
     public companion object {
         /**
-         * IP literals in their canonical form ([IpLiteral], so that responses match by endpoint
-         * equality), and `localhost` as 127.0.0.1; anything else needs a resolver that knows DNS.
+         * For datagram schemes, IP literals in their canonical form ([IpLiteral], so that responses match
+         * by endpoint equality) and `localhost` as 127.0.0.1; other names need a resolver that knows DNS.
+         *
+         * For the reliable schemes of RFC 8323 §8, responses arrive on the connection that carried the
+         * request, so host names stay names, which the connector resolves and TLS checks the certificate
+         * against: `coap+tcp` and `coaps+tcp` become an [Endpoint.Tcp], `coap+ws` and `coaps+ws` the
+         * [Endpoint.WebSocket] at `/.well-known/coap` of the URI's authority.
          */
         public val IpLiterals: EndpointResolver = EndpointResolver { uri ->
-            require(uri.scheme.kind == TransportKind.DATAGRAM) { "${uri.scheme.scheme} needs a ${uri.scheme.kind} transport" }
-            val host = when {
-                uri.host == "localhost" -> "127.0.0.1"
-                else -> IpLiteral.canonical(uri.host)
-                    ?: throw IllegalArgumentException("Cannot resolve '${uri.host}': configure an EndpointResolver")
+            val usesTls = uri.scheme.security == ChannelSecurityKind.TLS
+            when (uri.scheme.kind) {
+                TransportKind.DATAGRAM -> {
+                    val host = when {
+                        uri.host == "localhost" -> "127.0.0.1"
+                        else -> IpLiteral.canonical(uri.host)
+                            ?: throw IllegalArgumentException("Cannot resolve '${uri.host}': configure an EndpointResolver")
+                    }
+                    Endpoint.Udp(host, uri.port)
+                }
+                TransportKind.BYTE_STREAM -> Endpoint.Tcp(IpLiteral.canonical(uri.host) ?: uri.host, uri.port, usesTls)
+                TransportKind.MESSAGE_STREAM -> Endpoint.WebSocket.of(IpLiteral.canonical(uri.host) ?: uri.host, uri.port, usesTls)
             }
-            Endpoint.Udp(host, uri.port)
         }
     }
 }

@@ -7,9 +7,9 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * How a [CoapEndpoint] runs its messaging layer.
+ * How a [CoapEndpoint] runs its messaging layers.
  *
- * @property parameters RFC 7252 §4.8 transmission parameters.
+ * @property parameters RFC 7252 §4.8 transmission parameters, for datagram transports.
  * @property separateResponseDelay how long a Confirmable request may wait for its response before the
  *   endpoint sends an Empty ACK and the response follows separately (RFC 7252 §5.2.2). It should stay
  *   below ACK_TIMEOUT so the client does not retransmit; null disables it, so a slow handler makes the
@@ -22,6 +22,7 @@ import kotlin.time.TimeSource
  * @property interceptors the message interceptor chain, in order.
  * @property eventListener receives [EndpointEvent]s.
  * @property loggerFactory where the endpoint's loggers come from.
+ * @property reliable CSM settings and connection management for CoAP over reliable transports (RFC 8323).
  */
 public class CoapEndpointConfig(
     public val parameters: TransmissionParameters = TransmissionParameters.Default,
@@ -32,6 +33,7 @@ public class CoapEndpointConfig(
     public val interceptors: List<MessageInterceptor> = emptyList(),
     public val eventListener: EndpointEventListener = EndpointEventListener.None,
     public val loggerFactory: LoggerFactory = LoggerFactory.Global,
+    public val reliable: ReliableTransportConfig = ReliableTransportConfig(),
 ) {
     init {
         require(separateResponseDelay == null || !separateResponseDelay.isNegative()) {
@@ -40,5 +42,5 @@ public class CoapEndpointConfig(
     }
 
     override fun toString(): String =
-        "CoapEndpointConfig($parameters, separateResponseDelay=$separateResponseDelay, interceptors=${interceptors.size})"
+        "CoapEndpointConfig($parameters, separateResponseDelay=$separateResponseDelay, interceptors=${interceptors.size}, $reliable)"
 }

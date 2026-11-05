@@ -312,7 +312,8 @@ class EdgeCaseTest {
             loggerFactory = fixture.loggerFactory,
         )
         val client = CoapClient(fixture.transport(), backgroundScope, endpointConfig = config)
-        fixture.network.filter = { datagram -> datagram.from != fixture.address(server.endpoint) || Random.nextBoolean() }
+        val coin = Random(4)
+        fixture.network.filter = { datagram -> datagram.from != fixture.address(server.endpoint) || coin.nextBoolean() }
         assertEquals("ok", client.get(fixture.uri(server, "/r")).payloadAsText())
         client.close()
     }
@@ -353,12 +354,28 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun theDefaultResolverAcceptsOnlyIpLiteralsAndLocalhost() = runTest {
+    fun theDefaultResolverAcceptsOnlyIpLiteralsAndLocalhostForDatagrams() = runTest {
         val resolver = EndpointResolver.IpLiterals
         assertEquals(Endpoint.Udp("::1", 5683), resolver.resolve(CoapUri.parse("coap://[0:0:0:0:0:0:0:1]")))
         assertEquals(Endpoint.Udp("127.0.0.1", 1234), resolver.resolve(CoapUri.parse("coap://localhost:1234")))
         assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://example.com")) }
-        assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap+tcp://127.0.0.1")) }
+    }
+
+    /** RFC 8323 §8: responses come on the connection, so names stay names for the connector to resolve. */
+    @Test
+    fun theDefaultResolverMapsReliableSchemesToConnectionEndpoints() = runTest {
+        val resolver = EndpointResolver.IpLiterals
+        assertEquals(Endpoint.Tcp("127.0.0.1", 5683), resolver.resolve(CoapUri.parse("coap+tcp://127.0.0.1")))
+        assertEquals(Endpoint.Tcp("::1", 5684, usesTls = true), resolver.resolve(CoapUri.parse("coaps+tcp://[0::1]")))
+        assertEquals(Endpoint.Tcp("example.com", 5683), resolver.resolve(CoapUri.parse("coap+tcp://example.com")))
+        assertEquals(
+            Endpoint.WebSocket("ws://example.com:80/.well-known/coap"),
+            resolver.resolve(CoapUri.parse("coap+ws://example.com/sensors/temp?u=Cel")),
+        )
+        assertEquals(
+            Endpoint.WebSocket("wss://[2001:db8::1]:8443/.well-known/coap"),
+            resolver.resolve(CoapUri.parse("coaps+ws://[2001:DB8:0::1]:8443/")),
+        )
     }
 
     @Test
