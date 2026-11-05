@@ -681,6 +681,15 @@ public final class dev/kcoap/coap/security/UnprotectedRequest$DefaultImpls {
 	public static fun getChallenge (Ldev/kcoap/coap/security/UnprotectedRequest;)Ldev/kcoap/coap/CoapMessage;
 }
 
+public final class dev/kcoap/coap/server/AmplificationPolicy : java/lang/Enum {
+	public static final field ALL_RESPONSES Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static final field OFF Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static final field Q_BLOCK_BURSTS Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static fun values ()[Ldev/kcoap/coap/server/AmplificationPolicy;
+}
+
 public abstract class dev/kcoap/coap/server/CoapResource {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun add (Ldev/kcoap/coap/server/CoapResource;)Ldev/kcoap/coap/server/CoapResource;
@@ -724,12 +733,16 @@ public final class dev/kcoap/coap/server/CoapServer {
 
 public final class dev/kcoap/coap/server/CoapServerConfig {
 	public static final field Companion Ldev/kcoap/coap/server/CoapServerConfig$Companion;
+	public static final field DEFAULT_AMPLIFICATION_FACTOR I
 	public static final field DEFAULT_MAX_OBSERVERS I
 	public static final field DEFAULT_MAX_OBSERVERS_PER_PEER I
 	public static final field DEFAULT_MAX_OBSERVERS_PER_RESOURCE I
+	public static final field DEFAULT_MAX_VERIFIED_ADDRESSES I
 	public fun <init> ()V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAmplification ()Ldev/kcoap/coap/server/AmplificationPolicy;
+	public final fun getAmplificationFactor ()I
 	public final fun getConfirmableNotificationInterval-UwyO8pc ()J
 	public final fun getMaxBlockSize ()I
 	public final fun getMaxBodySize ()I
@@ -737,14 +750,17 @@ public final class dev/kcoap/coap/server/CoapServerConfig {
 	public final fun getMaxObservers ()I
 	public final fun getMaxObserversPerPeer ()I
 	public final fun getMaxObserversPerResource ()I
+	public final fun getMaxVerifiedAddresses ()I
 	public final fun getNonConfirmableNotificationInterval-UwyO8pc ()J
 	public final fun getSecurity ()Ldev/kcoap/coap/security/ServerMessageSecurity;
 	public final fun getSecurityReserve ()I
+	public final fun getVerifiedAddressLifetime-UwyO8pc ()J
 	public final fun getWellKnownCore ()Z
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/kcoap/coap/server/CoapServerConfig$Companion {
+	public final fun getDEFAULT_VERIFIED_ADDRESS_LIFETIME-UwyO8pc ()J
 }
 
 public abstract interface annotation class dev/kcoap/coap/server/CoapServerDsl : java/lang/annotation/Annotation {
@@ -918,6 +934,8 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached : dev/kcoap/c
 }
 
 public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/lang/Enum {
+	public static final field ADDRESS_CHALLENGES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field AMPLIFICATION_FACTOR Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field CONCURRENT_REQUESTS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field DEDUPLICATION_ENTRIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
@@ -926,6 +944,7 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/
 	public static final field OBSERVERS_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS_PER_RESOURCE Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field PENDING_CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field VERIFIED_ADDRESSES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;

@@ -21,6 +21,18 @@ final enum class dev.kcoap.coap.client/ObserveCancellation : kotlin/Enum<dev.kco
     final fun values(): kotlin/Array<dev.kcoap.coap.client/ObserveCancellation> // dev.kcoap.coap.client/ObserveCancellation.values|values#static(){}[0]
 }
 
+final enum class dev.kcoap.coap.server/AmplificationPolicy : kotlin/Enum<dev.kcoap.coap.server/AmplificationPolicy> { // dev.kcoap.coap.server/AmplificationPolicy|null[0]
+    enum entry ALL_RESPONSES // dev.kcoap.coap.server/AmplificationPolicy.ALL_RESPONSES|null[0]
+    enum entry OFF // dev.kcoap.coap.server/AmplificationPolicy.OFF|null[0]
+    enum entry Q_BLOCK_BURSTS // dev.kcoap.coap.server/AmplificationPolicy.Q_BLOCK_BURSTS|null[0]
+
+    final val entries // dev.kcoap.coap.server/AmplificationPolicy.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.server/AmplificationPolicy> // dev.kcoap.coap.server/AmplificationPolicy.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.coap.server/AmplificationPolicy // dev.kcoap.coap.server/AmplificationPolicy.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.coap.server/AmplificationPolicy> // dev.kcoap.coap.server/AmplificationPolicy.values|values#static(){}[0]
+}
+
 final enum class dev.kcoap.coap/CoapMessageType : kotlin/Enum<dev.kcoap.coap/CoapMessageType> { // dev.kcoap.coap/CoapMessageType|null[0]
     enum entry ACK // dev.kcoap.coap/CoapMessageType.ACK|null[0]
     enum entry CON // dev.kcoap.coap/CoapMessageType.CON|null[0]
@@ -220,6 +232,8 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.LimitReached.toString|toString(){}[0]
 
         final enum class Limit : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit> { // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit|null[0]
+            enum entry ADDRESS_CHALLENGES // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.ADDRESS_CHALLENGES|null[0]
+            enum entry AMPLIFICATION_FACTOR // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.AMPLIFICATION_FACTOR|null[0]
             enum entry CONCURRENT_REQUESTS // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.CONCURRENT_REQUESTS|null[0]
             enum entry CONNECTIONS // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.CONNECTIONS|null[0]
             enum entry DEDUPLICATION_ENTRIES // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES|null[0]
@@ -228,6 +242,7 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
             enum entry OBSERVERS_PER_PEER // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.OBSERVERS_PER_PEER|null[0]
             enum entry OBSERVERS_PER_RESOURCE // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.OBSERVERS_PER_RESOURCE|null[0]
             enum entry PENDING_CONNECTIONS // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.PENDING_CONNECTIONS|null[0]
+            enum entry VERIFIED_ADDRESSES // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.VERIFIED_ADDRESSES|null[0]
 
             final val entries // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.entries|#static{}entries[0]
                 final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit> // dev.kcoap.coap.stack/EndpointEvent.LimitReached.Limit.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -524,8 +539,12 @@ final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServ
 }
 
 final class dev.kcoap.coap.server/CoapServerConfig { // dev.kcoap.coap.server/CoapServerConfig|null[0]
-    constructor <init>(dev.kcoap.coap.security/ServerMessageSecurity? = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // dev.kcoap.coap.server/CoapServerConfig.<init>|<init>(dev.kcoap.coap.security.ServerMessageSecurity?;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    constructor <init>(dev.kcoap.coap.security/ServerMessageSecurity? = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., dev.kcoap.coap.server/AmplificationPolicy = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ...) // dev.kcoap.coap.server/CoapServerConfig.<init>|<init>(dev.kcoap.coap.security.ServerMessageSecurity?;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;dev.kcoap.coap.server.AmplificationPolicy;kotlin.Int;kotlin.Int;kotlin.time.Duration){}[0]
 
+    final val amplification // dev.kcoap.coap.server/CoapServerConfig.amplification|{}amplification[0]
+        final fun <get-amplification>(): dev.kcoap.coap.server/AmplificationPolicy // dev.kcoap.coap.server/CoapServerConfig.amplification.<get-amplification>|<get-amplification>(){}[0]
+    final val amplificationFactor // dev.kcoap.coap.server/CoapServerConfig.amplificationFactor|{}amplificationFactor[0]
+        final fun <get-amplificationFactor>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.amplificationFactor.<get-amplificationFactor>|<get-amplificationFactor>(){}[0]
     final val confirmableNotificationInterval // dev.kcoap.coap.server/CoapServerConfig.confirmableNotificationInterval|{}confirmableNotificationInterval[0]
         final fun <get-confirmableNotificationInterval>(): kotlin.time/Duration // dev.kcoap.coap.server/CoapServerConfig.confirmableNotificationInterval.<get-confirmableNotificationInterval>|<get-confirmableNotificationInterval>(){}[0]
     final val maxBlockSize // dev.kcoap.coap.server/CoapServerConfig.maxBlockSize|{}maxBlockSize[0]
@@ -540,24 +559,35 @@ final class dev.kcoap.coap.server/CoapServerConfig { // dev.kcoap.coap.server/Co
         final fun <get-maxObserversPerPeer>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.maxObserversPerPeer.<get-maxObserversPerPeer>|<get-maxObserversPerPeer>(){}[0]
     final val maxObserversPerResource // dev.kcoap.coap.server/CoapServerConfig.maxObserversPerResource|{}maxObserversPerResource[0]
         final fun <get-maxObserversPerResource>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.maxObserversPerResource.<get-maxObserversPerResource>|<get-maxObserversPerResource>(){}[0]
+    final val maxVerifiedAddresses // dev.kcoap.coap.server/CoapServerConfig.maxVerifiedAddresses|{}maxVerifiedAddresses[0]
+        final fun <get-maxVerifiedAddresses>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.maxVerifiedAddresses.<get-maxVerifiedAddresses>|<get-maxVerifiedAddresses>(){}[0]
     final val nonConfirmableNotificationInterval // dev.kcoap.coap.server/CoapServerConfig.nonConfirmableNotificationInterval|{}nonConfirmableNotificationInterval[0]
         final fun <get-nonConfirmableNotificationInterval>(): kotlin.time/Duration // dev.kcoap.coap.server/CoapServerConfig.nonConfirmableNotificationInterval.<get-nonConfirmableNotificationInterval>|<get-nonConfirmableNotificationInterval>(){}[0]
     final val security // dev.kcoap.coap.server/CoapServerConfig.security|{}security[0]
         final fun <get-security>(): dev.kcoap.coap.security/ServerMessageSecurity? // dev.kcoap.coap.server/CoapServerConfig.security.<get-security>|<get-security>(){}[0]
     final val securityReserve // dev.kcoap.coap.server/CoapServerConfig.securityReserve|{}securityReserve[0]
         final fun <get-securityReserve>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.securityReserve.<get-securityReserve>|<get-securityReserve>(){}[0]
+    final val verifiedAddressLifetime // dev.kcoap.coap.server/CoapServerConfig.verifiedAddressLifetime|{}verifiedAddressLifetime[0]
+        final fun <get-verifiedAddressLifetime>(): kotlin.time/Duration // dev.kcoap.coap.server/CoapServerConfig.verifiedAddressLifetime.<get-verifiedAddressLifetime>|<get-verifiedAddressLifetime>(){}[0]
     final val wellKnownCore // dev.kcoap.coap.server/CoapServerConfig.wellKnownCore|{}wellKnownCore[0]
         final fun <get-wellKnownCore>(): kotlin/Boolean // dev.kcoap.coap.server/CoapServerConfig.wellKnownCore.<get-wellKnownCore>|<get-wellKnownCore>(){}[0]
 
     final fun toString(): kotlin/String // dev.kcoap.coap.server/CoapServerConfig.toString|toString(){}[0]
 
     final object Companion { // dev.kcoap.coap.server/CoapServerConfig.Companion|null[0]
+        final const val DEFAULT_AMPLIFICATION_FACTOR // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_AMPLIFICATION_FACTOR|{}DEFAULT_AMPLIFICATION_FACTOR[0]
+            final fun <get-DEFAULT_AMPLIFICATION_FACTOR>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_AMPLIFICATION_FACTOR.<get-DEFAULT_AMPLIFICATION_FACTOR>|<get-DEFAULT_AMPLIFICATION_FACTOR>(){}[0]
         final const val DEFAULT_MAX_OBSERVERS // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS|{}DEFAULT_MAX_OBSERVERS[0]
             final fun <get-DEFAULT_MAX_OBSERVERS>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS.<get-DEFAULT_MAX_OBSERVERS>|<get-DEFAULT_MAX_OBSERVERS>(){}[0]
         final const val DEFAULT_MAX_OBSERVERS_PER_PEER // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS_PER_PEER|{}DEFAULT_MAX_OBSERVERS_PER_PEER[0]
             final fun <get-DEFAULT_MAX_OBSERVERS_PER_PEER>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS_PER_PEER.<get-DEFAULT_MAX_OBSERVERS_PER_PEER>|<get-DEFAULT_MAX_OBSERVERS_PER_PEER>(){}[0]
         final const val DEFAULT_MAX_OBSERVERS_PER_RESOURCE // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS_PER_RESOURCE|{}DEFAULT_MAX_OBSERVERS_PER_RESOURCE[0]
             final fun <get-DEFAULT_MAX_OBSERVERS_PER_RESOURCE>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_OBSERVERS_PER_RESOURCE.<get-DEFAULT_MAX_OBSERVERS_PER_RESOURCE>|<get-DEFAULT_MAX_OBSERVERS_PER_RESOURCE>(){}[0]
+        final const val DEFAULT_MAX_VERIFIED_ADDRESSES // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_VERIFIED_ADDRESSES|{}DEFAULT_MAX_VERIFIED_ADDRESSES[0]
+            final fun <get-DEFAULT_MAX_VERIFIED_ADDRESSES>(): kotlin/Int // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_MAX_VERIFIED_ADDRESSES.<get-DEFAULT_MAX_VERIFIED_ADDRESSES>|<get-DEFAULT_MAX_VERIFIED_ADDRESSES>(){}[0]
+
+        final val DEFAULT_VERIFIED_ADDRESS_LIFETIME // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_VERIFIED_ADDRESS_LIFETIME|{}DEFAULT_VERIFIED_ADDRESS_LIFETIME[0]
+            final fun <get-DEFAULT_VERIFIED_ADDRESS_LIFETIME>(): kotlin.time/Duration // dev.kcoap.coap.server/CoapServerConfig.Companion.DEFAULT_VERIFIED_ADDRESS_LIFETIME.<get-DEFAULT_VERIFIED_ADDRESS_LIFETIME>|<get-DEFAULT_VERIFIED_ADDRESS_LIFETIME>(){}[0]
     }
 }
 
