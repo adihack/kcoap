@@ -11,12 +11,14 @@ import dev.kcoap.crypto.CertificateValidator
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.edhoc.vectors.Rfc9529Trace1
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -530,6 +532,43 @@ class ErrorHandlingTest {
         responder.processMessage1(otherInitiator.createMessage1())
         assertFailsWith<CancellationException> { responder.createMessage2() }
         assertEquals(EdhocPhase.ABORTED, responder.phase)
+    }
+
+    /**
+     * RFC 9528 §9.8: when message_2 cannot be composed, because C_R equals C_I, the EAD handler fails or
+     * the call is cancelled, the ephemeral key Y is wiped, also with an Initiator that authenticates with
+     * static DH, for which Y is otherwise kept until message_3.
+     */
+    @Test
+    fun aFailedMessage2WipesTheEphemeralKey() = runTest {
+        for (method in listOf(method0, EdhocMethod.STATIC_DH_STATIC_DH)) {
+            for (failure in listOf("C_R", "EAD", "cancellation")) {
+                val ead = object : EadHandler {
+                    override suspend fun produce(message: EdhocMessage): List<EadItem> = when (failure) {
+                        "EAD" -> throw EdhocException.unspecified("No EAD_2 today")
+                        "cancellation" -> throw CancellationException("stop")
+                        else -> emptyList()
+                    }
+                }
+                val responderId = if (failure == "C_R") cid("18") else cid("19")
+                val (initiatorConfig, config) =
+                    Fixtures.configs(backend, method, CipherSuite.SUITE_0, cid("18"), responderId, responderEad = ead)
+                val keys = mutableListOf<PrivateKey>()
+                val recording = EphemeralKeySource { crypto, type ->
+                    crypto.generateKeyPair(type).also { keys += it.privateKey }
+                }
+                val responderConfig = EdhocResponderConfig(
+                    config.methods, config.cipherSuites, config.credentials, config.credentialResolver,
+                    config.connectionIdentifiers, ead, recording,
+                )
+                val responder = EdhocResponder(responderConfig, backend)
+                responder.processMessage1(EdhocInitiator(initiatorConfig, backend).createMessage1())
+                assertFails { responder.createMessage2() }
+                assertEquals(EdhocPhase.ABORTED, responder.phase)
+                val y = keys.single() as SoftwarePrivateKey
+                assertFailsWith<IllegalStateException>("method ${method.value}, $failure") { y.encoded() }
+            }
+        }
     }
 
     @Test

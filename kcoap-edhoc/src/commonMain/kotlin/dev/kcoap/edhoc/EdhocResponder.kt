@@ -118,6 +118,9 @@ public class EdhocResponder(
     /**
      * Composes message_2 (RFC 9528 §5.3.2): completes the ephemeral exchange (ECDH, or KEM encapsulation),
      * chooses C_R, and authenticates with MAC_2 and Signature_or_MAC_2.
+     *
+     * When it fails or is cancelled, the ephemeral key Y and the PRKs derived so far are wiped (RFC 9528
+     * §9.8), like the secrets of every later state when the session aborts.
      */
     public suspend fun createMessage2(): ByteArray {
         val verified = expect<State.VerifiedMessage1>("createMessage2")
@@ -127,59 +130,74 @@ public class EdhocResponder(
             val own = config.credentialFor(method, suite)!!
             val exchange = EphemeralKeyExchange.forSuite(suite, crypto, config.ephemeralKeys)
             val share = exchange.respond(verified.gX)
-            val connectionIdentifier = config.connectionIdentifiers.choose(crypto, initiatorConnectionIdentifier)
-            if (connectionIdentifier == initiatorConnectionIdentifier) {
-                share.privateKey?.destroyIfSoftware()
-                throw EdhocException.unspecified("C_R must differ from C_I")
-            }
-            val th2 = keySchedule.th2(share.gY, verified.hashMessage1)
-            val prk2e = keySchedule.prk2e(th2, share.sharedSecret)
-            record("G_Y", share.gY)
-            record("G_XY", share.sharedSecret)
-            record("TH_2", th2)
-            record("PRK_2e", prk2e)
-            wipeAll(share.sharedSecret)
+            // Until the WaitingForMessage3 state holds them, the finally block below owns these secrets.
+            var prk2e: ByteArray? = null
+            var prk3e2m: ByteArray? = null
+            var isComposed = false
+            try {
+                val connectionIdentifier = config.connectionIdentifiers.choose(crypto, initiatorConnectionIdentifier)
+                if (connectionIdentifier == initiatorConnectionIdentifier) {
+                    throw EdhocException.unspecified("C_R must differ from C_I")
+                }
+                val th2 = keySchedule.th2(share.gY, verified.hashMessage1)
+                prk2e = keySchedule.prk2e(th2, share.sharedSecret)
+                record("G_Y", share.gY)
+                record("G_XY", share.sharedSecret)
+                record("TH_2", th2)
+                record("PRK_2e", prk2e)
+                wipeAll(share.sharedSecret)
 
-            val kind = method.responderAuthentication
-            // PRK_3e2m = EDHOC_Extract( SALT_3e2m, G_RX ) with static DH (RFC 9528 §4.1.1.2).
-            val prk3e2m = if (kind == AuthenticationKind.STATIC_DH) {
-                val salt3e2m = keySchedule.salt3e2m(prk2e, th2)
-                val gRX = exchange.staticAgreementWithShare(own.privateKey, verified.gX)
-                record("SALT_3e2m", salt3e2m)
-                record("G_RX", gRX)
-                keySchedule.extract(salt3e2m, gRX).also { wipeAll(salt3e2m, gRX) }
-            } else {
-                prk2e.copyOf()
-            }
-            val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_2)
-            val authenticator = SignatureOrMac(keySchedule, crypto)
-            val input = AuthenticationInput(
-                KeySchedule.MAC_2, connectionIdentifier, own.identifier, th2, own.credential, ead,
-            )
-            val mac2 = authenticator.mac(prk3e2m, input, kind)
-            val signatureOrMac2 = authenticator.create(mac2, input, kind, own.privateKey)
-            val plaintext2 = AuthenticatedPlaintext(connectionIdentifier, own.identifier, signatureOrMac2, ead).encode()
-            val keystream2 = keySchedule.keystream2(prk2e, th2, plaintext2.size)
-            val message2 = SingleByteStringMessage.encode(share.gY + Handshake.xor(plaintext2, keystream2))
-            val th3 = keySchedule.nextTranscriptHash(th2, plaintext2, own.credential.encoded)
-            record("PRK_3e2m", prk3e2m)
-            record("MAC_2", mac2)
-            record("Signature_or_MAC_2", signatureOrMac2)
-            record("PLAINTEXT_2", plaintext2)
-            record("KEYSTREAM_2", keystream2)
-            record("TH_3", th3)
-            wipeAll(prk2e, keystream2)
+                val kind = method.responderAuthentication
+                // PRK_3e2m = EDHOC_Extract( SALT_3e2m, G_RX ) with static DH (RFC 9528 §4.1.1.2).
+                prk3e2m = if (kind == AuthenticationKind.STATIC_DH) {
+                    val salt3e2m = keySchedule.salt3e2m(prk2e, th2)
+                    val gRX = exchange.staticAgreementWithShare(own.privateKey, verified.gX)
+                    record("SALT_3e2m", salt3e2m)
+                    record("G_RX", gRX)
+                    keySchedule.extract(salt3e2m, gRX).also { wipeAll(salt3e2m, gRX) }
+                } else {
+                    prk2e.copyOf()
+                }
+                val ead = config.eadHandler.produce(EdhocMessage.MESSAGE_2)
+                val authenticator = SignatureOrMac(keySchedule, crypto)
+                val input = AuthenticationInput(
+                    KeySchedule.MAC_2, connectionIdentifier, own.identifier, th2, own.credential, ead,
+                )
+                val mac2 = authenticator.mac(prk3e2m, input, kind)
+                val signatureOrMac2 = authenticator.create(mac2, input, kind, own.privateKey)
+                val plaintext2 =
+                    AuthenticatedPlaintext(connectionIdentifier, own.identifier, signatureOrMac2, ead).encode()
+                val keystream2 = keySchedule.keystream2(prk2e, th2, plaintext2.size)
+                val message2 = SingleByteStringMessage.encode(share.gY + Handshake.xor(plaintext2, keystream2))
+                val th3 = keySchedule.nextTranscriptHash(th2, plaintext2, own.credential.encoded)
+                record("PRK_3e2m", prk3e2m)
+                record("MAC_2", mac2)
+                record("Signature_or_MAC_2", signatureOrMac2)
+                record("PLAINTEXT_2", plaintext2)
+                record("KEYSTREAM_2", keystream2)
+                record("TH_3", th3)
+                wipeAll(keystream2)
 
-            // Y is still needed for G_IY when the Initiator authenticates with static DH (RFC 9528 §4.1.1.3).
-            val keepY = method.initiatorAuthentication == AuthenticationKind.STATIC_DH
-            val ephemeralKey = share.privateKey.takeIf { keepY }
-            if (!keepY) share.privateKey?.destroyIfSoftware()
-            log.debug { "message_2: C_R $connectionIdentifier, ID_CRED_R ${own.identifier}, EAD_2 ${ead.describe()}" }
-            log.trace { "message_2 ${log.payload(message2)}" }
-            state = State.WaitingForMessage3(
-                verified.negotiation, keySchedule, exchange, connectionIdentifier, ephemeralKey, prk3e2m, th3,
-            )
-            message2
+                // Y is still needed for G_IY when the Initiator authenticates with static DH (RFC 9528 §4.1.1.3).
+                val keepY = method.initiatorAuthentication == AuthenticationKind.STATIC_DH
+                val ephemeralKey = share.privateKey.takeIf { keepY }
+                if (!keepY) share.privateKey?.destroyIfSoftware()
+                log.debug {
+                    "message_2: C_R $connectionIdentifier, ID_CRED_R ${own.identifier}, EAD_2 ${ead.describe()}"
+                }
+                log.trace { "message_2 ${log.payload(message2)}" }
+                state = State.WaitingForMessage3(
+                    verified.negotiation, keySchedule, exchange, connectionIdentifier, ephemeralKey, prk3e2m, th3,
+                )
+                isComposed = true
+                message2
+            } finally {
+                wipeAll(prk2e)
+                if (!isComposed) {
+                    share.privateKey?.destroyIfSoftware()
+                    wipeAll(share.sharedSecret, prk3e2m)
+                }
+            }
         }
     }
 
