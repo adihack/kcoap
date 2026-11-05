@@ -30,6 +30,8 @@ import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -37,6 +39,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -192,6 +195,40 @@ class EdhocServerSessionsTest {
         assertEquals("Connection identifier in use", EdhocError.decode(refused.payload).diagnostic)
         assertSame(established.single(), contexts.find(responderId.bytes, null), "Alice's context stays")
         assertEquals(0, second.pendingSessions())
+    }
+
+    /**
+     * A C_R is reserved before message_2 is composed, but the session it belongs to cannot be continued
+     * until message_2 is out: a continuation naming it, from any peer, gets the answer for an unknown C_R,
+     * and the session then completes as usual.
+     */
+    @Test
+    fun aContinuationForASessionStillComposingMessage2FindsNoSession() = runTest {
+        val peers = Peers.create(crypto)
+        val gate = Gate()
+        val events = mutableListOf<EdhocServerEvent>()
+        val contexts = InMemoryContextRepository()
+        val config = peers.responderConfig(eadHandler = gatedMessage2(gate))
+        val server = EdhocServer(config, FixedShortIds(crypto), contexts, eventListener = { events += it })
+
+        val first = async { handshake(peers, server, alice).run() }
+        gate.reached.await()
+        val responderId = ConnectionIdentifier(byteArrayOf(FixedShortIds.BYTE))
+        val garbage = byteArrayOf(0x41, 0)
+        for (peer in listOf(alice, bob)) {
+            for (message in listOf(bye, garbage)) {
+                val response = server.continueWith(peer, responderId, message)
+                assertEquals(CoapCode.BAD_REQUEST, response.code)
+                assertEquals(unknownSession, EdhocError.decode(response.payload))
+            }
+            val combined = assertFailsWith<EdhocException> { server.completeCombined(responderId, garbage, peer) }
+            assertEquals(unknownSession, combined.error)
+        }
+        assertEquals(emptyList(), events)
+        gate.open()
+        val session = first.await()
+        assertEquals(responderId, session.edhoc.responderConnectionIdentifier)
+        assertServerContextMatches(contexts, session)
     }
 
     @Test
@@ -468,6 +505,75 @@ class EdhocServerSessionsTest {
         }
     }
 
+    // --- cancellation ------------------------------------------------------------------------------------
+
+    /**
+     * A handler cancelled while message_2 is composed, for example because the client's connection closed,
+     * gives back its C_R and its place under the bounds, and its ephemeral key Y is wiped (RFC 9528 §9.8).
+     * Lost here, the place would never come back: only waiting sessions expire.
+     */
+    @Test
+    fun cancellingWhileMessage2IsComposedWipesYAndFreesTheCrAndThePlace() = runTest {
+        val peers = Peers.staticDiffieHellman(crypto)
+        val gate = Gate()
+        val ephemeralKeys = mutableListOf<SoftwarePrivateKey>()
+        val config =
+            peers.responderConfig(eadHandler = gatedMessage2(gate), ephemeralKeys = recording(ephemeralKeys))
+        val server = EdhocServer(config, FixedShortIds(crypto), InMemoryContextRepository(), maxPendingSessions = 1)
+
+        val job = launch { server.start(alice, initiator(peers)) }
+        gate.reached.await()
+        job.cancelAndJoin()
+
+        assertFailsWith<IllegalStateException>("Y is wiped") { ephemeralKeys.single().encoded() }
+        assertEquals(0, server.pendingSessions())
+        val next = handshake(peers, server, bob).run()
+        val responderId = next.edhoc.responderConnectionIdentifier
+        assertContentEquals(byteArrayOf(FixedShortIds.BYTE), responderId.bytes, "the C_R and the place came back")
+    }
+
+    /**
+     * A handler cancelled while message_3 is processed, sequentially or in an EDHOC + OSCORE request, gives
+     * back the C_R and the place, adds no context, and the session's Y is wiped.
+     */
+    @Test
+    fun cancellingWhileMessage3IsProcessedFreesTheCrAndThePlace() = runTest {
+        val peers = Peers.staticDiffieHellman(crypto)
+        for (combined in listOf(false, true)) {
+            val gate = Gate()
+            val trusted = peers.trustingClient()
+            val gatedResolver = CredentialResolver { identifier ->
+                gate.pass()
+                trusted.resolve(identifier)
+            }
+            val ephemeralKeys = mutableListOf<SoftwarePrivateKey>()
+            val contexts = InMemoryContextRepository()
+            val config =
+                peers.responderConfig(credentialResolver = gatedResolver, ephemeralKeys = recording(ephemeralKeys))
+            val server = EdhocServer(config, FixedShortIds(crypto), contexts, maxPendingSessions = 1)
+            val initiator = initiator(peers)
+            initiator.processMessage2(server.start(alice, initiator).payload)
+            val (message3, session) = initiator.createMessage3()
+            val responderId = session.responderConnectionIdentifier
+
+            val job = launch {
+                if (combined) {
+                    server.completeCombined(responderId, message3, alice)
+                } else {
+                    server.continueWith(alice, responderId, message3)
+                }
+            }
+            gate.reached.await()
+            job.cancelAndJoin()
+
+            assertEquals(0, server.pendingSessions(), "combined = $combined")
+            assertNull(contexts.find(responderId.bytes, null), "no context was added")
+            assertFailsWith<IllegalStateException>("Y is wiped") { ephemeralKeys.single().encoded() }
+            val next = handshake(peers, server, bob).run()
+            assertEquals(responderId, next.edhoc.responderConnectionIdentifier, "the C_R and the place came back")
+        }
+    }
+
     // --- sequence numbers --------------------------------------------------------------------------------
 
     @Test
@@ -512,6 +618,28 @@ class EdhocServerSessionsTest {
     /** Records every ephemeral key the server generates; they are software keys. */
     private fun recording(keys: MutableList<SoftwarePrivateKey>) = EphemeralKeySource { backend, type ->
         backend.generateKeyPair(type).also { keys += it.privateKey as SoftwarePrivateKey }
+    }
+
+    /** An EAD handler that holds the first message_2 at [gate]. */
+    private fun gatedMessage2(gate: Gate) = object : EadHandler {
+        override suspend fun produce(message: EdhocMessage): List<EadItem> {
+            if (message == EdhocMessage.MESSAGE_2) gate.pass()
+            return emptyList()
+        }
+    }
+
+    /** Holds the first coroutine that [pass]es until [open]; [reached] completes when it gets there. */
+    private class Gate {
+        val reached = CompletableDeferred<Unit>()
+        private val opened = CompletableDeferred<Unit>()
+
+        suspend fun pass() {
+            if (reached.complete(Unit)) opened.await()
+        }
+
+        fun open() {
+            opened.complete(Unit)
+        }
     }
 
     private suspend fun EdhocServer.start(peer: Endpoint, initiator: EdhocInitiator): CoapMessage =
