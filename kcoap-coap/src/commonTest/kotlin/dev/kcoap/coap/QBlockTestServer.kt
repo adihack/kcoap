@@ -60,6 +60,9 @@ internal class QBlockTestServer(
     /** Whether Q-Block is understood. */
     var supportsQBlock: Boolean = true
 
+    /** Whether every message is sent twice, as a network that duplicates datagrams would deliver it. */
+    var duplicates: Boolean = false
+
     /** The largest block the server sends. */
     var maxBlockSize: Int = 1024
 
@@ -377,7 +380,7 @@ internal class QBlockTestServer(
     }
 
     suspend fun send(to: Endpoint, message: CoapMessage) {
-        transport.send(to, UdpMessageCodec.encode(message))
+        repeat(if (duplicates) 2 else 1) { transport.send(to, UdpMessageCodec.encode(message)) }
     }
 
     override fun toString(): String = "QBlockTestServer($address)"

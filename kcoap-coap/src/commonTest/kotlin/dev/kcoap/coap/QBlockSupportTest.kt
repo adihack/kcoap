@@ -283,6 +283,48 @@ class QBlockSupportTest {
         assertEquals(Capability.SUPPORTED, setup.client.known(setup.server.address))
     }
 
+    @Test
+    fun rfc7252Section5_4_1AProbeAnswerWithAnUnknownCriticalOptionMeansNoSupport() = runTest {
+        val setup = scripted()
+        setup.server.script = { from, request ->
+            val probe = request.options.path == "/.well-known/core"
+            if (probe) {
+                send(from, CoapMessage.response(request, CoapCode.CONTENT) {
+                    type = CoapMessageType.ACK
+                    messageId = request.messageId
+                    options {
+                        qBlock2(BlockOption(0, true, 0))
+                        add(CoapOption(9999, byteArrayOf(1)))
+                    }
+                })
+            }
+            probe
+        }
+        setup.server.resources["/small"] = body(40)
+
+        assertContentEquals(body(40), setup.client.get(setup.server.uri("/small")).payload)
+
+        assertEquals(Capability.UNSUPPORTED, setup.client.known(setup.server.address))
+        val reason = setup.fixture.events.filterIsInstance<QBlockClientEvent.Fallback>().single().reason
+        assertTrue(reason.contains("rejected"), reason)
+    }
+
+    @Test
+    fun aProbeThatFailsOtherwiseFailsEveryRequestWaitingForIt() = runTest {
+        val setup = scripted()
+        setup.server.script = { _, _ -> true }
+
+        val requests = List(2) { async { runCatching { setup.client.get(setup.server.uri("/small")) } } }
+        delay(1.seconds)
+        setup.client.endpoint.close()
+
+        val reasons = requests.map { (it.await().exceptionOrNull() as CoapException).reason }
+        assertEquals(listOf(CoapException.Reason.CLOSED, CoapException.Reason.CLOSED), reasons)
+        assertEquals(1, probes(setup).size)
+        assertEquals(null, setup.client.known(setup.server.address))
+        assertTrue(setup.client.qBlock!!.support.toString().contains("PROBE"))
+    }
+
     // ---------------------------------------------------------------- forgetting
 
     @Test

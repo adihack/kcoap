@@ -19,6 +19,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -488,6 +489,201 @@ class QBlockClientTest {
         val requests = setup.requests().filter { it.options.path == "/legacy" }
         assertEquals(listOf("0/1/64"), requests.first().qBlock2)
         assertTrue(requests.drop(1).all { it.options.qBlock2 == null && it.options.block2 != null }, "never both")
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun anUploadAnsweredWithABlock2BodyGetsTheRestWithRfc7959AndTheRequestTag() = runTest {
+        val setup = setup()
+        val whole = body(150)
+        setup.server.script = { from, request ->
+            val final = request.options.qBlock1?.more == false || request.options.block2 != null
+            if (final) {
+                val num = request.options.block2?.number ?: 0
+                val end = minOf(whole.size, ((num + 1) * 64).toInt())
+                send(from, nonResponse(request, CoapCode.CHANGED, whole.copyOfRange((num * 64).toInt(), end)) {
+                    block2(BlockOption(num, end < whole.size, 2))
+                })
+            }
+            final
+        }
+
+        val response = setup.client.post(setup.server.uri("/echo"), body(100)) { nonConfirmable() }
+
+        assertContentEquals(whole, response.payload)
+        val follow = setup.requests().filter { it.options.block2 != null }
+        assertEquals(2, follow.size)
+        val tag = setup.requests().first { it.options.qBlock1 != null }.options.requestTags.single()
+        assertTrue(follow.all { it.options.requestTags.single().contentEquals(tag) && it.options.qBlock1 == null })
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun aRequestForBlocksAnsweredWithAnErrorFailsTheDownload() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(1500)
+        setup.server.script = { from, request ->
+            val continued = request.options.qBlock2List.singleOrNull()?.number == 10L
+            if (continued) {
+                send(from, nonResponse(request, CoapCode.VALID))
+                send(from, CoapMessage.response(request, CoapCode.SERVICE_UNAVAILABLE) {
+                    type = CoapMessageType.NON
+                    messageId = 0x6100
+                })
+            }
+            continued
+        }
+
+        val failure = assertFailsWith<CoapException> { setup.client.get(setup.server.uri("/big")) { nonConfirmable() } }
+
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
+        assertTrue(failure.message!!.contains("5.03"), failure.message)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc9175Section2_3ADownloadChallengedWithEchoIsRepeatedWithItOnce() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(300)
+        val echo = byteArrayOf(1, 2, 3, 4)
+        setup.server.script = { from, request ->
+            val challenge = request.options.path == "/big" && request.options.echo == null
+            if (challenge) send(from, nonResponse(request, CoapCode.UNAUTHORIZED) { echo(echo) })
+            challenge
+        }
+
+        val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+
+        assertContentEquals(body(300), response.payload)
+        val gets = setup.requests().filter { it.options.path == "/big" }
+        assertEquals(2, gets.size)
+        assertContentEquals(echo, gets.last().options.echo)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun withoutEchoRetryAnUploadChallengedWithEchoReturnsThe401() = runTest {
+        val fixture = StackFixture(this)
+        val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
+        server.script = { from, request ->
+            send(from, nonResponse(request, CoapCode.UNAUTHORIZED) { echo(byteArrayOf(5)) })
+            true
+        }
+        val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)
+        val client = fixture.client(CoapClientConfig(blockSize = 64, echoRetry = false, qBlock = qBlock))
+
+        val response = client.put(server.uri("/store"), body(200)) { nonConfirmable() }
+
+        assertEquals(CoapCode.UNAUTHORIZED, response.code)
+        assertEquals(0, client.endpoint.exchangeCount())
+    }
+
+    @Test
+    fun rfc9177Section4_3AResetToABlockAfterTheBodyStartedFailsItAndForgetsTheProbe() = runTest {
+        val setup = setup()
+        setup.server.script = { from, request ->
+            val reset = request.options.qBlock1?.number == 10L
+            if (reset) send(from, CoapMessage.empty(CoapMessageType.RST, request.messageId))
+            reset
+        }
+
+        val failure = assertFailsWith<CoapException> {
+            setup.client.put(setup.server.uri("/store"), body(15 * 64)) { nonConfirmable() }
+        }
+
+        assertEquals(CoapException.Reason.BLOCKWISE_FAILED, failure.reason)
+        assertEquals(null, setup.client.qBlock!!.support.known(setup.server.address, false))
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc9177Section4_1A402AfterTheBodyStartedIsReturnedAndForgetsTheProbe() = runTest {
+        val setup = setup()
+        setup.server.script = { from, request ->
+            val reject = request.options.qBlock1?.number == 10L
+            if (reject) send(from, nonResponse(request, CoapCode.BAD_OPTION))
+            reject
+        }
+
+        val response = setup.client.put(setup.server.uri("/store"), body(15 * 64)) { nonConfirmable() }
+
+        assertEquals(CoapCode.BAD_OPTION, response.code)
+        assertEquals(null, setup.client.qBlock!!.support.known(setup.server.address, false))
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun aResetToARequestForBlocksIsIgnoredAndTheTimersRecover() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(1500)
+        var resets = 0
+        setup.server.script = { from, request ->
+            val reset = request.options.qBlock2List.singleOrNull()?.number == 10L && resets++ == 0
+            if (reset) send(from, CoapMessage.empty(CoapMessageType.RST, request.messageId))
+            reset
+        }
+
+        val response = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+
+        assertContentEquals(body(1500), response.payload)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc7252Section4_2AConfirmableBlockThatIsNeverAcknowledgedFailsTheUpload() = runTest {
+        val setup = setup(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+        setup.fixture.network.filter = { it.message()?.options?.qBlock1?.number != 1L }
+
+        val failure = assertFailsWith<CoapException> { setup.client.put(setup.server.uri("/store"), body(200)) }
+
+        assertEquals(CoapException.Reason.TRANSMISSION_TIMEOUT, failure.reason)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun rfc7252Section4_2AConfirmableDownloadThatIsNeverAcknowledgedFails() = runTest {
+        val setup = setup(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+        setup.fixture.network.filter = { it.from != setup.server.address }
+
+        val failure = assertFailsWith<CoapException> { setup.client.get(setup.server.uri("/big")) }
+
+        assertEquals(CoapException.Reason.TRANSMISSION_TIMEOUT, failure.reason)
+        setup.assertNothingLeft()
+    }
+
+    @Test
+    fun anEndpointClosedInTheMiddleOfABodyFailsIt() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(3000)
+        setup.fixture.network.filter = { it.message()?.options?.qBlock2?.number != 5L }
+
+        val download = async { runCatching { setup.client.get(setup.server.uri("/big")) { nonConfirmable() } } }
+        delay(1.seconds)
+        setup.client.endpoint.close()
+
+        assertEquals(CoapException.Reason.CLOSED, (download.await().exceptionOrNull() as CoapException).reason)
+    }
+
+    @Test
+    fun duplicateAndUselessAnswersAreDropped() = runTest {
+        val setup = setup()
+        setup.server.resources["/big"] = body(300)
+        setup.server.duplicates = true
+        setup.server.script = { from, request ->
+            if (request.options.qBlock1?.number == 0L) {
+                send(from, nonResponse(request, CoapCode.REQUEST_ENTITY_INCOMPLETE, MissingBlocks.encode(listOf(100))) {
+                    contentFormat(ContentFormat.MISSING_BLOCKS_CBOR_SEQ)
+                })
+            }
+            false
+        }
+
+        val got = setup.client.get(setup.server.uri("/big")) { nonConfirmable() }
+        val put = setup.client.put(setup.server.uri("/store"), body(200)) { nonConfirmable() }
+
+        assertContentEquals(body(300), got.payload)
+        assertEquals(CoapCode.CHANGED, put.code)
+        assertTrue(setup.fixture.events.none { it is QBlockClientEvent.Recovery }, "a list of blocks outside the body asks for nothing")
         setup.assertNothingLeft()
     }
 }
