@@ -250,9 +250,26 @@ class RoundTripTest {
         assertContentEquals(initiator.oscoreMasterSalt(), responder.oscoreMasterSalt())
         assertFailsWith<IllegalArgumentException> { initiator.exporter(-1, ByteArray(0), 16) }
         assertFailsWith<IllegalArgumentException> { initiator.exporter(0, ByteArray(0), 0) }
-        initiator.destroy()
-        assertContentEquals(ByteArray(48), initiator.prkOut(), "PRK_out has the length of SHA-384")
         assertNull(EdhocInitiator(configs.first, backend).session)
+    }
+
+    /** The wiped keys would derive predictable OSCORE secrets, so a destroyed session fails closed. */
+    @Test
+    fun destroyedSessionsThrow() = runTest {
+        val configs = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, CipherSuite.SUITE_0)
+        val handshake = Fixtures.handshake(backend, configs)
+        val session = handshake.initiatorSession
+        session.destroy()
+        session.destroy()
+        assertFailsWith<IllegalStateException> { session.prkOut() }
+        assertFailsWith<IllegalStateException> { session.prkExporter() }
+        assertFailsWith<IllegalStateException> { session.exporter(40000, ByteArray(0), 16) }
+        assertFailsWith<IllegalStateException> { session.oscoreMasterSecret() }
+        assertFailsWith<IllegalStateException> { session.oscoreMasterSalt() }
+        assertFailsWith<IllegalStateException> { session.keyUpdate(byteArrayOf(1)) }
+        assertTrue(session.toString().startsWith("EdhocSession(INITIATOR"), "toString still works")
+        // The peer's session is its own and keeps working.
+        assertEquals(16, handshake.responderSession.oscoreMasterSecret().size)
     }
 
     private suspend fun credential(kind: AuthenticationKind, type: KeyType, kid: Int): LocalCredential =
