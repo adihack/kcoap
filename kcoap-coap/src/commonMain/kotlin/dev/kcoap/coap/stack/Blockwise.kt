@@ -171,6 +171,10 @@ internal data class OperationKey(
 /**
  * A bounded map whose entries expire [lifetime] after their last use, evicting the least recently used
  * entry when full. Not thread safe.
+ *
+ * [put] and [get] give an entry the expiry `now + lifetime` and move it to the end; [peek] changes
+ * neither. With one lifetime for all entries and `now` never going back, the entries are therefore in
+ * order of expiry, so the expired ones are always the first and pruning them costs only their number.
  */
 internal class ExpiringCache<K, V>(private val capacity: Int, private val lifetime: Duration) {
     private class Entry<V>(val value: V, var expiresAt: Duration)
@@ -215,7 +219,12 @@ internal class ExpiringCache<K, V>(private val capacity: Int, private val lifeti
 
     val size: Int get() = entries.size
 
+    /** Drops the expired entries, which are the first ones. */
     private fun prune(now: Duration) {
-        entries.entries.removeAll { it.value.expiresAt <= now }
+        val iterator = entries.values.iterator()
+        while (iterator.hasNext() && iterator.next().expiresAt <= now) iterator.remove()
     }
+
+    /** The keys from the first entry to the last, for tests. */
+    val keys: List<K> get() = entries.keys.toList()
 }
