@@ -212,30 +212,27 @@ internal class ReliableConnections(
         return attempt
     }
 
-    private suspend fun open(peer: Endpoint, connector: Connector): ConnectionDriver {
-        var driver: ConnectionDriver? = null
-        try {
-            return withTimeout(config.reliable.connectTimeout) {
-                val connection = connector.connect(peer)
-                check(connection.remote == peer) { "The connector opened a connection to ${connection.remote}, not $peer" }
-                val opened = withContext(NonCancellable) {
-                    val created = ConnectionDriver(connection, isInitiator = true, this@ReliableConnections, scope, config)
-                    if (registerAndStart(created) { null } != null) {
-                        connection.close()
-                        throw endpoint.closedError()
-                    }
-                    log.debug { "Connected to $peer" }
-                    created
-                }
-                driver = opened
-                // RFC 8323 §3.3 allows requests before the peer's CSM; waiting for it sizes them right from the start.
-                opened.established.await()
-                opened
+    private suspend fun open(peer: Endpoint, connector: Connector): ConnectionDriver = withTimeout(config.reliable.connectTimeout) {
+        val connection = connector.connect(peer)
+        check(connection.remote == peer) { "The connector opened a connection to ${connection.remote}, not $peer" }
+        val opened = withContext(NonCancellable) {
+            val created = ConnectionDriver(connection, isInitiator = true, this@ReliableConnections, scope, config)
+            if (registerAndStart(created) { null } != null) {
+                connection.close()
+                throw endpoint.closedError()
             }
+            log.debug { "Connected to $peer" }
+            created
+        }
+        try {
+            // RFC 8323 §3.3 allows requests before the peer's CSM; waiting for it sizes them right from the start.
+            opened.established.await()
         } catch (e: Throwable) {
-            driver?.let { withContext(NonCancellable) { it.abort("Connection setup failed: ${e.message}") } }
+            // No CSM in time, or the connection closed first: a started connection is aborted, never left open.
+            withContext(NonCancellable) { opened.abort("Connection setup failed: ${e.message}") }
             throw e
         }
+        opened
     }
 
     private suspend fun acceptLoop(listener: ConnectionListener) {
