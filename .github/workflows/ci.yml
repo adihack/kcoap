@@ -19,7 +19,7 @@ jobs:
       - run: ./gradlew jvmTest koverXmlReport koverVerify
       # The common tests again as native code (Kotlin/Native, OpenSSL crypto): the runtime iOS also uses.
       - run: ./gradlew linuxX64Test
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jvm-reports
@@ -41,7 +41,7 @@ jobs:
       - run: docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
       - run: docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
       - run: ./gradlew jvmTest --tests '*Interop*'
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: interop-logs
