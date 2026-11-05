@@ -17,6 +17,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -183,6 +184,34 @@ class ResponseAcknowledgementTest {
         peer.send(broken)
         delay(1.seconds)
         assertEquals(listOf(broken.messageId, genuine.messageId, broken.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+    }
+
+    @Test
+    fun rfc8613Section8_4AConfirmableRequestKeepsRetransmittingAfterAForgedResponse() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val security = verifying { response ->
+            if (response.payloadAsText() == "forged") throw MessageSecurityException("forged")
+            response
+        }
+
+        val exchange = endpoint.openExchange(peer.address, get(), true, security)
+        val request = peer.receive()
+        // No ACK: a forged response is all that arrives, and it must not stand in for one (RFC 7252 §5.2.2).
+        val forged = peer.response(request, CoapMessageType.CON, "forged")
+        peer.send(forged)
+        delay(endpoint.parameters.ackTimeout * endpoint.parameters.ackRandomFactor + 500.milliseconds)
+        val requests = fixture.sentBy(endpoint, CoapMessageType.CON)
+        assertEquals(listOf(request.messageId, request.messageId), requests.map { it.messageId }, "the request was retransmitted")
+        assertTrue(exchange.isOpen)
+
+        val genuine = peer.response(request, CoapMessageType.CON, "genuine")
+        peer.send(genuine)
+        assertEquals("genuine", endpoint.awaitResponse(exchange, 10.seconds).payloadAsText())
+        delay(endpoint.parameters.maxTransmitWait)
+        assertEquals(2, fixture.sentBy(endpoint, CoapMessageType.CON).size, "the genuine response ended the retransmission")
+        assertEquals(listOf(forged.messageId, genuine.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
     }
 
     @Test

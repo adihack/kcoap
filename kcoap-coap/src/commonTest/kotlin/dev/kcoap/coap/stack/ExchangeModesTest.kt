@@ -5,7 +5,11 @@ import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOption
+import dev.kcoap.coap.CoapResponse
+import dev.kcoap.coap.ReliableFixture
 import dev.kcoap.coap.StackFixture
+import dev.kcoap.coap.codec.ReliableMessageCodec
+import dev.kcoap.testkit.InMemoryByteStream
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.Endpoint
@@ -26,6 +30,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -80,6 +85,72 @@ class ExchangeModesTest {
         delay(1.seconds)
         assertEquals(listOf(late.messageId), fixture.sentBy(endpoint, CoapMessageType.RST).map { it.messageId })
         assertNull(inbox.tryReceive())
+    }
+
+    @Test
+    fun rfc9177Figure18AConfirmableInboxExchangeStaysOpenAfterAPiggybackedResponse() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox.forBody(endpoint.parameters)
+
+        val exchange = endpoint.openExchange(peer.address, get(), confirmable = true, security = null, mode = ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+        peer.send(
+            CoapMessage.response(request, CoapCode.CONTENT) {
+                type = CoapMessageType.ACK
+                messageId = request.messageId
+                payload("block 0")
+            },
+        )
+        val separate = listOf(peer.response(request, CoapMessageType.CON, "block 1"), peer.response(request, CoapMessageType.CON, "block 2"))
+        separate.forEach { peer.send(it) }
+        val events = List(3) { inbox.receive() }
+
+        assertEquals(listOf("block 0", "block 1", "block 2"), events.map { assertIs<ExchangeEvent.Response>(it).message.payloadAsText() })
+        assertTrue(exchange.isOpen, "the piggybacked response does not end an inbox exchange")
+        assertEquals(1, endpoint.exchangeCount())
+        assertEquals(separate.map { it.messageId }, fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+        delay(endpoint.parameters.maxTransmitWait)
+        assertEquals(1, fixture.sentBy(endpoint, CoapMessageType.CON).size, "the piggybacked response ended the retransmission")
+        exchange.cancel()
+    }
+
+    @Test
+    fun rfc9177AppendixBAnInboxExchangeOnAConnectionReceivesSeveralResponsesOnOneToken() = runTest {
+        val fixture = ReliableFixture(this)
+        fixture.server {
+            resource("big") {
+                get {
+                    delay(1000.seconds)
+                    CoapResponse.content("late")
+                }
+            }
+        }
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox.forBody(endpoint.parameters)
+
+        val exchange = endpoint.openExchange(Endpoint.Tcp("127.0.0.1", 5683), get(), false, null, ResponseMode.Inbox(inbox))
+        runCurrent()
+        val clientSide = fixture.connections.connections().first() as InMemoryByteStream
+        repeat(3) { index ->
+            val response = CoapMessage.build {
+                code = CoapCode.CONTENT
+                token = exchange.token
+                payload("block $index")
+            }
+            clientSide.inject(ReliableMessageCodec.Tcp.encode(response))
+        }
+        val events = List(3) { inbox.receive() }
+
+        assertEquals(listOf("block 0", "block 1", "block 2"), events.map { assertIs<ExchangeEvent.Response>(it).message.payloadAsText() })
+        assertTrue(events.all { it.exchange === exchange })
+        assertTrue(exchange.isOpen, "the first response on a connection does not end an inbox exchange")
+        assertEquals(1, endpoint.exchangeCount())
+        assertEquals(0, inbox.lost)
+        exchange.cancel()
+        assertEquals(0, endpoint.exchangeCount())
     }
 
     @Test
