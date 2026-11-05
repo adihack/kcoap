@@ -95,7 +95,8 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * second response to the same request is rejected, with or without a Partial IV. Two kinds of request take
  * several:
  * - An Observe registration takes notifications: at most one without a Partial IV, the others with a Partial
- *   IV above the Notification Number (§7.4.1, §8.4.2).
+ *   IV above the Notification Number (§7.4.1, §8.4.2). A response without an Inner Observe option is verified
+ *   as a non-Observe response (§4.1.3.5.2), so it takes one of those, which ends the observation.
  * - A request carrying an Inner Q-Block1 or Q-Block2 option (RFC 9177 §4) takes the responses of its body:
  *   the blocks of a Q-Block2 set and the sets that follow on its token, or a 2.31, 4.08s and the final
  *   response on the token of a Q-Block1 block (§4.3, §4.4, §10). At most one of them may reuse the request's
@@ -169,7 +170,7 @@ public class OscoreClient(
          */
         private fun checkFreshness(decrypted: CoapMessage, piv: ByteArray?): CoapMessage {
             if (decrypted.options.observe != null) return checkNotification(decrypted, piv)
-            if (binding.allowsSeveralResponses || binding.isObserveRegistration) {
+            if (binding.allowsSeveralResponses) {
                 admitOneOfSeveral(piv)
             } else if (responses > 0) {
                 throw MessageSecurityException("Second response to a request that takes one")

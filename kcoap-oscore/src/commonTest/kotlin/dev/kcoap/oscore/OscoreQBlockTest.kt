@@ -252,7 +252,7 @@ class OscoreQBlockTest {
     }
 
     @Test
-    fun anObserveRegistrationChecksItsOtherResponsesForReplayToo() = runTest {
+    fun rfc8613Section4_1_3_5_2AnObserveRegistrationTakesOneResponseThatIsNotANotification() = runTest {
         val (client, server) = clientFor()
         val registration = CoapMessage.request(CoapCode.GET) {
             token = "e1".hexToBytes()
@@ -263,15 +263,18 @@ class OscoreQBlockTest {
         }
         val exchange = exchange(client, server, registration)
         val inner = exchange.server.message
-        // A server that does not add the observer answers with plain responses, here a body without Observe.
-        val first = exchange.server.protectResponse(block(inner, 0))
-        val second = exchange.server.protectResponse(block(inner, 1))
-        exchange.client.unprotectResponse(first)
-        exchange.client.unprotectResponse(second)
+        suspend fun notification(value: Long) =
+            exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.CONTENT) { options { observe(value) } })
+        assertNotNull(exchange.client.unprotectResponse(notification(5)).options.observe)
+        assertNotNull(exchange.client.unprotectResponse(notification(6)).options.observe)
+        // Without an Inner Observe option the response is verified as a non-Observe response: it ends the observation.
+        val last = exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.NOT_FOUND))
+        val another = exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.NOT_FOUND))
+        assertEquals(CoapCode.NOT_FOUND, exchange.client.unprotectResponse(last).code)
 
-        assertFailsWith<MessageSecurityException>("replayed") { exchange.client.unprotectResponse(second) }
-        assertFailsWith<MessageSecurityException>("the request's nonce again") { exchange.client.unprotectResponse(first) }
-        val notification = exchange.server.protectResponse(CoapMessage.response(inner, CoapCode.CONTENT) { options { observe(5) } })
-        assertNotNull(exchange.client.unprotectResponse(notification).options.observe, "notifications go on as before")
+        val second = assertFailsWith<MessageSecurityException> { exchange.client.unprotectResponse(another) }
+        assertEquals("Second response to a request that takes one", second.message)
+        assertFailsWith<MessageSecurityException>("nor the first again") { exchange.client.unprotectResponse(last) }
+        assertNotNull(exchange.client.unprotectResponse(notification(7)).options.observe, "a notification is still accepted")
     }
 }

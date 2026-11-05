@@ -334,8 +334,9 @@ Build governance (WP-C1):
   request can no longer revoke the value the client is about to send back (Appendix B.1.2).
 - OSCORE client (QB-5): a request takes one response (RFC 8613 §7.4). A second response, also a replay of
   the first, was accepted whenever the first carried a Partial IV, and the non-notification responses to an
-  Observe registration were not checked for replay at all; now the second is rejected, and those of a
-  registration go through a replay window like the responses of a Q-Block body.
+  Observe registration were not checked for replay at all; now the second is rejected, also for a
+  registration, which takes its notifications and one response without Observe, verified as a non-Observe
+  response (§4.1.3.5.2).
 - OSCORE and EDHOC: derivation copies of the Master Secret, Salt, PRK and exporter outputs are wiped,
   also when derivation fails.
 - EDHOC server (WP-SEC1): two concurrent handshakes could get the same C_R (it was checked under the lock
