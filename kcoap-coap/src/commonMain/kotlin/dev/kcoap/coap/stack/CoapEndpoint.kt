@@ -101,7 +101,8 @@ public class CoapEndpoint private constructor(
 
     private val hasDatagramTransport = datagramTransport != null
     private val log = config.loggerFactory.logger(LogTags.COAP_EXCHANGE)
-    private val lock = Mutex()
+    /** Guards the messaging state machine and the exchanges; never held across a suspension. Internal for tests. */
+    internal val lock = Mutex()
     private val messaging = UdpMessaging(
         config.parameters,
         transport.maxDatagramSize,
@@ -250,13 +251,15 @@ public class CoapEndpoint private constructor(
             }?.build() ?: plain
             exchange.request = wire
             val slotHold = if (confirmable) null else nonConfirmableSlotHold(wire)
-            exchange.transmission = withMessaging { now ->
+            // Recorded under the lock, before the datagram goes out: a cancellation while sending can then
+            // still settle the transmission, which would otherwise retransmit for nobody and hold NSTART.
+            withMessaging { now ->
                 ensureOpen()
-                send(now, peer, wire, exchange, slotHold)
+                exchange.transmission = send(now, peer, wire, exchange, slotHold)
             }
             log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path} as $type" }
         } catch (e: Throwable) {
-            forget(exchange)
+            withContext(NonCancellable) { exchange.cancel() }
             throw e
         }
         return exchange
@@ -279,7 +282,8 @@ public class CoapEndpoint private constructor(
             ensureOpen()
             register(peer, token, isObservation).also { it.connection = connection }
         }
-        connection.exchangeOpened()
+        // Counted at once, cancelled or not: the cleanup below counts it out again.
+        withContext(NonCancellable) { connection.exchangeOpened() }
         val plain = request.toBuilder().apply { this.token = exchange.token }.build()
         try {
             val protected = security?.protectRequest(plain, peer)
@@ -289,7 +293,7 @@ public class CoapEndpoint private constructor(
             connection.send(wire)
             log.with("peer" to peer, "token" to exchange.key.token).debug { "Request ${plain.code} ${plain.options.path}" }
         } catch (e: Throwable) {
-            forget(exchange)
+            withContext(NonCancellable) { exchange.cancel() }
             throw e
         }
         return exchange
@@ -358,14 +362,15 @@ public class CoapEndpoint private constructor(
                 TransmissionOutcome.SlotReleased -> Unit
             }
         }
-        val transmission = withMessaging { now ->
-            ensureOpen()
-            send(now, peer, CoapMessage.empty(CoapMessageType.CON, allocateMessageId(peer, now)), owner)
-        }
+        var transmission: Transmission? = null
         try {
+            withMessaging { now ->
+                ensureOpen()
+                transmission = send(now, peer, CoapMessage.empty(CoapMessageType.CON, allocateMessageId(peer, now)), owner)
+            }
             return answer.await()
-        } catch (e: CancellationException) {
-            withContext(NonCancellable) { settle(transmission) }
+        } catch (e: Throwable) {
+            transmission?.let { settle(it) }
             throw e
         }
     }
@@ -381,8 +386,11 @@ public class CoapEndpoint private constructor(
         }
     }
 
-    /** The exchange ends: its token is free again, and its connection no longer counts it as busy. */
-    internal suspend fun forget(exchange: ClientExchange) {
+    /**
+     * The exchange ends: its token is free again, and its connection no longer counts it as busy. Cleanup,
+     * so it runs to the end in a cancelled coroutine too.
+     */
+    internal suspend fun forget(exchange: ClientExchange): Unit = withContext(NonCancellable) {
         var first = false
         val registered = lock.withLock {
             first = !exchange.isForgotten
@@ -392,9 +400,13 @@ public class CoapEndpoint private constructor(
         if (first) exchange.connection?.exchangeClosed(exchange.key.token.takeIf { registered })
     }
 
-    internal suspend fun settle(transmission: Transmission) {
+    /** Stops working on [transmission]; cleanup, so it runs to the end in a cancelled coroutine too. */
+    internal suspend fun settle(transmission: Transmission): Unit = withContext(NonCancellable) {
         withMessaging { now -> settle(now, transmission) }
     }
+
+    /** Exchanges in the registry, for tests. */
+    internal suspend fun exchangeCount(): Int = lock.withLock { exchanges.size }
 
     private fun ClientExchange.markReplaced() {
         // The new exchange took over the token; the old one gets no more responses.
@@ -551,7 +563,12 @@ public class CoapEndpoint private constructor(
 
     // ---------------------------------------------------------------- driving the state machine
 
-    /** Runs [block] on the state machine under the lock, then executes its effects outside the lock. */
+    /**
+     * Runs [block] on the state machine under the lock, then executes its effects outside the lock. The
+     * effects run to the end even when the calling coroutine is cancelled meanwhile: the state machine has
+     * committed to them, and they may belong to other exchanges, such as a queued request that a released
+     * NSTART slot started. A cancelled caller sees its cancellation at its next suspension.
+     */
     private suspend fun <T> withMessaging(signal: Boolean = true, block: UdpMessaging.(now: Duration) -> T): T {
         var effects: List<MessagingEffect> = emptyList()
         val result = try {
@@ -563,7 +580,7 @@ public class CoapEndpoint private constructor(
                 }
             }
         } finally {
-            execute(effects)
+            if (effects.isNotEmpty()) withContext(NonCancellable) { execute(effects) }
             if (signal) wakeups.trySend(Unit)
         }
         return result

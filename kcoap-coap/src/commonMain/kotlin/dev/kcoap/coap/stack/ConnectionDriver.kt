@@ -173,16 +173,21 @@ internal class ConnectionDriver(
     suspend fun ping(custody: Boolean, timeout: Duration): Boolean {
         val answer = CompletableDeferred<Boolean>()
         val ping = withMessaging { now -> ping(now, custody).also { pings[it] = answer } }
-        val answered = withTimeoutOrNull(timeout) { answer.await() }
-        if (answered == null) {
-            withContext(NonCancellable) {
-                withMessaging {
-                    cancelPing(ping)
-                    pings.remove(ping)
+        var answered: Boolean? = null
+        try {
+            answered = withTimeoutOrNull(timeout) { answer.await() }
+            return answered == true
+        } finally {
+            // Timed out or cancelled: the ping is forgotten either way, so it holds nothing.
+            if (answered == null) {
+                withContext(NonCancellable) {
+                    withMessaging {
+                        cancelPing(ping)
+                        pings.remove(ping)
+                    }
                 }
             }
         }
-        return answered == true
     }
 
     /** Sends a Release (RFC 8323 §5.5); the peer is expected to close. */
@@ -215,7 +220,9 @@ internal class ConnectionDriver(
                 }
             }
         } finally {
-            execute(effects)
+            // The state machine committed to these effects, which may be another exchange's or the close of
+            // the connection, so they run to the end even when the caller was cancelled meanwhile.
+            if (effects.isNotEmpty()) withContext(NonCancellable) { execute(effects) }
             if (signal) wakeups.trySend(Unit)
         }
         return result

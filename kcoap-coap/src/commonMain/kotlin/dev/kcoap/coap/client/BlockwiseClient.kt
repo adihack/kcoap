@@ -14,8 +14,10 @@ import dev.kcoap.common.ByteArrayBuilder
 import dev.kcoap.common.minimalUnsignedBytes
 import dev.kcoap.common.toHex
 import dev.kcoap.transport.Endpoint
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The client side of RFC 7959: uploads large request bodies in Block1 blocks and downloads large
@@ -24,7 +26,8 @@ import kotlinx.coroutines.sync.withLock
  */
 internal class BlockwiseClient(private val client: CoapClient) {
     private val config = client.config
-    private val tagLock = Mutex()
+    /** Guards [tagsInUse]; internal for tests. */
+    internal val tagLock = Mutex()
 
     /** Request-Tags (hex, "" for the absent option) of the Block1 operations in progress, per operation. */
     private val tagsInUse = HashMap<OperationKey, MutableSet<String>>()
@@ -116,7 +119,8 @@ internal class BlockwiseClient(private val client: CoapClient) {
                 offset = end
             }
         } finally {
-            releaseTag(key, tag)
+            // A cancelled upload must still free its Request-Tag for the next one.
+            withContext(NonCancellable) { releaseTag(key, tag) }
         }
     }
 
@@ -219,6 +223,9 @@ internal class BlockwiseClient(private val client: CoapClient) {
             if (used.isEmpty()) tagsInUse.remove(key)
         }
     }
+
+    /** Operations with Request-Tags in use, for tests. */
+    internal suspend fun tagsInUseCount(): Int = tagLock.withLock { tagsInUse.size }
 
     private companion object {
         const val MAX_RESTARTS = 2

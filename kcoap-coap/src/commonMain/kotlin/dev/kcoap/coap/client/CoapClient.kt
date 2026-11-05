@@ -20,12 +20,14 @@ import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * A CoAP client on a [CoapEndpoint].
@@ -88,7 +90,8 @@ public class CoapClient private constructor(
 
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_CLIENT)
     internal val blockwise = BlockwiseClient(this)
-    private val observationLock = Mutex()
+    /** Guards [observations]; internal for tests. */
+    internal val observationLock = Mutex()
     private val observations = HashMap<OperationKey, ClientObservation>()
 
     internal val requestTimeout: Duration get() = config.requestTimeout ?: endpoint.parameters.exchangeLifetime
@@ -251,7 +254,8 @@ public class CoapClient private constructor(
                 },
             )
         } finally {
-            release(observation)
+            // A cancelled collector must still count itself out, or the observation never stops.
+            withContext(NonCancellable) { release(observation) }
         }
     }
 
@@ -373,6 +377,9 @@ public class CoapClient private constructor(
             if (observations[observation.key] === observation) observations.remove(observation.key)
         }
     }
+
+    /** Registrations the client keeps, for tests. */
+    internal suspend fun observationCount(): Int = observationLock.withLock { observations.size }
 
     override fun toString(): String = "CoapClient($endpoint)"
 
