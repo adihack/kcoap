@@ -66,8 +66,12 @@ import kotlinx.coroutines.sync.withLock
  *   carried Q-Block1 or Q-Block2, goes out as a [ServedBody], even when it fits one block: Non-confirmable
  *   sets of MAX_PAYLOADS blocks on the request, NON_TIMEOUT_RANDOM apart unless a Continue asks for the next
  *   set; Confirmable blocks one after the other as each is acknowledged, the first piggybacked; on a
- *   connection all at once. The body stays for its Continues and requests of missing blocks; a GET or FETCH
- *   asking for `0/M=1` again runs the handler again, and other methods without a cached body get 4.08.
+ *   connection all at once. The body stays for its Continues and requests of missing blocks. A GET or FETCH
+ *   asking for `0/M=1` runs the handler again. For other methods only a request without payload continues a
+ *   cached body: a Continue, a request of missing blocks (4.08 when nothing is cached), or `0/M=1` with the
+ *   body's Request-Tag. Every other request of theirs is a new one whose handler runs, also one with a
+ *   payload and Q-Block2 `0/M=1` (§4.1: how a client offers Q-Block for the response to a payload); a
+ *   payload next to a later Q-Block2 block gets 4.00.
  * - **Amplification** (RFC 9175 §2.4 item 3). Before a burst to a client whose address
  *   [CoapServer.mustVerifyAddress] wants verified, the request gets a 4.01 with Echo instead; libcoap's probe,
  *   a single 16-byte block, stays within the factor.
@@ -344,11 +348,25 @@ internal class QBlockServer(
         val request = ref.request
         val single = request.options.qBlock2List.singleOrNull()
         val isWholeBody = single != null && single.number == 0L && single.more
-        val isSafe = request.code == CoapCode.GET || request.code == CoapCode.FETCH
-        if (!(isWholeBody && isSafe)) {
+        val isSafe = isSafe(request.code)
+        val hasPayload = request.payloadSize > 0
+        if (!isSafe && hasPayload && single?.number != 0L) {
+            // §4.1, §4.4: a payload makes it a new request, which asks for the start of its response body.
+            return Reply.Single(CoapResponse.error(CoapCode.BAD_REQUEST, "A request with a payload asks for Q-Block2 block 0"))
+        }
+        val isFollowUp = when {
+            // §4.4: 0/M=1 runs a GET or FETCH again; everything else of theirs continues the cached body.
+            isSafe -> !isWholeBody
+            // A payload is a new request of an unsafe method, never a follow-up (§4.4, §4.7: those carry none).
+            hasPayload -> false
+            // 0/M=1 asks for an unsafe method's body again from the cache only with that body's Request-Tag.
+            isWholeBody -> request.options.requestTags.isNotEmpty()
+            else -> true
+        }
+        if (isFollowUp) {
             val now = endpoint.now()
             val reply = lock.withLock {
-                when (val lookup = find(key, now)) {
+                when (val lookup = find(key, now, untagged = !hasPayload)) {
                     is Lookup.Found -> {
                         val body = lookup.body
                         Reply.Body(body, body.sender.onRequest(now, request, ref).also { schedule(body) }, isNew = false)
@@ -356,7 +374,8 @@ internal class QBlockServer(
                     Lookup.Ambiguous -> Reply.Single(
                         CoapResponse.error(CoapCode.BAD_REQUEST, "Q-Block2 request fits more than one body: add its Request-Tag"),
                     )
-                    // §4.4: a body that is no longer cached cannot be continued without running an unsafe method again.
+                    // §4.4: a body that is no longer cached cannot be continued without running an unsafe method
+                    // again; an unsafe 0/M=1 whose body is gone is a new request.
                     Lookup.Missing -> if (isSafe || isWholeBody) {
                         null
                     } else {
@@ -367,9 +386,13 @@ internal class QBlockServer(
             if (reply is Reply.Body) reportRecovery(ref, reply)
             if (reply != null) return reply
         }
-        // §4.4: a GET or FETCH runs again, also for a body that is no longer cached, which then has a new ETag.
+        // §4.4: a GET or FETCH runs again, also for a body that is no longer cached, which then has a new ETag;
+        // a new request runs, and its body replaces the one cached for the same operation.
         return shape(ref, server.respondTo(resource, request, ref.inbound, ref.unprotected), key, limits)
     }
+
+    /** RFC 7252 §5.1, RFC 8132 §2: the methods whose handler may run again for a body that is gone. */
+    private fun isSafe(code: CoapCode): Boolean = code == CoapCode.GET || code == CoapCode.FETCH
 
     private fun reportRecovery(ref: QBlockRequest, reply: Reply.Body) {
         val single = ref.request.options.qBlock2List.singleOrNull()
@@ -380,14 +403,14 @@ internal class QBlockServer(
 
     /**
      * Under [lock]: the body a follow-up request with [key] continues. §4.7 (Figure 12) lets a follow-up of a
-     * Q-Block1 upload leave its Request-Tag out; it continues the one body it fits, and is refused when it
-     * fits more than one.
+     * Q-Block1 upload, which carries no payload, leave its Request-Tag out: with [untagged], such a request
+     * continues the one body it fits, and is refused when it fits more than one.
      */
-    private fun find(key: OperationKey, now: Duration): Lookup {
+    private fun find(key: OperationKey, now: Duration, untagged: Boolean): Lookup {
         served.prune(now).forEach { it.drop() }
         served.get(key, now)?.let { return Lookup.Found(it) }
         val requestTag = CoapOptions.REQUEST_TAG.number
-        if (key.options.any { it.number == requestTag }) return Lookup.Missing
+        if (!untagged || key.options.any { it.number == requestTag }) return Lookup.Missing
         val matches = served.entryList.filter { (candidate, _) ->
             candidate.peer == key.peer && candidate.identity == key.identity && candidate.method == key.method &&
                 candidate.options.filter { it.number != requestTag } == key.options

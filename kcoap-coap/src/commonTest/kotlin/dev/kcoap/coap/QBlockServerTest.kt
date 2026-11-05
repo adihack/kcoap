@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.server.RequestHandlerFunction
 import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
@@ -76,6 +77,17 @@ class QBlockServerTest {
                     }
                     fetch { CoapResponse.content(payload.reversedArray(), ContentFormat.OCTET_STREAM) }
                 }
+                // Every unsafe method answering with a body, so a second request could be mistaken for a follow-up.
+                resource("echo") {
+                    val turn: RequestHandlerFunction = {
+                        stored += payload
+                        CoapResponse(CoapCode.CHANGED, payload = payload.reversedArray())
+                    }
+                    put(turn)
+                    post(turn)
+                    patch(turn)
+                    ipatch(turn)
+                }
                 routes()
             }
             peer = QBlockPeer.of(stack, server)
@@ -102,6 +114,25 @@ class QBlockServerTest {
     ) = CoapMessage.request(code) {
         this.type = type
         token = peer.token()
+        options {
+            uriPath(path)
+            qBlock2.forEach { addQBlock2(it) }
+            options()
+        }
+    }
+
+    /** A request of one message with [payload] that offers Q-Block2 for its response (RFC 9177 §4.1). */
+    private fun single(
+        peer: QBlockPeer,
+        code: CoapCode,
+        payload: String,
+        vararg qBlock2: BlockOption = arrayOf(block(0, true)),
+        path: String = "echo",
+        options: OptionSet.Builder.() -> Unit = {},
+    ) = CoapMessage.request(code) {
+        type = CoapMessageType.NON
+        token = peer.token()
+        this.payload = payload.encodeToByteArray()
         options {
             uriPath(path)
             qBlock2.forEach { addQBlock2(it) }
@@ -590,6 +621,72 @@ class QBlockServerTest {
         assertEquals(CoapCode.REQUEST_ENTITY_INCOMPLETE, answer.code)
         assertEquals("No response body to continue", answer.payloadAsText())
         assertTrue(f.stored.isEmpty())
+    }
+
+    @Test
+    fun rfc9177Section4_1EveryUnsafeRequestWithAPayloadAndQBlock2RunsItsHandler() = runTest {
+        // §4.1: a client offers Q-Block2 for the response to a PUT or POST with 0/M=1 on every such request.
+        val f = fixture()
+        for (code in listOf(CoapCode.POST, CoapCode.PUT, CoapCode.PATCH, CoapCode.IPATCH)) {
+            val first = f.peer.send(single(f.peer, code, "ab"))
+            val a = f.peer.drain().single()
+            val second = f.peer.send(single(f.peer, code, "cd"))
+            val b = f.peer.drain().single()
+
+            assertEquals("ba", a.payloadAsText(), "$code")
+            assertEquals("dc", b.payloadAsText(), "$code: the second request ran, it is not a follow-up of the first")
+            assertTrue(a.hasToken(first.token) && b.hasToken(second.token))
+            assertEquals(block(0, false), b.options.qBlock2)
+            assertFalse(a.options.etags.single().contentEquals(b.options.etags.single()), "two bodies")
+        }
+        assertEquals(List(4) { listOf("ab", "cd") }.flatten(), f.stored.map { it.decodeToString() })
+    }
+
+    @Test
+    fun rfc9177Figure12ASmallPostWithoutRequestTagAfterUploadsRunsItsHandler() = runTest {
+        val f = fixture()
+        for (requestTag in listOf(tag, byteArrayOf(9))) {
+            (0L..46L).forEach { f.peer.send(upload(f.peer, it, code = CoapCode.POST, requestTag = requestTag)) }
+            assertEquals((0L..9L).toList(), f.peer.drain().drop(4).numbers())
+
+            f.peer.send(single(f.peer, CoapCode.POST, "xy", path = "store"))
+            val answer = f.peer.drain().single()
+            assertEquals(CoapCode.CHANGED, answer.code, answer.payloadAsText())
+            assertEquals("yx", answer.payloadAsText(), "not the upload's body, nor 4.00 for two of them")
+        }
+        assertEquals(4, f.stored.size)
+        assertEquals("xy", f.stored.last().decodeToString())
+    }
+
+    @Test
+    fun rfc9177Section4_1APayloadNextToQBlock2Block0WithoutMRunsTheHandlerAndNextToALaterBlockGets400() = runTest {
+        val f = fixture()
+        f.peer.send(single(f.peer, CoapCode.POST, "ab", block(0, false)))
+        assertEquals("ba", f.peer.drain().single().payloadAsText(), "nothing cached, and still no 4.08")
+
+        f.peer.send(single(f.peer, CoapCode.POST, "cd", block(2, false)))
+        f.peer.send(single(f.peer, CoapCode.PUT, "ef", block(0, false), block(1, false)))
+        val refused = f.peer.drain()
+        assertEquals(listOf(CoapCode.BAD_REQUEST, CoapCode.BAD_REQUEST), refused.map { it.code })
+        assertEquals("A request with a payload asks for Q-Block2 block 0", refused.first().payloadAsText())
+        assertEquals(listOf("ab"), f.stored.map { it.decodeToString() })
+    }
+
+    @Test
+    fun rfc9177Section4_4AnUnsafeWholeBodyRequestIsServedFromTheCacheOnlyWithItsRequestTag() = runTest {
+        val f = fixture()
+        (0L..46L).forEach { f.peer.send(upload(f.peer, it, code = CoapCode.POST)) }
+        val etag = f.peer.drain().drop(4).first().options.etags.single()
+
+        val again = f.peer.send(get(f.peer, block(0, true), path = "store", code = CoapCode.POST) { requestTag(tag) })
+        val cached = f.peer.drain()
+        assertEquals((0L..9L).toList(), cached.numbers())
+        assertTrue(cached.all { it.hasToken(again.token) && it.options.etags.single().contentEquals(etag) }, "the same body")
+        assertEquals(1, f.stored.size)
+
+        f.peer.send(get(f.peer, block(0, true), path = "store", code = CoapCode.POST))
+        assertEquals(CoapCode.CHANGED, f.peer.drain().single().code, "without the tag: a new, empty POST")
+        assertEquals(2, f.stored.size)
     }
 
     @Test
