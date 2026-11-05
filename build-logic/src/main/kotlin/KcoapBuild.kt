@@ -19,22 +19,24 @@ import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootEnvSpec
 
 /**
- * Which Kotlin targets a kcoap module builds for. Protocol and core modules are common code and build
- * for [ALL]; only an adapter module that wraps a library bound to particular runtimes narrows its
- * targets, to the runtimes that library has.
+ * The target tiers of kcoap's modules (docs/target-architecture.md §2.1). Core modules are common code
+ * and build for [UNIVERSAL]; an adapter that wraps a library bound to particular runtimes declares the
+ * smallest tier that library supports. Each tier has one convention plugin: `kcoap.kmp-library`,
+ * `kcoap.kmp-jvm-native-library` and `kcoap.kmp-jvm-library`.
  */
 enum class KcoapTargets {
-    /** Every target: [NATIVE_AND_JVM] plus the web, `js` and `wasmJs` (browsers and Node.js). */
-    ALL,
+    /** Every target: [SOCKETS] plus the web, `js` and `wasmJs` (browsers and Node.js). */
+    UNIVERSAL,
 
     /**
      * JVM (servers and Android), iOS, macOS and Linux (gateways; also runs the native tests on Linux CI),
-     * for adapters that need sockets, which browsers do not have: UDP on ktor-network.
+     * for adapters that open sockets: ktor-network for UDP and TCP, a ktor server engine. Never the web:
+     * one js artifact serves browsers and Node.js, so sockets there would ship to browsers.
      */
-    NATIVE_AND_JVM,
+    SOCKETS,
 
-    /** JVM only, for adapters wrapping JVM libraries such as Bouncy Castle. */
-    JVM,
+    /** JVM only (servers and Android), for adapters wrapping JVM libraries such as Bouncy Castle. */
+    JVM_LIBRARY,
 }
 
 /**
@@ -43,14 +45,21 @@ enum class KcoapTargets {
  */
 const val INTERNAL_API_MARKER: String = "dev.kcoap.common.InternalKcoapApi"
 
-/** Settings shared by every kcoap library module: targets, explicit API, JVM level, test setup. */
+/** The plugin that keeps a module out of the published set (`kcoap.unpublished.gradle.kts`). */
+const val UNPUBLISHED_PLUGIN: String = "kcoap.unpublished"
+
+/**
+ * Settings shared by every kcoap library module: targets, explicit API, the internal-API opt-in, JVM
+ * level and test setup. Then, unless [UNPUBLISHED_PLUGIN] was applied first, publishing.
+ */
 fun Project.configureKcoapLibrary(targets: KcoapTargets) {
     group = providers.gradleProperty("kcoap.group").get()
     version = providers.gradleProperty("kcoap.version").get()
 
     val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
+    val multiplatform = extensions.getByType<KotlinMultiplatformExtension>()
 
-    extensions.getByType<KotlinMultiplatformExtension>().apply {
+    multiplatform.apply {
         explicitApi()
 
         jvm {
@@ -59,13 +68,13 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
                 freeCompilerArgs.add("-Xjdk-release=17")
             }
         }
-        if (targets == KcoapTargets.ALL || targets == KcoapTargets.NATIVE_AND_JVM) {
+        if (targets == KcoapTargets.UNIVERSAL || targets == KcoapTargets.SOCKETS) {
             iosArm64()
             iosSimulatorArm64()
             macosArm64()
             linuxX64()
         }
-        if (targets == KcoapTargets.ALL) {
+        if (targets == KcoapTargets.UNIVERSAL) {
             js {
                 webEnvironments()
                 nodejs {
@@ -118,6 +127,12 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
                 else -> error("kcoap.tests must be unit, interop or all, not '$selection'")
             }
         }
+    }
+
+    // Applied last, so the coordinates and the targets are known. kcoap.unpublished, when it is wanted,
+    // must already be applied: it fails the build if publishing comes first.
+    if (!pluginManager.hasPlugin(UNPUBLISHED_PLUGIN)) {
+        pluginManager.apply("kcoap.publishing")
     }
 }
 
