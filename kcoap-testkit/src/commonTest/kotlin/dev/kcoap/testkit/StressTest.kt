@@ -6,6 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -53,14 +54,16 @@ class StressTest {
         val lock = Mutex()
         var cancelled = 0
         Stress.run(iterations = 5, parallelism = 2) {
+            val started = CompletableDeferred<Unit>()
             background.launch {
                 try {
+                    started.complete(Unit)
                     awaitCancellation()
                 } finally {
                     lock.withLock { cancelled++ }
                 }
             }
-            yield()
+            started.await()
         }
         assertEquals(5, cancelled)
     }
