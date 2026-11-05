@@ -1,29 +1,3 @@
-public final class dev/kcoap/coap/CoapException : java/lang/Exception {
-	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;)V
-	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun getReason ()Ldev/kcoap/coap/CoapException$Reason;
-	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
-}
-
-public final class dev/kcoap/coap/CoapException$Reason : java/lang/Enum {
-	public static final field BAD_RESPONSE Ldev/kcoap/coap/CoapException$Reason;
-	public static final field BLOCKWISE_FAILED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field CLOSED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field CONNECTION_CLOSED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field IDENTIFIERS_EXHAUSTED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field MESSAGE_TOO_LARGE Ldev/kcoap/coap/CoapException$Reason;
-	public static final field RESET Ldev/kcoap/coap/CoapException$Reason;
-	public static final field RESPONSE_TIMEOUT Ldev/kcoap/coap/CoapException$Reason;
-	public static final field SESSION_ENDED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field TRANSMISSION_TIMEOUT Ldev/kcoap/coap/CoapException$Reason;
-	public static final field TRANSPORT_FAILED Ldev/kcoap/coap/CoapException$Reason;
-	public static final field TRANSPORT_UNAVAILABLE Ldev/kcoap/coap/CoapException$Reason;
-	public static final field UNVERIFIED_RESPONSE Ldev/kcoap/coap/CoapException$Reason;
-	public static fun getEntries ()Lkotlin/enums/EnumEntries;
-	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/CoapException$Reason;
-	public static fun values ()[Ldev/kcoap/coap/CoapException$Reason;
-}
-
 public final class dev/kcoap/coap/client/CoapClient {
 	public fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/client/CoapClientConfig;)V
 	public synthetic fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/client/CoapClientConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -357,7 +331,7 @@ public final class dev/kcoap/coap/stack/CoapEndpoint {
 	public synthetic fun <init> (Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;Ldev/kcoap/transport/DatagramTransport;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun awaitClosed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun getCloseCause ()Ldev/kcoap/coap/CoapException;
+	public final fun getCloseCause ()Ldev/kcoap/coap/stack/CoapException;
 	public final fun getConfig ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
 	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
 	public final fun isClosed ()Z
@@ -390,6 +364,32 @@ public final class dev/kcoap/coap/stack/CoapEndpointConfig {
 }
 
 public final class dev/kcoap/coap/stack/CoapEndpointConfig$Companion {
+}
+
+public final class dev/kcoap/coap/stack/CoapException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;)V
+	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getReason ()Ldev/kcoap/coap/stack/CoapException$Reason;
+	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
+}
+
+public final class dev/kcoap/coap/stack/CoapException$Reason : java/lang/Enum {
+	public static final field BAD_RESPONSE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field BLOCKWISE_FAILED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field CLOSED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field CONNECTION_CLOSED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field IDENTIFIERS_EXHAUSTED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field MESSAGE_TOO_LARGE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field RESET Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field RESPONSE_TIMEOUT Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field SESSION_ENDED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSMISSION_TIMEOUT Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSPORT_FAILED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSPORT_UNAVAILABLE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field UNVERIFIED_RESPONSE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/CoapException$Reason;
 }
 
 public abstract interface class dev/kcoap/coap/stack/EndpointEvent {

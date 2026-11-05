@@ -2,7 +2,6 @@ package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.stack.QBlockMessages.block

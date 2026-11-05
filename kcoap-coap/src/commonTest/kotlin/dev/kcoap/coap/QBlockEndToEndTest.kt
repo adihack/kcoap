@@ -8,6 +8,7 @@ import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.QBlockServerConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.testkit.DatagramFate

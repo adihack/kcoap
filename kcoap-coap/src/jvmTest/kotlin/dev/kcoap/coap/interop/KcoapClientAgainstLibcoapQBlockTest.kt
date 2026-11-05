@@ -2,7 +2,6 @@ package dev.kcoap.coap.interop
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.CoapOptions
@@ -15,6 +14,7 @@ import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.QBlockCapabilities

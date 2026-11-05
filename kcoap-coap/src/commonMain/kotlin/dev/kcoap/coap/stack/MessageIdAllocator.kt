@@ -1,6 +1,5 @@
 package dev.kcoap.coap.stack
 
-import dev.kcoap.coap.CoapException
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 

@@ -3,6 +3,7 @@ package dev.kcoap.coap
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.testkit.LinkConditions
 import dev.kcoap.transport.DatagramEvent

@@ -702,10 +702,10 @@ final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndp
         final fun <get-parameters>(): dev.kcoap.coap.stack/TransmissionParameters // dev.kcoap.coap.stack/CoapEndpoint.parameters.<get-parameters>|<get-parameters>(){}[0]
 
     final var closeCause // dev.kcoap.coap.stack/CoapEndpoint.closeCause|{}closeCause[0]
-        final fun <get-closeCause>(): dev.kcoap.coap/CoapException? // dev.kcoap.coap.stack/CoapEndpoint.closeCause.<get-closeCause>|<get-closeCause>(){}[0]
+        final fun <get-closeCause>(): dev.kcoap.coap.stack/CoapException? // dev.kcoap.coap.stack/CoapEndpoint.closeCause.<get-closeCause>|<get-closeCause>(){}[0]
 
     final fun toString(): kotlin/String // dev.kcoap.coap.stack/CoapEndpoint.toString|toString(){}[0]
-    final suspend fun awaitClosed(): dev.kcoap.coap/CoapException // dev.kcoap.coap.stack/CoapEndpoint.awaitClosed|awaitClosed(){}[0]
+    final suspend fun awaitClosed(): dev.kcoap.coap.stack/CoapException // dev.kcoap.coap.stack/CoapEndpoint.awaitClosed|awaitClosed(){}[0]
     final suspend fun close() // dev.kcoap.coap.stack/CoapEndpoint.close|close(){}[0]
     final suspend fun ping(dev.kcoap.transport/Endpoint): kotlin/Boolean // dev.kcoap.coap.stack/CoapEndpoint.ping|ping(dev.kcoap.transport.Endpoint){}[0]
     final suspend fun ping(dev.kcoap.transport/Endpoint, kotlin/Boolean): kotlin/Boolean // dev.kcoap.coap.stack/CoapEndpoint.ping|ping(dev.kcoap.transport.Endpoint;kotlin.Boolean){}[0]
@@ -748,6 +748,37 @@ final class dev.kcoap.coap.stack/CoapEndpointConfig { // dev.kcoap.coap.stack/Co
             final fun <get-DEFAULT_MAX_DEDUPLICATION_ENTRIES>(): kotlin/Int // dev.kcoap.coap.stack/CoapEndpointConfig.Companion.DEFAULT_MAX_DEDUPLICATION_ENTRIES.<get-DEFAULT_MAX_DEDUPLICATION_ENTRIES>|<get-DEFAULT_MAX_DEDUPLICATION_ENTRIES>(){}[0]
         final const val DEFAULT_MAX_EXCHANGES_PER_PEER // dev.kcoap.coap.stack/CoapEndpointConfig.Companion.DEFAULT_MAX_EXCHANGES_PER_PEER|{}DEFAULT_MAX_EXCHANGES_PER_PEER[0]
             final fun <get-DEFAULT_MAX_EXCHANGES_PER_PEER>(): kotlin/Int // dev.kcoap.coap.stack/CoapEndpointConfig.Companion.DEFAULT_MAX_EXCHANGES_PER_PEER.<get-DEFAULT_MAX_EXCHANGES_PER_PEER>|<get-DEFAULT_MAX_EXCHANGES_PER_PEER>(){}[0]
+    }
+}
+
+final class dev.kcoap.coap.stack/CoapException : kotlin/Exception { // dev.kcoap.coap.stack/CoapException|null[0]
+    constructor <init>(kotlin/String, dev.kcoap.coap.stack/CoapException.Reason, kotlin/Throwable? = ..., dev.kcoap.coap/CoapResponse? = ...) // dev.kcoap.coap.stack/CoapException.<init>|<init>(kotlin.String;dev.kcoap.coap.stack.CoapException.Reason;kotlin.Throwable?;dev.kcoap.coap.CoapResponse?){}[0]
+
+    final val reason // dev.kcoap.coap.stack/CoapException.reason|{}reason[0]
+        final fun <get-reason>(): dev.kcoap.coap.stack/CoapException.Reason // dev.kcoap.coap.stack/CoapException.reason.<get-reason>|<get-reason>(){}[0]
+    final val response // dev.kcoap.coap.stack/CoapException.response|{}response[0]
+        final fun <get-response>(): dev.kcoap.coap/CoapResponse? // dev.kcoap.coap.stack/CoapException.response.<get-response>|<get-response>(){}[0]
+
+    final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/CoapException.Reason> { // dev.kcoap.coap.stack/CoapException.Reason|null[0]
+        enum entry BAD_RESPONSE // dev.kcoap.coap.stack/CoapException.Reason.BAD_RESPONSE|null[0]
+        enum entry BLOCKWISE_FAILED // dev.kcoap.coap.stack/CoapException.Reason.BLOCKWISE_FAILED|null[0]
+        enum entry CLOSED // dev.kcoap.coap.stack/CoapException.Reason.CLOSED|null[0]
+        enum entry CONNECTION_CLOSED // dev.kcoap.coap.stack/CoapException.Reason.CONNECTION_CLOSED|null[0]
+        enum entry IDENTIFIERS_EXHAUSTED // dev.kcoap.coap.stack/CoapException.Reason.IDENTIFIERS_EXHAUSTED|null[0]
+        enum entry MESSAGE_TOO_LARGE // dev.kcoap.coap.stack/CoapException.Reason.MESSAGE_TOO_LARGE|null[0]
+        enum entry RESET // dev.kcoap.coap.stack/CoapException.Reason.RESET|null[0]
+        enum entry RESPONSE_TIMEOUT // dev.kcoap.coap.stack/CoapException.Reason.RESPONSE_TIMEOUT|null[0]
+        enum entry SESSION_ENDED // dev.kcoap.coap.stack/CoapException.Reason.SESSION_ENDED|null[0]
+        enum entry TRANSMISSION_TIMEOUT // dev.kcoap.coap.stack/CoapException.Reason.TRANSMISSION_TIMEOUT|null[0]
+        enum entry TRANSPORT_FAILED // dev.kcoap.coap.stack/CoapException.Reason.TRANSPORT_FAILED|null[0]
+        enum entry TRANSPORT_UNAVAILABLE // dev.kcoap.coap.stack/CoapException.Reason.TRANSPORT_UNAVAILABLE|null[0]
+        enum entry UNVERIFIED_RESPONSE // dev.kcoap.coap.stack/CoapException.Reason.UNVERIFIED_RESPONSE|null[0]
+
+        final val entries // dev.kcoap.coap.stack/CoapException.Reason.entries|#static{}entries[0]
+            final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/CoapException.Reason> // dev.kcoap.coap.stack/CoapException.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+        final fun valueOf(kotlin/String): dev.kcoap.coap.stack/CoapException.Reason // dev.kcoap.coap.stack/CoapException.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+        final fun values(): kotlin/Array<dev.kcoap.coap.stack/CoapException.Reason> // dev.kcoap.coap.stack/CoapException.Reason.values|values#static(){}[0]
     }
 }
 
@@ -838,36 +869,5 @@ final class dev.kcoap.coap.stack/TransmissionParameters { // dev.kcoap.coap.stac
     final object Companion { // dev.kcoap.coap.stack/TransmissionParameters.Companion|null[0]
         final val Default // dev.kcoap.coap.stack/TransmissionParameters.Companion.Default|{}Default[0]
             final fun <get-Default>(): dev.kcoap.coap.stack/TransmissionParameters // dev.kcoap.coap.stack/TransmissionParameters.Companion.Default.<get-Default>|<get-Default>(){}[0]
-    }
-}
-
-final class dev.kcoap.coap/CoapException : kotlin/Exception { // dev.kcoap.coap/CoapException|null[0]
-    constructor <init>(kotlin/String, dev.kcoap.coap/CoapException.Reason, kotlin/Throwable? = ..., dev.kcoap.coap/CoapResponse? = ...) // dev.kcoap.coap/CoapException.<init>|<init>(kotlin.String;dev.kcoap.coap.CoapException.Reason;kotlin.Throwable?;dev.kcoap.coap.CoapResponse?){}[0]
-
-    final val reason // dev.kcoap.coap/CoapException.reason|{}reason[0]
-        final fun <get-reason>(): dev.kcoap.coap/CoapException.Reason // dev.kcoap.coap/CoapException.reason.<get-reason>|<get-reason>(){}[0]
-    final val response // dev.kcoap.coap/CoapException.response|{}response[0]
-        final fun <get-response>(): dev.kcoap.coap/CoapResponse? // dev.kcoap.coap/CoapException.response.<get-response>|<get-response>(){}[0]
-
-    final enum class Reason : kotlin/Enum<dev.kcoap.coap/CoapException.Reason> { // dev.kcoap.coap/CoapException.Reason|null[0]
-        enum entry BAD_RESPONSE // dev.kcoap.coap/CoapException.Reason.BAD_RESPONSE|null[0]
-        enum entry BLOCKWISE_FAILED // dev.kcoap.coap/CoapException.Reason.BLOCKWISE_FAILED|null[0]
-        enum entry CLOSED // dev.kcoap.coap/CoapException.Reason.CLOSED|null[0]
-        enum entry CONNECTION_CLOSED // dev.kcoap.coap/CoapException.Reason.CONNECTION_CLOSED|null[0]
-        enum entry IDENTIFIERS_EXHAUSTED // dev.kcoap.coap/CoapException.Reason.IDENTIFIERS_EXHAUSTED|null[0]
-        enum entry MESSAGE_TOO_LARGE // dev.kcoap.coap/CoapException.Reason.MESSAGE_TOO_LARGE|null[0]
-        enum entry RESET // dev.kcoap.coap/CoapException.Reason.RESET|null[0]
-        enum entry RESPONSE_TIMEOUT // dev.kcoap.coap/CoapException.Reason.RESPONSE_TIMEOUT|null[0]
-        enum entry SESSION_ENDED // dev.kcoap.coap/CoapException.Reason.SESSION_ENDED|null[0]
-        enum entry TRANSMISSION_TIMEOUT // dev.kcoap.coap/CoapException.Reason.TRANSMISSION_TIMEOUT|null[0]
-        enum entry TRANSPORT_FAILED // dev.kcoap.coap/CoapException.Reason.TRANSPORT_FAILED|null[0]
-        enum entry TRANSPORT_UNAVAILABLE // dev.kcoap.coap/CoapException.Reason.TRANSPORT_UNAVAILABLE|null[0]
-        enum entry UNVERIFIED_RESPONSE // dev.kcoap.coap/CoapException.Reason.UNVERIFIED_RESPONSE|null[0]
-
-        final val entries // dev.kcoap.coap/CoapException.Reason.entries|#static{}entries[0]
-            final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap/CoapException.Reason> // dev.kcoap.coap/CoapException.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
-
-        final fun valueOf(kotlin/String): dev.kcoap.coap/CoapException.Reason // dev.kcoap.coap/CoapException.Reason.valueOf|valueOf#static(kotlin.String){}[0]
-        final fun values(): kotlin/Array<dev.kcoap.coap/CoapException.Reason> // dev.kcoap.coap/CoapException.Reason.values|values#static(){}[0]
     }
 }

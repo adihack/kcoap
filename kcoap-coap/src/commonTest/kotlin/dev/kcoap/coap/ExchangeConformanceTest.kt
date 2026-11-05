@@ -22,6 +22,7 @@ import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.common.toHex

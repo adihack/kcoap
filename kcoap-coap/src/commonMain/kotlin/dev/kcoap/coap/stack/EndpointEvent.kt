@@ -98,7 +98,7 @@ public sealed interface EndpointEvent {
     }
 
     /**
-     * The connection to [peer] closed. Its exchanges failed with [dev.kcoap.coap.CoapException.Reason.CONNECTION_CLOSED]
+     * The connection to [peer] closed. Its exchanges failed with [CoapException.Reason.CONNECTION_CLOSED]
      * and its observations ended (RFC 8323 §3.4, §7.4).
      */
     public class ConnectionClosed(override val peer: Endpoint, public val reason: String) : EndpointEvent {

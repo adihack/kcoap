@@ -11,6 +11,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel

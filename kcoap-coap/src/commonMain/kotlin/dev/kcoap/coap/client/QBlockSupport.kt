@@ -2,9 +2,9 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability

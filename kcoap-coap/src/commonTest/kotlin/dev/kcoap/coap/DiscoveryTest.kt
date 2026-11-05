@@ -5,6 +5,7 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceAttributes
+import dev.kcoap.coap.stack.CoapException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

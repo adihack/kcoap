@@ -1,4 +1,6 @@
-package dev.kcoap.coap
+package dev.kcoap.coap.stack
+
+import dev.kcoap.coap.CoapResponse
 
 /**
  * A CoAP exchange that could not complete because of the peer, the network or the endpoint itself: no

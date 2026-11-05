@@ -1,6 +1,7 @@
 package dev.kcoap.coap
 
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.transport.DatagramEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals

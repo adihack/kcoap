@@ -1,6 +1,5 @@
 package dev.kcoap.coap.stack
 
-import dev.kcoap.coap.CoapException
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.codec.CoapFormatException

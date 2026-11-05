@@ -14,6 +14,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.ReliableTransportConfig

@@ -13,6 +13,7 @@ import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.RawPeer

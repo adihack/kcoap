@@ -8,6 +8,7 @@ import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities.Capability
 import dev.kcoap.coap.stack.TransmissionParameters
