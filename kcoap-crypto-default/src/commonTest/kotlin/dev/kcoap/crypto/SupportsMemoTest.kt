@@ -48,6 +48,34 @@ class SupportsMemoTest {
         }
     }
 
+    /**
+     * The KEM and SHAKE256 probes never reach the provider (this backend refuses ML-KEM key types before any
+     * lookup, and SHAKE256 is common code), so the backend's own operations count them: the KEM probe starts
+     * with [CryptoBackend.generateKeyPair], the hash probe of an XOF with [CryptoBackend.digest] alone.
+     */
+    @Test
+    fun theKemAndShake256QuestionsAreProbedOnce() = runTest {
+        val backend = object : DefaultCryptoBackend(CountingProvider()) {
+            var keyPairs = 0
+            var digests = 0
+
+            override suspend fun generateKeyPair(type: KeyType): KeyPair {
+                keyPairs++
+                return super.generateKeyPair(type)
+            }
+
+            override suspend fun digest(algorithm: HashAlgorithm, data: ByteArray): ByteArray {
+                digests++
+                return super.digest(algorithm, data)
+            }
+        }
+
+        repeat(3) { assertFalse(backend.supports(KemAlgorithm.ML_KEM_512), "this backend has no KEM") }
+        assertEquals(1, backend.keyPairs, "ML-KEM-512 is probed once")
+        repeat(3) { assertTrue(backend.supports(HashAlgorithm.SHAKE256)) }
+        assertEquals(1, backend.digests, "SHAKE256 is probed once")
+    }
+
     /** Callers racing on real threads (one event loop on JS and Wasm) share the first caller's probe. */
     @Test
     fun racingCallersShareOneProbe() = runTest {
