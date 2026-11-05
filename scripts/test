@@ -4,7 +4,8 @@
 #   scripts/test unit       every unit test on every target this machine can build
 #                           (JVM, Linux native, JS and Wasm on Node.js; Apple targets on macOS), and the
 #                           build checks: the build-logic tests, verifyCommonOnly on the core modules,
-#                           checkKotlinAbi against the committed ABI dumps
+#                           verifyNoServerEngine on the WebSocket server, checkKotlinAbi against the
+#                           committed ABI dumps
 #   scripts/test interop    the cross-tests against libcoap and libedhoc (builds their Docker images)
 #   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
 #   scripts/test apple      the common tests on macOS and the iOS simulator, and checkKotlinAbi with
@@ -48,7 +49,8 @@ build_images() {
 # build checks run in the same invocation, so a failing test does not hide an ABI or layout problem.
 unit() {
     say "Unit tests and build checks"
-    gradle allTests :build-logic:test verifyCommonOnly checkKotlinAbi -Pkcoap.tests=unit --continue "$@"
+    gradle allTests :build-logic:test verifyCommonOnly verifyNoServerEngine checkKotlinAbi -Pkcoap.tests=unit \
+        --continue "$@"
 }
 
 interop() {
@@ -127,5 +129,5 @@ case "$suite" in
     browser) browser "$@" ;;
     images) trap - EXIT; build_images ;;
     all) unit "$@"; interop "$@"; coverage "$@" ;;
-    *) sed -n '2,21p' "$0"; trap - EXIT; exit 2 ;;
+    *) sed -n '2,22p' "$0"; trap - EXIT; exit 2 ;;
 esac

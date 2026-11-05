@@ -15,7 +15,8 @@ connections, and reaches a CoAP server as a client through `kcoap-transport-ktor
 
 The module brings no server engine: the application depends on the one it runs. CIO
 (`io.ktor:ktor-server-cio`, `io.ktor.server.cio.CIO`) runs on the JVM and natively and is the one the
-tests use; another engine with WebSocket support, such as Netty on the JVM, is passed the same way.
+tests use; another engine with WebSocket support, such as Netty on the JVM, is passed the same way. The
+build's `verifyNoServerEngine` check fails if an engine appears among the published dependencies.
 
 ```kotlin
 // build.gradle.kts: implementation("io.ktor:ktor-server-cio:<ktor version>")

@@ -69,13 +69,14 @@ only those, and `all` (the default) runs both.
 
 ## Build checks
 
-Three checks guard the build itself. `scripts/test unit` runs all three after the tests, in the same
-Gradle invocation, and `./gradlew check` includes the first two for each module:
+Four checks guard the build itself. `scripts/test unit` runs all four after the tests, in the same
+Gradle invocation, and `./gradlew check` includes the first three in each module that has them:
 
 | Check | Fails when | Fix |
 |---|---|---|
 | `checkKotlinAbi` | the public API of a published module differs from its dumps in `<module>/api` (`<module>.api` for the JVM, `<module>.klib.api` for every other target) | if the change is intended, `./gradlew updateKotlinAbi` and commit the dump diff with the change ([releasing.md](releasing.md#abi-dumps)) |
 | `verifyCommonOnly` | a core module (`kcoap.core`) has files in a main source set other than `commonMain` | move the code to `commonMain`, or into an adapter module |
+| `verifyNoServerEngine` | a ktor server engine (CIO, Netty, Jetty, Tomcat) appears in a Gradle module file or POM that `kcoap-transport-ktor-websocket-server` would publish, or on its JVM runtime classpath; the application chooses the engine (WP-W1) | keep the engine in the test source sets; `KtorWebSocketListener.start` takes it as a parameter |
 | `:build-logic:test` | a convention plugin no longer behaves as its Gradle TestKit fixtures expect | fix the plugin in `build-logic` |
 
 The build-logic tests (`build-logic/src/test`) run small fixture builds with Gradle TestKit, in a TestKit
@@ -94,7 +95,7 @@ machine, or after `build-logic/build` is deleted, needs the network.
 
 | Job | Runner | Runs |
 |---|---|---|
-| Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
+| Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly`, `verifyNoServerEngine` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
 | Interop | Linux | `scripts/test interop` with freshly built images |
 | Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
 | WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
