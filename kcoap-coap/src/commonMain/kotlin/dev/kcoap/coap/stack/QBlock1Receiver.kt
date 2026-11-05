@@ -53,7 +53,9 @@ internal class QBlock1Receiver<R>(
     private val block0 = requireNotNull(first.options.qBlock1) { "Not a Q-Block1 request: $first" }
 
     /** The body size from Size1 (RFC 9177 §4.6). */
-    val size1: Long = requireNotNull(first.options.size1) { "Q-Block1 request without Size1: $first" }
+    val size1: Long = requireNotNull(first.options.size1) { "Q-Block1 request without Size1: $first" }.also {
+        require(it <= Int.MAX_VALUE) { "Size1 $it too large" }
+    }
 
     val sizeExponent: Int = block0.sizeExponent
     private val unit: Int = block0.size
@@ -62,7 +64,13 @@ internal class QBlock1Receiver<R>(
     val count: Long = maxOf(1L, (size1 + unit - 1) / unit)
 
     private val sets = timing.sets
-    private val buffer = ByteArray(size1.also { require(it <= Int.MAX_VALUE) { "Size1 $it too large" } }.toInt())
+
+    /**
+     * The payloads that arrived, by block number, joined only once the body is complete: what the body holds
+     * grows with the blocks a client sends, never with the Size1 it claims (RFC 7959 §7.1), so one small
+     * datagram cannot make the receiver allocate a whole body.
+     */
+    private val chunks = HashMap<Long, ByteArray>()
     private val received = ReceivedBlocks(count)
     private var highestRef: R? = null
     private var lastActivity = now
@@ -70,6 +78,10 @@ internal class QBlock1Receiver<R>(
     private var retries = 0
     private var reportedSet = -1L
     private var continuedSet = -1L
+
+    /** The payload bytes held so far: those of the blocks that arrived, each once. */
+    var heldBytes: Long = 0
+        private set
 
     /** Whether the body was delivered. */
     var isComplete: Boolean = false
@@ -101,7 +113,8 @@ internal class QBlock1Receiver<R>(
         if (received.highest > previousHighest) highestRef = ref
         if (isNew) {
             // Only progress counts: a duplicate must not put off asking for what is missing.
-            payload.copyInto(buffer, destinationOffset = block.offset.toInt())
+            chunks[block.number] = payload
+            heldBytes += payload.size
             lastActivity = now
             retries = 0
         }
@@ -140,12 +153,14 @@ internal class QBlock1Receiver<R>(
         if (now < deadline) return emptyList()
         if (mode != BodyMode.NON) return discard("No block for NON_PARTIAL_TIMEOUT")
         if (retries >= timing.nonMaxRetransmit) return discard("Missing blocks asked for NON_MAX_RETRANSMIT times")
+        // Every block was rejected: there is no request to put a 4.08 on, nor anything to keep.
+        val ref = highestRef ?: return discard("No block of the body arrived")
         val highestSet = sets.of(received.highest)
         val missing = received.missing(0..sets.last(highestSet, count), timing.maxPayloads)
             .ifEmpty { sets.numbers(highestSet + 1, count).toList() }
         retries++
         last408At = now
-        return listOf(QBlockAction.Send408(checkNotNull(highestRef), missing))
+        return listOf(QBlockAction.Send408(ref, missing))
     }
 
     /** The client answered a 4.08 with a Reset: it abandoned the body (RFC 9177 §4.3). */
@@ -159,7 +174,14 @@ internal class QBlock1Receiver<R>(
 
     /** The completing request with the whole body, without Q-Block1 and Size1. */
     private fun assembled(request: CoapMessage): CoapMessage = request.toBuilder().apply {
-        payload = buffer
+        val body = ByteArray(size1.toInt())
+        for (num in chunks.keys.sorted()) {
+            val chunk = checkNotNull(chunks[num])
+            val offset = (num * unit).toInt()
+            chunk.copyInto(body, destinationOffset = offset, endIndex = minOf(chunk.size, body.size - offset))
+        }
+        chunks.clear()
+        payload = body
         options {
             remove(CoapOptions.Q_BLOCK1.number)
             remove(CoapOptions.SIZE1.number)

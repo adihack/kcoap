@@ -42,8 +42,9 @@ internal object QBlockCheck {
      *   connection whose CSMs both indicated BERT); Q-Block1 without Request-Tag or Size1 (§4.3); a Size1 that
      *   needs more than 2^20 blocks of the block size, which 20-bit block numbers cannot reach (RFC 7959
      *   §2.2); a payload that does not fill the block although M is set (RFC 7959 §2.3), or one larger than
-     *   the block (RFC 7959 §2.2: only the last block may differ, by being smaller); a block outside Size1 or
-     *   a last block that does not end at Size1 (§4.6); Q-Block2 options that are not strictly ascending or
+     *   the block (RFC 7959 §2.2: only the last block may differ, by being smaller); a block that starts at
+     *   or beyond Size1 (but block 0 of an empty body), reaches beyond it, or is the last and does not end at
+     *   it (§4.6); Q-Block2 options that are not strictly ascending or
      *   mix sizes, or repeat next to Q-Block1 (§4.4, §4.7).
      * - 4.13 with Size1: Size1 above [maxBodySize] (RFC 7959 §2.9.3, §7.1).
      */
@@ -91,6 +92,8 @@ internal object QBlockCheck {
         return when {
             !block.isBert && payload > block.size ->
                 badRequest("Q-Block1 block ${block.number} carries more than ${block.size} bytes")
+            // RFC 7959 §7.1 (plan row 39): NUM × size at or beyond Size1, except block 0 of an empty body.
+            offset > 0 && offset >= size1 -> badRequest("Q-Block1 block ${block.number} starts beyond Size1 $size1")
             block.more && !fills -> badRequest("Q-Block1 payload of $payload bytes does not fill block ${block.number}")
             block.more && offset + payload >= size1 -> badRequest("Q-Block1 block ${block.number} reaches beyond Size1 $size1")
             !block.more && offset + payload != size1 -> badRequest("Q-Block1 last block ${block.number} does not end at Size1 $size1")

@@ -739,8 +739,8 @@ public final class dev/kcoap/coap/server/CoapServerConfig {
 	public static final field DEFAULT_MAX_OBSERVERS_PER_RESOURCE I
 	public static final field DEFAULT_MAX_VERIFIED_ADDRESSES I
 	public fun <init> ()V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getAmplification ()Ldev/kcoap/coap/server/AmplificationPolicy;
 	public final fun getAmplificationFactor ()I
 	public final fun getConfirmableNotificationInterval-UwyO8pc ()J
@@ -752,6 +752,7 @@ public final class dev/kcoap/coap/server/CoapServerConfig {
 	public final fun getMaxObserversPerResource ()I
 	public final fun getMaxVerifiedAddresses ()I
 	public final fun getNonConfirmableNotificationInterval-UwyO8pc ()J
+	public final fun getQBlock ()Ldev/kcoap/coap/server/QBlockServerConfig;
 	public final fun getSecurity ()Ldev/kcoap/coap/security/ServerMessageSecurity;
 	public final fun getSecurityReserve ()I
 	public final fun getVerifiedAddressLifetime-UwyO8pc ()J
@@ -772,6 +773,25 @@ public abstract class dev/kcoap/coap/server/ObservableResource : dev/kcoap/coap/
 	public final fun getObserverCount ()I
 	public fun isObservable ()Z
 	public final fun notifyObservers ()V
+}
+
+public final class dev/kcoap/coap/server/QBlockServerConfig {
+	public static final field Companion Ldev/kcoap/coap/server/QBlockServerConfig$Companion;
+	public static final field DEFAULT_MAX_BODIES I
+	public static final field DEFAULT_MAX_BODIES_PER_PEER I
+	public fun <init> ()V
+	public fun <init> (ZZZIII)V
+	public synthetic fun <init> (ZZZIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMaxBodiesPerPeer ()I
+	public final fun getMaxCachedBodies ()I
+	public final fun getMaxPartialBodies ()I
+	public final fun getOnReliableTransports ()Z
+	public final fun getWithMessageSecurity ()Z
+	public final fun isEnabled ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/QBlockServerConfig$Companion {
 }
 
 public final class dev/kcoap/coap/server/RequestContext {
@@ -936,6 +956,8 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached : dev/kcoap/c
 public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/lang/Enum {
 	public static final field ADDRESS_CHALLENGES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field AMPLIFICATION_FACTOR Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field BODIES_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field CACHED_BODIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field CONCURRENT_REQUESTS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field DEDUPLICATION_ENTRIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
@@ -944,6 +966,7 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/
 	public static final field OBSERVERS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field OBSERVERS_PER_RESOURCE Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field PARTIAL_BODIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field PENDING_CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static final field VERIFIED_ADDRESSES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
@@ -978,6 +1001,28 @@ public final class dev/kcoap/coap/stack/EndpointEvent$ObserverRemoved : dev/kcoa
 	public final fun getPath ()Ljava/lang/String;
 	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
 	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$PartialBodyDropped : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$QBlockFallback : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$QBlockRecovery : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;ZLjava/util/List;)V
+	public final fun getBlocks ()Ljava/util/List;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun isRequestedByPeer ()Z
 	public fun toString ()Ljava/lang/String;
 }
 

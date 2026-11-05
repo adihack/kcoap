@@ -164,9 +164,62 @@ public sealed interface EndpointEvent {
              * item 3). When that repeat comes, the request runs again.
              */
             HELD_BACK_RESPONSES,
+
+            /**
+             * `QBlockServerConfig.maxPartialBodies`: a Q-Block1 upload from [peer] that would start one more
+             * partial body was refused with 5.03 Service Unavailable and Max-Age (RFC 9177 §4.3, RFC 7959 §7.1).
+             */
+            PARTIAL_BODIES,
+
+            /**
+             * `QBlockServerConfig.maxBodiesPerPeer`: a new Q-Block1 upload from [peer] was refused with 5.03 and
+             * Max-Age, or the oldest Q-Block2 body kept for [peer] was dropped for a new one.
+             */
+            BODIES_PER_PEER,
+
+            /**
+             * `QBlockServerConfig.maxCachedBodies`: the Q-Block2 body, or the record of a completed Q-Block1
+             * body, used longest ago, that of [peer], was dropped for a new one. A later request for its missing
+             * blocks runs a GET or FETCH again and gets 4.08 for other methods (RFC 9177 §4.4).
+             */
+            CACHED_BODIES,
         }
 
         override fun toString(): String = "LimitReached(peer=$peer, limit=$limit)"
+    }
+
+    /**
+     * Missing blocks of a Q-Block body (RFC 9177 §4.3, §4.4, §5) were asked for. [isRequestedByPeer] is true
+     * when [peer] asked, with a 4.08 Request Entity Incomplete listing them or a request for missing Q-Block2
+     * blocks, and this endpoint sends [blocks] again; false when this endpoint asked [peer] for [blocks].
+     * Many of these towards one peer show a lossy path, for which RFC 9177 §7.2 suggests a smaller
+     * MAX_PAYLOADS.
+     */
+    public class QBlockRecovery(
+        override val peer: Endpoint,
+        public val isRequestedByPeer: Boolean,
+        public val blocks: List<Long>,
+    ) : EndpointEvent {
+        override fun toString(): String = "QBlockRecovery(peer=$peer, requestedByPeer=$isRequestedByPeer, blocks=$blocks)"
+    }
+
+    /**
+     * A client uses RFC 7959 block-wise transfer instead of Q-Block towards [peer] (RFC 9177 §4.1): the peer
+     * answered the probe with 4.02 Bad Option, a Reset or a response without Q-Block, or a Q-Block request got
+     * one of those; [reason] says which.
+     */
+    public class QBlockFallback(override val peer: Endpoint, public val reason: String) : EndpointEvent {
+        override fun toString(): String = "QBlockFallback(peer=$peer, reason=$reason)"
+    }
+
+    /**
+     * A partially received Q-Block body from [peer] was given up and its state dropped (RFC 9177 §4.3, §4.4,
+     * §7.2): its missing blocks were asked for NON_MAX_RETRANSMIT times without success, no block came for
+     * NON_PARTIAL_TIMEOUT, the peer answered a 4.08 with a Reset, or the peer's session ended; [reason] says
+     * which.
+     */
+    public class PartialBodyDropped(override val peer: Endpoint, public val reason: String) : EndpointEvent {
+        override fun toString(): String = "PartialBodyDropped(peer=$peer, reason=$reason)"
     }
 
     /** A client was added to the observers of [path] (RFC 7641 §4.1). */

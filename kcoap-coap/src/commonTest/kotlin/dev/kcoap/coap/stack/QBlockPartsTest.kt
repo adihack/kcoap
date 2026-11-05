@@ -171,6 +171,9 @@ class QBlockPartsTest {
         assertEquals(CoapCode.BAD_REQUEST, check(beyond)?.code)
         val wrongEnd = upload(46, 3000).toBuilder().options { size1(4000) }.build()
         assertEquals(CoapCode.BAD_REQUEST, check(wrongEnd)?.code, "a last block must end at Size1")
+        // Row 39: NUM × size at Size1, with nothing in it, adds up but is outside the body.
+        assertEquals(0, upload(2, 128).payloadSize)
+        assertEquals("Q-Block1 block 2 starts beyond Size1 128", check(upload(2, 128))?.diagnostic)
         val tooLarge = check(upload(0, 3000), maxBodySize = 2048)
         assertEquals(CoapCode.REQUEST_ENTITY_TOO_LARGE, tooLarge?.code)
         assertEquals(2048L, tooLarge?.size1, "RFC 7959 §2.9.3: Size1 tells the largest acceptable body")

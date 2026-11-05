@@ -36,7 +36,53 @@ object Libcoap {
         /** The messages libcoap logged at verbosity 6 or more: `v:1 t:CON c:GET i:1234 {} [ ... ]`. */
         val messages: List<String> get() = (stdout + "\n" + stderr).lines().filter { it.startsWith("v:1 ") }
 
+        /** The messages libcoap sent and received, in order, from its log at verbosity 7 ([wire]). */
+        val wire: List<Wire> get() = wire(stdout + "\n" + stderr)
+
         override fun toString(): String = "exit $exitCode\nstdout: $stdout\nstderr: $stderr"
+    }
+
+    /**
+     * One message on libcoap's side of the wire: [isSent] by libcoap or received, and the line libcoap printed
+     * for it, such as `v:1 t:NON c:GET i:8176 {} [ Uri-Path:big, Q-Block2:0/M/64, Request-Tag:0x9959f003 ]`.
+     */
+    class Wire(val isSent: Boolean, val line: String) {
+        /** The message type: `CON`, `NON`, `ACK` or `RST`; null over reliable transports, which have none. */
+        val type: String? get() = Regex(""" t:(\w+) """).find(line)?.groupValues?.get(1)
+
+        /** The code as libcoap prints it: `GET`, `2.05`, `4.08`. */
+        val code: String? get() = Regex(""" c:([\w.]+) """).find(line)?.groupValues?.get(1)
+
+        /** The token in hex, empty for none. */
+        val token: String? get() = Regex("""\{(\w*)\}""").find(line)?.groupValues?.get(1)
+
+        /** Every value of [option], as printed: `Q-Block2` gives `0/M/64`. */
+        fun option(option: String): List<String> = Regex("""[\[ ]$option:([^,\]]+?)(?:,| \])""").findAll(line).map { it.groupValues[1].trim() }.toList()
+
+        /** The block number of the Q-Block1 or Q-Block2 option [option] (the first one). */
+        fun number(option: String): Long? = option(option).firstOrNull()?.substringBefore('/')?.toLong()
+
+        override fun toString(): String = (if (isSent) "> " else "< ") + line
+    }
+
+    /**
+     * The messages in a libcoap log at verbosity 7: each `v:1`, `v:Reliable` or `v:WebSocket` line right after
+     * a `netif: sent` or `netif: recv` line, which says its direction.
+     */
+    fun wire(log: String): List<Wire> {
+        val wire = mutableListOf<Wire>()
+        var direction: Boolean? = null
+        for (line in log.lines()) {
+            when {
+                "netif: sent" in line -> direction = true
+                "netif: recv" in line -> direction = false
+                direction != null && (line.startsWith("v:1 ") || line.startsWith("v:Reliable ") || line.startsWith("v:WebSocket ")) -> {
+                    wire += Wire(direction, line)
+                    direction = null
+                }
+            }
+        }
+        return wire
     }
 
     /**
@@ -49,6 +95,9 @@ object Libcoap {
         val webSocketUri: String get() = "coap+ws://127.0.0.1:${checkNotNull(webSocketPort)}"
 
         fun logs(): String = run(listOf("docker", "logs", container), 30).let { it.stdout + it.stderr }
+
+        /** The messages the server sent and received so far; read before [close], which removes its log. */
+        fun wire(): List<Wire> = wire(logs())
 
         override fun close() {
             exitCode("docker", "rm", "-f", container)
@@ -70,7 +119,10 @@ object Libcoap {
         return Server(port, name, webSocketPort)
     }
 
-    /** Runs `coap-client` with [arguments]; [mount] is visible as /data in the container. */
+    /**
+     * Runs `coap-client` with [arguments]; [mount] is visible as /data in the container. libcoap 4.3.5 reads
+     * `-L` only before `-P` and `-f`, so the block mode goes first.
+     */
     fun client(vararg arguments: String, mount: File? = null, timeoutSeconds: Long = 60): Result {
         val volume = mount?.let { listOf("-v", "${it.absolutePath}:/data") } ?: emptyList()
         return run(listOf("docker", "run", "--rm", "--network", "host") + volume + listOf(IMAGE, "coap-client") + arguments, timeoutSeconds)

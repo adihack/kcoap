@@ -56,6 +56,17 @@ class QBlock2SenderTest {
     }
 
     @Test
+    fun rfc9177Section4_4AContinueOnABodyThatNeverStartedBecomesItsOriginalRequest() {
+        val sender = sender()
+        // The first request asked for block 0 alone, as libcoap's probe does with Q-Block2 0/0.
+        assertEquals(listOf("0/1@probe"), sender.onRequest(Duration.ZERO, followUp(block(0, false)), "probe").sent())
+        val actions = sender.onRequest(1.seconds, followUp(block(10, true)), "continue")
+        assertTrue(actions.none { it is QBlockAction.NoResponse<*> }, "the Continue gets the set itself")
+        assertEquals((10..19).map { "$it/1@continue" }, actions.sent())
+        assertEquals((20..25).map { "$it/${if (it < 25) 1 else 0}@continue" }, sender.onTimer(1.seconds + pause).sent())
+    }
+
+    @Test
     fun rfc9177Section4_4AContinueBeyondTheBodyIsRefused() {
         val sender = sender()
         sender.start(Duration.ZERO, "get")
@@ -156,6 +167,16 @@ class QBlock2SenderTest {
         assertEquals(listOf("0/1@obs"), sender.start(Duration.ZERO, "obs").sent(), "NSTART 1")
         assertEquals(listOf("1/1@obs"), sender.onAcknowledged(1.seconds, 0).sent())
         assertEquals(emptyList(), sender(mode = BodyMode.NON).onAcknowledged(1.seconds, 0), "only Confirmable bodies count ACKs")
+    }
+
+    @Test
+    fun rfc9177Section4_4ABodyThatNeverStartedSendsNothingByItself() {
+        for (mode in listOf(BodyMode.NON, BodyMode.CON)) {
+            val sender = sender(mode = mode)
+            assertEquals(listOf("0/1@probe"), sender.onRequest(Duration.ZERO, followUp(block(0, false)), "probe").sent(), "$mode")
+            assertFalse(sender.isSending, "$mode: only the block asked for")
+            assertNull(sender.nextDeadline())
+        }
     }
 
     @Test

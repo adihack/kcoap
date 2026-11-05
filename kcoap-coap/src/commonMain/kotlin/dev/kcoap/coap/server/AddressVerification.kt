@@ -58,11 +58,12 @@ internal class AddressVerification(
     /**
      * Whether a response of [responseSize] bytes to a request of [requestSize] bytes needs a verified address
      * under [CoapServerConfig.amplification]: [isBurst] says whether it is a Q-Block2 burst, [responseSize]
-     * then the size of all its blocks together. Up to [CoapServerConfig.amplificationFactor] times the
+     * then the size of all the blocks sent in answer to that request so far, this burst included (§2.4
+     * item 3: "the total size of the response(s)"). Up to [CoapServerConfig.amplificationFactor] times the
      * request is always allowed.
      */
-    fun exceedsLimit(requestSize: Int, responseSize: Int, isBurst: Boolean): Boolean =
-        appliesTo(isBurst) && responseSize.toLong() > config.amplificationFactor.toLong() * requestSize
+    fun exceedsLimit(requestSize: Int, responseSize: Long, isBurst: Boolean): Boolean =
+        appliesTo(isBurst) && responseSize > config.amplificationFactor.toLong() * requestSize
 
     /**
      * Whether the address of [peer] is verified: still within its lifetime, or by now, because [echo], the

@@ -38,8 +38,11 @@ import kotlinx.coroutines.SupervisorJob
  * 2. Proxy-Uri and Proxy-Scheme get 5.05 (RFC 7252 §5.10.2), unknown paths 4.04, and unrecognized
  *    critical options 4.02 with a diagnostic, or a silent rejection for Non-confirmable requests
  *    (RFC 7252 §5.4.1);
- * 3. Block1 bodies are assembled (RFC 7959 §2.5) and Observe registrations recorded (RFC 7641 §4.1);
- * 4. the resource's handler runs; large responses go out in Block2 blocks (RFC 7959 §2.4);
+ * 3. Block1 bodies are assembled (RFC 7959 §2.5) and Observe registrations recorded (RFC 7641 §4.1); with
+ *    [CoapServerConfig.qBlock] on, requests carrying Q-Block1 or Q-Block2 go to the Q-Block layer instead
+ *    (RFC 9177), which assembles uploads from bursts and sends response bodies in them;
+ * 4. the resource's handler runs; large responses go out in Block2 blocks (RFC 7959 §2.4), or in Q-Block2
+ *    blocks when the request carried Q-Block (RFC 9177 §4.4);
  * 5. the response is protected with the request's security context and sent, piggybacked when it is
  *    ready in time, otherwise separately (RFC 7252 §5.2). No-Response (RFC 7967) suppresses it. A
  *    response that [CoapServerConfig.amplification] holds back from a client whose address is not yet
@@ -111,6 +114,9 @@ public class CoapServer private constructor(
     /** The parent of this server's request coroutines, so [close] stops them on a shared endpoint too. */
     private val handlers = SupervisorJob(endpoint.scope.coroutineContext[Job])
 
+    /** Q-Block bodies (RFC 9177), when [CoapServerConfig.qBlock] is on. */
+    internal val qBlock = QBlockServer(this, endpoint, config, handlers)
+
     /** The root of the resource tree; requests to "/" go to its handlers. */
     public val root: CoapResource get() = rootResource
 
@@ -131,10 +137,20 @@ public class CoapServer private constructor(
             override suspend fun onSessionEnded(peer: Endpoint) {
                 observations.sessionEnded(peer)
                 blockwise.forget(peer)
+                qBlock.forget(peer)
             }
 
             override suspend fun onEndpointClosed() {
                 stop()
+            }
+        }
+        if (config.qBlock.isEnabled) {
+            // RFC 9177 §11 does not recommend Q-Block in NoSec mode, which requests without OSCORE use, also on a
+            // server with message security (it answers them unprotected).
+            val who = if (config.security == null) "without message security" else "also for requests without message security"
+            log.warn {
+                "Q-Block (RFC 9177) is on $who, which RFC 9177 §11 does not recommend: bursts go to " +
+                    "unauthenticated clients once their address is verified (${config.amplification})"
             }
         }
         // Only now, with the resources and the handler in place, does the endpoint start receiving.
@@ -163,12 +179,10 @@ public class CoapServer private constructor(
     private suspend fun stop() {
         handlers.cancel()
         observations.close()
+        qBlock.close()
     }
 
     // ---------------------------------------------------------------- the request pipeline
-
-    /** What answers a request; [isChallenge] marks a 4.01 with Echo that verifies the client's address. */
-    private class Reply(val response: CoapResponse, val observation: ServerObservation? = null, val isChallenge: Boolean = false)
 
     private suspend fun process(inbound: InboundRequest) {
         val security = config.security
@@ -211,7 +225,7 @@ public class CoapServer private constructor(
             throw e
         } catch (e: Exception) {
             log.error(e) { "Failed to answer ${request.code} ${request.options.path}" }
-            Reply(CoapResponse(CoapCode.INTERNAL_SERVER_ERROR))
+            Reply.Single(CoapResponse(CoapCode.INTERNAL_SERVER_ERROR))
         }
         send(inbound, request, unprotected, reply)
     }
@@ -249,7 +263,11 @@ public class CoapServer private constructor(
         val options = request.options
         val peer = inbound.peer
         val resource = rootResource.find(options.uriPath)
-        val unrecognized = OptionCheck.unrecognizedCritical(options, OptionCheck.SERVER_RECOGNIZED + (resource?.recognizedOptions ?: emptySet()))
+        // RFC 9177 §4.1: Q-Block1 and Q-Block2 count as recognized only where the Q-Block layer takes them.
+        val qBlockAccepted = qBlock.accepts(inbound, unprotected)
+        val recognized = OptionCheck.SERVER_RECOGNIZED + (if (qBlockAccepted) OptionCheck.Q_BLOCK_RECOGNIZED else emptySet()) +
+            (resource?.recognizedOptions ?: emptySet())
+        val unrecognized = OptionCheck.unrecognizedCritical(options, recognized)
         if (unrecognized.isNotEmpty()) {
             val numbers = unrecognized.joinToString { it.number.toString() }
             if (!inbound.isConfirmable) {
@@ -257,49 +275,55 @@ public class CoapServer private constructor(
                 inbound.reject("unrecognized critical options $numbers")
                 return null
             }
-            return Reply(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
+            return Reply.Single(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
         }
         if (options.proxyUri != null || options.proxyScheme != null) {
-            return Reply(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
+            return Reply.Single(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
         }
-        if (resource == null) return Reply(CoapResponse(CoapCode.NOT_FOUND))
+        if (resource == null) return Reply.Single(CoapResponse(CoapCode.NOT_FOUND))
         val block1 = options.block1
         val block2 = options.block2
         val limits = endpoint.limits(inbound.connection)
         if (!limits.isReliable && (block1?.isBert == true || block2?.isBert == true)) {
             // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00; it is BERT on RFC 8323 transports only.
-            return Reply(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
+            return Reply.Single(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
         }
         val now = endpoint.now()
         val checksAddress = checksAddress(inbound, unprotected)
         val echo = options.echo
+        val key = OperationKey(peer, unprotected?.identity, request.code.value, Blockwise.operationOptions(options))
+        val isQBlock = qBlockAccepted && QBlockServer.carriesQBlock(options)
+        if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxBodySize) {
+            // RFC 7959 §2.9.3: a body of one message beyond the bound, Q-Block2 or not; Size1 says what fits.
+            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(config.maxBodySize.toLong()) })
+        }
         if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
             // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.
-            addressVerification.takeWithheld(peer, request, now)?.let { return Reply(it) }
+            addressVerification.takeWithheld(peer, request, now)?.let { withheld ->
+                return if (isQBlock) qBlock.serve(QBlockRequest(inbound, request, unprotected), withheld, key, limits) else Reply.Single(withheld)
+            }
         }
-        val key = OperationKey(peer, unprotected?.identity, request.code.value, Blockwise.operationOptions(options))
+        if (isQBlock) return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
 
         var effective = request
         var block1Control: BlockOption? = null
         if (block1 != null) {
             when (val result = blockwise.receiveBlock1(key, request, block1, now, limits)) {
-                is BlockwiseServer.Block1Result.Respond -> return Reply(result.response)
+                is BlockwiseServer.Block1Result.Respond -> return Reply.Single(result.response)
                 is BlockwiseServer.Block1Result.Assembled -> {
                     effective = result.request
                     block1Control = result.control
                 }
             }
-        } else if (request.payloadSize > config.maxBodySize) {
-            return Reply(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(config.maxBodySize.toLong()) })
         }
 
         if (block2 != null && block2.number > 0 && block1 == null) {
             blockwise.representation(key, now)?.let { cached ->
-                return Reply(blockwise.serve(key, request.token, block2, cached, reserve, now, limits))
+                return Reply.Single(blockwise.serve(key, request.token, block2, cached, reserve, now, limits))
             }
             if (request.code != CoapCode.GET && request.code != CoapCode.FETCH) {
                 // Re-running an unsafe method for a later block would repeat its effect.
-                return Reply(CoapResponse.error(CoapCode.REQUEST_ENTITY_INCOMPLETE, "No response body to continue"))
+                return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_INCOMPLETE, "No response body to continue"))
             }
         }
 
@@ -346,9 +370,30 @@ public class CoapServer private constructor(
             // A representation that fits no block became 5.00, which ends the client's observation
             // (RFC 7641 §3.2), so the server keeps no observer for it either.
             observations.remove(observation, "registration response ${served.code}")
-            return Reply(served.withOptions { remove(CoapOptions.OBSERVE.number) })
+            return Reply.Single(served.withOptions { remove(CoapOptions.OBSERVE.number) })
         }
-        return Reply(served, observation)
+        return Reply.Single(served, observation)
+    }
+
+    /**
+     * The handler's response to [request] for the Q-Block layer ([QBlockServer]): the whole body of a Q-Block1
+     * upload, or a request carrying Q-Block2, after the checks of [answer]. A GET or FETCH with Observe 1
+     * deregisters as always; one with Observe 0 is served as a plain request without adding an observer,
+     * which RFC 7641 §4.1 allows, so no Observe goes out. Accept is honoured (RFC 7252 §5.10.4).
+     */
+    internal suspend fun respondTo(
+        resource: CoapResource,
+        request: CoapMessage,
+        inbound: InboundRequest,
+        unprotected: UnprotectedRequest?,
+    ): CoapResponse {
+        val options = request.options
+        if (options.observe == OBSERVE_DEREGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH)) {
+            observations.remove(inbound.peer, request.token, "deregistered")
+        }
+        val context = RequestContext(request, inbound.peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
+        val response = acceptable(options, invoke(resource, context))
+        return if (CoapOptions.OBSERVE.number in response.options) response.withOptions { remove(CoapOptions.OBSERVE.number) } else response
     }
 
     private fun limitOf(registration: ObservationRegistry.Registration): EndpointEvent.LimitReached.Limit? = when (registration) {
@@ -380,6 +425,15 @@ public class CoapServer private constructor(
     }
 
     private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply) {
+        when (reply) {
+            is Reply.Single -> send(inbound, request, unprotected, reply)
+            // RFC 9177 §4.3, Appendix B: an Empty ACK for a Confirmable block, and on a connection it counts as answered.
+            Reply.None -> inbound.finishWithoutResponse()
+            is Reply.Body -> qBlock.send(QBlockRequest(inbound, request, unprotected), reply)?.let { send(inbound, request, unprotected, it) }
+        }
+    }
+
+    private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply.Single) {
         val response = reply.response
         if (reply.observation == null && isSuppressed(request.options, response.code)) {
             // RFC 7967 §2: the client is not interested; a Confirmable request still gets its ACK.
@@ -399,7 +453,7 @@ public class CoapServer private constructor(
         val transmission = try {
             val outgoing = unprotected?.protectResponse(message) ?: message
             log.debug { "${response.code} for ${request.code} ${request.options.path} from ${inbound.peer}" }
-            inbound.respond(outgoing, owner = observation, separateType = separateType)
+            inbound.respond(outgoing, owner = observation ?: reply.owner, separateType = separateType)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -440,11 +494,23 @@ public class CoapServer private constructor(
         unprotected: UnprotectedRequest?,
         responses: List<CoapMessage>,
         isBurst: Boolean,
+    ): Boolean = mustVerifyAddress(inbound, request, unprotected, isBurst) { responses.sumOf { UdpMessageCodec.encode(it).size.toLong() } }
+
+    /**
+     * [mustVerifyAddress] for answers counted by their sender: [responseSize] gives every byte sent and about
+     * to be sent in answer to [request], all Q-Block2 sets and retransmissions included (§2.4 item 3: "the
+     * total size of the response(s) to that request"), and runs only when the check applies.
+     */
+    internal suspend fun mustVerifyAddress(
+        inbound: InboundRequest,
+        request: CoapMessage,
+        unprotected: UnprotectedRequest?,
+        isBurst: Boolean,
+        responseSize: () -> Long,
     ): Boolean {
         if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst)) return false
         val requestSize = UdpMessageCodec.encode(inbound.message).size
-        val responseSize = responses.sumOf { UdpMessageCodec.encode(it).size }
-        if (!addressVerification.exceedsLimit(requestSize, responseSize, isBurst)) return false
+        if (!addressVerification.exceedsLimit(requestSize, responseSize(), isBurst)) return false
         return !addressVerification.verify(inbound.peer, request.options.echo, endpoint.now())
     }
 
@@ -459,7 +525,7 @@ public class CoapServer private constructor(
         inbound: InboundRequest,
         request: CoapMessage,
         unprotected: UnprotectedRequest?,
-        reply: Reply,
+        reply: Reply.Single,
     ): CoapMessageType {
         if (reply.isChallenge) return CoapMessageType.NON
         if (!checksAddress(inbound, unprotected) || !addressVerification.appliesTo(isBurst = false)) return CoapMessageType.CON
@@ -472,10 +538,10 @@ public class CoapServer private constructor(
      * receives at its address, in place of the response, which [kept] holds for the repeat when the request
      * must not run twice.
      */
-    private suspend fun challenge(peer: Endpoint, now: Duration, kept: AddressVerification.Withheld? = null): Reply {
+    internal suspend fun challenge(peer: Endpoint, now: Duration, kept: AddressVerification.Withheld? = null): Reply.Single {
         val echo = addressVerification.challenge(peer, now, kept)
         log.debug { "Asked $peer to verify its address with Echo before a large response (RFC 9175 §2.4)" }
-        return Reply(CoapResponse(CoapCode.UNAUTHORIZED, OptionSet.build { echo(echo) }), isChallenge = true)
+        return Reply.Single(CoapResponse(CoapCode.UNAUTHORIZED, OptionSet.build { echo(echo) }), isChallenge = true)
     }
 
     /** RFC 7967 §2.1: bit 2 suppresses 2.xx, bit 8 4.xx and bit 16 5.xx responses. */

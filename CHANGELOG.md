@@ -33,7 +33,7 @@ adds its entry and migration note below.
   `Dispatchers.Default` for common tests (WP-S1).
 - Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
   Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
-  (QB-0). The Q-Block state machines exist but are not yet used by the client or server (QB-1, ADR 0006).
+  (QB-0). The Q-Block state machines (QB-1, ADR 0006) drive the server (QB-3, below), not yet the client.
   The endpoint can carry several responses to one request into a per-body inbox, and holds one NSTART
   slot per Non-confirmable body, released at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (QB-2; internal,
   no API change). New public API:
@@ -51,8 +51,8 @@ adds its entry and migration note below.
   sends a 4.01 Unauthorized with an 8-byte Echo value instead, piggybacked or Non-confirmable, never as a
   separate Confirmable response, and a request that returns the value verifies the address for
   `verifiedAddressLifetime` (1 hour). `CoapServerConfig.amplification` chooses what is checked:
-  `AmplificationPolicy.Q_BLOCK_BURSTS` (the default; the server sends no Q-Block bursts yet, so nothing
-  changes for now), `ALL_RESPONSES` (also every Observe registration; a separate response to an address
+  `AmplificationPolicy.Q_BLOCK_BURSTS` (the default; it acts only on a server with Q-Block on, QB-3),
+  `ALL_RESPONSES` (also every Observe registration; a separate response to an address
   not yet verified goes Non-confirmable, so it is never retransmitted there; and each POST or PATCH keeps
   its own response for the repeat of that request, so it does not run twice, up to `maxConcurrentTransfers`
   of them) or `OFF`. `maxVerifiedAddresses` (10 000) bounds the verified addresses and, separately, the
@@ -63,6 +63,35 @@ adds its entry and migration note below.
   configuration properties are new trailing constructor parameters with defaults, so source stays
   compatible; compiled callers of the constructor recompile. libcoap's `coap-client` repeats its request
   with the Echo value and completes, and its Q-Block probe of `/.well-known/core` is never challenged.
+- Q-Block on the server (RFC 9177; QB-3), off by default: `CoapServerConfig.qBlock` takes a
+  `QBlockServerConfig` with `isEnabled` (false), `withMessageSecurity` (false: OSCORE-protected requests keep
+  getting 4.02 for Q-Block), `onReliableTransports` (true), `maxPartialBodies` (64), `maxCachedBodies` (64)
+  and `maxBodiesPerPeer` (4). With it on, Q-Block1 uploads are assembled from Non-confirmable bursts with a
+  2.31 per complete set and 4.08 lists of missing blocks (Content-Format 272) at once and on the
+  NON_RECEIVE_TIMEOUT ladder, Confirmable ones block by block, and responses to requests carrying Q-Block1
+  or Q-Block2 go out as Q-Block2 bodies: sets of MAX_PAYLOADS blocks NON_TIMEOUT_RANDOM apart, Continues and
+  requests of missing blocks served from a cache, every block with an ETag of its own body (which replaces
+  the resource's ETag) and Size2. A request of another method than GET or FETCH that carries a payload is
+  always a new request whose handler runs, also with Q-Block2 `0/M=1`; only payload-less Continues, requests
+  of missing blocks, and `0/M=1` with the cached body's Request-Tag are served from the cache. A body that
+  gives way in the cache while it still sends finishes its sets, bodies done sending give way first, and a
+  GET or FETCH body of one block is not cached. An upload holds only the blocks that arrived, whatever its
+  Size1 claims, and any request body of one message beyond `maxBodySize` gets 4.13, Q-Block2 or not. On TCP
+  and WebSockets blocks go back to back and the requests in between count as answered, so a Ping with
+  Custody is not held up. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`, everything sent in answer
+  to one request to an address not yet verified counts against the factor, later sets and the
+  retransmissions of a Confirmable block included: a first burst beyond it gets a 4.01 with Echo instead,
+  later sets beyond it stop, and a Continue is a request of its own. The server warns at start when Q-Block
+  is on (RFC 9177 §11): without `security`, or for the requests without OSCORE that a server with `security`
+  still answers unprotected. It serves an Observe registration that carries Q-Block2 without adding an
+  observer until QB-6. libcoap's `coap-client -L 7` completes uploads and
+  downloads against it over UDP, TCP and WebSockets. New public API besides the configuration:
+  `EndpointEvent.QBlockRecovery` (missing blocks asked for, by either side), `EndpointEvent.QBlockFallback`
+  (for the client, QB-4), `EndpointEvent.PartialBodyDropped`, and the `EndpointEvent.LimitReached.Limit`
+  values `PARTIAL_BODIES` and `BODIES_PER_PEER` (an upload refused with 5.03 and Max-Age, or a peer's oldest
+  body dropped) and `CACHED_BODIES`; an exhaustive `when` over `EndpointEvent` or `Limit` needs the new
+  branches. `qBlock` is a new trailing constructor parameter with a default, so source stays compatible;
+  compiled callers of the `CoapServerConfig` constructor recompile.
 - Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
   `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
 - ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
