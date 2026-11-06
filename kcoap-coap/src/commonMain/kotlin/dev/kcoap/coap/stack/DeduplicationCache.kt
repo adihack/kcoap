@@ -18,9 +18,10 @@ import kotlin.time.Duration
  * - It forgets the oldest *repeatable* entry, of the same peer for that peer's bound, of any peer for the
  *   total: one whose message the endpoint may process again, because doing so ends the same way. That is a
  *   request with an idempotent method (GET, PUT and DELETE, RFC 7252 §5.1; FETCH and iPATCH, RFC 8132 §2, §3)
- *   once it no longer waits for a piggybacked answer, any message answered with a Reset, and a request the
- *   server answered before anything acted on it ([markRepeatable]). §4.5 lets deduplication be relaxed for
- *   such requests, so a later duplicate of a forgotten one is processed as a new message.
+ *   once it no longer waits for a piggybacked answer, unless OSCORE protects it (RFC 8613 §7.4), any message
+ *   answered with a Reset, and a request the server answered or dropped before anything acted on it
+ *   ([markRepeatable]). §4.5 lets deduplication be relaxed for such requests, so a later duplicate of a
+ *   forgotten one is processed as a new message.
  * - When nothing repeatable is left, it refuses the new message, which is then dropped without state or
  *   answer: every remembered message must still be processed at most once.
  * - A quarter of [maxEntries] is kept for repeatable entries: a message whose entry must be kept (a

@@ -7,6 +7,7 @@ import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
@@ -34,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -42,7 +44,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * RFC 7252 §11.3, §11.4: a UDP source address proves nothing, so a flood of Confirmable requests from any number
  * of forged addresses ([dev.kcoap.testkit.InMemoryNetwork.spoof]) must leave every structure it fills bounded, in
  * total and per peer, while a client at a real address is still served. One test per bound: deduplication
- * (§4.5), Message IDs (§4.4), exchanges in progress, and observers (RFC 7641 §4.1, §4.5).
+ * (§4.5), Message IDs (§4.4), exchanges in progress, and observers (RFC 7641 §4.1, §4.5); and one per way a
+ * request refused before anything acted on it may be processed again, with OSCORE requests (RFC 8613 §7.4) as
+ * the ones that never may.
  */
 class SpoofedFloodTest {
     private companion object {
@@ -235,6 +239,77 @@ class SpoofedFloodTest {
         assertTrue(server.endpoint.messagingSizes()!!.deduplicationEntries <= 400)
         assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
         assertEquals(CoapCode.CHANGED, fixture.client().post(fixture.uri(server, "/store"), "x".encodeToByteArray()).code)
+    }
+
+    @Test
+    fun rfc8613Section8_2AFloodOfPostsThatFailVerificationLeavesRoomForAProtectedPost() = runTest {
+        val fixture = StackFixture(this)
+        val bounded = fixture.bounded { maxDeduplicationEntries = 400 }
+        val server = fixture.server(CoapServerConfig(security = ToyOscore()), bounded) {
+            resource("store") { post { CoapResponse.changed() } }
+        }
+        // Half name no security context (4.01), half meet a failing context repository (5.00): nothing acted on either.
+        fixture.flood(server, 2_000) {
+            protectedRequest(CoapCode.POST, it, "store", kid = if (it % 2 == 0) NO_CONTEXT else REPOSITORY_FAILS)
+        }
+        delay(1.seconds)
+
+        assertTrue(server.endpoint.messagingSizes()!!.deduplicationEntries <= 400)
+        assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
+        val legitimate = protectedRequest(CoapCode.POST, 7, "store")
+        val answer = answerTo(fixture.transport(), fixture.address(server.endpoint), legitimate)
+        assertEquals(CoapCode.CHANGED, open(assertNotNull(answer)).code)
+    }
+
+    @Test
+    fun adr0008AFloodOfPostsTheAccessPolicyRefusesLeavesRoomForALegitimatePost() = runTest {
+        val fixture = StackFixture(this)
+        val server = fixture.server(endpointConfig = fixture.bounded { maxDeduplicationEntries = 400 }) {
+            resource("admin") {
+                access = AccessPolicy { false }
+                post { CoapResponse.changed() }
+            }
+            resource("store") { post { CoapResponse.changed() } }
+        }
+        fixture.flood(server, 2_000) { request(CoapCode.POST, CoapMessageType.CON, it, "admin") }
+        delay(1.seconds)
+
+        assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES), "a 4.01 before any work may be processed again")
+        assertEquals(CoapCode.CHANGED, fixture.client().post(fixture.uri(server, "/store"), byteArrayOf(1)).code)
+    }
+
+    private suspend fun TestScope.floodBeyondTheHandlers(type: CoapMessageType) {
+        val fixture = StackFixture(this)
+        val server = fixture.server(
+            endpointConfig = fixture.bounded {
+                maxDeduplicationEntries = 400
+                maxConcurrentRequests = 2
+            },
+        ) {
+            resource("slow") {
+                post {
+                    delay(2.seconds)
+                    CoapResponse.changed()
+                }
+            }
+        }
+        // Two run; every other one is refused before its handler, with 5.03 if Confirmable, else dropped.
+        fixture.flood(server, 2_000) { request(CoapCode.POST, type, it, "slow") }
+        delay(3.seconds)
+
+        assertEquals(1_998, fixture.limits(Limit.CONCURRENT_REQUESTS))
+        assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES), "no handler ran, so they may be processed again")
+        assertEquals(CoapCode.CHANGED, fixture.client().post(fixture.uri(server, "/slow"), byteArrayOf(1)).code)
+    }
+
+    @Test
+    fun rfc7252Section5_9_3_4AFloodOfConfirmablePostsBeyondTheHandlersLeavesRoomForALegitimatePost() = runTest {
+        floodBeyondTheHandlers(CoapMessageType.CON)
+    }
+
+    @Test
+    fun rfc7252Section4_5AFloodOfNonConfirmablePostsBeyondTheHandlersLeavesRoomForALegitimatePost() = runTest {
+        floodBeyondTheHandlers(CoapMessageType.NON)
     }
 
     /**

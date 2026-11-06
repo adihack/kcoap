@@ -788,6 +788,21 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun rfc7252Section4_5ARequestDroppedBeforeAnyEffectMayBeForgotten() {
+        val messaging = messaging(maxDeduplicationEntries = 1)
+        messaging.receive(Duration.ZERO, post(CoapMessageType.NON, 1))
+        messaging.takeEffects()
+        messaging.receive(1.seconds, post(CoapMessageType.NON, 2))
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES), messaging.takeEffects().limits())
+
+        // An overloaded endpoint dropped the first POST unanswered: it makes room for the next one.
+        messaging.markRepeatable(peer, 1)
+        messaging.markRepeatable(peer, 99)
+        messaging.receive(2.seconds, post(CoapMessageType.NON, 2))
+        assertEquals(listOf(2), messaging.takeEffects().delivered())
+    }
+
+    @Test
     fun rfc7252Section11_3AQuarterOfTheCacheIsKeptForMessagesThatMayBeProcessedAgain() {
         val messaging = messaging(maxDeduplicationEntries = 4)
         val peers = List(4) { Endpoint.Udp("192.0.2.${10 + it}", 5683) }

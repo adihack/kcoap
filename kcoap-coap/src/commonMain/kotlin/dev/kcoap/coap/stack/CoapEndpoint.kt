@@ -708,7 +708,7 @@ public class CoapEndpoint private constructor(
         log.debug { "Refused a request from ${request.peer}: ${config.maxConcurrentRequests} handlers are running" }
         // No handler ran, so a duplicate may be processed again (RFC 7252 §4.5).
         request.isRepeatable = true
-        if (!request.isConfirmable) return
+        if (!request.isConfirmable) return request.leaveUnanswered()
         try {
             request.respond(CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE) { options { maxAge(OVERLOAD_MAX_AGE) } })
         } catch (e: CancellationException) {

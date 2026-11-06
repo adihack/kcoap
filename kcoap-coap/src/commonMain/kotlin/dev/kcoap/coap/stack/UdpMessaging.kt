@@ -369,6 +369,15 @@ internal class UdpMessaging(
         received.remove(key)
     }
 
+    /**
+     * Nothing acted on the delivered message [messageId] from [from], which gets no answer, such as a
+     * Non-confirmable request an overloaded endpoint dropped: processing a duplicate ends the same way, so its
+     * deduplication entry may be forgotten for room (§4.5).
+     */
+    fun markRepeatable(from: Endpoint, messageId: Int) {
+        received[MessageKey(from, messageId)]?.let(received::markRepeatable)
+    }
+
     /** Rejects a delivered message with a Reset (§4.2, §4.3), remembered for duplicates of a Confirmable one. */
     fun reject(from: Endpoint, messageId: Int, reason: String) {
         val entry = received[MessageKey(from, messageId)] ?: return

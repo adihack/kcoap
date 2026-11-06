@@ -227,6 +227,11 @@ internal class DatagramLink(
         withMessaging { reject(peer, messageId, reason) }
     }
 
+    /** Nothing acted on the message [messageId] from [peer]; see [UdpMessaging.markRepeatable]. */
+    suspend fun markRepeatable(peer: Endpoint, messageId: Int) {
+        withMessaging { markRepeatable(peer, messageId) }
+    }
+
     // ---------------------------------------------------------------- lifecycle
 
     /**
@@ -461,6 +466,10 @@ internal class DatagramLink(
 
         override suspend fun reject(request: InboundRequest, reason: String) {
             this@DatagramLink.reject(peer, request.message.messageId, reason)
+        }
+
+        override suspend fun leaveUnanswered(request: InboundRequest) {
+            if (request.isRepeatable) markRepeatable(peer, request.message.messageId)
         }
 
         override suspend fun notify(message: CoapMessage, confirmable: Boolean, owner: DeliveryOwner, slotHold: Duration?): Delivery {
