@@ -88,6 +88,7 @@ values.
 | `HkdfTest` | RFC 5869, RFC 8613 Appendix C key derivation |
 | `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, fresh platform keys of both parities through `Sec1` (whose vectors are in kcoap-crypto), unusable peer keys |
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
+| `DefaultCryptoBackendConformanceTest` | the conformance suite of [kcoap-crypto-testsuite](../kcoap-crypto-testsuite/README.md): every `supports` answer holds on the target it runs on, what is supported reproduces a published known answer, and the capability report of the target goes to the build log |
 | `RawPrivateKeysTest` | the copies of a private key handed to the provider or taken from it are wiped, also when the provider fails, and keys stay usable after |
 | `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads (the testkit's `Stress`); the KEM and SHAKE256 answers, which never reach the provider, come from the memo too |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |

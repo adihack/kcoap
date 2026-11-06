@@ -61,6 +61,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |
 | [kcoap-crypto-default](../kcoap-crypto-default/README.md) | The default backend per platform, its capabilities and fallbacks, and its R8 rules |
 | [kcoap-crypto-bc](../kcoap-crypto-bc/README.md) | The post-quantum backend: ML-KEM and ML-DSA on Bouncy Castle |
+| [kcoap-crypto-testsuite](../kcoap-crypto-testsuite/README.md) | The conformance suite every crypto backend's tests extend: the capability contract, NIST's ACVP vectors, the capability report per target |
 | [kcoap-cbor](../kcoap-cbor/README.md) | CBOR and CBOR sequences |
 | [kcoap-cose](../kcoap-cose/README.md) | The COSE structures and key formats OSCORE and EDHOC need |
 | [kcoap-transport](../kcoap-transport/README.md) | The seam between protocol code and the network: transports, endpoints, schemes |
