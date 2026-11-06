@@ -177,13 +177,13 @@
       <div class="card">
         <ul class="checks mb-0">
           <li class="is-open"><span class="visually-hidden">Open: </span>The release freeze has merged and CI is green on <code>main</code>. The freeze is complete on <code>feat/protocol-core</code>; pull request #1, which brings it to <code>main</code>, is still a draft.</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span>Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed.</li>
+          <li><span class="visually-hidden">Done: </span>Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed (work package P1).</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>CHANGELOG.md has an entry for the version, with migration notes.</li>
           <li><span class="visually-hidden">Done: </span>The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev, since 6 November 2026.</li>
           <li><span class="visually-hidden">Done: </span>The Maven Central user token and the release signing key are set as repository secrets, since 6 November 2026.</li>
           <li><span class="visually-hidden">Done: </span>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
           <li><span class="visually-hidden">Done: </span>Snapshots publish to Maven Local, <code>kcoap-bom</code> with them, which <code>verifyBomConstraints</code> checks against the published modules; CI builds an Android consumer app against them.</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span>A JVM consumer and a js consumer build against the snapshot through <code>kcoap-bom</code> (work package P1).</li>
+          <li><span class="visually-hidden">Done: </span>A JVM consumer and a js consumer build against the snapshot through <code>kcoap-bom</code>, the js one within a bundle-size budget and in headless Chrome (work package P1); their CI jobs have not run yet.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
         </ul>
