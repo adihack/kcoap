@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JVM servers and desktop · kcoap</title>
-<meta name="description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta name="description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <link rel="canonical" href="https://kcoap.dev/start/jvm/">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -19,7 +19,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="kcoap">
 <meta property="og:title" content="JVM servers and desktop · kcoap">
-<meta property="og:description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta property="og:description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <meta property="og:url" content="https://kcoap.dev/start/jvm/">
 <meta property="og:image" content="https://kcoap.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -27,7 +27,7 @@
 <meta property="og:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="JVM servers and desktop · kcoap">
-<meta name="twitter:description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta name="twitter:description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <meta name="twitter:image" content="https://kcoap.dev/assets/og-image.png">
 <meta name="twitter:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 </head>
@@ -83,26 +83,18 @@
       <div class="doc-body prose">
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
-          <li>A JDK 17 or newer, to build kcoap and to run your application.</li>
+          <li>A JDK 17 or newer, to build and run your application.</li>
           <li>Kotlin 2.3 or newer in your project. The samples use 2.4.21, the version kcoap is built with.</li>
-          <li>Git, to clone kcoap. Gradle comes with kcoap’s wrapper.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code> and is not on Maven Central. You publish it from a clone into your local Maven repository, as below. The coordinates stay the same after the first release; only the repository and the version change.</p>
+          <span class="callout-title">On Maven Central</span>
+          <p>kcoap 0.1.0 is on Maven Central under <code>dev.kcoap</code>. The build file below takes it from <code>mavenCentral()</code>, which also has every library kcoap depends on.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
-          <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
           <li>
             <h3>Create the build file</h3>
             <p>A plain Kotlin/JVM application. Without a toolchain setting it compiles for the JDK that runs Gradle, which must be 17 or newer. The bill of materials, <code>kcoap-bom</code>, sets one version for every kcoap module, so the modules name none.</p>
@@ -115,12 +107,11 @@
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)
@@ -137,7 +128,7 @@
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
 kotlin = <span class="tok-s">"2.4.21"</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -165,7 +156,6 @@ kotlin-jvm = { id = <span class="tok-s">"org.jetbrains.kotlin.jvm"</span>, versi
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -357,8 +347,8 @@ on</code></pre></div>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
-          <dt>Could not find <code>dev.kcoap:kcoap-coap:0.1.0-SNAPSHOT</code></dt>
-          <dd>Run <code>./gradlew publishToMavenLocal</code> in the kcoap clone, and check that <code>mavenLocal()</code> is in your repositories.</dd>
+          <dt>Could not find <code>dev.kcoap:kcoap-coap:0.1.0</code></dt>
+          <dd>Check that <code>mavenCentral()</code> is in your repositories, or in <code>dependencyResolutionManagement</code> when the settings file declares them.</dd>
           <dt>An error about inlining bytecode built with JVM target 17</dt>
           <dd>Your project compiles for an older JVM. Build it with a JDK 17 or newer, or set the Kotlin <code>jvmTarget</code> to 17 or newer.</dd>
           <dt><code>Cannot resolve '…': configure an EndpointResolver</code></dt>
@@ -374,7 +364,7 @@ on</code></pre></div>
           <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>: Observe, discovery, endpoint tuning, Q-Block and message security.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
           <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-edhoc-oscore/README.md">EDHOC with OSCORE guide</a>: the EDHOC server, the client handshake and the combined request.</li>
-          <li>The API reference is published with the first release; until then <code>./gradlew dokkaGenerate</code> builds it into <code>build/dokka/html</code>.</li>
+          <li>The API reference is not online yet; it goes online once its deploy is fixed. Until then <code>./gradlew dokkaGenerate</code> in a clone of kcoap builds it into <code>build/dokka/html</code>.</li>
         </ul>
 
         <nav class="pager" aria-label="Platform guides">

@@ -90,19 +90,12 @@
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local. CI runs every common test as native Linux code, and the WebSocket loopback test natively; the UDP and TCP adapter tests run on the JVM only, from the same common code.</p>
+          <span class="callout-title">On Maven Central</span>
+          <p>kcoap 0.1.0 is on Maven Central, its <code>linuxX64</code> artifacts included. CI runs every common test as native Linux code, and the WebSocket loopback test natively; the UDP and TCP adapter tests run on the JVM only, from the same common code.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
-          <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
           <li>
             <h3>Create the build file</h3>
             <p>The bill of materials, <code>kcoap-bom</code>, sets one version for every kcoap module, so the modules name none.</p>
@@ -114,7 +107,6 @@
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -124,7 +116,7 @@
     }
     <span class="tok-f">sourceSets</span> {
         commonMain.<span class="tok-f">dependencies</span> {
-            <span class="tok-k">val</span> bom = <span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>
+            <span class="tok-k">val</span> bom = <span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>
             <span class="tok-f">implementation</span>(project.dependencies.<span class="tok-f">platform</span>(bom))
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
@@ -139,7 +131,7 @@
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
 kotlin = <span class="tok-s">"2.4.21"</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -165,7 +157,6 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -253,7 +244,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
           <dt>Could not find <code>dev.kcoap:…-linuxx64</code></dt>
-          <dd>Publish kcoap to Maven Local, and check that <code>mavenLocal()</code> is in your repositories with <code>dev.kcoap</code> in its content filter.</dd>
+          <dd>Check that <code>mavenCentral()</code> is in your repositories, and that the target is <code>linuxX64</code>: kcoap publishes no other Linux target.</dd>
           <dt><code>Dispatchers.IO</code> does not resolve</dt>
           <dd>On Kotlin/Native it needs <code>import kotlinx.coroutines.IO</code>. <code>Dispatchers.Default</code> works without it.</dd>
           <dt><code>Cannot resolve '…': configure an EndpointResolver</code></dt>

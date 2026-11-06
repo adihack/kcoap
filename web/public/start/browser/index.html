@@ -84,26 +84,19 @@
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
           <li>A Kotlin Multiplatform project with a <code>js</code> or <code>wasmJs</code> target, on Kotlin 2.3 or newer; the samples use 2.4.21, the version kcoap is built with.</li>
-          <li>A JDK 17 or newer and a clone of kcoap, to publish from.</li>
+          <li>A JDK 17 or newer, to run Gradle.</li>
           <li>A CoAP server that speaks WebSockets: a kcoap server on the JVM or Linux, as below, or a proxy such as libcoap’s <code>coap-server</code> in front of UDP devices.</li>
           <li>The build sets no minimum browser version. Kotlin/Wasm needs a browser with WebAssembly garbage collection.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released, and usable from Kotlin only</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local. It has no npm package and no TypeScript declarations, so your browser code is Kotlin/JS or Kotlin/Wasm. CI runs the common tests on Node.js, whose WebCrypto is the browsers’ API, and the js WebSocket client in headless Chrome against a JVM server. The <code>wasmJs</code> WebSocket engine has not run against a real server yet.</p>
+          <span class="callout-title">Usable from Kotlin only</span>
+          <p>kcoap 0.1.0 is on Maven Central, its <code>js</code> and <code>wasmJs</code> artifacts included. It has no npm package and no TypeScript declarations, so your browser code is Kotlin/JS or Kotlin/Wasm. CI runs the common tests on Node.js, whose WebCrypto is the browsers’ API, and the js WebSocket client in headless Chrome against a JVM server. The <code>wasmJs</code> WebSocket engine has not run against a real server yet.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
-          <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
           <li>
             <h3>Create the build file</h3>
             <p>The WebSocket client is the only transport here: leave out <code>kcoap-transport-ktor</code>, which builds no web targets. The bill of materials, <code>kcoap-bom</code>, sets one version for every kcoap module, so the modules name none.</p>
@@ -117,7 +110,6 @@
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -133,7 +125,7 @@
     }
     <span class="tok-f">sourceSets</span> {
         commonMain.<span class="tok-f">dependencies</span> {
-            <span class="tok-k">val</span> bom = <span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>
+            <span class="tok-k">val</span> bom = <span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>
             <span class="tok-f">implementation</span>(project.dependencies.<span class="tok-f">platform</span>(bom))
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor-websocket"</span>)
@@ -149,7 +141,7 @@
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
 kotlin = <span class="tok-s">"2.4.21"</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -175,7 +167,6 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 

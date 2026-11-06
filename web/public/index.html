@@ -333,18 +333,10 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
     <div class="container container-narrow">
       <div class="section-head">
         <p class="eyebrow">Get started</p>
-        <h2 id="setup-title">Use it today, before the first release</h2>
-        <p class="lede">Nothing is on Maven Central yet. Publish a snapshot from a clone into your local Maven repository, then depend on it like any other library.</p>
+        <h2 id="setup-title">Add it to your build</h2>
+        <p class="lede">kcoap 0.1.0 is on Maven Central. Name the modules you need, with one version for all of them, and depend on them like any other library.</p>
       </div>
       <ol class="steps">
-        <li>
-          <h3>Clone and publish to Maven Local</h3>
-          <p>Needs a JDK 17 or newer; Gradle downloads the rest. For iOS and macOS apps, run it on a Mac with Xcode.</p>
-          <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-        </li>
         <li>
           <h3>Add the modules you need</h3>
           <p>The bill of materials, <code>kcoap-bom</code>, gives every kcoap module the same version. In a multiplatform project the BOM and the same coordinates go into <code>commonMain.dependencies</code>, except the adapters a target lacks.</p>
@@ -353,13 +345,11 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
               <p class="tab-panel-title">Kotlin DSL</p>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
-    <span class="tok-c">// kcoap 0.1.0-SNAPSHOT, until the first release is on Maven Central</span>
-    <span class="tok-f">mavenLocal</span>()
-    <span class="tok-f">mavenCentral</span>()  <span class="tok-c">// kcoap's own dependencies</span>
+    <span class="tok-f">mavenCentral</span>()
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)            <span class="tok-c">// client, server</span>
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)  <span class="tok-c">// UDP, TCP</span>
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)  <span class="tok-c">// cryptography</span>
@@ -371,7 +361,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
               <p class="tab-panel-title">Version catalog</p>
               <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-c"># gradle/libs.versions.toml</span>
 <span class="tok-k">[versions]</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -391,7 +381,6 @@ kcoap = [
 ]</code></pre></div>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span>()
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -409,8 +398,8 @@ kcoap = [
         </li>
       </ol>
       <div class="callout callout-status mt-2">
-        <span class="callout-title">After the first release</span>
-        <p>The coordinates will be <code>dev.kcoap:&lt;module&gt;:&lt;version&gt;</code> from <code>mavenCentral()</code>, under the verified <code>dev.kcoap</code> namespace. Not available yet.</p>
+        <span class="callout-title">On Maven Central</span>
+        <p>The coordinates are <code>dev.kcoap:&lt;module&gt;:0.1.0</code> from <code>mavenCentral()</code>, under the verified <code>dev.kcoap</code> namespace, and the release key signs every artifact. <a href="/releases/">Releases</a> lists the versions.</p>
       </div>
     </div>
   </section>

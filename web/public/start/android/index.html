@@ -85,32 +85,24 @@
         <ul>
           <li>An app with <code>minSdk</code> 26 or higher, built with the Android Gradle plugin. The sample uses AGP 9.4.1 with compileSdk and targetSdk 36.</li>
           <li>Kotlin 2.3 or newer. AGP 9 compiles Kotlin with the Kotlin Gradle plugin on the build’s classpath; the sample puts 2.4.21 there, the version kcoap is built with.</li>
-          <li>A JDK 17 or newer, and a clone of kcoap to publish from.</li>
+          <li>A JDK 17 or newer, to run Gradle.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released, and not run on a device yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local. API level 26 is held by checks of every jar against the API 26 signature and by the sample’s R8 build in CI, not yet by a run on an emulator or a phone. Whether the X25519 and Ed25519 probes answer on API levels 26 to 32 is still open.</p>
+          <span class="callout-title">Not run on a device yet</span>
+          <p>kcoap 0.1.0 is on Maven Central. API level 26 is held by checks of every jar against the API 26 signature and by the sample’s R8 build in CI, not yet by a run on an emulator or a phone. Whether the X25519 and Ed25519 probes answer on API levels 26 to 32 is still open.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
           <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
-          <li>
-            <h3>Let Maven Local serve kcoap</h3>
-            <p>In <code>settings.gradle.kts</code>, take only the <code>dev.kcoap</code> group from Maven Local, as the sample does.</p>
+            <h3>Check the repositories</h3>
+            <p>kcoap comes from Maven Central, which the <code>settings.gradle.kts</code> of a new Android project already lists.</p>
 <div class="code-block"><p class="code-block-label">settings.gradle.kts</p><pre tabindex="0"><code><span class="tok-f">dependencyResolutionManagement</span> {
     <span class="tok-f">repositories</span> {
-        <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }  <span class="tok-c">// kcoap only</span>
         <span class="tok-f">google</span>()
-        <span class="tok-f">mavenCentral</span>()
+        <span class="tok-f">mavenCentral</span>()  <span class="tok-c">// kcoap</span>
     }
 }</code></pre></div>
           </li>
@@ -131,7 +123,7 @@
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)
@@ -143,7 +135,7 @@
               <div class="tab-panel" data-tab-label="Version catalog">
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -275,8 +267,8 @@ kcoap = [
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
-          <dt>Could not find <code>dev.kcoap:…:0.1.0-SNAPSHOT</code></dt>
-          <dd>Publish kcoap to Maven Local, and check that the repositories in <code>settings.gradle.kts</code> include <code>mavenLocal()</code>. With <code>RepositoriesMode.FAIL_ON_PROJECT_REPOS</code>, repositories in a module’s build file are refused.</dd>
+          <dt>Could not find <code>dev.kcoap:…:0.1.0</code></dt>
+          <dd>Check that the repositories in <code>settings.gradle.kts</code> include <code>mavenCentral()</code>. With <code>RepositoriesMode.FAIL_ON_PROJECT_REPOS</code>, repositories in a module’s build file are refused.</dd>
           <dt>R8 fails the release build on missing Bouncy Castle classes</dt>
           <dd>Check that <code>kcoap-crypto-default</code> is on the classpath: its jar carries the rules.</dd>
           <dt>Binding the socket fails with a permission error</dt>
