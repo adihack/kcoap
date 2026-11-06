@@ -720,6 +720,47 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low to medium.
 - **Accept:** a virtual-time test shows an exchange opened during `close()` fails with `CLOSED` immediately; link-format fuzzing finds no `IllegalArgumentException`; standard gate.
 
+> **Amendment (B3).** Done as listed, each item re-checked against the tree after B1, B2, A3, SEC1, SEC2, the
+> Q-Block packages and QB-FIX. Where the code had moved on:
+> - **Calls after close.** S1 had already checked `closeCause` under the endpoint lock in `openExchange`, `ping`
+>   and `leaseBody`. B3 adds the client's check before it resolves a host, so a closed endpoint looks nothing
+>   up, and the virtual-time test (`ClientErrorContractTest.anExchangeOpenedWhileTheEndpointClosesFailsWithClosedAtOnce`:
+>   a request that started while the endpoint was open opens its exchange while `close()` waits for its transport,
+>   and fails with `CLOSED` with no time passing and nothing registered).
+> - **`SECURITY`** wraps every exception of `protectRequest` but a cancellation, not only
+>   `MessageSecurityException`, so a failing sequence-number store is reported like a missing context (EO-4). The
+>   Q-Block probe, which relied on the raw exception (ADR 0008), now skips on `SECURITY`.
+> - **`UNRESOLVED_HOST`**: a resolver throws it for a lookup that fails at runtime; the client passes
+>   `CoapException` and `IllegalArgumentException` (a host the resolver cannot resolve by design) on, and reports
+>   any other exception as `UNRESOLVED_HOST` with it as cause. kcoap-edhoc-oscore's `PeerSecurity.install`
+>   calls the resolver directly, so there a resolver's exception arrives as the resolver threw it.
+> - **`RequestContext.path`** is a `String` (`/a/b`), like `OptionSet.path` and `CoapResource.path`, not the
+>   `List<String>` the finding suggested; the segments stay `options.uriPath`.
+> - **`parseOrNull` on peer-supplied URIs.** No code parsed a peer's URI: link targets and Location-\* stay text,
+>   and the stack builds no URI from them. B3 therefore adds `LinkFormat.parseOrNull` beside
+>   `CoapUri.parseOrNull`, reads `/.well-known/core` with it in `CoapClient.discover`, uses
+>   `CoapUri.parseOrNull` for OSCORE's Proxy-Uri decomposition, and documents both for link targets. Both throw
+>   only a private subtype of `IllegalArgumentException` from `parse`, which `parseOrNull` alone turns into null,
+>   so a genuine bug still surfaces. `PeerInputFuzzTest` (kcoap-coap-message) mutates documents and URIs with
+>   `ByteMutator`. `parse` now also refuses a port outside 1..65535, which failed in the constructor with a
+>   plain `IllegalArgumentException`, and a signed percent-encoding (`%+F`), which it decoded.
+> - **`ObserverRemoved.Reason`** has `SESSION_ENDED` beside the six planned values, for an ended DTLS session or
+>   connection (RFC 7252 §9.1.1, RFC 8323 §7.4). An observation refused by the address check (its response
+>   became a 4.01 with Echo) and a registration answered with an error are `ERROR_RESPONSE`.
+> - **`PlatformCsprng`** (U8) is the renamed `SecureRandom` of `TokenGenerator.kt`, moved to a file of its own,
+>   without the opt-in (`Uuid.random()` is stable in Kotlin 2.4), and its `nextBytes` takes 15 bytes (120 of
+>   the 122 random bits) of each UUID. docs/architecture.md has the "Randomness" paragraph.
+> - **API-07 item 2**: `CoapResponse.toMessage(token)` is `@InternalKcoapApi`. `EndpointEvent` and
+>   `CoapException` say in their KDoc that subtypes and reasons may be added before 1.0 (EO-7 item 9).
+>
+> Not done, outside the scope as written: refusing `coaps` on a datagram transport without DTLS (EO-2 item 4,
+> left to B3 by S1), which needs a channel-security capability on `DatagramTransport` in kcoap-transport (D1's);
+> enums for `MessageRejected` and `MalformedMessage`; the dropped verification failure as the cause of
+> `RESPONSE_TIMEOUT` and a `ResponseRejected` event (EO-3 items 1 and 7); EO-7 items 3–8; EO-8; and
+> `CoapResponseException` (EO-11). Ownership deviations: KDoc lines in kcoap-oscore's `OscoreEndpoints` and
+> kcoap-edhoc-oscore's `PeerSecurity`, kcoap-oscore's Proxy-Uri parse, and test expectations in kcoap-oscore
+> (jvmTest) and kcoap-edhoc-oscore (commonTest) for the renames and `SECURITY`.
+
 **WP-T1: TLS for stream transports**
 
 - **Findings:** critique D (server and gateway TLS).
