@@ -1,0 +1,645 @@
+#!/usr/bin/env python3
+"""Checks the kcoap.dev website (web/public) before it is deployed.
+
+    scripts/check-site [directory]
+
+The directory defaults to web/public next to this script. Every HTML page in it is checked for:
+
+- internal links and #anchors that resolve to a file and an id (directories need their trailing slash);
+- a <title>, a meta description, a canonical URL that is the page's own address, the Open Graph and
+  Twitter card tags, <html lang="en"> and exactly one <h1> (404.html has no canonical URL or og:url, and
+  must say noindex instead);
+- og:image and twitter:image as absolute https://kcoap.dev/ URLs of files that exist, and og:image:width and
+  og:image:height that match the PNG;
+- alt text on every image, and ids that are unique and that every aria-labelledby, aria-describedby,
+  aria-controls and label/for points at;
+- no inline code that the Content-Security-Policy forbids: no <script> without src, no <style>, no style
+  attribute, no on* handler attribute, no javascript: URL (also with tabs or line breaks in it); and nothing
+  that sends the reader or data elsewhere: no <meta http-equiv="refresh">, <base>, <form> or ping attribute;
+- no resource loaded from anywhere but the site itself: scripts, stylesheets, icons, images, media, frames;
+  in CSS no url(), image-set() or @import that leaves the site, in any letter case; in JavaScript no
+  protocol-relative //host, github.com only in assets/releases.js, and network calls only from there, to
+  https://api.github.com; SVG files with no script, style, event handler or external reference;
+- URLs as Cloudflare serves them with html_handling "auto-trailing-slash": every page is an index.html in its
+  directory (404.html aside), no link ends in .html or /index, and every link and resource of 404.html is an
+  absolute path, since that page is served at any depth;
+- every <pre> focusable (tabindex="0"), so code that scrolls sideways scrolls from the keyboard; code lines of
+  at most 80 characters, except one-line TOML tables ({ module = ... }), which TOML cannot break;
+- done and open said in text: every item of a .checks list starts with a visually hidden "Done: " or
+  "Open: " that matches its is-open class, and every .meter-block ends with a visually hidden state;
+- repository links (github.com/adihack/kcoap/blob|tree/<branch>/) that all name the same branch;
+- at most 150 KB per page counting the HTML and its images, and 180 KB counting everything it loads, the
+  shared stylesheet and scripts included;
+- sitemap.xml listing every page except 404.html, and nothing that is not a page; robots.txt allowing
+  everything and naming the sitemap;
+- _headers: at most 100 rules and 2,000 characters a line, splats only at the end of a path, one /* rule
+  with the security headers and exactly the site's Content-Security-Policy, and no file that two rules give
+  the same header, which Cloudflare would join with a comma.
+
+Exit status: 0 when the site passes, 1 when anything fails, 2 for a missing directory. Needs only the
+Python 3 standard library.
+"""
+import os
+import re
+import struct
+import sys
+import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import unquote, urljoin, urlsplit
+
+SITE = "https://kcoap.dev"
+MAX_PAGE_BYTES = 150 * 1024          # the HTML and its images, as the site's brief counts them
+MAX_PAGE_TOTAL_BYTES = 180 * 1024    # everything a page loads, the shared stylesheet and scripts included
+MAX_CODE_LINE = 80
+TOML_TABLE_LINE = re.compile(r"^[\w.-]+ = \{ .* \}$")
+NOT_FOUND_PAGE = "404.html"
+REPO_LINK = re.compile(r"^https://github\.com/adihack/kcoap/(?:blob|tree)/([^/]+)/")
+# <link rel> values that load something; any other rel (canonical, alternate, ...) only names a URL.
+RESOURCE_RELS = {"stylesheet", "icon", "shortcut", "apple-touch-icon", "mask-icon", "manifest", "preload",
+                 "modulepreload", "prefetch", "prerender", "preconnect", "dns-prefetch"}
+REQUIRED_META = ["description", "og:type", "og:title", "og:description", "og:image", "og:url",
+                 "twitter:card", "twitter:title", "twitter:description", "twitter:image"]
+NETWORK_CALLS = re.compile(r"\bfetch\s*\(|XMLHttpRequest|new\s+WebSocket|EventSource|sendBeacon|importScripts")
+RELEASES_SCRIPT = "assets/releases.js"
+# The one Content-Security-Policy of the site, directive by directive; any other directive fails.
+CSP = {
+    "default-src": ["'none'"],
+    "script-src": ["'self'"],
+    "style-src": ["'self'"],
+    "img-src": ["'self'"],
+    "connect-src": ["https://api.github.com"],
+    "base-uri": ["'none'"],
+    "form-action": ["'none'"],
+    "frame-ancestors": ["'none'"],
+    "upgrade-insecure-requests": [],
+}
+SECURITY_HEADERS = {
+    "content-security-policy": None,
+    "x-content-type-options": "nosniff",
+    "referrer-policy": None,
+    "x-frame-options": "DENY",
+    "strict-transport-security": None,
+}
+MAX_HEADER_RULES = 100
+MAX_HEADER_LINE = 2000
+
+
+class Page(HTMLParser):
+    """Collects what the checks need from one HTML file."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.lang = None
+        self.title = None
+        self._in_title = False
+        self.meta = {}
+        self.canonical = []
+        self.ids = []
+        self.h1 = 0
+        self.links = []          # (tag, attribute, url) for hyperlinks
+        self.resources = []      # (tag, attribute, url) for things the browser loads
+        self.references = []     # (attribute, id) from aria-* and label/for
+        self.problems = []
+        self._script_has_src = None
+        self._script_text = ""
+        self._pre = None         # (line, text) while inside a <pre>
+        self.code_lines = []     # (line, text) of every line of code
+
+    def handle_starttag(self, tag, attrs):
+        a = {k.lower(): (v if v is not None else "") for k, v in attrs}
+        line = self.getpos()[0]
+        for name, value in a.items():
+            if name.startswith("on"):
+                self.problems.append(f"line {line}: <{tag}> has an inline event handler {name}=")
+            if name == "style":
+                self.problems.append(f"line {line}: <{tag}> has a style attribute")
+            if name in ("href", "src", "action", "formaction", "xlink:href") and \
+                    re.sub(r"[\x00-\x20]", "", value).lower().startswith("javascript:"):
+                self.problems.append(f"line {line}: <{tag}> has a javascript: URL")
+            if name == "ping":
+                self.problems.append(f"line {line}: <{tag}> has a ping attribute, which reports clicks elsewhere")
+        if tag == "base":
+            self.problems.append(f"line {line}: <base> changes where every relative URL points")
+        if tag == "form":
+            self.problems.append(f"line {line}: <form> is not allowed; the CSP sets form-action 'none'")
+        if tag == "meta" and a.get("http-equiv", "").lower() == "refresh":
+            self.problems.append(f"line {line}: <meta http-equiv=\"refresh\"> is not allowed")
+        if tag == "pre":
+            if a.get("tabindex") != "0":
+                self.problems.append(f"line {line}: <pre> needs tabindex=\"0\" so its code scrolls from the keyboard")
+            self._pre = (line, "")
+        if "id" in a:
+            self.ids.append((a["id"], line))
+        if tag == "a" and "name" in a:
+            self.ids.append((a["name"], line))
+        for attr in ("aria-labelledby", "aria-describedby", "aria-controls"):
+            for ref in a.get(attr, "").split():
+                self.references.append((attr, ref, line))
+        if tag == "label" and a.get("for"):
+            self.references.append(("for", a["for"], line))
+
+        if tag == "html":
+            self.lang = a.get("lang")
+        elif tag == "title":
+            self._in_title = True
+            self.title = ""
+        elif tag == "meta":
+            key = a.get("name") or a.get("property")
+            if key:
+                self.meta.setdefault(key.lower(), a.get("content", ""))
+        elif tag == "link":
+            rels = set(a.get("rel", "").lower().split())
+            if "canonical" in rels:
+                self.canonical.append(a.get("href", ""))
+            if rels & RESOURCE_RELS:
+                self.resources.append(("link", "href", a.get("href", ""), line))
+        elif tag == "h1":
+            self.h1 += 1
+        elif tag == "style":
+            self.problems.append(f"line {line}: inline <style> element")
+        elif tag == "script":
+            self._script_has_src = bool(a.get("src"))
+            self._script_text = ""
+            if a.get("src"):
+                self.resources.append(("script", "src", a["src"], line))
+        elif tag == "img":
+            if "alt" not in a:
+                self.problems.append(f"line {line}: <img src=\"{a.get('src', '')}\"> has no alt attribute")
+            self.resources.append(("img", "src", a.get("src", ""), line))
+        elif tag in ("iframe", "frame", "embed"):
+            self.problems.append(f"line {line}: <{tag}> is not allowed")
+            if a.get("src"):
+                self.resources.append((tag, "src", a["src"], line))
+        elif tag == "object":
+            self.problems.append(f"line {line}: <object> is not allowed")
+        elif tag in ("audio", "video", "source", "track", "input"):
+            for attr in ("src", "poster"):
+                if a.get(attr):
+                    self.resources.append((tag, attr, a[attr], line))
+        elif tag in ("image", "use", "feimage"):
+            ref = a.get("href") or a.get("xlink:href") or ""
+            if ref and not ref.startswith("#"):
+                self.resources.append((tag, "href", ref, line))
+        for attr in ("srcset", "imagesrcset"):
+            for candidate in a.get(attr, "").split(","):
+                url = candidate.strip().split(" ")[0]
+                if url:
+                    self.resources.append((tag, attr, url, line))
+        if tag in ("a", "area") and "href" in a:
+            self.links.append((tag, "href", a["href"], line))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag == "script":
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        if tag == "pre" and self._pre:
+            first, text = self._pre
+            for offset, code in enumerate(text.split("\n")):
+                self.code_lines.append((first + offset, code))
+            self._pre = None
+        if tag == "title":
+            self._in_title = False
+        elif tag == "script" and self._script_has_src is not None:
+            if not self._script_has_src:
+                self.problems.append(f"line {self.getpos()[0]}: inline <script>")
+            elif self._script_text.strip():
+                self.problems.append(f"line {self.getpos()[0]}: <script src> with inline content")
+            self._script_has_src = None
+
+    def handle_data(self, data):
+        if self._pre:
+            self._pre = (self._pre[0], self._pre[1] + data)
+        if self._in_title:
+            self.title += data
+        if self._script_has_src is not None:
+            self._script_text += data
+
+
+def page_url_path(root, file):
+    """The URL path a file is served at: start/index.html is /start/, 404.html is /404.html."""
+    rel = file.relative_to(root).as_posix()
+    if rel == "index.html":
+        return "/"
+    if rel.endswith("/index.html"):
+        return "/" + rel[: -len("index.html")]
+    return "/" + rel
+
+
+def resolve(root, url_path):
+    """The file a URL path is served from, or (None, reason)."""
+    path = unquote(url_path)
+    if ".." in path.split("/"):
+        return None, "leaves the site"
+    target = root / path.lstrip("/")
+    if path.endswith("/"):
+        index = target / "index.html"
+        return (index, None) if index.is_file() else (None, "no index.html there")
+    if target.is_file():
+        return target, None
+    if target.is_dir() and (target / "index.html").is_file():
+        return None, f"a directory: link to {path}/ with the trailing slash"
+    return None, "no such file"
+
+
+def is_external(url):
+    parts = urlsplit(url)
+    return bool(parts.scheme) or url.startswith("//")
+
+
+def png_size(file):
+    """The width and height in a PNG's IHDR chunk, or None."""
+    head = file.read_bytes()[:24]
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return struct.unpack(">II", head[16:24])
+
+
+def check_markup(rel, text):
+    """Structure the HTML parser does not see: the state text of check lists and meter blocks."""
+    errors = []
+    for ul in re.finditer(r'<ul class="checks[^"]*">(.*?)</ul>', text, re.S):
+        for li in re.finditer(r'<li( class="is-open")?>(.*?)</li>', ul.group(1), re.S):
+            state = "Open" if li.group(1) else "Done"
+            if not li.group(2).startswith(f'<span class="visually-hidden">{state}: </span>'):
+                line = text.count("\n", 0, ul.start(1) + li.start()) + 1
+                errors.append(f"{rel}: line {line}: a .checks item must start with "
+                              f"<span class=\"visually-hidden\">{state}: </span>")
+    states = {"": "not started", " is-done": "merged", " is-active": "in progress"}
+    for m in re.finditer(r'<li class="meter-block([^"]*)"[^>]*>(.*?)</li>', text, re.S):
+        hidden = re.fullmatch(r'\w+<span class="visually-hidden">, ([a-z ]+)</span>', m.group(2))
+        if not hidden or states.get(m.group(1)) != hidden.group(1):
+            line = text.count("\n", 0, m.start()) + 1
+            errors.append(f"{rel}: line {line}: a .meter-block must end with a visually hidden "
+                          f"\", {states.get(m.group(1), '?')}\" that matches its class")
+    return errors
+
+
+def header_rule_regex(path):
+    """A _headers rule path as an anchored regex: a splat matches anything, a :placeholder one segment."""
+    parts = re.split(r"(\*|:[A-Za-z0-9_]+)", path)
+    out = []
+    for part in parts:
+        if part == "*":
+            out.append(".*")
+        elif part.startswith(":") and len(part) > 1:
+            out.append("[^/]+")
+        else:
+            out.append(re.escape(part))
+    return re.compile("^" + "".join(out) + "$")
+
+
+def check_headers(root, served_paths):
+    """The _headers file: Cloudflare's limits, the security headers, the CSP, and no header set twice."""
+    errors = []
+    file = root / "_headers"
+    if not file.is_file():
+        return ["_headers is missing: the security headers and the Content-Security-Policy live there"]
+    rules = []
+    for n, raw in enumerate(file.read_text(encoding="utf-8").split("\n"), 1):
+        if len(raw) > MAX_HEADER_LINE:
+            errors.append(f"_headers: line {n}: {len(raw)} characters, over Cloudflare's {MAX_HEADER_LINE}")
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw[0].isspace():
+            if not (stripped.startswith("/") or stripped.startswith("https://")):
+                errors.append(f"_headers: line {n}: a rule starts with / or https://: {stripped!r}")
+                continue
+            path = urlsplit(stripped).path if stripped.startswith("https://") else stripped
+            if path.count("*") > 1 or ("*" in path and not path.endswith("*")):
+                errors.append(f"_headers: line {n}: {stripped} has a splat that is not at the end of the path, "
+                              f"which Cloudflare's documentation does not describe")
+            rules.append((path, n, []))
+            continue
+        if not rules:
+            errors.append(f"_headers: line {n}: a header before any rule")
+            continue
+        name, sep, value = stripped.partition(":")
+        if not sep or not name.strip():
+            errors.append(f"_headers: line {n}: not a 'Name: value' header: {stripped!r}")
+            continue
+        rules[-1][2].append((name.strip().lower(), value.strip(), n))
+    if len(rules) > MAX_HEADER_RULES:
+        errors.append(f"_headers: {len(rules)} rules, over Cloudflare's {MAX_HEADER_RULES}")
+
+    everything = [r for r in rules if r[0] == "/*"]
+    if len(everything) != 1:
+        errors.append(f"_headers: needs exactly one /* rule with the security headers, has {len(everything)}")
+    else:
+        headers = {name: (value, n) for name, value, n in everything[0][2]}
+        for name, expected in SECURITY_HEADERS.items():
+            if name not in headers:
+                errors.append(f"_headers: the /* rule sets no {name}")
+            elif expected and headers[name][0] != expected:
+                errors.append(f"_headers: line {headers[name][1]}: {name} is {headers[name][0]!r}, not {expected!r}")
+        if "content-security-policy" in headers:
+            value, n = headers["content-security-policy"]
+            for token in ("'unsafe-inline'", "'unsafe-eval'", "'unsafe-hashes'", "data:", "blob:"):
+                if token in value:
+                    errors.append(f"_headers: line {n}: the CSP allows {token}")
+            directives = {}
+            for part in value.split(";"):
+                words = part.split()
+                if words:
+                    directives[words[0].lower()] = words[1:]
+            for name, sources in directives.items():
+                if "*" in sources or any(s.endswith("*") for s in sources):
+                    errors.append(f"_headers: line {n}: the CSP's {name} allows a wildcard")
+                if name not in CSP:
+                    errors.append(f"_headers: line {n}: the CSP has {name}, which the site does not need")
+                elif sorted(sources) != sorted(CSP[name]):
+                    errors.append(f"_headers: line {n}: the CSP's {name} is {' '.join(sources)!r}, "
+                                  f"not {' '.join(CSP[name])!r}")
+            for name in CSP:
+                if name not in directives:
+                    errors.append(f"_headers: line {n}: the CSP has no {name}")
+
+    compiled = [(header_rule_regex(path), path, headers) for path, _, headers in rules]
+    for url_path in sorted(served_paths):
+        seen = {}
+        for regex, path, headers in compiled:
+            if not regex.match(url_path):
+                continue
+            for name, _, n in headers:
+                if name in seen:
+                    errors.append(f"_headers: {url_path} gets {name} from line {seen[name]} and line {n}; "
+                                  f"Cloudflare would join the two values with a comma")
+                else:
+                    seen[name] = n
+    return errors
+
+
+def check(root):
+    errors = []
+    pages = sorted(p for p in root.rglob("*.html") if p.is_file())
+    if not pages:
+        return [f"{root}: no HTML pages"], 0
+    parsed = {}
+    for file in pages:
+        page = Page()
+        page.feed(file.read_text(encoding="utf-8"))
+        page.close()
+        parsed[file] = page
+
+    ids_of = {f: {i for i, _ in p.ids} for f, p in parsed.items()}
+    branches = {}
+
+    for file, page in parsed.items():
+        rel = file.relative_to(root).as_posix()
+        url_path = page_url_path(root, file)
+        own_url = SITE + url_path
+        err = errors.append
+
+        for problem in page.problems:
+            err(f"{rel}: {problem}")
+
+        # Head and document structure.
+        if page.lang != "en":
+            err(f"{rel}: <html lang> is {page.lang!r}, not 'en'")
+        if not (page.title or "").strip():
+            err(f"{rel}: no <title>")
+        is_not_found = rel == NOT_FOUND_PAGE
+        for key in REQUIRED_META:
+            if is_not_found and key == "og:url":
+                continue
+            if not page.meta.get(key, "").strip():
+                err(f"{rel}: no <meta {'property' if key.startswith('og:') else 'name'}=\"{key}\"> content")
+        if is_not_found:
+            if page.canonical:
+                err(f"{rel}: the 404 page is served at every missing path and must not name a canonical URL")
+            if "noindex" not in page.meta.get("robots", ""):
+                err(f"{rel}: the 404 page needs <meta name=\"robots\" content=\"noindex\">")
+        else:
+            if len(page.canonical) != 1:
+                err(f"{rel}: needs exactly one <link rel=\"canonical\">, has {len(page.canonical)}")
+            elif page.canonical[0] != own_url:
+                err(f"{rel}: canonical URL {page.canonical[0]} is not the page's own address {own_url}")
+            if page.meta.get("og:url") and page.meta["og:url"] != own_url:
+                err(f"{rel}: og:url {page.meta['og:url']} is not the page's own address {own_url}")
+        if page.h1 != 1:
+            err(f"{rel}: needs exactly one <h1>, has {page.h1}")
+        for key in ("og:image", "twitter:image"):
+            value = page.meta.get(key, "").strip()
+            if not value:
+                continue
+            if not value.startswith(SITE + "/"):
+                err(f"{rel}: {key} {value} is not an absolute {SITE}/ URL, which crawlers need")
+                continue
+            image, reason = resolve(root, urlsplit(value).path)
+            if image is None:
+                err(f"{rel}: {key} {value} does not exist ({reason})")
+            elif key == "og:image":
+                size = png_size(image)
+                declared = (page.meta.get("og:image:width"), page.meta.get("og:image:height"))
+                if size is None:
+                    err(f"{rel}: og:image {value} is not a PNG")
+                elif declared != (str(size[0]), str(size[1])):
+                    err(f"{rel}: og:image:width and og:image:height say {declared}, the PNG is {size[0]}x{size[1]}")
+        if rel != NOT_FOUND_PAGE and rel != "index.html" and not rel.endswith("/index.html"):
+            err(f"{rel}: a page must be an index.html in its directory; Cloudflare serves {rel} at "
+                f"/{rel[:-5]} and redirects /{rel} there")
+        for line, code in page.code_lines:
+            if len(code) > MAX_CODE_LINE and not TOML_TABLE_LINE.match(code):
+                err(f"{rel}: line {line}: a code line of {len(code)} characters, over {MAX_CODE_LINE}: {code.strip()[:60]}")
+        for problem in check_markup(rel, file.read_text(encoding="utf-8")):
+            err(problem)
+
+        # Ids and the references to them.
+        seen = {}
+        for ident, line in page.ids:
+            if ident in seen:
+                err(f"{rel}: line {line}: duplicate id {ident!r} (first on line {seen[ident]})")
+            seen.setdefault(ident, line)
+        for attr, ref, line in page.references:
+            if ref not in seen:
+                err(f"{rel}: line {line}: {attr} points at a missing id {ref!r}")
+
+        # Hyperlinks: internal ones must resolve, anchors included.
+        for tag, attr, url, line in page.links:
+            if not url.strip():
+                err(f"{rel}: line {line}: empty {attr}")
+                continue
+            parts = urlsplit(url)
+            if parts.scheme in ("mailto", "tel"):
+                continue
+            if is_not_found and not is_external(url) and not url.startswith(("/", "#")):
+                err(f"{rel}: line {line}: {url} is relative, but the 404 page is served at any path; "
+                    f"use an absolute path")
+            if not is_external(url) and re.search(r"(\.html|/index)$", parts.path):
+                err(f"{rel}: line {line}: {url} names a file Cloudflare redirects away from; link to the "
+                    f"directory with its trailing slash")
+            if parts.scheme == "http":
+                err(f"{rel}: line {line}: plain http link {url}; use https")
+                continue
+            match = REPO_LINK.match(url)
+            if match:
+                branches.setdefault(match.group(1), []).append(f"{rel}:{line}")
+            if is_external(url):
+                if url.startswith(SITE + "/") or url == SITE:
+                    err(f"{rel}: line {line}: link to its own site by absolute URL {url}; use a path")
+                continue
+            if url.startswith("#") and len(url) == 1:
+                err(f"{rel}: line {line}: link to an empty anchor '#'")
+                continue
+            target_url = urljoin(url_path, url)
+            target_parts = urlsplit(target_url)
+            target, reason = resolve(root, target_parts.path)
+            if target is None:
+                err(f"{rel}: line {line}: broken link {url} ({reason})")
+                continue
+            if target_parts.fragment:
+                if target.suffix != ".html":
+                    err(f"{rel}: line {line}: anchor on a file that is not a page: {url}")
+                elif unquote(target_parts.fragment) not in ids_of.get(target, set()):
+                    err(f"{rel}: line {line}: broken anchor {url} (no id {target_parts.fragment!r} "
+                        f"in {target.relative_to(root).as_posix()})")
+
+        # Resources: only from the site itself; their files must exist.
+        size = file.stat().st_size
+        total = size
+        counted = set()
+        for tag, attr, url, line in page.resources:
+            if not url.strip():
+                err(f"{rel}: line {line}: <{tag}> with an empty {attr}")
+                continue
+            if is_not_found and not is_external(url) and not url.startswith("/"):
+                err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> is relative, but the 404 page is served at "
+                    f"any path; use an absolute path")
+            if url.startswith("data:"):
+                err(f"{rel}: line {line}: <{tag} {attr}> is a data: URL, which the CSP does not allow")
+                continue
+            if is_external(url):
+                err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> loads from outside the site")
+                continue
+            target, reason = resolve(root, urlsplit(urljoin(url_path, url)).path)
+            if target is None:
+                err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> is missing ({reason})")
+                continue
+            is_image = tag in ("img", "image", "source", "video") or target.suffix.lower() in (
+                ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico")
+            if target not in counted:
+                counted.add(target)
+                total += target.stat().st_size
+                if is_image:
+                    size += target.stat().st_size
+        if size > MAX_PAGE_BYTES:
+            err(f"{rel}: {size / 1024:.1f} KB with its images, over the {MAX_PAGE_BYTES // 1024} KB limit")
+        if total > MAX_PAGE_TOTAL_BYTES:
+            err(f"{rel}: {total / 1024:.1f} KB with everything it loads, over the "
+                f"{MAX_PAGE_TOTAL_BYTES // 1024} KB limit")
+
+    if len(branches) > 1:
+        summary = "; ".join(f"{b} ({len(v)} links, first {v[0]})" for b, v in sorted(branches.items()))
+        errors.append(f"repository links name more than one branch: {summary}")
+
+    # Stylesheets and scripts.
+    for css in sorted(root.rglob("*.css")):
+        rel = css.relative_to(root).as_posix()
+        text = css.read_text(encoding="utf-8")
+        urls = [(m.start(), (m.group(1) or m.group(2)).strip()) for m in re.finditer(
+            r"url\(\s*['\"]?([^'\")]+)|@import\s+(?:url\()?\s*['\"]?([^'\";)]+)", text, re.I)]
+        for m in re.finditer(r"image-set\(([^;{}]*)\)", text, re.I):
+            urls += [(m.start(), s.group(1).strip()) for s in re.finditer(r"['\"]([^'\"]+)['\"]", m.group(1))]
+        for start, url in urls:
+            line = text.count("\n", 0, start) + 1
+            if is_external(url):
+                errors.append(f"{rel}: line {line}: loads {url} from outside the site")
+            elif url.startswith("data:"):
+                errors.append(f"{rel}: line {line}: a data: URL, which the CSP does not allow")
+    for js in sorted(root.rglob("*.js")):
+        rel = js.relative_to(root).as_posix()
+        text = js.read_text(encoding="utf-8")
+        for m in re.finditer(r"https?://([A-Za-z0-9.-]+)", text, re.I):
+            host = m.group(1).lower()
+            line = text.count("\n", 0, m.start()) + 1
+            if m.group(0).lower().startswith("http://"):
+                errors.append(f"{rel}: line {line}: plain http URL {m.group(0)}")
+            elif host not in ("github.com", "api.github.com"):
+                errors.append(f"{rel}: line {line}: URL on a host other than github.com: {m.group(0)}")
+            elif rel != RELEASES_SCRIPT:
+                errors.append(f"{rel}: line {line}: only {RELEASES_SCRIPT} may name {host}")
+        for m in re.finditer(r"['\"`]//[A-Za-z0-9-]+\.[A-Za-z0-9.-]+", text):
+            line = text.count("\n", 0, m.start()) + 1
+            errors.append(f"{rel}: line {line}: a protocol-relative URL {m.group(0)[1:]}")
+        for m in NETWORK_CALLS.finditer(text):
+            if rel != RELEASES_SCRIPT:
+                line = text.count("\n", 0, m.start()) + 1
+                errors.append(f"{rel}: line {line}: network call {m.group(0).strip()!r}; "
+                              f"only {RELEASES_SCRIPT} may make one")
+
+    for svg in sorted(root.rglob("*.svg")):
+        rel = svg.relative_to(root).as_posix()
+        text = svg.read_text(encoding="utf-8")
+        for pattern, what in ((r"<script", "a <script>"), (r"<style", "a <style>"), (r"\sstyle\s*=", "a style attribute"),
+                              (r"\son[a-z]+\s*=", "an event handler"), (r"<foreignObject", "a <foreignObject>")):
+            if re.search(pattern, text, re.I):
+                errors.append(f"{rel}: has {what}")
+        for m in re.finditer(r"(?:xlink:)?href\s*=\s*['\"]([^'\"]*)['\"]", text, re.I):
+            if not m.group(1).startswith("#"):
+                errors.append(f"{rel}: refers to {m.group(1)}; only #fragments are allowed in an SVG file")
+
+    served = {page_url_path(root, f) for f in pages}
+    served |= {"/" + f.relative_to(root).as_posix() for f in root.rglob("*")
+               if f.is_file() and f.suffix != ".html" and f.name != "_headers"}
+    served.add("/a/path/that/does/not/exist/")
+    errors += check_headers(root, served)
+
+    # The sitemap against the pages.
+    sitemap = root / "sitemap.xml"
+    page_urls = {SITE + page_url_path(root, f) for f in pages if f.relative_to(root).as_posix() != NOT_FOUND_PAGE}
+    if not sitemap.is_file():
+        errors.append("sitemap.xml is missing")
+    else:
+        try:
+            tree = ET.parse(sitemap)
+            locs = [(e.text or "").strip() for e in tree.iter("{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+        except ET.ParseError as e:
+            errors.append(f"sitemap.xml: not well-formed XML: {e}")
+            locs = []
+        for loc in locs:
+            if loc not in page_urls:
+                errors.append(f"sitemap.xml: {loc} is not a page of the site")
+        for url in sorted(page_urls - set(locs)):
+            errors.append(f"sitemap.xml: page {url} is missing")
+        if len(locs) != len(set(locs)):
+            errors.append("sitemap.xml: lists a URL twice")
+    robots = root / "robots.txt"
+    if not robots.is_file():
+        errors.append("robots.txt is missing")
+    else:
+        lines = [line.strip() for line in robots.read_text(encoding="utf-8").splitlines()]
+        if f"Sitemap: {SITE}/sitemap.xml" not in lines:
+            errors.append("robots.txt: does not name the sitemap")
+        if "User-agent: *" not in lines:
+            errors.append("robots.txt: has no 'User-agent: *' group")
+        for line in lines:
+            if line.lower().startswith("disallow:") and line.split(":", 1)[1].strip():
+                errors.append(f"robots.txt: {line!r} keeps crawlers out")
+
+    return errors, len(pages)
+
+
+def main(argv):
+    if len(argv) > 2 or (len(argv) == 2 and argv[1] in ("-h", "--help")):
+        print(__doc__.strip())
+        return 0 if len(argv) == 2 else 2
+    default = Path(__file__).resolve().parent.parent / "web" / "public"
+    root = Path(argv[1]).resolve() if len(argv) == 2 else default
+    if not root.is_dir():
+        print(f"check-site: no such directory: {root}", file=sys.stderr)
+        return 2
+    errors, count = check(root)
+    for e in errors:
+        print(e)
+    if errors:
+        print(f"check-site: {len(errors)} problem(s) in {root}", file=sys.stderr)
+        return 1
+    print(f"check-site: {count} pages in {os.path.relpath(root)} pass")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

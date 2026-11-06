@@ -1,0 +1,17 @@
+// The Cloudflare Worker that serves https://kcoap.dev: static assets only, with no Worker script.
+// Workers Builds deploys it from the GitHub repository with the root directory "web"; web/README.md has
+// the dashboard settings and the Cloudflare documentation behind every key.
+{
+  // Must match the Worker's name in the Cloudflare dashboard, or the build fails.
+  "name": "kcoap",
+  // A date in the past; it picks the Workers runtime version. Static assets do not depend on it.
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // Everything in web/public is uploaded and served as it is; there is no build step.
+    "directory": "./public",
+    // A path with no file gets the nearest 404.html, with status 404.
+    "not_found_handling": "404-page",
+    // /start/index.html is served at /start/; /start redirects there.
+    "html_handling": "auto-trailing-slash"
+  }
+}

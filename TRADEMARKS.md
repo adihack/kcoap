@@ -12,9 +12,9 @@ or registration exists in any trademark office.
 
 This section is the only place that states the marks' registration status. Anyone who shows a symbol
 with the marks uses the one shown here, ™, until this section names a registration. The project shows
-the symbol in two more places, which change together with this section: the [README](README.md) (its
-introduction and License section) and the footer of the API reference (`KcoapProject.DOKKA_FOOTER` in
-`build-logic`).
+the symbol in three more places, which change together with this section: the [README](README.md) (its
+introduction and License section), the footer of the API reference (`KcoapProject.DOKKA_FOOTER` in
+`build-logic`), and the footer of every page of https://kcoap.dev (`web/public`).
 
 ## The marks
 

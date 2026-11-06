@@ -91,6 +91,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [Testing](testing.md) | The test levels, one command per suite, build checks, CI, coverage, and how to write tests |
 | [Code style](code-style.md) | How the code is laid out, named, documented and kept safe; the rules for contributors |
 | [Changelog](../CHANGELOG.md) | Every notable change, with migration notes for breaking ones |
+| [Website](../web/README.md) | How kcoap.dev is built and deployed: the page files, local preview, the site checks, and the Cloudflare Worker settings |
 
 ## Community and legal
 
