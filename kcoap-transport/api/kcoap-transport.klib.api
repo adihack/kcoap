@@ -187,9 +187,6 @@ sealed interface dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint|
         final val link // dev.kcoap.transport/Endpoint.Opaque.link|{}link[0]
             final fun <get-link>(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.link.<get-link>|<get-link>(){}[0]
 
-        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.component1|component1(){}[0]
-        final fun component2(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.component2|component2(){}[0]
-        final fun copy(kotlin/String = ..., kotlin/String = ...): dev.kcoap.transport/Endpoint.Opaque // dev.kcoap.transport/Endpoint.Opaque.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Opaque.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Opaque.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Opaque.toString|toString(){}[0]
@@ -224,10 +221,6 @@ sealed interface dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint|
         final val usesTls // dev.kcoap.transport/Endpoint.Tcp.usesTls|{}usesTls[0]
             final fun <get-usesTls>(): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.usesTls.<get-usesTls>|<get-usesTls>(){}[0]
 
-        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Tcp.component1|component1(){}[0]
-        final fun component2(): kotlin/Int // dev.kcoap.transport/Endpoint.Tcp.component2|component2(){}[0]
-        final fun component3(): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.component3|component3(){}[0]
-        final fun copy(kotlin/String = ..., kotlin/Int = ..., kotlin/Boolean = ...): dev.kcoap.transport/Endpoint.Tcp // dev.kcoap.transport/Endpoint.Tcp.copy|copy(kotlin.String;kotlin.Int;kotlin.Boolean){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Tcp.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Tcp.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Tcp.toString|toString(){}[0]
@@ -241,9 +234,6 @@ sealed interface dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint|
         final val port // dev.kcoap.transport/Endpoint.Udp.port|{}port[0]
             final fun <get-port>(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.port.<get-port>|<get-port>(){}[0]
 
-        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.Udp.component1|component1(){}[0]
-        final fun component2(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.component2|component2(){}[0]
-        final fun copy(kotlin/String = ..., kotlin/Int = ...): dev.kcoap.transport/Endpoint.Udp // dev.kcoap.transport/Endpoint.Udp.copy|copy(kotlin.String;kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.Udp.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.Udp.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.Udp.toString|toString(){}[0]
@@ -259,8 +249,6 @@ sealed interface dev.kcoap.transport/Endpoint { // dev.kcoap.transport/Endpoint|
         final val usesTls // dev.kcoap.transport/Endpoint.WebSocket.usesTls|{}usesTls[0]
             final fun <get-usesTls>(): kotlin/Boolean // dev.kcoap.transport/Endpoint.WebSocket.usesTls.<get-usesTls>|<get-usesTls>(){}[0]
 
-        final fun component1(): kotlin/String // dev.kcoap.transport/Endpoint.WebSocket.component1|component1(){}[0]
-        final fun copy(kotlin/String = ...): dev.kcoap.transport/Endpoint.WebSocket // dev.kcoap.transport/Endpoint.WebSocket.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.transport/Endpoint.WebSocket.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // dev.kcoap.transport/Endpoint.WebSocket.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // dev.kcoap.transport/Endpoint.WebSocket.toString|toString(){}[0]

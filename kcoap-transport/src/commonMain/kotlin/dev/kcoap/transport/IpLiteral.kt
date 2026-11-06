@@ -1,12 +1,13 @@
 package dev.kcoap.transport
 
 /**
- * The one textual form of an IP address that [Endpoint.Udp] uses, so that endpoints compare equal by
- * their host string: dotted decimal for IPv4, RFC 5952 canonical text for IPv6 (lower case, no leading
- * zeros, the longest run of two or more zero groups compressed to `::`). IPv4-mapped IPv6 addresses
+ * The one textual form of an IP address, which [Endpoint.Udp] and [Endpoint.Tcp] keep their host in, so that
+ * one address is one endpoint: dotted decimal for IPv4, RFC 5952 canonical text for IPv6 (lower case, no
+ * leading zeros, the longest run of two or more zero groups compressed to `::`). IPv4-mapped IPv6 addresses
  * are written as IPv4, as a dual-stack socket reports such peers.
  *
- * Transports format received addresses with [format]; clients normalize literals with [canonical].
+ * Transports format received addresses with [format]; endpoints and clients normalize literals with
+ * [canonical].
  */
 public object IpLiteral {
     /** The text of a 4- or 16-byte address. */
