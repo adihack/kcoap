@@ -18,6 +18,7 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.PlatformCsprng
 import dev.kcoap.coap.stack.TokenGenerator
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
@@ -31,8 +32,10 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -134,6 +137,25 @@ class EdgeCaseTest {
         assertEquals(0, sequence.next(session).size)
         assertEquals(8, sequence.next(Endpoint.Udp("127.0.0.1", 1)).size)
         TokenGenerator { ByteArray(0) }.forget(session)
+    }
+
+    @Test
+    fun thePlatformCsprngFillsExactlyTheRangeItIsGiven() {
+        val sentinel: Byte = 0x55
+        for (size in 0..40) {
+            val array = ByteArray(size + 4) { sentinel }
+            assertSame(array, PlatformCsprng.nextBytes(array, 2, size + 2))
+            assertEquals(listOf(sentinel, sentinel), array.take(2), "before the range")
+            assertEquals(listOf(sentinel, sentinel), array.takeLast(2), "after the range")
+            if (size >= 8) assertTrue(array.copyOfRange(2, size + 2).any { it != sentinel }, "random bytes for $size")
+        }
+        // 15 random bytes come from each UUID; 16 take a second one, and two draws differ.
+        assertFalse(PlatformCsprng.nextBytes(16).contentEquals(PlatformCsprng.nextBytes(16)))
+        assertEquals(0, PlatformCsprng.nextBits(0))
+        assertTrue(PlatformCsprng.nextInt(10) in 0 until 10)
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), 3, 2) }
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), 0, 5) }
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), -1, 2) }
     }
 
     @Test
