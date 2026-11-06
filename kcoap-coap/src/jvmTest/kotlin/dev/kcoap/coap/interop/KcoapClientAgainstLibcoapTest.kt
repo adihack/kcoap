@@ -143,7 +143,7 @@ class KcoapClientAgainstLibcoapTest {
     }
 
     @Test
-    fun negotiatesASmallBlockSizeEarly() = withClient(CoapClientConfig(blockSize = 64)) { client ->
+    fun negotiatesASmallBlockSizeEarly() = withClient(CoapClientConfig(preferredBlockSize = 64)) { client ->
         val random = Random(3)
         val body = ByteArray(700) { ('a' + random.nextInt(26)).code.toByte() }
         assertTrue(client.put("${server.uri}/example_data", body).isSuccess)

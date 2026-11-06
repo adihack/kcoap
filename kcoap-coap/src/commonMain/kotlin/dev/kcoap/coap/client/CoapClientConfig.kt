@@ -17,10 +17,12 @@ import kotlin.time.Duration
  * @property requestTimeout how long to wait for the response to one request (one block), measured
  *   from sending; null waits EXCHANGE_LIFETIME. A Confirmable request without ACK fails earlier, after
  *   MAX_TRANSMIT_WAIT.
- * @property blockSize the block size for Block1 uploads and the Block2 size proposed in requests
- *   (early negotiation, RFC 7959 §2.4); null uses the largest size the datagram (or the server's
- *   Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and lets the server
- *   choose the response block size. Set, it also turns BERT off.
+ * @property preferredBlockSize the block size the client prefers, 16..1024: Block1 uploads use it, and setting it
+ *   turns on early negotiation, so every request without a body proposes it as the Block2 size of the response
+ *   (RFC 7959 §2.4); a server may still choose smaller blocks. Null, the default, uses the largest size the
+ *   datagram (or the server's Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and
+ *   lets the server choose the response block size. Set, it also turns BERT off. The server's counterpart is
+ *   its upper bound `CoapServerConfig.maxBlockSize`.
  * @property maxResponseBodySize the largest body assembled from Block2 transfers.
  * @property resolver turns the host of a URI into a transport [Endpoint]; [EndpointResolver.Default] takes IP
  *   literals for every scheme and passes host names to the connectors of RFC 8323 schemes.
@@ -31,12 +33,12 @@ import kotlin.time.Duration
  * @property securityReserve bytes kept free in each message for [security]'s overhead when choosing
  *   block sizes.
  * @property qBlock whether and how requests use Q-Block (RFC 9177) instead of RFC 7959; off by default.
- *   [blockSize] and [maxResponseBodySize] apply to Q-Block bodies too.
+ *   [preferredBlockSize] and [maxResponseBodySize] apply to Q-Block bodies too.
  */
 public class CoapClientConfig(
     public val security: ClientMessageSecurity? = null,
     public val requestTimeout: Duration? = null,
-    public val blockSize: Int? = null,
+    public val preferredBlockSize: Int? = null,
     public val maxResponseBodySize: Int = 1 shl 20,
     public val resolver: EndpointResolver = EndpointResolver.Default,
     public val observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
@@ -46,7 +48,8 @@ public class CoapClientConfig(
 ) {
     init {
         require(requestTimeout == null || requestTimeout.isPositive()) { "Request timeout must be positive: $requestTimeout" }
-        require(blockSize == null || (blockSize in 16..1024 && blockSize and (blockSize - 1) == 0)) {
+        val blockSize = preferredBlockSize
+        require(blockSize == null || blockSize in 16..1024 && blockSize and (blockSize - 1) == 0) {
             "Block size must be a power of two in 16..1024: $blockSize"
         }
         require(maxResponseBodySize > 0) { "Maximum response body size must be positive" }
@@ -54,8 +57,8 @@ public class CoapClientConfig(
     }
 
     override fun toString(): String =
-        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, blockSize=$blockSize, " +
-            "qBlock=${qBlock.mode})"
+        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, " +
+            "preferredBlockSize=$preferredBlockSize, qBlock=${qBlock.mode})"
 }
 
 /** How a [CoapClient] ends an observation whose collector went away (RFC 7641 §3.6). */

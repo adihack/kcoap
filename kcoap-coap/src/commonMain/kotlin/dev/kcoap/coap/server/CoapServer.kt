@@ -302,9 +302,10 @@ public class CoapServer private constructor(
         val echo = options.echo
         val key = OperationKey(peer, unprotected?.identity, request.code.value, Blockwise.operationOptions(options))
         val isQBlock = qBlockAccepted && QBlockServer.carriesQBlock(options)
-        if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxBodySize) {
+        if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxRequestBodySize) {
             // RFC 7959 §2.9.3: a body of one message beyond the bound, Q-Block2 or not; Size1 says what fits.
-            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(config.maxBodySize.toLong()) })
+            val limit = config.maxRequestBodySize.toLong()
+            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
         }
         if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
             // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.

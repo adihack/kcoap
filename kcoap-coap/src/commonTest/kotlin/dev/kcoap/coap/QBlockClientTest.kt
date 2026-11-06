@@ -57,7 +57,7 @@ class QBlockClientTest {
         val fixture = StackFixture(this, seed)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
         val client = fixture.client(
-            CoapClientConfig(blockSize = blockSize, qBlock = qBlock),
+            CoapClientConfig(preferredBlockSize = blockSize, qBlock = qBlock),
             fixture.endpointConfig(parameters = parameters),
         )
         return Setup(fixture, server, client)
@@ -466,7 +466,7 @@ class QBlockClientTest {
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
         server.resources["/big"] = body(3000)
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)
-        val client = fixture.client(CoapClientConfig(blockSize = 64, maxResponseBodySize = 1000, qBlock = qBlock))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, maxResponseBodySize = 1000, qBlock = qBlock))
 
         val failure = assertFailsWith<CoapException> { client.get(server.uri("/big")) { nonConfirmable() } }
 
@@ -705,7 +705,7 @@ class QBlockClientTest {
             true
         }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)
-        val client = fixture.client(CoapClientConfig(blockSize = 64, echoRetry = false, qBlock = qBlock))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, echoRetry = false, qBlock = qBlock))
 
         val response = client.put(server.uri("/store"), body(200)) { nonConfirmable() }
 

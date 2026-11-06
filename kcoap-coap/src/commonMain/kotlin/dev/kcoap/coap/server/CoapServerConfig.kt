@@ -14,7 +14,7 @@ import kotlin.time.Duration.Companion.seconds
  *   that does not say otherwise (ADR 0008).
  * @property maxBlockSize the largest block the server sends or asks for (RFC 7959), 16..1024. The
  *   transport's datagram size may force smaller blocks.
- * @property maxBodySize the largest request body the server assembles from Block1 transfers; larger
+ * @property maxRequestBodySize the largest request body the server assembles from Block1 transfers; larger
  *   ones get 4.13 Request Entity Too Large with Size1 (RFC 7959 §2.9.3).
  * @property maxConcurrentTransfers how many partial Block1 uploads and cached Block2 representations
  *   the server keeps; the least recently used is dropped first (RFC 9175 §3.3).
@@ -73,7 +73,7 @@ import kotlin.time.Duration.Companion.seconds
 public class CoapServerConfig(
     public val security: ServerMessageSecurity? = null,
     public val maxBlockSize: Int = 1024,
-    public val maxBodySize: Int = 1 shl 20,
+    public val maxRequestBodySize: Int = 1 shl 20,
     public val maxConcurrentTransfers: Int = 64,
     public val confirmableNotificationInterval: Duration = 24.hours,
     public val nonConfirmableNotificationInterval: Duration = 3.seconds,
@@ -93,7 +93,7 @@ public class CoapServerConfig(
         require(maxBlockSize in 16..1024 && maxBlockSize and (maxBlockSize - 1) == 0) {
             "Block size must be a power of two in 16..1024: $maxBlockSize"
         }
-        require(maxBodySize > 0) { "Maximum body size must be positive: $maxBodySize" }
+        require(maxRequestBodySize > 0) { "Maximum request body size must be positive: $maxRequestBodySize" }
         require(maxConcurrentTransfers > 0) { "At least one block-wise transfer must be allowed" }
         require(confirmableNotificationInterval.isPositive()) { "Confirmable notification interval must be positive" }
         require(!nonConfirmableNotificationInterval.isNegative()) { "Non-confirmable notification interval must not be negative" }
@@ -128,5 +128,5 @@ public class CoapServerConfig(
 
     override fun toString(): String =
         "CoapServerConfig(security=${security != null}, defaultAccess=$defaultAccess, maxBlockSize=$maxBlockSize, " +
-            "maxBodySize=$maxBodySize, amplification=$amplification, qBlock=${qBlock.isEnabled})"
+            "maxRequestBodySize=$maxRequestBodySize, amplification=$amplification, qBlock=${qBlock.isEnabled})"
 }

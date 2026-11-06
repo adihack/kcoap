@@ -37,14 +37,15 @@ internal class BlockwiseClient(private val client: CoapClient) {
         val reserve = client.securityReserve
         val limits = client.endpoint.limits(peer)
         // §2.4 early negotiation: propose the configured block size for the response.
-        val early = config.blockSize?.takeIf { request.payloadSize == 0 }
+        val early = config.preferredBlockSize?.takeIf { request.payloadSize == 0 }
         val single = if (early != null) {
             request.toBuilder().options { block2(Blockwise.block(0, false, early)) }.build()
         } else {
             request
         }
+        val preferred = config.preferredBlockSize
         val needsBlock1 = request.payloadSize > 0 &&
-            (!Blockwise.fits(single, limits, reserve) || request.payloadSize > (config.blockSize ?: Int.MAX_VALUE))
+            (!Blockwise.fits(single, limits, reserve) || request.payloadSize > (preferred ?: Int.MAX_VALUE))
         if (!needsBlock1) {
             val response = client.exchange(peer, single, confirmable)
             // RFC 7959 §2.9.3: 4.13 to a request without Block1 is a hint to try Block1.
@@ -53,7 +54,7 @@ internal class BlockwiseClient(private val client: CoapClient) {
             }
             return complete(peer, single, response, confirmable)
         }
-        return upload(peer, request, confirmable, config.blockSize, limits)
+        return upload(peer, request, confirmable, config.preferredBlockSize, limits)
     }
 
     /**
@@ -96,7 +97,8 @@ internal class BlockwiseClient(private val client: CoapClient) {
                     options {
                         block1(option)
                         if (offset == 0) size1(body.size.toLong())
-                        if (!more && config.blockSize != null) block2(Blockwise.block(0, false, config.blockSize))
+                        val preferred = config.preferredBlockSize
+                        if (!more && preferred != null) block2(Blockwise.block(0, false, preferred))
                     }
                 }.build()
                 val response = client.exchange(peer, block, confirmable)

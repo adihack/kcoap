@@ -51,7 +51,7 @@ class QBlockSupportTest {
     ): QBlockClientTest.Setup {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
-        val client = fixture.client(CoapClientConfig(security = security, blockSize = 64, qBlock = qBlock))
+        val client = fixture.client(CoapClientConfig(security = security, preferredBlockSize = 64, qBlock = qBlock))
         return QBlockClientTest.Setup(fixture, server, client)
     }
 
@@ -392,7 +392,7 @@ class QBlockSupportTest {
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
         server.resources["/small"] = body(40)
         val endpoint = fixture.endpoint()
-        val config = CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE))
+        val config = CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE))
 
         // Short-lived clients on a long-lived endpoint, never closed.
         repeat(100) { assertContentEquals(body(40), CoapClient(endpoint, config).get(server.uri("/small")).payload) }

@@ -55,7 +55,7 @@ class QBlockClientSoakTest {
                 fixture.network.conditions = LinkConditions(lossRate = lossRate)
                 val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
                 val client = fixture.client(
-                    CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
+                    CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
                     fixture.endpointConfig(parameters = parameters),
                 )
                 val expected = body(size, seed)
@@ -115,7 +115,7 @@ class QBlockClientSoakTest {
         val rebinding = RebindingTransport(fixture.transport(), fixture.transport(), switchAt = 5, oldAddressReceives = false)
         val client = CoapClient(
             CoapEndpoint(rebinding, backgroundScope, fixture.endpointConfig()),
-            CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
+            CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
         )
         val upload = body(1000, 7)
 
@@ -139,7 +139,7 @@ class QBlockClientSoakTest {
     fun rfc9177Section7_2ASecondNonConfirmableBodyToTheSamePeerWaitsForTheFirst() = runTest {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
-        val client = fixture.client(CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
 
         val first = async { client.put(server.uri("/a"), body(1500, 1)) { nonConfirmable() } }
         val second = async { client.put(server.uri("/b"), body(1500, 2)) { nonConfirmable() } }
@@ -161,7 +161,7 @@ class QBlockClientSoakTest {
     fun rfc9177Section4_3AnAbandonedUploadForgetsItsTokensSoTheServerDropsItsPartialBody() = runTest {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
-        val client = fixture.client(CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
         fixture.network.filter = { datagram ->
             runCatching { dev.kcoap.coap.codec.UdpMessageCodec.decode(datagram.bytes) }.getOrNull()?.options?.qBlock1?.number != 3L
         }

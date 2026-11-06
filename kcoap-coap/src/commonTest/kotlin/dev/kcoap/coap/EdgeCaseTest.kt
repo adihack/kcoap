@@ -253,7 +253,7 @@ class EdgeCaseTest {
     @Test
     fun aBodyLargerThanTheServerAcceptsGets413EvenWithoutBlock1() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(maxBodySize = 50)) { resource("r") { put { CoapResponse.changed() } } }
+        val server = fixture.server(CoapServerConfig(maxRequestBodySize = 50)) { resource("r") { put { CoapResponse.changed() } } }
         val raw = fixture.transport()
         val request = CoapMessage.request(CoapCode.PUT) {
             messageId = 1
@@ -349,14 +349,14 @@ class EdgeCaseTest {
 
     @Test
     fun configurationsAreValidated() {
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(blockSize = 100) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(blockSize = 2048) }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 100) }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 2048) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(requestTimeout = 0.seconds) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(maxResponseBodySize = 0) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(securityReserve = -1) }
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(separateResponseDelay = (-1).milliseconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxBlockSize = 100) }
-        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxBodySize = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxRequestBodySize = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxConcurrentTransfers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(confirmableNotificationInterval = 0.seconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(nonConfirmableNotificationInterval = (-1).seconds) }

@@ -56,7 +56,7 @@ import kotlinx.coroutines.withContext
  *   for; [CoapServer] treats the options as unrecognized for every other request (§4.1). [QBlockCheck] refuses
  *   requests that break the structural rules: 4.02 for Q-Block mixed with Block1 or Block2, 4.00 for a missing
  *   Request-Tag or Size1, a payload that does not fill its block, SZX 7 without BERT or Q-Block2 options out
- *   of order, 4.13 with Size1 above [CoapServerConfig.maxBodySize].
+ *   of order, 4.13 with Size1 above [CoapServerConfig.maxRequestBodySize].
  * - **Q-Block1 uploads** (§4.3). The blocks of a body, one operation by [OperationKey] (Request-Tag included,
  *   Size1, Echo and the Q-Block options not), go to its [PartialBody]. Its receiver answers each block: no
  *   response in the middle of a set, 2.31 with Q-Block1 when a Non-confirmable set is complete, a
@@ -165,7 +165,7 @@ internal class QBlockServer(
      * when it was rejected without one (RFC 7252 §5.4.1).
      */
     suspend fun answer(ref: QBlockRequest, resource: CoapResource, key: OperationKey, limits: MessageLimits): Reply? {
-        val violation = QBlockCheck.request(ref.request, limits.allowsBert, config.maxBodySize)
+        val violation = QBlockCheck.request(ref.request, limits.allowsBert, config.maxRequestBodySize)
         if (violation != null) {
             log.debug { "Refused a Q-Block request from ${ref.inbound.peer}: $violation" }
             if (violation.resetIfNonConfirmable && !ref.inbound.isConfirmable) {

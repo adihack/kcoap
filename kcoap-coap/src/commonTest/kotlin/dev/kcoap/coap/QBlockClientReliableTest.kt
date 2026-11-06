@@ -58,7 +58,7 @@ class QBlockClientReliableTest {
     private fun body(size: Int): ByteArray = ByteArray(size) { (it * 13 + it / 256).toByte() }
 
     private fun ReliableFixture.qBlockClient(): CoapClient = client(
-        CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, onReliableTransports = true)),
+        CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, onReliableTransports = true)),
     )
 
     @Test

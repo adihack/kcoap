@@ -183,7 +183,7 @@ class QBlockReliableTest {
             add(Versions())
         }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, onReliableTransports = true)
-        val client = reliable.client(CoapClientConfig(blockSize = 64, qBlock = qBlock))
+        val client = reliable.client(CoapClientConfig(preferredBlockSize = 64, qBlock = qBlock))
         return Peers(reliable, server, client, stored)
     }
 

@@ -53,7 +53,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class QBlockStressTest {
     private val quiet = CoapEndpointConfig(loggerFactory = LoggerFactory(LogConfig.build { level = LogLevel.WARN }))
     private val qBlockServer = CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true))
-    private val qBlockClient = CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+    private val qBlockClient = CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
 
     private fun body(size: Int, seed: Int): ByteArray = ByteArray(size) { (it * 31 + seed).toByte() }
 

@@ -27,7 +27,7 @@ package dev.kcoap.coap.server
  * that neither OSCORE nor DTLS authenticated verifies its address with Echo first (RFC 9175 §2.4), and its
  * bodies go Confirmable once that verification lapses.
  *
- * Memory is bounded: at most [maxPartialBodies] uploads, each up to [CoapServerConfig.maxBodySize] bytes,
+ * Memory is bounded: at most [maxPartialBodies] uploads, each up to [CoapServerConfig.maxRequestBodySize] bytes,
  * are assembled at a time, each holding only the blocks that arrived (never what its Size1 claims before
  * they do), and at most [maxCachedBodies] response bodies, and as many records of completed uploads, are
  * kept for NON_PARTIAL_TIMEOUT after their last use for requests of missing blocks.

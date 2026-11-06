@@ -234,7 +234,7 @@ class QBlockServerTest {
 
     @Test
     fun rfc9177Section4_3AnUploadWithoutRequestTagOrSize1Gets400AndOneTooLarge413WithSize1() = runTest {
-        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxBodySize = 2048, qBlock = qBlockOn))
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxRequestBodySize = 2048, qBlock = qBlockOn))
         val withoutTag = upload(f.peer, 0).toBuilder().options { remove(CoapOptions.REQUEST_TAG.number) }.build()
         val withoutSize1 = upload(f.peer, 0).toBuilder().options { remove(CoapOptions.SIZE1.number) }.build()
 
@@ -251,7 +251,7 @@ class QBlockServerTest {
 
     @Test
     fun rfc7959Section2_9_3ARequestOfOneMessageBeyondMaxBodySizeGets413AlsoWithQBlock2() = runTest {
-        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxBodySize = 16, qBlock = qBlockOn))
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxRequestBodySize = 16, qBlock = qBlockOn))
         f.peer.send(single(f.peer, CoapCode.POST, "x".repeat(64)))
 
         val answer = f.peer.drain().single()

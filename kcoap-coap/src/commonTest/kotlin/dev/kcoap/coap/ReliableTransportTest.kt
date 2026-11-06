@@ -224,7 +224,7 @@ class ReliableTransportTest {
         fixture.server(endpointConfig = fixture.endpointConfig(ReliableTransportConfig(maxMessageSize = 2048))) {
             resource("store") { put { CoapResponse.changed() } }
         }
-        val client = fixture.client(CoapClientConfig(blockSize = 512))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 512))
         assertEquals(CoapCode.CHANGED, client.put(fixture.uri("/store"), body(3000)).code)
         assertTrue(fixture.sent(CoapCode.PUT).all { it.options.block1!!.size == 512 && !it.options.block1!!.isBert })
     }
