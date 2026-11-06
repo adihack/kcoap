@@ -2,6 +2,7 @@ package dev.kcoap.oscore
 
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.common.KcoapException
 
 /**
  * Why an OSCORE message was rejected, with the error response RFC 8613 §8.2 and §7.4 suggest for a
@@ -29,9 +30,13 @@ public enum class OscoreError(public val responseCode: CoapCode, public val diag
     SEQUENCE_EXHAUSTED(CoapCode.INTERNAL_SERVER_ERROR, "Sequence numbers exhausted"),
 }
 
-/** Raised by OSCORE processing; converts to the stack's [MessageSecurityException]. */
+/**
+ * Raised by OSCORE processing, a [KcoapException] with the [error] RFC 8613 §8.2 and §7.4 name; reading an OSCORE
+ * option ([OscoreOptionValue.decode]) throws it too. `OscoreClient` and `OscoreServer` convert it to the stack's
+ * [MessageSecurityException] ([toMessageSecurityException]) at the message-security SPI.
+ */
 public class OscoreException(public val error: OscoreError, detail: String? = null, cause: Throwable? = null) :
-    Exception(detail?.let { "${error.diagnostic}: $it" } ?: error.diagnostic, cause) {
+    KcoapException(detail?.let { "${error.diagnostic}: $it" } ?: error.diagnostic, cause) {
 
     public fun toMessageSecurityException(): MessageSecurityException =
         MessageSecurityException(message ?: error.diagnostic, error.responseCode, error.diagnostic, this)

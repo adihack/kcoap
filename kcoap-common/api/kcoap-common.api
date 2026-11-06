@@ -20,6 +20,10 @@ public final class dev/kcoap/common/HexKt {
 public abstract interface annotation class dev/kcoap/common/InternalKcoapApi : java/lang/annotation/Annotation {
 }
 
+public class dev/kcoap/common/KcoapException : java/lang/Exception {
+	protected fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+}
+
 public final class dev/kcoap/log/CompositeSink : dev/kcoap/log/LogSink {
 	public fun <init> (Ljava/util/List;)V
 	public fun write (Ldev/kcoap/log/LogRecord;)V

@@ -1,6 +1,7 @@
 package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.CoapResponse
+import dev.kcoap.common.KcoapException
 
 /**
  * A CoAP exchange that could not complete because of the peer, the network, message security or the endpoint
@@ -8,8 +9,9 @@ import dev.kcoap.coap.CoapResponse
  * that violates the protocol or could not be verified, a request that message security could not protect, a host
  * that could not be resolved, or an endpoint that is closed, has no transport for the peer, or whose transport
  * failed. [reason] says which; the reasons of one transport shape say so. This is the one exception type that
- * `CoapClient`, [CoapEndpoint] and `CoapServer` calls fail with at runtime; `IllegalArgumentException` and
- * `IllegalStateException` are kept for mistakes of the caller, such as a malformed URI string.
+ * `CoapClient`, [CoapEndpoint] and `CoapServer` calls fail with at runtime, a [KcoapException] like the
+ * exceptions of kcoap's other protocols; `IllegalArgumentException` and `IllegalStateException` are kept for
+ * mistakes of the caller, such as a malformed URI string.
  *
  * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses. The exception is a
  * protected request answered only by an error that message security could not verify, which ends with
@@ -25,7 +27,7 @@ public class CoapException(
     public val reason: Reason,
     cause: Throwable? = null,
     public val response: CoapResponse? = null,
-) : Exception(message, cause) {
+) : KcoapException(message, cause) {
 
     /**
      * Why the exchange failed.

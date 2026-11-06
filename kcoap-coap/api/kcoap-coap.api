@@ -432,7 +432,7 @@ public final class dev/kcoap/coap/stack/CoapEndpointConfigKt {
 	public static final fun CoapEndpointConfig (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/stack/CoapEndpointConfig;
 }
 
-public final class dev/kcoap/coap/stack/CoapException : java/lang/Exception {
+public final class dev/kcoap/coap/stack/CoapException : dev/kcoap/common/KcoapException {
 	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;)V
 	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getReason ()Ldev/kcoap/coap/stack/CoapException$Reason;

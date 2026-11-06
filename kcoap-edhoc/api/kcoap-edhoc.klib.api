@@ -451,7 +451,7 @@ final class dev.kcoap.edhoc/TrustedCredentials : dev.kcoap.edhoc/CredentialResol
     final suspend fun resolve(dev.kcoap.edhoc/CredentialIdentifier): kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential> // dev.kcoap.edhoc/TrustedCredentials.resolve|resolve(dev.kcoap.edhoc.CredentialIdentifier){}[0]
 }
 
-open class dev.kcoap.edhoc/EdhocException : kotlin/Exception { // dev.kcoap.edhoc/EdhocException|null[0]
+open class dev.kcoap.edhoc/EdhocException : dev.kcoap.common/KcoapException { // dev.kcoap.edhoc/EdhocException|null[0]
     constructor <init>(dev.kcoap.edhoc/EdhocError, kotlin/String = ..., kotlin/Throwable? = ...) // dev.kcoap.edhoc/EdhocException.<init>|<init>(dev.kcoap.edhoc.EdhocError;kotlin.String;kotlin.Throwable?){}[0]
 
     final val error // dev.kcoap.edhoc/EdhocException.error|{}error[0]
