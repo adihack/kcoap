@@ -812,7 +812,11 @@ public class CoapEndpoint private constructor(
         } finally {
             reservation?.release()
         }
-        if (taken) link.acceptResponse(message) else link.deferResponse(message)
+        if (taken) return link.acceptResponse(message)
+        // Only a Non-confirmable one can be left here: a Confirmable one was acknowledged above, and an ACK cannot
+        // be taken back, so its exchange must have taken it.
+        check(message.type != CoapMessageType.CON) { "A Confirmable response was acknowledged but not taken: $message" }
+        link.deferResponse(message)
     }
 
     /**
