@@ -1,9 +1,13 @@
 package dev.kcoap.coap
 
 import dev.kcoap.coap.client.CoapClientConfig
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.AccessPolicy
+import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.RequestCompleted
+import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -111,6 +115,46 @@ class RequestCompletedTest {
         assertEquals("/r", completed.resourcePath)
         assertNull(completed.responseCode, "rejected with a Reset, not answered")
         assertFalse(completed.isSuppressed)
+    }
+
+    @Test
+    fun rfc7252Section4_4AResponseABoundRefusedCompletesWithoutAResponse() = runTest {
+        val fixture = StackFixture(this)
+        val bounded = fixture.endpointConfig().toBuilder().apply { maxReservedMessageIdsPerPeer = 4 }.build()
+        val server = fixture.server(endpointConfig = bounded) { resource("r") { get { CoapResponse.content("ok") } } }
+        val client = fixture.client(CoapClientConfig { requestTimeout = 5.seconds })
+
+        // RFC 7252 §5.2.3: each response to a Non-confirmable request needs a Message ID of its own, which stays
+        // reserved for EXCHANGE_LIFETIME (§4.4); such responses get three quarters of the bound, here 3.
+        val answers = List(4) { runCatching { client.get(fixture.uri(server, "/r")) { nonConfirmable() }.code }.getOrNull() }
+
+        assertEquals(listOf(CoapCode.CONTENT, CoapCode.CONTENT, CoapCode.CONTENT, null), answers)
+        assertEquals(
+            listOf(CoapCode.CONTENT, CoapCode.CONTENT, CoapCode.CONTENT, null),
+            fixture.completed.map { it.responseCode },
+            "the refused response did not go out",
+        )
+        assertEquals("/r", fixture.completed.last().resourcePath)
+    }
+
+    @Test
+    fun aSecurityLayerThatFailsCompletesWith500AndTheOuterMethod() = runTest {
+        val fixture = StackFixture(this)
+        val failing = object : ServerMessageSecurity {
+            override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest =
+                error("context repository unavailable")
+        }
+        val server = fixture.server(CoapServerConfig(security = failing)) { resource("r") { post { CoapResponse.changed() } } }
+        val client = fixture.client()
+
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, client.post(fixture.uri(server, "/r"), "x".encodeToByteArray()).code)
+
+        val completed = fixture.completed.single()
+        assertEquals(CoapCode.POST, completed.method, "the method on the wire: nothing could read an inner one")
+        assertNull(completed.resourcePath)
+        assertEquals(CoapCode.INTERNAL_SERVER_ERROR, completed.responseCode)
+        assertNull(completed.securityIdentity)
+        assertTrue(fixture.events.none { it is EndpointEvent.SecurityRejected }, "a failure of this side, not a rejection")
     }
 
     @Test

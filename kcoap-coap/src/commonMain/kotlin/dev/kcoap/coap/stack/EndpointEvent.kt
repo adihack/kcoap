@@ -394,8 +394,9 @@ public sealed interface EndpointEvent {
      * Every field is bounded, fit for a metric's labels: [method] and [responseCode] are the inner codes, as the
      * resource saw them (the outer method on the wire for a request message security could not read), and
      * [resourcePath] is the path in the resource tree of the resource the request named, never the Uri-Path the
-     * client sent, and null when none exists (a 4.04) or message security rejected the request before its path
-     * could be read.
+     * client sent, and null when none exists (a 4.04), when message security rejected the request before its path
+     * could be read, or when it answered a verified request with a freshness challenge instead of passing it on
+     * (RFC 8613 Appendix B.1.2), which no resource saw.
      *
      * @property responseCode the code of the response the server sent, or with [isSuppressed] the one it left out
      *   because the client asked for no such response (No-Response, RFC 7967 §2). Null when the request got no

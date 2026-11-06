@@ -237,7 +237,9 @@ fun report(server: CoapServer) {
 - `RequestCompleted` comes once per request a server finished, Block1 and Q-Block1 blocks included, with the inner
   method and response code (also under OSCORE, whose outer codes are all an interceptor sees), the resource's path
   in the tree (null for a 4.04, never the client's Uri-Path, so it is safe as a metric label), whether No-Response
-  suppressed the answer, the OSCORE identity, and the duration.
+  suppressed the answer, the OSCORE identity, and the duration. The endpoint answers some requests before a server
+  sees them: duplicates, from its deduplication cache, and the 5.03 of an overload, which `LimitReached` with
+  `CONCURRENT_REQUESTS` counts.
 - `SecurityRejected` comes when message security stopped a request: `VERIFICATION_FAILED` (answered unprotected,
   RFC 8613 §8.2; under OSCORE the `error`'s cause is the `OscoreException`) or `FRESHNESS_CHALLENGE` (RFC 8613
   Appendix B.1.2).

@@ -382,7 +382,7 @@ own, emitted outside the locks:
 |---|---|
 | Messaging | `Retransmitted`, `TransmissionTimedOut`, `ResetReceived`, `DuplicateReceived`, `MalformedMessage`, `MessageRejected`, `SessionEnded`, `LimitReached`; on connections `ConnectionOpened`, `CsmReceived`, `ReleaseReceived`, `AbortReceived`, `AbortSent`, `ConnectionClosed` |
 | Client exchanges | `ResponseRejected` (a response that failed verification, or an unverified error), `QBlockFallback`; `QBlockRecovery` and `PartialBodyDropped`, also on a server |
-| Server | `RequestCompleted` (one per request: inner method and code, the resource's path in the tree, No-Response, the security identity, the duration), `SecurityRejected`, `ObserverAdded`, `ObserverRemoved` |
+| Server | `RequestCompleted` (one per request the server processes: inner method and code, the resource's path in the tree, No-Response, the security identity, the duration), `SecurityRejected`, `ObserverAdded`, `ObserverRemoved` |
 
 Every reason a metric would count by is a bounded enum, with an optional free-text `detail` for a log:
 `MalformedMessage.Reason`, `MessageRejected.Reason`, `ResponseRejected.Reason`, `SecurityRejected.Reason`,

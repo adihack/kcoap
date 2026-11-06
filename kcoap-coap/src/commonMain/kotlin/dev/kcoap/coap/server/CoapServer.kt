@@ -66,10 +66,13 @@ import kotlinx.coroutines.SupervisorJob
  * that observer, unless a bound of the endpoint refused it (RFC 7252 §11.3): then the latest state goes later
  * (RFC 7641 §4.5). When even the 5.00 cannot be sent, the failure is logged.
  *
- * Every request ends in an [EndpointEvent.RequestCompleted] to the endpoint's event listener, with its inner method
- * and response code, the resource it named and how long it took, and one that message security stopped also in an
- * [EndpointEvent.SecurityRejected]. What a peer sent wrong is logged once, at DEBUG and without a stack trace;
- * what the server could not handle, such as a failing handler, at ERROR.
+ * Every request the server processes ends in an [EndpointEvent.RequestCompleted] to the endpoint's event listener,
+ * with its inner method and response code, the resource it named and how long it took, and one that message
+ * security stopped also in an [EndpointEvent.SecurityRejected]. Requests the endpoint answers before they reach the
+ * server have none: a duplicate answered from the deduplication cache (RFC 7252 §4.5), one after [close], and one
+ * refused with 5.03 because [CoapEndpointConfig.maxConcurrentRequests] handlers run, which
+ * [EndpointEvent.LimitReached] with `CONCURRENT_REQUESTS` counts instead. What a peer sent wrong is logged once, at
+ * DEBUG and without a stack trace; what the server could not handle, such as a failing handler, at ERROR.
  *
  * The server is safe to use from any number of coroutines. Its handlers run on the endpoint's scope, one
  * coroutine per request, and [close] cancels those still running.
