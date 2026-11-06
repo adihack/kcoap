@@ -176,11 +176,13 @@ internal class ClientExchange(
      * retransmission (RFC 7252 §5.2.2: it serves as an acknowledgement) and frees a Non-confirmable request's
      * NSTART slot; one that failed verification does neither.
      *
+     * An inbox exchange queues it in the room [reservation] holds, which the endpoint took before verifying a
+     * Confirmable response ([ExchangeInbox.tryReserve]); the caller releases a reservation this did not use.
      * Returns false only when the [ExchangeInbox] of an inbox exchange had no room for it, so it was not taken:
      * the endpoint then leaves a Confirmable one unacknowledged, for its sender to send again (RFC 7252 §4.2).
      * True otherwise, also when the exchange is closed and drops it.
      */
-    suspend fun accept(response: CoapMessage): Boolean {
+    suspend fun accept(response: CoapMessage, reservation: ExchangeInbox.Reservation? = null): Boolean {
         settleRequest()
         if (!isOpen) return true
         log.debug { "Response ${response.code}" }
@@ -192,7 +194,7 @@ internal class ClientExchange(
                 responses?.close()
             }
             ResponseMode.Stream -> responses?.trySend(response)
-            is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Response(this, response))
+            is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Response(this, response), reservation)
         }
         return true
     }
@@ -205,12 +207,13 @@ internal class ClientExchange(
      * [CoapException.Reason.UNVERIFIED_RESPONSE], which carries it, and so stops retransmitting its request;
      * the caller then gets a distinct failure instead of waiting for its timeout. An inbox exchange reports it.
      *
-     * Returns false only when the [ExchangeInbox] of an inbox exchange had no room for it, as [accept] does.
+     * An inbox exchange queues it in the room [reservation] holds, and returns false only when its [ExchangeInbox]
+     * had no room for it, as [accept] does.
      */
-    suspend fun acceptUnverified(response: CoapMessage, reason: String): Boolean {
+    suspend fun acceptUnverified(response: CoapMessage, reason: String, reservation: ExchangeInbox.Reservation? = null): Boolean {
         if (!isOpen) return true
         when {
-            mode is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Unverified(this, response))
+            mode is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Unverified(this, response), reservation)
             mode == ResponseMode.Stream && hasVerifiedResponse -> log.warn { "Dropped an unverified ${response.code} to an observation: $reason" }
             else -> {
                 log.warn { "Unverified ${response.code} to a protected request: $reason" }
@@ -255,9 +258,9 @@ internal class ClientExchange(
         }
     }
 
-    /** Queues [event] in [inbox]; false when the inbox is full and the event was not taken. */
-    private fun report(inbox: ExchangeInbox, event: ExchangeEvent): Boolean {
-        val queued = inbox.offer(event)
+    /** Queues [event] in [inbox], in the room [reservation] holds if any; false when it did not fit and was not taken. */
+    private fun report(inbox: ExchangeInbox, event: ExchangeEvent, reservation: ExchangeInbox.Reservation? = null): Boolean {
+        val queued = inbox.offer(event, reservation)
         if (!queued) log.debug { "The body's inbox is full; $event was not taken" }
         return queued
     }

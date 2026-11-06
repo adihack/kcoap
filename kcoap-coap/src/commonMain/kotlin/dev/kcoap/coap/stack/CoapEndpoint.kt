@@ -2,6 +2,7 @@ package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
+import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
@@ -659,8 +660,11 @@ public class CoapEndpoint private constructor(
      *
      * A Confirmable response is acknowledged only once its exchange took it. An ACK tells the sender that the
      * message arrived, so it is never sent again (RFC 7252 §4.2); one that the full [ExchangeInbox] of a Q-Block
-     * body could not take is therefore left unacknowledged ([PeerLink.deferResponse]), and its retransmission
-     * after ACK_TIMEOUT is delivered again. A Non-confirmable one that does not fit counts as lost.
+     * body has no room for is therefore left unacknowledged ([PeerLink.deferResponse]), and its retransmission
+     * after ACK_TIMEOUT is delivered again. Whether it fits is decided before it is verified, with an
+     * [ExchangeInbox.Reservation], so the security layer records nothing for it: OSCORE would otherwise have its
+     * Partial IV in the replay window and refuse the retransmission, which carries the same one (RFC 8613 §7.4).
+     * A Non-confirmable one that does not fit counts as lost.
      */
     internal suspend fun onResponse(link: PeerLink, message: CoapMessage) {
         val exchange = lock.withLock { exchanges[ExchangeKey(link.peer, message.tokenHex)] }?.takeIf { it.link == link }
@@ -672,26 +676,39 @@ public class CoapEndpoint private constructor(
         }
         // RFC 8323 §3.1: on a connection there is nothing to answer at the messaging layer.
         if (!link.capabilities.hasMessageTypes) return exchange.onResponse(message)
+        // A Confirmable response that the body's inbox has no room for is left for its retransmission before
+        // anything verifies it, so the security layer records nothing for it (RFC 8613 §7.4).
+        val inbox = (exchange.mode as? ResponseMode.Inbox)?.inbox?.takeIf { message.type == CoapMessageType.CON }
+        val reservation = inbox?.let {
+            it.tryReserve() ?: return link.deferResponse(message)
+        }
         // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
         // options, which only the verified response shows; so it is answered after both, and an accepted one
         // only once it was handed on: if it was not taken, it is left for its sender to send again (§4.2). No
         // timer answers it meanwhile (UdpMessaging), so every way out of here answers or defers it.
-        val inspection = try {
-            exchange.inspect(message)
-        } catch (e: Throwable) {
-            // An unexpected failure of the message security: the response is dropped, as one that failed
-            // verification, but acknowledged, so the peer does not retransmit it until it gives up.
-            link.acceptResponse(message)
-            throw e
-        }
-        val taken = when (inspection) {
-            is ClientExchange.Inspection.Accepted -> exchange.accept(inspection.response)
-            is ClientExchange.Inspection.Rejected -> {
-                link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
-                return exchange.refuse(inspection.cause)
+        val taken = try {
+            val inspection = try {
+                exchange.inspect(message)
+            } catch (e: Throwable) {
+                // An unexpected failure of the message security: the response is dropped, as one that failed
+                // verification, but acknowledged, so the peer does not retransmit it until it gives up.
+                link.acceptResponse(message)
+                throw e
             }
-            is ClientExchange.Inspection.Unverified -> exchange.acceptUnverified(inspection.response, inspection.reason)
-            ClientExchange.Inspection.Dropped -> true
+            when (inspection) {
+                is ClientExchange.Inspection.Accepted -> exchange.accept(inspection.response, reservation)
+                is ClientExchange.Inspection.Rejected -> {
+                    // The exchange ends, and its last event takes the room back.
+                    reservation?.release()
+                    link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
+                    exchange.refuse(inspection.cause)
+                    return
+                }
+                is ClientExchange.Inspection.Unverified -> exchange.acceptUnverified(inspection.response, inspection.reason, reservation)
+                ClientExchange.Inspection.Dropped -> true
+            }
+        } finally {
+            reservation?.release()
         }
         if (taken) link.acceptResponse(message) else link.deferResponse(message)
     }

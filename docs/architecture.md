@@ -176,7 +176,10 @@ Resets, timeouts and failures to a bounded inbox that all requests of one Q-Bloc
 §4.3, §4.4); an event that does not fit is not taken, so the receive loop never waits for a slow driver. A
 Non-confirmable response that does not fit counts as lost; a Confirmable one is left unacknowledged and
 forgotten by deduplication, since the sender never sends an acknowledged message again (RFC 7252 §4.2), and
-its retransmission is delivered once the driver made room. A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
+its retransmission is delivered once the driver made room. Whether a Confirmable response fits is decided
+before it is verified, by reserving room in the inbox: OSCORE records the Partial IV of every response it
+verifies, and the retransmission carries the same one, so it would otherwise be refused as a replay (RFC 8613
+§7.4). A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
 released when the body ends or at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (§7.2); its blocks take no
 slot of their own. A Confirmable body takes a slot per block instead, so NSTART runs it in lock-step.
 

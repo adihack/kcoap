@@ -98,11 +98,12 @@ internal interface PeerLink {
     suspend fun acceptResponse(response: CoapMessage)
 
     /**
-     * A response the exchange layer matched but could not take now: the [ExchangeInbox] of its body was full. A
-     * Confirmable one gets no ACK, which would tell the sender that it arrived (RFC 7252 §4.2), and deduplication
-     * forgets it (§4.5), so the retransmission its sender sends after ACK_TIMEOUT is delivered as new. A
-     * Non-confirmable one counts as lost. Nothing on a connection, which delivers every response once and whose
-     * body inbox has room for every block (RFC 9177 Appendix B, [ExchangeInbox.forReliableBody]).
+     * A response the exchange layer matched but could not take now: the [ExchangeInbox] of its body was full, which
+     * for a Confirmable one is found before it is verified ([CoapEndpoint.onResponse]). A Confirmable one gets no
+     * ACK, which would tell the sender that it arrived (RFC 7252 §4.2), and deduplication forgets it (§4.5), so the
+     * retransmission its sender sends after ACK_TIMEOUT is delivered as new. A Non-confirmable one counts as lost.
+     * Nothing on a connection, which delivers every response once and whose body inbox has room for every block
+     * (RFC 9177 Appendix B, [ExchangeInbox.forReliableBody]).
      */
     suspend fun deferResponse(response: CoapMessage)
 

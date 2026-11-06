@@ -611,13 +611,15 @@ Build governance (WP-C1):
 
 ### Fixed
 
-- A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at
-  all. The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind
-  the receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block
-  again (RFC 7252 §4.2). A Confirmable response that the body cannot take now stays unacknowledged, and its
-  retransmission is delivered. A Confirmable body also asks for its next missing blocks as soon as the last
-  request for them is answered, rather than once per MAX_TRANSMIT_SPAN (45 s), and a notification body that
-  the client asks for again whole keeps the token the rest of its blocks come on (RFC 9177 §4.4).
+- A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at all.
+  The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind the
+  receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block again
+  (RFC 7252 §4.2). A Confirmable response that the body cannot take now stays unacknowledged, and its
+  retransmission is delivered, also under OSCORE: the client decides whether the block fits before it verifies
+  it, so the Partial IV of the retransmission is not refused as a replay (RFC 8613 §7.4). A Confirmable body also
+  asks for its next missing blocks as soon as the last request for them is answered, rather than once per
+  MAX_TRANSMIT_SPAN (45 s), and a notification body that the client asks for again whole keeps the token the
+  rest of its blocks come on (RFC 9177 §4.4).
 - An Observe server could miss a change made while the handler of a registration ran, so the client kept the
   older state until the next change, and it could send the same state twice when several threads changed the
   resource at once. Changes are now counted per resource and read before every run of the handler (RFC 7641

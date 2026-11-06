@@ -8,6 +8,10 @@ import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.ReliableFixture
 import dev.kcoap.coap.StackFixture
 import dev.kcoap.coap.codec.ReliableMessageCodec
+import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.testkit.InMemoryByteStream
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
@@ -20,6 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -46,6 +51,26 @@ class ExchangeModesTest {
 
     private fun StackFixture.sentBy(endpoint: CoapEndpoint, type: CoapMessageType): List<CoapMessage> =
         sentBy(endpoint).filter { it.type == type }
+
+    /**
+     * Message security that sends requests as they are and hands on each response as [verify] makes it, once per
+     * Message ID: like the OSCORE replay window, which records the Partial IV of every response it verifies and
+     * refuses one it received before (RFC 8613 §7.4), it refuses a Message ID it saw before as a replay. The
+     * Message IDs it took are in [verified].
+     */
+    private class ReplayRefusing(private val verify: (CoapMessage) -> ResponseVerification) : ClientMessageSecurity {
+        val verified = mutableListOf<Int>()
+
+        override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
+            override val message: CoapMessage = request
+
+            override suspend fun unprotectResponse(response: CoapMessage): ResponseVerification {
+                if (response.messageId in verified) throw MessageSecurityException("Replayed or too old response")
+                verified += response.messageId
+                return verify(response)
+            }
+        }
+    }
 
     // ---------------------------------------------------------------- response modes
 
@@ -296,6 +321,111 @@ class ExchangeModesTest {
         assertEquals(responses.map { it.messageId }, acknowledged())
         assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
         assertTrue(exchange.isOpen)
+        exchange.cancel()
+    }
+
+    /**
+     * RFC 8613 §7.4: verifying a protected response records its Partial IV, and one received before is refused as
+     * a replay. A Confirmable response the inbox has no room for comes again with the same Partial IV, so whether
+     * it fits is decided before it is verified: the retransmission is then verified for the first time, delivered
+     * and acknowledged, instead of being dropped as a replay.
+     */
+    @Test
+    fun rfc8613Section7_4AProtectedConfirmableResponseThatDoesNotFitTheInboxIsNotVerifiedUntilItComesAgain() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox(capacity = 2)
+        val security = ReplayRefusing { ResponseVerification.Verified(it) }
+        fun acknowledged() = fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId }
+        fun drain() = generateSequence { inbox.tryReceive() }.map { (it as ExchangeEvent.Response).message.payloadAsText() }.toList()
+
+        val exchange = endpoint.openExchange(peer.address, get(), false, security, ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+        val responses = List(4) { peer.response(request, CoapMessageType.CON, "block $it") }
+        responses.forEach { peer.send(it) }
+        delay(1.seconds)
+
+        assertEquals(responses.take(2).map { it.messageId }, security.verified, "what does not fit is not verified")
+        assertEquals(responses.take(2).map { it.messageId }, acknowledged())
+        assertEquals(2, inbox.lost)
+        assertEquals(listOf("block 0", "block 1"), drain())
+        responses.drop(2).forEach { peer.send(it) }
+        delay(1.seconds)
+
+        assertEquals(listOf("block 2", "block 3"), drain(), "the retransmissions are verified once and delivered")
+        assertEquals(responses.map { it.messageId }, security.verified)
+        assertEquals(responses.map { it.messageId }, acknowledged())
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+        assertTrue(exchange.isOpen)
+        exchange.cancel()
+    }
+
+    /**
+     * The same for a response the security layer hands on unverified (RFC 8613 §8.2, ADR 0008): one that does not
+     * fit the inbox is not acknowledged, and its retransmission is reported as [ExchangeEvent.Unverified] and
+     * acknowledged once the driver made room.
+     */
+    @Test
+    fun rfc7252Section4_2AnUnverifiedConfirmableResponseThatDoesNotFitTheInboxIsNotAcknowledgedAndComesAgain() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox(capacity = 1)
+        val security = ReplayRefusing { ResponseVerification.Unverified(it, "sent without OSCORE") }
+        fun acknowledged() = fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId }
+
+        val exchange = endpoint.openExchange(peer.address, get(), false, security, ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+        val first = peer.response(request, CoapMessageType.CON, "") { code = CoapCode.UNAUTHORIZED }
+        val second = peer.response(request, CoapMessageType.CON, "") { code = CoapCode.BAD_OPTION }
+        peer.send(first)
+        peer.send(second)
+        delay(1.seconds)
+
+        assertEquals(listOf(first.messageId), acknowledged(), "only what the inbox took is acknowledged")
+        assertEquals(CoapCode.UNAUTHORIZED, assertIs<ExchangeEvent.Unverified>(inbox.tryReceive()).message.code)
+        assertNull(inbox.tryReceive())
+        peer.send(second)
+        delay(1.seconds)
+
+        assertEquals(CoapCode.BAD_OPTION, assertIs<ExchangeEvent.Unverified>(inbox.tryReceive()).message.code)
+        assertEquals(listOf(first.messageId, second.messageId), acknowledged())
+        assertEquals(listOf(first.messageId, second.messageId), security.verified)
+        assertTrue(exchange.isOpen, "an unverified response does not end an inbox exchange")
+        exchange.cancel()
+    }
+
+    @Test
+    fun aReservationHoldsRoomInTheInboxUntilAnOfferUsesItOrItIsReleased() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox(capacity = 2)
+        val exchange = endpoint.openExchange(peer.address, get(), false, null, ResponseMode.Inbox(inbox))
+        val event = ExchangeEvent.Acknowledged(exchange)
+
+        val held = assertNotNull(inbox.tryReserve())
+        val used = assertNotNull(inbox.tryReserve())
+        assertNull(inbox.tryReserve(), "two reservations fill an inbox of two")
+        assertFalse(inbox.offer(event), "an offer without a reservation finds no room")
+        assertEquals(2, inbox.lost)
+        assertTrue(inbox.offer(event, used))
+        assertTrue(used.toString().startsWith("Reservation(used"))
+        used.release()
+        assertNull(inbox.tryReserve(), "releasing a used reservation gives nothing back")
+        assertFalse(inbox.offer(event, used), "a reservation is used once")
+
+        assertSame(event, inbox.tryReceive())
+        assertTrue(inbox.offer(event), "a received event frees its room")
+        assertFalse(inbox.offer(event))
+        held.release()
+        held.release()
+        assertTrue(inbox.offer(event), "a released reservation frees its room, once")
+        assertFalse(inbox.offer(event))
+        val other = assertNotNull(ExchangeInbox(capacity = 1).tryReserve())
+        assertFailsWith<IllegalArgumentException> { inbox.offer(event, other) }
+        assertEquals(6, inbox.lost)
         exchange.cancel()
     }
 
