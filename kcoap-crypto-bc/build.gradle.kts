@@ -21,3 +21,15 @@ kotlin {
         }
     }
 }
+
+// The conformance suite prints a capability report (kcoap-crypto-testsuite). Its lines go to the build log, so a
+// CI log shows what the backend runs.
+tasks.withType<AbstractTestTask>().configureEach {
+    val target = name
+    val log = logger
+    addTestOutputListener { _, output ->
+        output.message.lineSequence()
+            .filter { it.startsWith("kcoap-crypto capabilities") }
+            .forEach { log.lifecycle("[$target] $it") }
+    }
+}

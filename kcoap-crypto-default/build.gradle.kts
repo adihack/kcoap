@@ -21,10 +21,24 @@ kotlin {
             implementation(project(":kcoap-common"))
             // Stress.run and Stress.race for the memo under real concurrency.
             implementation(project(":kcoap-testkit"))
+            // The conformance suite: the capability contract on every target, and its report.
+            implementation(project(":kcoap-crypto-testsuite"))
         }
         jvmTest.dependencies {
             // Independent CCM/GCM/ChaCha20 implementation for differential tests.
             implementation(libs.bouncycastle.prov)
         }
+    }
+}
+
+// The conformance suite prints a capability report on every target (kcoap-crypto-testsuite). Its lines go to
+// the build log, so a CI log shows what the backend runs on each platform.
+tasks.withType<AbstractTestTask>().configureEach {
+    val target = name
+    val log = logger
+    addTestOutputListener { _, output ->
+        output.message.lineSequence()
+            .filter { it.startsWith("kcoap-crypto capabilities") }
+            .forEach { log.lifecycle("[$target] $it") }
     }
 }
