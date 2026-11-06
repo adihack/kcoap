@@ -128,7 +128,12 @@ class BrowserTopologyInteropTest {
         // Q-Block on (PROBE), as an application might set it: over WebSockets and under OSCORE the client still keeps
         // it off by default, so protected bodies go in inner RFC 7959 blocks, which an OSCORE-unaware proxy passes on.
         val qBlock = QBlockClientConfig(QBlockMode.PROBE)
-        val browser = webSocketClient(CoapClientConfig(security = recording, qBlock = qBlock))
+        val browser = webSocketClient(
+            CoapClientConfig {
+                security = recording
+                this.qBlock = qBlock
+            },
+        )
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -187,10 +192,10 @@ class BrowserTopologyInteropTest {
 
             // Another client that OSCORE authenticates, but whose identity is not admitted: a protected 4.03.
             val otherContext = clientContext(sender = OTHER_ID, recipient = DEVICE_ID_FOR_OTHER)
-            val other = webSocketClient(CoapClientConfig(security = OscoreClient(otherContext)))
+            val other = webSocketClient(CoapClientConfig { security = OscoreClient(otherContext) })
             assertEquals(CoapCode.FORBIDDEN, other.request(route.viaProxyScheme(get("lights"))).code)
             // A client without OSCORE: the unprotected 4.01 of a server with message security (ADR 0008).
-            val plain = webSocketClient(CoapClientConfig())
+            val plain = webSocketClient(CoapClientConfig.Default)
             assertEquals(CoapCode.UNAUTHORIZED, plain.request(route.viaProxyScheme(get("lights"))).code)
             assertEquals(1, start.lights.size, "the handler ran for the admitted client only")
         }
@@ -204,7 +209,7 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val security = PeerSecurity()
-        val browser = webSocketClient(CoapClientConfig(security = security))
+        val browser = webSocketClient(CoapClientConfig { this.security = security })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -255,7 +260,7 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val security = PeerSecurity()
-        val browser = webSocketClient(CoapClientConfig(security = security))
+        val browser = webSocketClient(CoapClientConfig { this.security = security })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -297,7 +302,7 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val recording = RecordingClientSecurity(OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID)))
-        val browser = webSocketClient(CoapClientConfig(security = recording))
+        val browser = webSocketClient(CoapClientConfig { security = recording })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -343,7 +348,7 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val security = PeerSecurity()
-        val browser = webSocketClient(CoapClientConfig(security = security))
+        val browser = webSocketClient(CoapClientConfig { this.security = security })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -385,7 +390,7 @@ class BrowserTopologyInteropTest {
         val start = startDevice(peers, responderTrusts = TrustedCredentials(crypto, emptyList()))
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
-        val browser = webSocketClient(CoapClientConfig(security = PeerSecurity()))
+        val browser = webSocketClient(CoapClientConfig { security = PeerSecurity() })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -416,7 +421,7 @@ class BrowserTopologyInteropTest {
         val named = startDevice(peers, port = namedPort, greeting = "named")
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
-        val browser = webSocketClient(CoapClientConfig())
+        val browser = webSocketClient(CoapClientConfig.Default)
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -453,7 +458,7 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val recording = RecordingClientSecurity(OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID)))
-        val browser = webSocketClient(CoapClientConfig(security = recording))
+        val browser = webSocketClient(CoapClientConfig { security = recording })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -490,7 +495,12 @@ class BrowserTopologyInteropTest {
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
         val recording = RecordingClientSecurity(OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID)))
-        val browser = webSocketClient(CoapClientConfig(security = recording, requestTimeout = 3.seconds))
+        val browser = webSocketClient(
+            CoapClientConfig {
+                security = recording
+                requestTimeout = 3.seconds
+            },
+        )
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
@@ -525,9 +535,8 @@ class BrowserTopologyInteropTest {
         )
         val proxy = startProxy()
         val route = ProxyRoute(proxy.webSocketUri)
-        val browser = webSocketClient(
-            CoapClientConfig(security = OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID))),
-        )
+        val security = OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID))
+        val browser = webSocketClient(CoapClientConfig { this.security = security })
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
