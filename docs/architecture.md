@@ -401,7 +401,13 @@ The four operations of the message-security SPI, OSCORE's protection and verific
 listed, so they end a Swift process as a failed precondition does. A Swift caller catches the failure as an
 `NSError` of domain `KotlinException` and finds the Kotlin exception in its `userInfo` under
 `"KotlinException"`; kcoap-swift-smoke's script, run by the macOS CI job, checks a request timeout and a
-malformed URI this way. On the JVM the same annotation adds a `throws` clause, which only Java callers see.
+malformed URI this way. On the JVM the same annotation adds a `throws` clause, which only Java callers see and
+which kcoap-edhoc-oscore's `ThrowsDeclarationsTest` reads back to check every list above. The failures of what the
+application plugs in reach these lists through the entry point that calls it: a resolver's (a platform's DNS
+exception, its own timeout) through `CoapClient` and `PeerSecurity.install` as `CoapException(UNRESOLVED_HOST)`, a
+sequence-number store's or crypto backend's through `EdhocClientHandshake` and `EdhocServer` as an `EdhocException`.
+`SecurityContext.derive`, called directly, passes them unchanged, so a Swift caller gives it a store that does not
+throw.
 
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also

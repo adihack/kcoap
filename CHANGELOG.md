@@ -355,7 +355,26 @@ One exception root, and `@Throws` for Swift (WP-D2):
   An implementation of the message-security SPI that declares no `@Throws`, as kcoap's own do, inherits the
   SPI's list; Kotlin/Native accepts an override with a `@Throws` of its own only when it names the same
   exceptions, `MessageSecurityException` and `CancellationException`. On the JVM the annotation adds `throws`
-  clauses to these methods, which only Java code sees.
+  clauses to these methods, which only Java code sees, and which `ThrowsDeclarationsTest` (kcoap-edhoc-oscore)
+  reads back to check every list.
+- **`EdhocClientHandshake.run` and `runCombined` fail with an `EdhocException` when the OSCORE context cannot be
+  derived** (WP-D2): an exception of the `sequenceStore` or of the crypto backend in that last step, or a
+  cancellation of their own while the caller is still active, used to pass through unchanged, which `@Throws` does
+  not list, so a Swift caller crashed. It is now an `EdhocException` with error code 1, no error message to send and
+  that exception as `cause`, as `EdhocServer` already reported such a failure on its side; the session is still
+  wiped. `SecurityContext.derive` and `EdhocSession.oscoreContext`, called directly, still pass these exceptions
+  unchanged. `PeerSecurity.install(client, uri, protection)` likewise reports a resolver's runtime failure, such as a
+  platform's DNS exception or the resolver's own timeout, as `CoapException(UNRESOLVED_HOST)` with it as cause, as the
+  client's requests do, instead of passing it through. *Migration:* code that caught the store's own exception from
+  a handshake catches `EdhocException` and reads its `cause`:
+
+  ```kotlin
+  // Before
+  try { handshake.run() } catch (e: IOException) { storeUnavailable(e) }
+
+  // After
+  try { handshake.run() } catch (e: EdhocException) { (e.cause as? IOException)?.let(::storeUnavailable) ?: throw e }
+  ```
 
 Two configuration builders and explicit `Endpoint` classes (WP-D1):
 

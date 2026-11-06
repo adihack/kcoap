@@ -873,8 +873,9 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 
 > **Amendment (D2).** Done as listed, and PL-3 of [plan-qblock-and-platforms.md](plan-qblock-and-platforms.md)
 > with it. Where the tree or the toolchain asked for more:
-> - **The root.** `KcoapException` (kcoap-common) is `open` with a `protected` constructor, so only kcoap's modules
->   create subtypes. `CoapException`, `OscoreException`, `EdhocException` (and with it `EdhocPeerErrorException`
+> - **The root.** `KcoapException` (kcoap-common) is `open` with a `protected` constructor for kcoap's protocol
+>   modules; applications should not subclass it, so that catching `KcoapException` means a kcoap failure, but
+>   nothing enforces that. `CoapException`, `OscoreException`, `EdhocException` (and with it `EdhocPeerErrorException`
 >   and `EdhocTransferException`), `CborException`, which COSE throws too, and `CertificateFormatException` extend
 >   it, with their reasons, fields and messages unchanged. `ErrorModelTest` (kcoap-edhoc-oscore, which sees every
 >   module of the table) asserts each §3.6 type is a `KcoapException` and each SPI signal is not.
@@ -887,7 +888,16 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 >   `EdhocSession.oscoreContext` (the EDHOC form of `derive`). Not annotated: the `close()` functions and
 >   `EdhocServer.handle`, which throw only a cancellation, and `observe`, which returns a `Flow`.
 >   `SecurityContext.derive` lists the root as planned, but what it documents (an `IllegalArgumentException`, the
->   store's and the backend's exceptions) is not a `KcoapException`, so from Swift those still end the process.
+>   store's and the backend's exceptions) is not a `KcoapException`, so from Swift those still end the process when
+>   it is called directly. `EdhocClientHandshake.run`/`runCombined` translate them into an `EdhocException` with
+>   error code 1 and the failure as cause, as `EdhocServer` already did, so the handshake does not inherit the gap.
+> - **Plugged-in failures.** `PeerSecurity.install(client, uri, protection)` resolves through the client's
+>   translation (`resolvePeer`, `@InternalKcoapApi` in kcoap-coap, which `CoapClient` uses too), so a resolver's
+>   runtime failure, a platform DNS exception or its own `withTimeout` included, is `CoapException(UNRESOLVED_HOST)`
+>   there as for the requests.
+> - **Tests.** `ThrowsDeclarationsTest` (kcoap-edhoc-oscore, JVM) reads every `@Throws` list back from the class
+>   files, where the common annotation writes it as a `throws` clause, so a lost annotation or a new overload
+>   without one fails on Linux; the Swift script remains the only check of the Apple side.
 > - **Caller mistakes** stay unlisted everywhere but `CoapUri.parse`, as §3.6 has it: the `String` overloads of
 >   `CoapClient` end a Swift process on a malformed URI, so the KDoc tells Swift callers to parse first.
 > - **The smoke module** applies `kcoap.unpublished` with the Kotlin plugin directly, since no tier covers the
