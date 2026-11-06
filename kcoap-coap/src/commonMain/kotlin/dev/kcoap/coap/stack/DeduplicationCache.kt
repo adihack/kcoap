@@ -81,7 +81,7 @@ internal class DeduplicationCache(
      * Remembers the message with [key] that arrived at [now] as [type]. A Non-confirmable request with an
      * [idempotent] method is repeatable at once; a Confirmable one once it is answered or acknowledged.
      */
-    fun add(key: MessageKey, type: CoapMessageType, now: Duration, idempotent: Boolean = false): InboundEntry {
+    fun add(key: MessageKey, type: CoapMessageType, now: Duration, idempotent: Boolean): InboundEntry {
         val confirmable = type == CoapMessageType.CON
         val entry = InboundEntry(key, type, now + if (confirmable) exchangeLifetime else nonLifetime, idempotent)
         entries.remove(key)?.let(::unlink)
@@ -124,9 +124,6 @@ internal class DeduplicationCache(
     }
 
     val size: Int get() = entries.size
-
-    /** Entries of [peer], for tests. */
-    fun sizeOf(peer: Endpoint): Int = peers[peer]?.count ?: 0
 
     /** Repeatable entries, for tests. */
     val repeatableCount: Int get() = repeatable.size
@@ -183,9 +180,6 @@ internal class InboundEntry(
     /** Its place among the repeatable entries of all peers, and of its peer; null while it must be kept. */
     internal var repeatableNode: LinkedChain.Node<InboundEntry>? = null
     internal var peerRepeatableNode: LinkedChain.Node<InboundEntry>? = null
-
-    /** Whether the cache may forget it for room ([DeduplicationCache.markRepeatable]). */
-    val isRepeatable: Boolean get() = repeatableNode != null
 
     enum class State {
         /** Delivered upwards; nothing sent yet. */
