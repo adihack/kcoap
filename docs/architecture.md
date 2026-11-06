@@ -256,15 +256,18 @@ observers; a request on a connection whose handler it cancelled before the answe
 
 **Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
 answering spoofed traffic turns a server into an amplifier against the address it names. Everything a
-peer can make the endpoint keep or do is therefore bounded, with defaults sized for servers. At a bound
-the endpoint refuses only the extra work, with an answer at most a few bytes larger than what it
-received (a refusal's Max-Age), keeps serving what it has, and reports `EndpointEvent.LimitReached`:
+peer can make the endpoint keep or do is therefore bounded, in total and per peer, with defaults sized for
+servers. At a bound the endpoint first forgets what the RFCs let it forget, then refuses only the extra
+work, with an answer at most a few bytes larger than what it received (a refusal's Max-Age), keeps serving
+what it has, and reports what it refused as `EndpointEvent.LimitReached`:
 
 | Bound | Default | Beyond it |
 |---|---|---|
-| `CoapEndpointConfig.maxDeduplicationEntries` | 50 000 | a new message is dropped without state or answer; duplicates are still answered (§4.5) |
+| `CoapEndpointConfig.maxDeduplicationEntries`, `maxDeduplicationEntriesPerPeer` | 50 000, 10 000 | the oldest entry §4.5 lets the endpoint process again (an idempotent request once answered, a message answered with a Reset, a request the server refused before anything acted on it) makes room; otherwise the new message is dropped without state or answer. Three quarters at most hold entries that must be kept, so a POST flood never keeps a GET out |
+| `CoapEndpointConfig.maxReservedMessageIds`, `maxReservedMessageIdsPerPeer` | 262 144, 65 536 | a message that needs a new Message ID (a request, a separate response, a notification) is refused: §4.4 forbids reusing one early. Piggybacked responses need none |
 | `CoapEndpointConfig.maxConcurrentRequests` | 256 | a CON gets a piggybacked 5.03 with Max-Age, a NON is dropped, a connection gets 5.03 |
 | `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response or notification queued behind NSTART is not sent |
+| `CoapEndpointConfig.maxExchanges` | 16 384 | the oldest Non-confirmable message kept only for a Reset is forgotten, then the oldest Confirmable one still unacknowledged after a retransmission is given up; otherwise as `maxExchangesPerPeer` |
 | `CoapServerConfig.maxObservers`, `maxObserversPerPeer`, `maxObserversPerResource` | 10 000, 32, 1 000 | the registration is served without Observe (RFC 7641 §4.1); re-registrations do not count again |
 | `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
 | `ReliableTransportConfig.maxConnections` | 1 024 | an accepted connection beyond it, opened and accepted ones together, is closed at once |
@@ -300,9 +303,9 @@ the endpoint scope's dispatcher, so the time source must advance with that dispa
 `TimeSource.Monotonic` with a real dispatcher, and under `runTest` `testScheduler.timeSource`, with which
 a 247-second lifetime passes in an instant. The endpoint warns once when it sees the two disagree.
 Request timeouts wait on the same dispatcher clock. Retransmission jitter and the first Message ID come
-from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG, with per-session
-sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per endpoint unless the configuration
-names one.
+from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG, with
+sequence numbers from zero on each DTLS session and TLS connection (RFC 9175 §4.2), one generator per
+endpoint unless the configuration names one.
 
 **Randomness.** Two sources, by layer, and no public `SecureRandom` in kcoap-common:
 
@@ -775,7 +778,9 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
   keeps a client on the same socket.
 - **State keyed by security context, not by address**: OSCORE context, or DTLS session and CID.
   Combined with a shared store this survives NAT rebinding and node changes.
-- Rate limiting (RFC 8516 Too Many Requests) and amplification mitigation (RFC 9175 Echo).
+- Rate limiting by the application: `CoapResponse.tooManyRequests` and the client's `RetryAfter` are
+  built (RFC 8516); a per-client limiter in the server is not, since RFC 8516 §3 warns that per-client
+  state can add to the load. Amplification mitigation (RFC 9175 Echo) is built.
 
 ## Extension points
 

@@ -119,7 +119,7 @@ host name given to `EndpointResolver.Default`.
 | `TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET` | The peer did not acknowledge, did not answer in time, or refused | Retry later; check the address |
 | `SESSION_ENDED`, `CONNECTION_CLOSED` | The DTLS session or the connection ended | The next request opens a new one |
 | `BAD_RESPONSE`, `BLOCKWISE_FAILED` | The response broke the protocol, or a body could not be assembled | Report it; retrying rarely helps |
-| `MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED` | A size or per-peer limit was reached | Smaller bodies, fewer requests in flight |
+| `MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED` | A size limit, or a bound on exchanges or Message IDs (see [Limits](#limits-under-load)), was reached | Smaller bodies, fewer requests in flight |
 | `SECURITY` | Message security could not protect the request; nothing was sent | Fix the context or install a protection (run EDHOC) |
 | `UNVERIFIED_RESPONSE` | Only an error message security could not verify came back | Re-establish the context (run EDHOC); the request may have run |
 | `UNRESOLVED_HOST` | The resolver could not resolve the host | Retry once the network is back |
@@ -178,6 +178,66 @@ bounds reached and observer changes; `EndpointEvent.ObserverRemoved` says why an
 `Reason` (`DEREGISTERED`, `RESET`, `NOT_ACKNOWLEDGED`, `RESOURCE_REMOVED`, `ERROR_RESPONSE`, `SESSION_ENDED`,
 `FAILED`) to count by, and a `detail` to log. New events and reasons may come before 1.0, so keep an `else`
 branch in a `when` over them.
+
+## Limits under load
+
+A UDP source address proves nothing (RFC 7252 §11.4), so a server must survive a flood of requests from
+forged addresses without running out of memory and without amplifying it towards the addresses they name
+(§11.3). Every structure such a flood fills is bounded in total and per peer, with defaults sized for a
+server; a constrained device sets smaller ones:
+
+```kotlin
+val limits = CoapEndpointConfig {
+    maxDeduplicationEntries = 5_000
+    maxDeduplicationEntriesPerPeer = 500
+    maxReservedMessageIds = 20_000
+    maxExchanges = 1_024
+    eventListener = EndpointEventListener { event ->
+        if (event is EndpointEvent.LimitReached) println("refused for ${event.peer}: ${event.limit}")
+    }
+}
+```
+
+| Bound (`CoapEndpointConfig`) | Default | At the bound |
+|---|---|---|
+| `maxDeduplicationEntries`, `maxDeduplicationEntriesPerPeer` | 50 000, 10 000 | The oldest message RFC 7252 §4.5 lets the endpoint process again makes room: an answered GET, PUT, DELETE, FETCH or iPATCH, a message answered with a Reset, a request refused before anything acted on it. Otherwise the new message is dropped without an answer. POSTs and responses take three quarters at most, so a POST flood never keeps a GET out |
+| `maxReservedMessageIds`, `maxReservedMessageIdsPerPeer` | 262 144, 65 536 | A request, separate response or notification that needs a new Message ID is refused, since §4.4 forbids reusing one within EXCHANGE_LIFETIME; piggybacked responses need none |
+| `maxExchanges`, `maxExchangesPerPeer` | 16 384, 256 | In total, the oldest Non-confirmable message kept only for a Reset is forgotten, then the oldest Confirmable one still unacknowledged after a retransmission is given up, as a spoofed source never acknowledges; otherwise a request fails with `IDENTIFIERS_EXHAUSTED` and a separate response or notification is not sent |
+| `maxConcurrentRequests` | 256 | A Confirmable request gets a piggybacked 5.03 with Max-Age 2, a Non-confirmable one is dropped |
+
+The observer bounds are in `CoapServerConfig` (`maxObservers`, `maxObserversPerPeer`,
+`maxObserversPerResource`: a registration beyond them is served without Observe, RFC 7641 §4.1), the
+connection bounds in `ReliableTransportConfig`. What a bound refuses is reported as
+`EndpointEvent.LimitReached`, whose `limit` names the bound, so a metrics adapter can count each.
+
+A response much larger than its request, sent to a forged address, still amplifies an attack on that address
+(RFC 9175 §2.6). `CoapServerConfig.amplification` chooses which responses wait until the client has shown, by
+returning an Echo value, that it receives at its address: by default only Q-Block2 bursts. A server that faces
+the Internet should set `AmplificationPolicy.ALL_RESPONSES`, which holds back every response larger than three
+times its request; it is not the default because a client without RFC 9175 cannot answer the 4.01 with Echo.
+
+**Too Many Requests** (RFC 8516). A server that wants a client which asks too often to wait answers with
+4.29 and the wait as Max-Age; a client that gets one waits it out before it asks again:
+
+```kotlin
+fun ResourceBuilder.readings(limiter: Limiter) = resource("reading") {
+    get {
+        if (limiter.tooOften(peer)) CoapResponse.tooManyRequests(30.seconds, "one reading every 30 s")
+        else CoapResponse.content("21.5")
+    }
+}
+
+suspend fun readPolitely(client: CoapClient, uri: String): CoapResponse =
+    RetryAfter(maxWait = 1.minutes).request(client, CoapRequest(CoapCode.GET, CoapUri.parse(uri)))
+```
+
+`tooManyRequests` rounds the wait up to whole seconds. `RetryAfter` sends the request again after each 4.29
+or 5.03 once its `retryAfter` (the Max-Age, 60 seconds without one) has passed, `maxAttempts` times in all
+(3), and returns a refusal whose wait is longer than `maxWait` at once rather than ask too early. Cancelling
+the caller ends the wait. Without message security a 4.29 can be forged (RFC 8516 §5): `maxWait` bounds what
+that costs. RFC 8516 §3 keeps 4.29 for the clients that ask too often, and 5.03 for an overload of all, which
+is what `maxConcurrentRequests` answers. kcoap has no rate limiter of its own: per-client state can add to
+the load it is meant to shed, so the policy (`Limiter` above) is the application's.
 
 ## Over TCP and WebSockets
 

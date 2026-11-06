@@ -4,6 +4,7 @@ import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
+import dev.kcoap.coap.client.RetryAfter
 import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
@@ -11,6 +12,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.server.ResourceAttributes
+import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
@@ -208,7 +210,51 @@ class GuideExamplesTest {
         assertEquals("Hello", client.get("coap://${address.host}:${address.port}/hello").payloadAsText())
     }
 
+    val limits = CoapEndpointConfig {
+        maxDeduplicationEntries = 5_000
+        maxDeduplicationEntriesPerPeer = 500
+        maxReservedMessageIds = 20_000
+        maxExchanges = 1_024
+        eventListener = EndpointEventListener { event ->
+            if (event is EndpointEvent.LimitReached) println("refused for ${event.peer}: ${event.limit}")
+        }
+    }
+
+    /** The application's policy behind the guide's 4.29 example; here every second request is one too many. */
+    class Limiter {
+        private var count = 0
+
+        fun tooOften(peer: Endpoint): Boolean = ++count % 2 == 0
+    }
+
+    fun ResourceBuilder.readings(limiter: Limiter) = resource("reading") {
+        get {
+            if (limiter.tooOften(peer)) CoapResponse.tooManyRequests(30.seconds, "one reading every 30 s")
+            else CoapResponse.content("21.5")
+        }
+    }
+
+    suspend fun readPolitely(client: CoapClient, uri: String): CoapResponse =
+        RetryAfter(maxWait = 1.minutes).request(client, CoapRequest(CoapCode.GET, CoapUri.parse(uri)))
+
     // ---------------------------------------------------------------- running them
+
+    @Test
+    fun theLimitsExamplesWork() = runTest {
+        val network = InMemoryNetwork(backgroundScope)
+        val config = limits.toBuilder().apply { timeSource = testScheduler.timeSource }.build()
+        assertEquals(500, config.maxDeduplicationEntriesPerPeer)
+        val serverTransport = network.attach()
+        CoapServer(serverTransport, backgroundScope, endpointConfig = config) { readings(Limiter()) }
+        val client = CoapClient(network.attach(), backgroundScope, endpointConfig = config)
+        val uri = "coap://${serverTransport.localEndpoint.host}:${serverTransport.localEndpoint.port}/reading"
+
+        assertEquals("21.5", readPolitely(client, uri).payloadAsText())
+        val start = testScheduler.currentTime
+        // The second request gets 4.29 with Max-Age 30; the third, 30 seconds later, is served.
+        assertEquals("21.5", readPolitely(client, uri).payloadAsText())
+        assertTrue(testScheduler.currentTime - start >= 30_000)
+    }
 
     @Test
     fun theServerAndClientExamplesWork() = runBlocking(Dispatchers.IO) {

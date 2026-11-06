@@ -9,6 +9,8 @@ applications built on it.
   the network's seeded `Random`, so a failing run can be replayed.
 - `InMemoryNetwork.filter` drops chosen datagrams deterministically ("lose the first ACK"), and
   `InMemoryNetwork.tap` sees every datagram with its `DatagramFate`.
+- `InMemoryNetwork.spoof` sends a datagram from a forged source address with nothing attached there, so
+  whatever answers it is unreachable, as with spoofed UDP; flood tests send from thousands of addresses so.
 - `InMemoryTransport.inject` hands any `DatagramEvent` to the receiver, for example
   `SessionEnded` to simulate a DTLS layer.
 - `RebindingTransport`: a client behind a NAT that rebinds. It sends from one attached transport until

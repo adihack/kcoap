@@ -45,8 +45,10 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   CONs, silent drop for malformed NONs and invalid ACK/RST; NSTART per peer, with Non-confirmable
   requests holding their slot at PROBING_RATE; failing instead of retransmitting across ended DTLS
   sessions (§9.1.1). All parameters in `TransmissionParameters`.
-- **Exchanges, RFC 7252 §5.2–5.3**: random 8-byte tokens from the platform CSPRNG, sequence-number
-  tokens on DTLS sessions (RFC 9175 §4.2); matching by peer `Endpoint` equality and token; piggybacked,
+- **Exchanges, RFC 7252 §5.2–5.3**: random 8-byte tokens from the platform CSPRNG, where the token is what
+  stops off-path response spoofing (§5.3.1); sequence-number tokens from zero on each DTLS session and TLS
+  connection (`coaps+tcp`, `coaps+ws`), where only the peer can answer and a count binds each response to
+  its request better than chance (RFC 9175 §4.2); matching by peer `Endpoint` equality and token; piggybacked,
   separate and Non-confirmable responses; response timeouts; cancellation through coroutines; the
   message-security SPI around each message. A separate response is answered only after it was verified
   and its critical options checked: one with an unknown critical option gets a Reset and fails the
@@ -147,14 +149,22 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   failing notification removes its observer, and nothing escapes to the application's exception
   handler. A request on a connection whose handler was cancelled, by `CoapServer.close()` for example,
   gets 5.03 (RFC 8323 §3.3).
-- **Resource bounds, RFC 7252 §11.3**: everything a peer can make the endpoint keep is bounded, and a
-  bound reports `EndpointEvent.LimitReached`. `CoapEndpointConfig.maxDeduplicationEntries` (50 000; new
-  messages dropped silently), `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age),
-  `maxExchangesPerPeer` (256; `IDENTIFIERS_EXHAUSTED`), `CoapServerConfig.maxObservers`,
+- **Resource bounds, RFC 7252 §11.3**: everything a peer can make the endpoint keep is bounded, in total
+  and per peer, and what a bound refuses is reported as `EndpointEvent.LimitReached`.
+  `CoapEndpointConfig.maxDeduplicationEntries` and `maxDeduplicationEntriesPerPeer` (50 000 and 10 000; the
+  oldest entry §4.5 lets the endpoint process again makes room, else the new message is dropped silently,
+  and three quarters at most hold entries that must be kept), `maxReservedMessageIds` and
+  `maxReservedMessageIdsPerPeer` (262 144 and 65 536; a message needing a new Message ID is refused, §4.4),
+  `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age), `maxExchangesPerPeer` and `maxExchanges`
+  (256 and 16 384; `IDENTIFIERS_EXHAUSTED`, and in total first forgetting Non-confirmable messages kept for a
+  Reset, then giving up Confirmable ones unacknowledged after a retransmission), `CoapServerConfig.maxObservers`,
   `maxObserversPerPeer` and `maxObserversPerResource` (10 000, 32 and 1 000; served without Observe,
   RFC 7641 §4.1), `ReliableTransportConfig.maxPendingConnections` (128; accepted connections awaiting
   their CSM) and `maxConnections` (1 024; accepted connections beyond it are closed). Non-confirmable
   notifications to unauthenticated observers are interspersed with Confirmable ones (RFC 7641 §7).
+- **Too Many Requests, RFC 8516**: `CoapResponse.tooManyRequests(retryAfter)` answers a client that asks
+  too often with 4.29 and Max-Age; `CoapResponse.retryAfter` reads the wait of a 4.29 or 5.03, and the
+  client's `RetryAfter` waits it out, up to a cap and cancellably, and asks again.
 - **Threads**: every public type is safe to use from any number of coroutines on any dispatcher; the
   endpoint runs on the dispatcher of the scope it is given, so on Android or iOS give it one such as
   `lifecycleScope + Dispatchers.Default`. Under `runTest`, give it `testScheduler.timeSource`: timers
@@ -178,7 +188,8 @@ DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `d
 a TLS listener and a `coaps+tcp` client off the JVM (docs/platforms.md; `coaps+ws` works on the ktor engine's TLS where it
 authenticates the server), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
-(RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
+(RFC 9175 §2.3), a per-client rate limiter that answers 4.29 by itself (RFC 8516 §3 leaves it to the
+application); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
 (§8–9), which wait for multicast and proxying.
 
 ## Verified by
@@ -206,7 +217,9 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   `UNRESOLVED_HOST` carry their causes, and cancellation is never translated.
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class
   (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
-  `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; `ConcurrencyStressTest` on real threads through
+  `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; floods from
+  thousands of spoofed sources against each bound, with a real client served throughout
+  (`SpoofedFloodTest`); `ConcurrencyStressTest` on real threads through
   `kcoap-testkit`'s `Stress`, on the JVM and Kotlin/Native: close racing requests and collectors, the
   observer registry, the connection pool, requests racing an idle Release.
 - Q-Block (RFC 9177): every figure of §10 and Appendices A–B as a script on virtual time
