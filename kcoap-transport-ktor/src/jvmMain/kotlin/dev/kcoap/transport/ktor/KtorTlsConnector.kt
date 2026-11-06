@@ -36,6 +36,11 @@ import kotlinx.coroutines.IO
  * - Only the ECDHE suites with AES-GCM (`TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256` and `..._256_GCM_SHA384`,
  *   the same with RSA), as RFC 9325 §4.2 recommends; ktor's RSA key transport and CBC suites are left out. RFC
  *   7925's `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` is not among ktor's suites.
+ * - Without the extended master secret (RFC 7627) and the renegotiation indication (RFC 5746: neither the
+ *   `renegotiation_info` extension nor `TLS_EMPTY_RENEGOTIATION_INFO_SCSV`), which RFC 9325 §3.5 requires of
+ *   TLS 1.2 implementations: ktor-network-tls sends neither. The attacks they prevent (triple handshake,
+ *   renegotiation injection) need a renegotiation, a resumed session or a client certificate, and this connector
+ *   uses none of them, so the risk is low; the JSSE client that ADR 0010 plans would close the gap.
  * - No ALPN: RFC 8323 §8.2 has the client offer `coap` on every port but 5684, so a port other than 5684 is
  *   refused unless [TlsClientConfig.allowsAnyPortWithoutAlpn] is set.
  * - Certificates only: no PreSharedKey or RawPublicKey mode, and no client certificate.
@@ -76,7 +81,7 @@ public class KtorTlsConnector(
      */
     override suspend fun connect(peer: Endpoint): Connection {
         require(peer is Endpoint.Tcp && peer.usesTls) { "A TLS connector reaches only coaps+tcp peers, not $peer" }
-        require(peer.port == CoapScheme.COAPS_TCP.defaultPort || config.allowsAnyPortWithoutAlpn) {
+        require(config.admitsWithoutAlpn(peer.port)) {
             "coaps+tcp on port ${peer.port} needs ALPN `${CoapScheme.ALPN}` (RFC 8323 §8.2), which ktor-network-tls " +
                 "cannot offer; only port ${CoapScheme.COAPS_TCP.defaultPort} implies coaps+tcp without it. Set " +
                 "TlsClientConfig.allowsAnyPortWithoutAlpn for a server that accepts clients without ALPN"
@@ -113,6 +118,14 @@ public class KtorTlsConnector(
 
     override fun toString(): String = "KtorTlsConnector"
 }
+
+/**
+ * Whether a [KtorTlsConnector] may connect to [port] although it cannot offer ALPN: RFC 8323 §8.2 has a client
+ * offer `coap` on every port but 5684, unless [TlsClientConfig.allowsAnyPortWithoutAlpn] says the server does
+ * without it.
+ */
+internal fun TlsClientConfig.admitsWithoutAlpn(port: Int): Boolean =
+    port == CoapScheme.COAPS_TCP.defaultPort || allowsAnyPortWithoutAlpn
 
 /**
  * The suites a [KtorTlsConnector] offers: RFC 9325 §4.2's recommended TLS 1.2 suites among ktor's (ECDHE with
