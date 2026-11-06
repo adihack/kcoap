@@ -127,7 +127,8 @@
           <p>The code lives on the branch <code>feat/protocol-core</code> until pull request #1 merges; <code>main</code> still holds only the first skeleton. The build needs a JDK 17 or newer and downloads the rest. For iOS and macOS apps, run it on a Mac with Xcode.</p>
 <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
 <span class="tok-f">cd</span> kcoap
-<span class="tok-f">./gradlew</span> publishToMavenLocal  <span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span></code></pre></div>
+<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
+<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
         </li>
         <li>
           <h3>Add Maven Local and the modules you need</h3>
@@ -163,7 +164,13 @@ kcoap-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-oscore"</span>, v
 kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
 
 <span class="tok-k">[bundles]</span>
-kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-transport-ktor"</span>, <span class="tok-s">"kcoap-crypto-default"</span>, <span class="tok-s">"kcoap-oscore"</span>, <span class="tok-s">"kcoap-edhoc-oscore"</span>]</code></pre></div>
+kcoap = [
+    <span class="tok-s">"kcoap-coap"</span>,
+    <span class="tok-s">"kcoap-transport-ktor"</span>,
+    <span class="tok-s">"kcoap-crypto-default"</span>,
+    <span class="tok-s">"kcoap-oscore"</span>,
+    <span class="tok-s">"kcoap-edhoc-oscore"</span>,
+]</code></pre></div>
 <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-f">repositories</span> {
     <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()

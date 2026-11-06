@@ -98,7 +98,8 @@
             <h3>Publish kcoap to Maven Local</h3>
 <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
 <span class="tok-f">cd</span> kcoap
-<span class="tok-f">./gradlew</span> publishToMavenLocal  <span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span></code></pre></div>
+<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
+<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
           </li>
           <li>
             <h3>Create the build file</h3>
@@ -124,8 +125,10 @@
             <span class="tok-k">val</span> kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap:$kcoap"</span>)
             <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor-websocket:$kcoap"</span>)
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default:$kcoap"</span>)  <span class="tok-c">// WebCrypto</span>
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore:$kcoap"</span>)     <span class="tok-c">// EDHOC, OSCORE</span>
+            <span class="tok-c">// WebCrypto underneath</span>
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default:$kcoap"</span>)
+            <span class="tok-c">// EDHOC, and OSCORE with it</span>
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore:$kcoap"</span>)
         }
     }
 }</code></pre></div>
@@ -143,7 +146,12 @@ kcoap-crypto-default = { module = <span class="tok-s">"dev.kcoap:kcoap-crypto-de
 kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
 
 <span class="tok-k">[bundles]</span>
-kcoap-web = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-transport-ktor-websocket"</span>, <span class="tok-s">"kcoap-crypto-default"</span>, <span class="tok-s">"kcoap-edhoc-oscore"</span>]
+kcoap-web = [
+    <span class="tok-s">"kcoap-coap"</span>,
+    <span class="tok-s">"kcoap-transport-ktor-websocket"</span>,
+    <span class="tok-s">"kcoap-crypto-default"</span>,
+    <span class="tok-s">"kcoap-edhoc-oscore"</span>,
+]
 
 <span class="tok-k">[plugins]</span>
 kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multiplatform"</span>, version.ref = <span class="tok-s">"kotlin"</span> }</code></pre></div>
@@ -186,7 +194,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
     <span class="tok-k">val</span> scope = <span class="tok-t">CoroutineScope</span>(<span class="tok-t">Dispatchers</span>.<span class="tok-t">Default</span> + <span class="tok-t">SupervisorJob</span>())
     scope.<span class="tok-f">launch</span> {
         <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-f">listOf</span>(<span class="tok-t">KtorWebSocketConnector</span>()), scope)
-        <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coap+ws://127.0.0.1:8080/hello"</span>).<span class="tok-f">payloadAsText</span>())  <span class="tok-c">// Hello over WebSocket</span>
+        <span class="tok-c">// Hello over WebSocket</span>
+        <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coap+ws://127.0.0.1:8080/hello"</span>).<span class="tok-f">payloadAsText</span>())
         client.<span class="tok-f">close</span>()  <span class="tok-c">// closes the connection, so the process can exit</span>
     }
 }</code></pre></div>

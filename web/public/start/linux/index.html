@@ -98,7 +98,8 @@
             <h3>Publish kcoap to Maven Local</h3>
 <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
 <span class="tok-f">cd</span> kcoap
-<span class="tok-f">./gradlew</span> publishToMavenLocal  <span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span></code></pre></div>
+<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
+<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
           </li>
           <li>
             <h3>Create the build file</h3>
@@ -144,7 +145,13 @@ kcoap-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-oscore"</span>, v
 kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
 
 <span class="tok-k">[bundles]</span>
-kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-transport-ktor"</span>, <span class="tok-s">"kcoap-crypto-default"</span>, <span class="tok-s">"kcoap-oscore"</span>, <span class="tok-s">"kcoap-edhoc-oscore"</span>]
+kcoap = [
+    <span class="tok-s">"kcoap-coap"</span>,
+    <span class="tok-s">"kcoap-transport-ktor"</span>,
+    <span class="tok-s">"kcoap-crypto-default"</span>,
+    <span class="tok-s">"kcoap-oscore"</span>,
+    <span class="tok-s">"kcoap-edhoc-oscore"</span>,
+]
 
 <span class="tok-k">[plugins]</span>
 kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multiplatform"</span>, version.ref = <span class="tok-s">"kotlin"</span> }</code></pre></div>
@@ -190,7 +197,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
     <span class="tok-k">val</span> scope = <span class="tok-t">CoroutineScope</span>(<span class="tok-t">Dispatchers</span>.<span class="tok-t">Default</span> + <span class="tok-t">SupervisorJob</span>())
     <span class="tok-k">try</span> {
         <span class="tok-k">var</span> stored = <span class="tok-s">"nothing yet"</span>
-        <span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(<span class="tok-s">"127.0.0.1"</span>, <span class="tok-n">5683</span>), scope) {
+        <span class="tok-k">val</span> transport = <span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(<span class="tok-s">"127.0.0.1"</span>, <span class="tok-n">5683</span>)
+        <span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(transport, scope) {
             <span class="tok-f">resource</span>(<span class="tok-s">"hello"</span>) { <span class="tok-f">get</span> { <span class="tok-t">CoapResponse</span>.<span class="tok-f">content</span>(<span class="tok-s">"Hello, $peer"</span>) } }
             <span class="tok-f">resource</span>(<span class="tok-s">"store"</span>) {
                 <span class="tok-f">get</span> { <span class="tok-t">CoapResponse</span>.<span class="tok-f">content</span>(stored) }
@@ -204,7 +212,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(<span class="tok-s">"127.0.0.1"</span>), scope)
         <span class="tok-k">val</span> uri = <span class="tok-s">"coap://127.0.0.1:5683"</span>
         <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"$uri/hello"</span>).<span class="tok-f">payloadAsText</span>())
-        client.<span class="tok-f">put</span>(<span class="tok-s">"$uri/store"</span>, <span class="tok-s">"on"</span>.<span class="tok-f">encodeToByteArray</span>(), <span class="tok-t">ContentFormat</span>.<span class="tok-t">TEXT_PLAIN</span>)
+        <span class="tok-k">val</span> body = <span class="tok-s">"on"</span>.<span class="tok-f">encodeToByteArray</span>()
+        client.<span class="tok-f">put</span>(<span class="tok-s">"$uri/store"</span>, body, <span class="tok-t">ContentFormat</span>.<span class="tok-t">TEXT_PLAIN</span>)
         <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"$uri/store"</span>).<span class="tok-f">payloadAsText</span>())
 
         client.<span class="tok-f">close</span>()
@@ -216,7 +225,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>The kcoap lines are the guide’s, which CI compiles and runs on the JVM; the same common code runs natively in CI’s Linux tests. This program as a whole is not compiled in CI.</span></p>
         <p>Build the executable and run it:</p>
 <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">./gradlew</span> linkReleaseExecutableLinuxX64
-<span class="tok-f">ls</span> build/bin/linuxX64/releaseExecutable/  <span class="tok-c"># the .kexe file to copy to the gateway</span></code></pre></div>
+<span class="tok-c"># the .kexe file to copy to the gateway</span>
+<span class="tok-f">ls</span> build/bin/linuxX64/releaseExecutable/</code></pre></div>
         <p>A gateway that serves browsers adds the WebSocket listener: <code>kcoap-transport-ktor-websocket-server</code> with <code>io.ktor:ktor-server-cio:3.6.1</code>, whose CIO engine runs natively on Linux. The <a href="/start/jvm/#tcp-and-websockets">TCP and WebSocket example</a> is the same code.</p>
 
         <h2 id="security">Keys and state on a gateway</h2>

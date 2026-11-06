@@ -115,7 +115,8 @@ client.<span class="tok-f">put</span>(<span class="tok-s">"$server/store"</span>
     <span class="tok-k">override</span> <span class="tok-k">suspend</span> <span class="tok-k">fun</span> <span class="tok-f">handleGet</span>(context: <span class="tok-t">RequestContext</span>) =
         <span class="tok-t">CoapResponse</span>.<span class="tok-f">content</span>(<span class="tok-t">Clock</span>.<span class="tok-t">System</span>.<span class="tok-f">now</span>().<span class="tok-f">toString</span>())
 }
-<span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(port = <span class="tok-n">5683</span>), scope) { <span class="tok-f">add</span>(clock) }
+<span class="tok-k">val</span> transport = <span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(port = <span class="tok-n">5683</span>)
+<span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(transport, scope) { <span class="tok-f">add</span>(clock) }
 scope.<span class="tok-f">launch</span> {
     <span class="tok-k">while</span> (isActive) {
         <span class="tok-f">delay</span>(<span class="tok-n">1</span>.seconds)
@@ -338,7 +339,8 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
           <p>Needs a JDK 17 or newer; Gradle downloads the rest. For iOS and macOS apps, run it on a Mac with Xcode.</p>
           <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
 <span class="tok-f">cd</span> kcoap
-<span class="tok-f">./gradlew</span> publishToMavenLocal  <span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span></code></pre></div>
+<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
+<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
         </li>
         <li>
           <h3>Add the modules you need</h3>
@@ -348,17 +350,18 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
               <p class="tab-panel-title">Kotlin DSL</p>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span>()    <span class="tok-c">// kcoap 0.1.0-SNAPSHOT, until the first release is on Maven Central</span>
+    <span class="tok-c">// kcoap 0.1.0-SNAPSHOT, until the first release is on Maven Central</span>
+    <span class="tok-f">mavenLocal</span>()
     <span class="tok-f">mavenCentral</span>()  <span class="tok-c">// kcoap's own dependencies</span>
 }
 
 <span class="tok-f">dependencies</span> {
     <span class="tok-k">val</span> kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
-    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap:$kcoap"</span>)            <span class="tok-c">// CoAP client and server</span>
-    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor:$kcoap"</span>)  <span class="tok-c">// UDP and TCP sockets</span>
-    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default:$kcoap"</span>)  <span class="tok-c">// the platform's cryptography</span>
+    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap:$kcoap"</span>)            <span class="tok-c">// client, server</span>
+    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor:$kcoap"</span>)  <span class="tok-c">// UDP, TCP</span>
+    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default:$kcoap"</span>)  <span class="tok-c">// cryptography</span>
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-oscore:$kcoap"</span>)          <span class="tok-c">// OSCORE</span>
-    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore:$kcoap"</span>)    <span class="tok-c">// EDHOC over CoAP, into OSCORE</span>
+    <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore:$kcoap"</span>)    <span class="tok-c">// EDHOC, OSCORE</span>
 }</code></pre></div>
             </div>
             <div class="tab-panel" data-tab-label="Version catalog">
@@ -375,7 +378,13 @@ kcoap-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-oscore"</span>, v
 kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
 
 <span class="tok-k">[bundles]</span>
-kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-transport-ktor"</span>, <span class="tok-s">"kcoap-crypto-default"</span>, <span class="tok-s">"kcoap-oscore"</span>, <span class="tok-s">"kcoap-edhoc-oscore"</span>]</code></pre></div>
+kcoap = [
+    <span class="tok-s">"kcoap-coap"</span>,
+    <span class="tok-s">"kcoap-transport-ktor"</span>,
+    <span class="tok-s">"kcoap-crypto-default"</span>,
+    <span class="tok-s">"kcoap-oscore"</span>,
+    <span class="tok-s">"kcoap-edhoc-oscore"</span>,
+]</code></pre></div>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
     <span class="tok-f">mavenLocal</span>()
