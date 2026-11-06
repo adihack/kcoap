@@ -192,7 +192,7 @@ class CapabilityInvariantTest {
                 return when (privateKey.type) {
                     KeyType.P256 -> base.randomBytes(secret.size)
                     KeyType.X25519 -> secret.flipped(0)
-                    KeyType.X448 -> secret.copyOf(32)
+                    KeyType.P384 -> secret.copyOf(32)
                     else -> secret
                 }
             }
@@ -200,7 +200,7 @@ class CapabilityInvariantTest {
 
         assertViolation(backend, KeyType.P256, answer = true, "keyAgreement gives the two sides different secrets")
         assertViolation(backend, KeyType.X25519, answer = true, "keyAgreement does not reproduce RFC 7748 §6.1")
-        assertViolation(backend, KeyType.X448, answer = true, "keyAgreement returned 32 bytes, not 56")
+        assertViolation(backend, KeyType.P384, answer = true, "keyAgreement returned 32 bytes, not 48")
     }
 
     /** A key store may import no keys; the known answers that need one are skipped, but other failures are not. */
