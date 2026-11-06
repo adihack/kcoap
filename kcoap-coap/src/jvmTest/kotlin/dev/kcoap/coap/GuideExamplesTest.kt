@@ -6,6 +6,7 @@ import dev.kcoap.coap.client.QBlockClientConfig
 import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.client.RetryAfter
 import dev.kcoap.coap.server.AmplificationPolicy
+import dev.kcoap.coap.server.CoapResponseException
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
@@ -18,6 +19,7 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.plus
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.testkit.InMemoryConnections
@@ -237,7 +239,67 @@ class GuideExamplesTest {
     suspend fun readPolitely(client: CoapClient, uri: String): CoapResponse =
         RetryAfter(maxWait = 1.minutes).request(client, CoapRequest(CoapCode.GET, CoapUri.parse(uri)))
 
+    class Inventory(private val items: Map<Int, String>) {
+        fun find(id: Int): String =
+            items[id] ?: throw CoapResponseException(CoapResponse.error(CoapCode.NOT_FOUND, "no item $id"))
+    }
+
+    fun ResourceBuilder.items(inventory: Inventory) = resource("items") {
+        get {
+            val id = query.singleOrNull()?.toIntOrNull()
+                ?: throw CoapResponseException(CoapResponse.error(CoapCode.BAD_REQUEST, "which item?"))
+            CoapResponse.content(inventory.find(id))
+        }
+    }
+
+    val monitoring = CoapEndpointConfig {
+        eventListener = EndpointEventListener { event ->
+            if (event is EndpointEvent.RequestCompleted) {
+                println("${event.method} ${event.resourcePath} -> ${event.responseCode} in ${event.duration}")
+            }
+        } + EndpointEventListener { event ->
+            when (event) {
+                is EndpointEvent.SecurityRejected -> println("security: ${event.reason} ${event.responseCode}")
+                is EndpointEvent.ResponseRejected -> println("rejected a response: ${event.reason}")
+                is EndpointEvent.MessageRejected -> println("rejected a message: ${event.reason}")
+                else -> Unit
+            }
+        }
+    }
+
+    fun report(server: CoapServer) {
+        println(server.endpoint.stats())
+        println(server.stats())
+    }
+
     // ---------------------------------------------------------------- running them
+
+    @Test
+    fun theErrorAndMonitoringExamplesWork() = runTest {
+        val network = InMemoryNetwork(backgroundScope)
+        val config = monitoring.toBuilder().apply { timeSource = testScheduler.timeSource }.build()
+        val serverTransport = network.attach()
+        val server = CoapServer(serverTransport, backgroundScope, endpointConfig = config) { items(Inventory(mapOf(1 to "lamp"))) }
+        val client = CoapClient(network.attach(), backgroundScope)
+        val uri = "coap://${serverTransport.localEndpoint.host}:${serverTransport.localEndpoint.port}/items"
+
+        assertEquals("lamp", client.get("$uri?1").payloadAsText())
+        val missing = client.get("$uri?7")
+        assertEquals(CoapCode.NOT_FOUND to "no item 7", missing.code to missing.payloadAsText())
+        assertEquals(CoapCode.BAD_REQUEST, client.get(uri).code)
+        report(server)
+
+        assertEquals(
+            listOf(
+                "0.01 GET /items -> 2.05 Content in 0s",
+                "0.01 GET /items -> 4.04 Not Found in 0s",
+                "0.01 GET /items -> 4.00 Bad Request in 0s",
+            ),
+            output.take(3),
+        )
+        assertTrue(output[3].startsWith("EndpointStats(exchanges=0, runningHandlers="), output[3])
+        assertTrue(output[4].startsWith("ServerStats(observers=0"), output[4])
+    }
 
     @Test
     fun theLimitsExamplesWork() = runTest {

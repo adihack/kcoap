@@ -12,6 +12,32 @@ adds its entry and migration note below.
 
 ### Added
 
+- Errors and observability for CoAP (WP-B4), all in kcoap-coap:
+  - **`CoapResponseException`** (`dev.kcoap.coap.server`): a resource handler, or code several calls below it, throws
+    it with a 4.xx or 5.xx `CoapResponse`, and the server sends that response as if the handler had returned it,
+    logged at DEBUG only. Thrown while a notification is produced, it ends the observation like any error
+    notification (RFC 7641 §3.2). Any other exception is still a bare 5.00, logged at ERROR.
+  - **A `RESPONSE_TIMEOUT` after responses that failed verification** (RFC 8613 §8.4, which drops them and waits
+    on) has the last of them, the security layer's `MessageSecurityException`, as `cause`, and its message says how
+    many came; so does that of a Q-Block body. A stale OSCORE context no longer looks like a silent peer.
+  - **New `EndpointEvent`s**: `ResponseRejected` (a response the client did not act on: `VERIFICATION_FAILED` or
+    `UNVERIFIED`, the only signal an observation gets of a bad notification); `RequestCompleted`, once per request a
+    server finished, with the inner method and response code, the resource's path in the tree (never the client's
+    Uri-Path), whether No-Response suppressed the answer, the message-security identity and the duration;
+    `SecurityRejected` (`VERIFICATION_FAILED`, answered unprotected, with the security layer's exception, or
+    `FRESHNESS_CHALLENGE`, RFC 8613 Appendix B.1.2). The three inputs the datagram messaging layer ignored with only
+    a log line, an ACK carrying a request, a piggybacked response with a foreign token and a non-empty Reset, are
+    `MessageRejected` events now. See "Changed (breaking)" for what new subtypes mean for a `when`.
+  - **`CoapEndpoint.stats()` and `CoapServer.stats()`**: what is held now, as `EndpointStats` (exchanges, running
+    handlers, transmissions, deduplication entries, reserved Message IDs, connections) and `ServerStats` (observers,
+    Block1 and Block2 transfers, Q-Block1 and Q-Block2 bodies), each named after the bound that limits it. Reading
+    takes no lock, so a metrics library may poll it from any thread.
+  - **`EndpointEventListener.plus`**: listeners combine as `LogSink`s do; one that throws keeps the event from none
+    of the others.
+  - Documentation: [the guide](docs/guide-client-server.md#monitoring) has a Monitoring section and the
+    `CoapResponseException` example, compiled by `GuideExamplesTest`; [docs/logging.md](docs/logging.md) explains the
+    levels and why rejected input is DEBUG; [docs/code-style.md](docs/code-style.md#logging) adds "log or throw,
+    never both".
 - `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
   `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
   also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. Every published
@@ -349,6 +375,15 @@ adds its entry and migration note below.
 
 ### Changed
 
+- **The default log threshold is WARN** (WP-B4), not INFO: `LogConfig.Default` still prints to the console, so a
+  failure shows, but an app that never configures logging no longer writes endpoint and server lifecycle lines to
+  its standard output. To get them back, `KcoapLogging.configure { level = LogLevel.INFO }`.
+- **Rejected input from a peer is logged once, at DEBUG and without a stack trace** in kcoap-coap (WP-B4): malformed
+  datagrams, ignored ACKs and Resets, Non-confirmable messages dropped, responses that failed verification or came
+  unverified, requests message security rejected or an access policy refused, and the Aborts this side sends, which
+  were WARN, some with a stack trace, and could flood a log at network rate. Each is an `EndpointEvent` to count by
+  instead. An Abort received is INFO, like a Release. kcoap-oscore and kcoap-edhoc-oscore still log some of the same
+  input at WARN.
 - Tokens on TLS connections (SRV-2): `TokenGenerator.sessionSequence`, every endpoint's default, numbers the
   requests on a `coaps+tcp` or `coaps+ws` connection from zero, as it did on DTLS sessions (RFC 9175 §4.2), and
   starts again on the next connection; the first request on a connection has the empty token. Plain UDP, TCP
@@ -364,6 +399,25 @@ adds its entry and migration note below.
 
 ### Changed (breaking)
 
+Bounded reasons, and new events (WP-B4):
+
+- **`EndpointEvent.MessageRejected.reason` and `EndpointEvent.MalformedMessage.reason` are enums**,
+  `MessageRejected.Reason` (`PING`, `EMPTY_NON_CONFIRMABLE`, `RESERVED_CODE`, `UNKNOWN_SIGNAL`, `NO_SERVER`,
+  `UNKNOWN_TOKEN`, `UNRECOGNIZED_CRITICAL_OPTION`, `INVALID_ACKNOWLEDGEMENT`, `FOREIGN_TOKEN`, `INVALID_RESET`) and
+  `MalformedMessage.Reason` (`UNKNOWN_VERSION`, `FORMAT_ERROR`), instead of free text that carried sizes and tokens and
+  so could not label a metric. The text is the new nullable `detail`, for a log. *Migration:* compare `reason` with
+  the constants instead of strings, and log `detail`; code that built these events passes a constant. Keep an `else`
+  branch, since constants may be added before 1.0:
+
+  ```kotlin
+  // Before
+  if (event is EndpointEvent.MessageRejected && event.reason.startsWith("unrecognized")) badOptions++
+  // After
+  if (event is EndpointEvent.MessageRejected && event.reason == EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION) badOptions++
+  ```
+- **`EndpointEvent` has three new subtypes**, `ResponseRejected`, `RequestCompleted` and `SecurityRejected`
+  (see "Added"). A `when` over `EndpointEvent` without an `else` branch no longer compiles. *Migration:* add an
+  `else` branch, which the KDoc of `EndpointEvent` has asked for since WP-B3, or branches for the new events.
 One exception root, and `@Throws` for Swift (WP-D2):
 
 - **Every protocol exception extends `KcoapException`** (kcoap-common) instead of `Exception`: `CoapException`,
