@@ -926,6 +926,28 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun rfc7252Section4_7GivingUpAMessageToThePeerAboutToSendKeepsItsNstartWindow() {
+        val messaging = messaging(FixedRandom(0.0), maxTransmissions = 2)
+        val first = messaging.sendConfirmable(Duration.ZERO)
+        messaging.sendConfirmable(Duration.ZERO, to = otherPeer)
+        messaging.onTimer(2.seconds)
+        messaging.takeEffects()
+
+        // The table is full, and making room gives up the peer's only slot holder, which ends its window.
+        val second = messaging.sendConfirmable(3.seconds, token = "b1")
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.TimedOut), messaging.takeEffects().outcomes())
+        assertEquals(Transmission.State.DONE, first.state)
+        assertEquals(Transmission.State.IN_FLIGHT, second.state)
+        // The new message holds the peer's one slot (NSTART = 1), so the next one waits for it.
+        val third = messaging.sendConfirmable(3.seconds, token = "c1")
+        assertEquals(Transmission.State.QUEUED, third.state)
+        messaging.takeEffects()
+        messaging.receive(4.seconds, CoapMessage.empty(CoapMessageType.ACK, second.message.messageId))
+        assertEquals(Transmission.State.IN_FLIGHT, third.state)
+        assertEquals(listOf(third.message.messageId), messaging.takeEffects().transmitted().map { it.messageId })
+    }
+
+    @Test
     fun rfc7252Section11_3MessagesQueuedTowardsOnePeerAreBounded() {
         val messaging = messaging(maxPerPeer = 2)
         messaging.sendConfirmable(Duration.ZERO)

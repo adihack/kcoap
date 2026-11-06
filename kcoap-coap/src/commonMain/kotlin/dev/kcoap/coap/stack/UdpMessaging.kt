@@ -157,12 +157,13 @@ internal class UdpMessaging(
             "Only CON and NON messages are sent as transmissions: $message"
         }
         val transmission = Transmission(peer, message, encodeForSending(peer, message), owner, slotHold)
-        val existing = windows[peer]
-        if (transmission.holdsSlot && existing.isFull()) throw beyondLimit(peer)
+        if (transmission.holdsSlot && windows[peer].isFull()) throw beyondLimit(peer)
         if (outbound.size >= maxTransmissions && !makeRoomForTransmission(now)) throw beyondLimit(peer, EndpointEvent.LimitReached.Limit.EXCHANGES)
         outbound[MessageKey(peer, message.messageId)] = transmission
         if (transmission.holdsSlot) {
-            val window = existing ?: PeerWindow().also { windows[peer] = it }
+            // Looked up only now: making room may have given up this peer's last slot holder, which took its window
+            // out of [windows], and a slot counted on that one would let the next message pass NSTART (§4.7).
+            val window = windows.getOrPut(peer) { PeerWindow() }
             if (window.outstanding >= parameters.nstart) {
                 transmission.state = Transmission.State.QUEUED
                 window.queue.addLast(transmission)
