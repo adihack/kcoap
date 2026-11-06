@@ -73,14 +73,15 @@ Settings → Builds):
 | Git branch (production) | `feat/protocol-core` until pull request #1 merges, then `main` |
 | Root directory | `web` |
 | Build command | empty |
-| Deploy command | `npx wrangler@4.152.0 deploy` |
-| Non-production branch command | `npx wrangler@4.152.0 versions upload` |
+| Deploy command | `npx wrangler deploy`; pinned: `npx wrangler@4.152.0 deploy` (below) |
+| Non-production branch command | `npx wrangler versions upload`; pinned: `npx wrangler@4.152.0 versions upload` |
 | Build watch paths (optional) | include `web/*`, so only changes to the site start a build |
 
 **Wrangler's version.** There is no `package.json`, so a bare `npx wrangler` installs whatever Wrangler is
 newest on every build (Workers Builds sets `CI=true`, and npx then installs without asking), and a new
-major could change how the site deploys without a change in the repository. The commands above pin
-4.152.0, published on 22 October 2026; raise it on purpose, after reading Wrangler's changelog.
+major could change how the site deploys without a change in the repository. The pinned forms in the
+table fix 4.152.0, published on 22 October 2026; with them, raise the version on purpose, after reading
+Wrangler's changelog. Which form to use is the owner's choice; the site's brief named the unpinned one.
 
 **Watch paths.** Cloudflare's documentation does not say whether `web/*` matches nested files or whether it
 is read from the repository root or from the root directory. After setting it, push a change to a nested
