@@ -32,8 +32,9 @@ rootProject.name = "kcoap"
 // Each module applies the convention plugin of its target tier (build-logic, docs/target-architecture.md
 // §2.1): kcoap.kmp-library (UNIVERSAL: every target, browsers included), kcoap.kmp-jvm-native-library
 // (SOCKETS: JVM and native) or kcoap.kmp-jvm-library (JVM_LIBRARY). Core modules (protocol, wire and SPI
-// code) also apply kcoap.core, which keeps their main code in commonMain. Every module is published, with
-// ABI dumps under <module>/api, except those that apply kcoap.unpublished.
+// code) also apply kcoap.core, which keeps their main code in commonMain. Every module with a tier plugin is
+// published, with ABI dumps under <module>/api, except those that apply kcoap.unpublished; kcoap-bom, which
+// applies kcoap.bom, is published too and constrains exactly those modules.
 include(
     // Core. Shared basics every module uses: logging, hex, constant-time comparison, the opt-in markers.
     ":kcoap-common",
@@ -80,4 +81,7 @@ include(
     ":kcoap-edhoc-oscore",
     // Unpublished, Apple targets only. The framework the Swift smoke test of the macOS CI job runs against.
     ":kcoap-swift-smoke",
+    // Published, no code (kcoap.bom). The bill of materials: one version for every published module, its
+    // constraints generated from the modules above that kcoap.publishing publishes.
+    ":kcoap-bom",
 )

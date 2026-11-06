@@ -7,8 +7,14 @@ plugins {
     id("org.jetbrains.kotlinx.kover")
 }
 
-dependencies {
-    subprojects.forEach { add("kover", it) }
+// Every module that applies Kover: each library module through its tier plugin, and kcoap-swift-smoke.
+// kcoap-bom has no code and no Kover, so it stays out.
+val aggregator = project
+subprojects {
+    val module = this
+    pluginManager.withPlugin("org.jetbrains.kotlinx.kover") {
+        aggregator.dependencies.add("kover", module)
+    }
 }
 
 kover {
