@@ -97,6 +97,32 @@ class BomPluginTest {
         assertContains(result.output, "module metadata (runtimeElements) constrains dev.kcoap.fixture:unpublished:1.0.0")
     }
 
+    @Test
+    fun aVariantWithoutConstraintsFailsVerifyBomConstraints() {
+        val build = kcoapLikeBuild().file(
+            "bom/build.gradle.kts",
+            """
+            plugins { id("kcoap.bom") }
+            // Every constraint moved to the runtime configuration: runtimeElements and the POM keep them, but
+            // apiElements, which a compile classpath selects, then has no dependencyConstraints at all.
+            gradle.projectsEvaluated {
+                val api = configurations["api"].dependencyConstraints
+                val moved = api.toList()
+                api.clear()
+                moved.forEach { dependencies.constraints.add("runtime", it.group + ":" + it.name + ":" + it.version) }
+            }
+            """,
+        )
+
+        val result = build.runner(":bom:verifyBomConstraints").buildAndFail()
+
+        assertEquals(TaskOutcome.FAILED, result.task(":bom:verifyBomConstraints")?.outcome)
+        assertContains(result.output, "module metadata (apiElements) lacks dev.kcoap.fixture:universal:1.0.0")
+        assertContains(result.output, "module metadata (apiElements) lacks dev.kcoap.fixture:jvmonly-jvm:1.0.0")
+        assertFalse(result.output.contains("POM lacks"), result.output)
+        assertFalse(result.output.contains("module metadata (runtimeElements) lacks"), result.output)
+    }
+
     /**
      * A build shaped like kcoap's: a module of the UNIVERSAL tier, one of the JVM_LIBRARY tier, one marked
      * kcoap.unpublished, and the BOM. Nothing in it is compiled.

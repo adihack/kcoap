@@ -56,9 +56,9 @@ The BOM is published with the modules, with the same coordinates scheme and POM.
 
 ## Verified by
 
-- `verifyBomConstraints`, part of `check` and `scripts/test unit`: the POM and the Gradle module metadata the BOM
-  publishes constrain exactly the multiplatform and JVM publications of the build, no more, no fewer, at the
-  build's version.
+- `verifyBomConstraints`, part of `check` and `scripts/test unit`: the POM and every variant of the Gradle module
+  metadata the BOM publishes constrain exactly the multiplatform and JVM publications of the build, no more, no
+  fewer, at the build's version.
 - `BomPluginTest` (build-logic, Gradle TestKit): on a build with modules of two tiers, an unpublished module and
   a BOM, the published BOM lists exactly the published modules' artifacts, `-Pkcoap.version` sets their
-  version, and a stray or missing constraint fails the check.
+  version, and a stray or missing constraint, or a variant without constraints, fails the check.

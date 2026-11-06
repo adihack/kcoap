@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
@@ -64,7 +65,7 @@ abstract class VerifyBomConstraints : DefaultTask() {
         val inPom = pomConstraints(pom.get().asFile)
         val variants = moduleMetadataConstraints(moduleMetadata.get().asFile)
         val problems = differences("POM", inPom, expected) +
-            (if (variants.isEmpty()) listOf("module metadata has no dependencyConstraints") else emptyList()) +
+            (if (variants.isEmpty()) listOf("module metadata has no variants") else emptyList()) +
             variants.flatMap { (variant, found) -> differences("module metadata ($variant)", found, expected) }
         if (problems.isNotEmpty()) {
             throw GradleException(
@@ -94,25 +95,21 @@ abstract class VerifyBomConstraints : DefaultTask() {
     }
 
     /**
-     * The constraints of each variant (apiElements, runtimeElements) by variant name. Gradle writes the module
-     * file with a fixed key order: a variant's `name` first, its `dependencyConstraints` later, and in each
-     * constraint `group`, `module`, then `version` as `{ "requires": ... }`. Each variant must hold the
-     * whole set, since a consumer reads only the one it selects.
+     * The constraints of every variant of the module metadata (apiElements, runtimeElements), by variant name.
+     * A variant without `dependencyConstraints` has none, and fails the check like any other that lacks
+     * some: each variant must hold the whole set, since a consumer reads only the one it selects.
      */
-    private fun moduleMetadataConstraints(file: File): List<Pair<String, List<String>>> =
-        VARIANT.findAll(file.readText()).map { variant ->
-            variant.groupValues[1] to CONSTRAINT.findAll(variant.groupValues[2])
-                .map { "${it.groupValues[1]}:${it.groupValues[2]}:${it.groupValues[3]}" }.toList()
-        }.toList()
-
-    private companion object {
-        /** A variant's name and its constraint array, which holds no `]` of its own. */
-        val VARIANT = Regex(
-            "\"name\"\\s*:\\s*\"([^\"]+)\"(?:(?!\"name\"\\s*:).)*?\"dependencyConstraints\"\\s*:\\s*\\[(.*?)]",
-            RegexOption.DOT_MATCHES_ALL,
-        )
-        val CONSTRAINT = Regex(
-            "\"group\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"module\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"version\"\\s*:\\s*\\{\\s*\"requires\"\\s*:\\s*\"([^\"]+)\"",
-        )
+    private fun moduleMetadataConstraints(file: File): List<Pair<String, List<String>>> {
+        val module = JsonSlurper().parse(file) as? Map<*, *> ?: return emptyList()
+        val variants = module["variants"] as? List<*> ?: return emptyList()
+        return variants.map { variant ->
+            variant as Map<*, *>
+            val constraints = variant["dependencyConstraints"] as? List<*> ?: emptyList<Any>()
+            variant["name"].toString() to constraints.map { constraint ->
+                constraint as Map<*, *>
+                val version = (constraint["version"] as? Map<*, *>)?.get("requires") ?: ""
+                "${constraint["group"]}:${constraint["module"]}:$version"
+            }
+        }
     }
 }

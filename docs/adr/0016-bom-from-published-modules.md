@@ -23,8 +23,9 @@ Kotlin frameworks do not share types.
   through the module metadata; Maven names the JVM artifact). The tier plugins apply `kcoap.publishing` to every
   module not marked `kcoap.unpublished`, so the published set and the BOM cannot disagree.
 - **Checked, not trusted.** `verifyBomConstraints` (part of `check` and `scripts/test unit`) compares the POM and
-  the module metadata the BOM publishes with the build's own publications; `BomPluginTest` checks the plugin on a
-  TestKit build, including a stray and a missing constraint.
+  the module metadata the BOM publishes with the build's own publications, every variant of the latter;
+  `BomPluginTest` checks the plugin on TestKit builds, including a stray and a missing constraint and a variant
+  without constraints.
 - **No export-everything umbrella framework now.** A KMP app's own shared framework `export()`s the kcoap types its
   Swift code needs. A prebuilt XCFramework for Swift-only apps comes from a dedicated facade module with a curated
   surface (roadmap E4, kcoap-apple), after the first publish.
