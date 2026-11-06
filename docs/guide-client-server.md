@@ -52,9 +52,12 @@ suspend fun startServer(scope: CoroutineScope): CoapServer {
 - Resources are a tree by Uri-Path. Define them with the DSL, or subclass `CoapResource` and override
   `handleGet`, `handlePost`, `handlePut`, `handleDelete`, `handleFetch`, `handlePatch` or `handleIPatch`;
   other methods answer 4.05.
-- A handler gets a `RequestContext`: the (verified, reassembled) `request`, the `peer` endpoint, its
-  DTLS `peerIdentity`, the OSCORE `securityIdentity`, and `acknowledge()` to promise a separate response
-  early.
+- A handler gets a `RequestContext`: the `method`, `path`, `query`, `options` and `payload` of the
+  (verified, reassembled) request, the `peer` endpoint, its DTLS `peerIdentity`, the OSCORE
+  `securityIdentity`, and `acknowledge()` to promise a separate response early. Like the client's
+  `CoapRequest` it leaves out the messaging-layer fields (type, Message ID, token), which differ by transport.
+- `CoapServerConfig.maxRequestBodySize` (1 MiB) bounds the request bodies the server assembles; larger ones
+  get 4.13 with Size1 (RFC 7959 §2.9.3).
 - Large responses and request bodies go block-wise automatically, in blocks that fit the transport's
   datagram size. `/.well-known/core` lists every resource with handlers that the caller may use (see
   [Message security](#message-security)), with `obs` for observable ones.
@@ -84,15 +87,45 @@ suspend fun useServer(scope: CoroutineScope) {
 - Every call suspends until the whole response arrived: separate responses are awaited, Block1 and
   Block2 are done for you, a 4.01 with Echo is repeated with that Echo (under message security, only a
   verified one).
-- Error codes come back as responses (`response.isSuccess`); no answer at all throws `CoapException`
-  with a `reason` such as `TRANSMISSION_TIMEOUT` or `RESET`. Cancelling the coroutine cancels the
-  exchange.
+- Error codes come back as responses (`response.isSuccess`); everything else that goes wrong throws
+  `CoapException` with a `reason` ([Errors](#errors)). Cancelling the coroutine cancels the exchange.
 - `observe` returns a cold `Flow`: it registers when collected and deregisters (GET with Observe 1)
   when the collector stops. Collectors of the same resource share one registration.
-- `CoapClientConfig` sets the request timeout, a block size for early negotiation, a size limit for
-  downloads and the `EndpointResolver`: `EndpointResolver.Default` takes IP literals for every scheme and
-  `localhost`, and leaves host names of `coap+tcp` and `coap+ws` to the connector; a `coap://` host name
-  needs a resolver of your own.
+- `CoapClientConfig` sets the request timeout, a `preferredBlockSize`, which turns on early negotiation
+  (RFC 7959 §2.4), a size limit for downloads (`maxResponseBodySize`) and the `EndpointResolver`:
+  `EndpointResolver.Default` takes IP literals for every scheme and `localhost`, and leaves host names of
+  `coap+tcp` and `coap+ws` to the connector; a `coap://` host name needs a resolver of your own. A resolver
+  throws `CoapException` with `UNRESOLVED_HOST` when a lookup fails at runtime, and
+  `IllegalArgumentException` only for a host it cannot resolve by design. A lookup that times out in its own
+  `withTimeout` is reported as `UNRESOLVED_HOST` too, so a `CancellationException` from a call always means
+  that the calling coroutine was cancelled.
+- `discover` reads the server's `/.well-known/core`; a malformed document is `BAD_RESPONSE`, saying where it
+  broke. The link targets it returns are the server's text, so parse an absolute one with
+  `CoapUri.parseOrNull`, which returns null instead of throwing.
+- A `coaps://` URI fails with `TRANSPORT_UNAVAILABLE` before its host is resolved: kcoap has no DTLS yet, and
+  nothing goes out in plaintext (RFC 7252 §6.2). Protect `coap://` requests with OSCORE instead.
+
+### Errors
+
+Every call of `CoapClient`, `CoapEndpoint` and `CoapServer` fails at runtime with `CoapException` only, its
+`cause` the lower layer's exception. `IllegalArgumentException` and `IllegalStateException` mean a mistake in
+the calling code: a URI string that is not a CoAP URI, `observe` with a method other than GET or FETCH, a
+host name given to `EndpointResolver.Default`.
+
+| `reason` | What happened | What to do |
+|---|---|---|
+| `TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET` | The peer did not acknowledge, did not answer in time, or refused | Retry later; check the address |
+| `SESSION_ENDED`, `CONNECTION_CLOSED` | The DTLS session or the connection ended | The next request opens a new one |
+| `BAD_RESPONSE`, `BLOCKWISE_FAILED` | The response broke the protocol, or a body could not be assembled | Report it; retrying rarely helps |
+| `MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED` | A size or per-peer limit was reached | Smaller bodies, fewer requests in flight |
+| `SECURITY` | Message security could not protect the request; nothing was sent | Fix the context or install a protection (run EDHOC) |
+| `UNVERIFIED_RESPONSE` | Only an error message security could not verify came back | Re-establish the context (run EDHOC); the request may have run |
+| `UNRESOLVED_HOST` | The resolver could not resolve the host | Retry once the network is back |
+| `TRANSPORT_UNAVAILABLE` | The endpoint has no transport for the URI's scheme, or the scheme is `coaps`, which needs DTLS | Give the endpoint that transport; use OSCORE over `coap` until DTLS lands |
+| `TRANSPORT_FAILED`, `CLOSED` | The endpoint's transport failed, or the endpoint was closed | Create a new endpoint |
+
+A call after `close()` fails with `CLOSED` at once, before its host is looked up, and so does one that
+races `close()`, a ping on any transport included.
 
 ## Client and server on one port
 
@@ -121,6 +154,11 @@ val config = CoapEndpointConfig(
 `TransmissionParameters` holds RFC 7252 §4.8's ACK_TIMEOUT, ACK_RANDOM_FACTOR, MAX_RETRANSMIT, NSTART,
 PROBING_RATE and MAX_LATENCY and derives EXCHANGE_LIFETIME and the other §4.8.2 values. Interceptors see
 every message at the wire, after OSCORE protection; `toString()` of a message never shows its payload.
+The event listener gets retransmissions, timeouts, Resets, duplicates, rejected and malformed messages,
+bounds reached and observer changes; `EndpointEvent.ObserverRemoved` says why an observer went with a
+`Reason` (`DEREGISTERED`, `RESET`, `NOT_ACKNOWLEDGED`, `RESOURCE_REMOVED`, `ERROR_RESPONSE`, `SESSION_ENDED`,
+`FAILED`) to count by, and a `detail` to log. New events and reasons may come before 1.0, so keep an `else`
+branch in a `when` over them.
 
 ## Over TCP and WebSockets
 
@@ -287,8 +325,9 @@ Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md
   `Reason.UNVERIFIED_RESPONSE`; `exception.response` is the error as it came. A server that lost its
   context answers like this: run EDHOC again rather than repeating a request that may already have run.
 - **No silent plaintext.** `OscoreClient` fails a request its resolver finds no context for, and
-  kcoap-edhoc-oscore's `PeerSecurity` one to a server without an installed protection, with
-  `MessageSecurityException`, before anything is sent; `allowUnprotected = true` on either sends such
+  kcoap-edhoc-oscore's `PeerSecurity` one to a server without an installed protection, before anything is
+  sent: the client throws `CoapException` with `Reason.SECURITY`, whose `cause` is the security layer's
+  `MessageSecurityException`; `allowUnprotected = true` on either sends such
   requests in plain CoAP on purpose. Discovering the EDHOC resource before the handshake therefore takes a
   plain client (or `/.well-known/core` in `PeerSecurity`'s `unprotectedPaths`); a Q-Block probe the security
   layer will not send yet is skipped for that request, so EDHOC works on a client with `QBlockMode.PROBE`.

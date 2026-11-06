@@ -190,7 +190,7 @@ class StackOscoreInteropTest {
         context: SecurityContext? = null,
     ): Pair<CoapClient, RecordingClientSecurity> {
         val recording = RecordingClientSecurity(OscoreClient(context ?: qBlockClientContext()))
-        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(security = recording, blockSize = 64, qBlock = qBlock))
+        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(security = recording, preferredBlockSize = 64, qBlock = qBlock))
         return client to recording
     }
 

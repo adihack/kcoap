@@ -5,19 +5,27 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.OptionSet
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.stack.InboundRequest
+import dev.kcoap.common.InternalKcoapApi
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 
 /**
  * A request as a resource handler sees it: verified by message security, reassembled from Block1
- * transfers, and with who sent it.
+ * transfers, and with who sent it. This is the server's application model, the counterpart of the
+ * client's `CoapRequest`: [method], [path], [query], [options] and [payload], without the messaging-layer
+ * fields (type, Message ID, token), which differ by transport and mean nothing to a handler.
  *
  * Authorize on either identity (architecture rule 4): [peerIdentity] is what DTLS or TLS authenticated for the
  * hop, [securityIdentity] what OSCORE authenticated end to end.
  */
 public class RequestContext internal constructor(
-    /** The request: inner (decrypted) for OSCORE, with the whole body for Block1 transfers. */
-    public val request: CoapMessage,
+    /**
+     * The request message: inner (decrypted) for OSCORE, with the whole body for Block1 transfers, and with the
+     * messaging-layer fields of the message it came in. Plumbing for kcoap's own modules; a handler reads the
+     * properties of this class instead.
+     */
+    @InternalKcoapApi
+    public val message: CoapMessage,
     /** Where the request came from; responses and notifications go back there. */
     public val peer: Endpoint,
     /** The message-security identity, or null for an unprotected request. */
@@ -29,22 +37,28 @@ public class RequestContext internal constructor(
     public val peerIdentity: PeerIdentity,
 ) {
     /** The request method. */
-    public val method: CoapCode get() = request.code
+    public val method: CoapCode get() = message.code
+
+    /**
+     * The request's Uri-Path values joined with "/" and a leading "/", or "/" for the root: the path the request
+     * names, which is the [resource]'s path or below it.
+     */
+    public val path: String get() = message.options.path
 
     /** The request options (inner options for OSCORE). */
-    public val options: OptionSet get() = request.options
+    public val options: OptionSet get() = message.options
 
     /** The whole request body; a copy. */
-    public val payload: ByteArray get() = request.payload
+    public val payload: ByteArray get() = message.payload
 
     /** The size of the request body in bytes. */
-    public val payloadSize: Int get() = request.payloadSize
+    public val payloadSize: Int get() = message.payloadSize
 
     /** The request body as UTF-8 text. */
-    public fun payloadAsText(): String = request.payloadAsText()
+    public fun payloadAsText(): String = message.payloadAsText()
 
     /** Uri-Query values, decoded. */
-    public val query: List<String> get() = request.options.uriQuery
+    public val query: List<String> get() = message.options.uriQuery
 
     /** True when the handler runs to produce an Observe notification rather than to answer a request. */
     public val isNotification: Boolean get() = inbound == null

@@ -128,3 +128,16 @@ Findings SEC-3 and SEC-4 of the architecture review (WP-SEC2 in
   checklist oscore-x3 records that deferral.
 - Policies are asked per request and per listed link: they should be quick, and they see identities, never
   keys.
+
+## Amendment (WP-B3)
+
+WP-B3 gave the CoAP facades one exception type, so two statements above now read differently for a `CoapClient`
+caller:
+
+- A request that the security layer refuses to protect, as `OscoreClient` without a context or `PeerSecurity`
+  before `install`, still fails before anything is sent, but the client throws `CoapException` with
+  `CoapException.Reason.SECURITY`, whose `cause` is the `MessageSecurityException` (or whatever else
+  `protectRequest` threw). Where "Consequences" says clients "see `MessageSecurityException`", they see it as
+  that cause. The SPI itself, `ClientMessageSecurity.protectRequest`, still throws it.
+- The Q-Block probe skips on `SECURITY` where it skipped on the raw `MessageSecurityException`, with the same
+  effect: it finds and keeps nothing, and the request goes with RFC 7959 under its own protection.

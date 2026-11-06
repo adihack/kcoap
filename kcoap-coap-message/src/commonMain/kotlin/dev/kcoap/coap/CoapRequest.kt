@@ -3,7 +3,9 @@ package dev.kcoap.coap
 /**
  * A request as the client application states it: method, target URI, further options and the whole body.
  * The client turns the URI into Uri-* options (RFC 7252 §6.4), splits a large body into Block1 transfers
- * and assigns token and Message ID. Immutable; build one with [Builder] or the client's method shortcuts.
+ * and assigns token and Message ID. Immutable; build one with [Builder] or the client's method shortcuts. Two
+ * requests are equal when method, URI, options, body (by content) and [isConfirmable] are, as two [CoapResponse]s
+ * are by their parts.
  *
  * @property options options besides those the URI gives, such as Accept or Content-Format.
  * @property isConfirmable whether the request goes in a Confirmable message (RFC 7252 §4.2) or a
@@ -33,6 +35,18 @@ public class CoapRequest(
         it.options { addAll(options) }
         it.payload = body
         it.isConfirmable = isConfirmable
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is CoapRequest && method == other.method && uri == other.uri && options == other.options &&
+            body.contentEquals(other.body) && isConfirmable == other.isConfirmable
+
+    override fun hashCode(): Int {
+        var result = method.value
+        result = 31 * result + uri.hashCode()
+        result = 31 * result + options.hashCode()
+        result = 31 * result + body.contentHashCode()
+        return 31 * result + isConfirmable.hashCode()
     }
 
     override fun toString(): String = buildString {

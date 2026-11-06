@@ -34,7 +34,8 @@ public object UdpMessageCodec : MessageCodec {
     override fun decode(bytes: ByteArray): CoapMessage {
         if (bytes.size < HEADER_LENGTH) throw CoapFormatException("Datagram of ${bytes.size} bytes is shorter than a header")
         val first = bytes[0].toInt() and 0xFF
-        val type = CoapMessageType.fromValue((first ushr 4) and 0x3)
+        // Two bits, and the four types are declared in the order of their values (RFC 7252 §3).
+        val type = CoapMessageType.entries[(first ushr 4) and 0x3]
         val messageId = ((bytes[2].toInt() and 0xFF) shl 8) or (bytes[3].toInt() and 0xFF)
         val fail = { reason: String -> CoapFormatException(reason, messageId, type) }
 

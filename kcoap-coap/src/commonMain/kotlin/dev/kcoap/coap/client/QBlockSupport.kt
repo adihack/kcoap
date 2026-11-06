@@ -3,7 +3,6 @@ package dev.kcoap.coap.client
 import dev.kcoap.coap.BlockOption
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
-import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.QBlockCapabilities
@@ -34,8 +33,9 @@ import kotlinx.coroutines.withContext
  * - No answer, or under message security only an answer that could not be verified, leaves it
  *   [Capability.UNKNOWN]: requests use RFC 7959, and the probe is repeated after
  *   min(1 minute, [QBlockClientConfig.capabilityLifetime]).
- * - A probe the security layer refuses to send ([MessageSecurityException] from `protectRequest`, such as
- *   kcoap-edhoc-oscore's `PeerSecurity` before a protection is installed) leaves it [Capability.UNKNOWN] for
+ * - A probe the security layer refuses to send ([CoapException.Reason.SECURITY], from a `protectRequest` that
+ *   throws, such as kcoap-edhoc-oscore's `PeerSecurity` before a protection is installed) leaves it
+ *   [Capability.UNKNOWN] for
  *   that request alone, and nothing is kept: the request goes with RFC 7959 and its own protection decides
  *   whether it is sent (ADR 0008), so the EDHOC request goes in the clear, and the first request after the
  *   protection is installed probes.
@@ -150,11 +150,13 @@ internal class QBlockSupport(
         }
         val response = try {
             client.exchange(peer, request, confirmable = true, recognized = QBlockClient.RECOGNIZED_OPTIONS)
-        } catch (e: MessageSecurityException) {
-            log.debug { "No Q-Block probe of $peer: ${e.message}" }
-            return null
         } catch (e: CoapException) {
             return when (e.reason) {
+                // ADR 0008: the security layer would not send it, which says nothing about the server.
+                CoapException.Reason.SECURITY -> {
+                    log.debug { "No Q-Block probe of $peer: ${e.message}" }
+                    null
+                }
                 CoapException.Reason.RESET -> Capability.UNSUPPORTED to "The Q-Block probe was answered with a Reset"
                 CoapException.Reason.BAD_RESPONSE -> Capability.UNSUPPORTED to "The Q-Block probe's answer was rejected: ${e.message}"
                 CoapException.Reason.TRANSMISSION_TIMEOUT, CoapException.Reason.RESPONSE_TIMEOUT ->

@@ -34,6 +34,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -142,7 +143,8 @@ class FailureBoundaryTest {
         delay(1.seconds)
         assertEquals(0, gauge.observerCount)
         val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
-        assertTrue("notification failed" in removed.reason, removed.reason)
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.FAILED, removed.reason)
+        assertTrue("notification failed" in removed.detail.orEmpty(), removed.detail)
         collector.cancel()
     }
 
@@ -161,7 +163,9 @@ class FailureBoundaryTest {
         delay(1.seconds)
         // Block-wise answers a representation that fits no block with 5.00, which ends both sides.
         assertEquals(0, gauge.observerCount)
-        assertTrue("5.00" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.ERROR_RESPONSE, removed.reason)
+        assertTrue("5.00" in removed.detail.orEmpty(), removed.detail)
         assertTrue(collector.isCompleted, "the client's observation ended with the 5.00")
     }
 
@@ -177,7 +181,9 @@ class FailureBoundaryTest {
         assertEquals(CoapCode.INTERNAL_SERVER_ERROR, responses.single().code)
         assertNull(responses.single().options.observe)
         assertEquals(0, gauge.observerCount, "no observer counts against the bounds for it")
-        assertTrue("5.00" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.ERROR_RESPONSE, removed.reason)
+        assertTrue("5.00" in removed.detail.orEmpty(), removed.detail)
     }
 
     @Test
@@ -198,7 +204,9 @@ class FailureBoundaryTest {
         gauge.change()
         delay(1.seconds)
         assertEquals(0, gauge.observerCount)
-        assertTrue("notification failed" in fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single().reason)
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.FAILED, removed.reason)
+        assertTrue("notification failed" in removed.detail.orEmpty(), removed.detail)
         collector.cancel()
     }
 
@@ -238,7 +246,9 @@ class FailureBoundaryTest {
         }
         val client = fixture.client(CoapClientConfig(security = failing))
 
-        assertFailsWith<MessageSecurityException> { client.get(fixture.uri("/r")) }
+        val error = assertFailsWith<CoapException> { client.get(fixture.uri("/r")) }
+        assertEquals(CoapException.Reason.SECURITY, error.reason)
+        assertIs<MessageSecurityException>(error.cause)
         assertEquals(0, client.endpoint.exchangeCount())
         server.close()
     }

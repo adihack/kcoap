@@ -72,8 +72,10 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
   Proxy-Uri / Proxy-Scheme (§5.10.2); 5.00 for failing handlers; conditional-request helper (§5.10.8);
   `/.well-known/core` with `rt`, `if`, `ct`, `sz`, `title`, `obs`, `osc` and RFC 6690 §4.1 filtering;
-  No-Response (RFC 7967); the request context with the peer, its `PeerIdentity` and the
-  `SecurityIdentity`.
+  No-Response (RFC 7967); the request context, the server's application model, with the `method`, `path`,
+  `query`, `options` and `payload`, the peer, its `PeerIdentity` and the `SecurityIdentity`, and without
+  the messaging-layer fields (its `message` is `@InternalKcoapApi`). A request body is bounded by
+  `CoapServerConfig.maxRequestBodySize`, the counterpart of the client's `maxResponseBodySize`.
 - **Access control** ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)): an `AccessPolicy` per
   resource (`Public`, `MessageSecurityRequired`, `Authenticated` or the application's own), inherited down
   the tree, `CoapServerConfig.defaultAccess` (`MessageSecurityRequired` with message security, else
@@ -84,10 +86,13 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   sequence numbers, at
   most one outstanding notification per client (NSTART) with superseding at the next timeout (§4.5.2),
   NON notifications rate-limited with a CON at least every 24 hours, observers removed on RST, timeout,
-  non-2.xx notification, deregistration, ended session and resource removal; client observations shared
-  per target resource (§3.1), ordered by §3.4, cancelled by deregistration or by forgetting.
+  non-2.xx notification, deregistration, ended session and resource removal, each reported as
+  `EndpointEvent.ObserverRemoved` with a `Reason` fit for counting and an optional `detail`; client
+  observations shared per target resource (§3.1), ordered by §3.4, cancelled by deregistration or by
+  forgetting.
 - **Block-wise, RFC 7959**: client Block1 uploads following the server's preferred size and the 4.13
-  hints, Block2 downloads with ETag checks and restarts, early negotiation, Size1/Size2; server atomic
+  hints, Block2 downloads with ETag checks and restarts, early negotiation when
+  `CoapClientConfig.preferredBlockSize` is set, Size1/Size2; server atomic
   Block1 assembly with 2.31 / 4.08 / 4.13 + Size1, Block2 from a cached representation with an ETag, also
   for notifications (§2.6); block sizes from the link's limits: the transport's `maxDatagramSize` over
   datagrams, the peer's Max-Message-Size on a connection. RFC 9175 Request-Tags for
@@ -105,6 +110,19 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
   Non-confirmable, and keeps each POST's or PATCH's response for its repeat), or nothing.
 - **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
+- **Errors**: every runtime failure of a `CoapClient`, `CoapEndpoint` or `CoapServer` call is a
+  `CoapException`, whose `Reason` says what failed and whose cause is the lower layer's exception: the peer
+  (`TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET`, `BAD_RESPONSE`, `BLOCKWISE_FAILED`), the session or
+  connection (`SESSION_ENDED`, `CONNECTION_CLOSED`), message security (`SECURITY` when the request could not
+  be protected and nothing was sent, `UNVERIFIED_RESPONSE`), the host lookup (`UNRESOLVED_HOST`, which an
+  `EndpointResolver` throws for a lookup that fails at runtime; any other exception of a resolver is reported
+  as it too, its own timeout included), limits (`MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED`), or the endpoint
+  (`TRANSPORT_UNAVAILABLE`, also for every `coaps` URI until DTLS exists, `TRANSPORT_FAILED`, `CLOSED`).
+  `IllegalArgumentException` and `IllegalStateException` are kept for mistakes of the caller, such as a
+  malformed URI string, `CancellationException` for a cancelled caller, and error codes are returned as
+  responses. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
+  too, a ping on a connection included: the closed state is checked under the lock that registers the
+  exchange. A malformed link-format document from a server is `BAD_RESPONSE`, with the parser's message.
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at
@@ -167,6 +185,9 @@ re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side
   Observe, none acted on (`UnverifiedResponseTest`).
 - Live interop with libcoap v4.3.5b in both directions (`src/jvmTest/.../interop`, see
   `interop/README.md`).
+- The client's error contract (`ClientErrorContractTest`): an exchange opened while `close()` runs fails
+  with `CLOSED` at once on virtual time, calls after close resolve nothing, `SECURITY` and
+  `UNRESOLVED_HOST` carry their causes, and cancellation is never translated.
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class
   (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
   `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; `ConcurrencyStressTest` on real threads through

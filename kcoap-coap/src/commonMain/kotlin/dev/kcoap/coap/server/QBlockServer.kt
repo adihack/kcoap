@@ -18,6 +18,7 @@ import dev.kcoap.coap.stack.DeliveryOwner
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
+import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
 import dev.kcoap.coap.stack.ExpiringCache
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.MessageLimits
@@ -56,7 +57,7 @@ import kotlinx.coroutines.withContext
  *   for; [CoapServer] treats the options as unrecognized for every other request (§4.1). [QBlockCheck] refuses
  *   requests that break the structural rules: 4.02 for Q-Block mixed with Block1 or Block2, 4.00 for a missing
  *   Request-Tag or Size1, a payload that does not fill its block, SZX 7 without BERT or Q-Block2 options out
- *   of order, 4.13 with Size1 above [CoapServerConfig.maxBodySize].
+ *   of order, 4.13 with Size1 above [CoapServerConfig.maxRequestBodySize].
  * - **Q-Block1 uploads** (§4.3). The blocks of a body, one operation by [OperationKey] (Request-Tag included,
  *   Size1, Echo and the Q-Block options not), go to its [PartialBody]. Its receiver answers each block: no
  *   response in the middle of a set, 2.31 with Q-Block1 when a Non-confirmable set is complete, a
@@ -165,7 +166,7 @@ internal class QBlockServer(
      * when it was rejected without one (RFC 7252 §5.4.1).
      */
     suspend fun answer(ref: QBlockRequest, resource: CoapResource, key: OperationKey, limits: MessageLimits): Reply? {
-        val violation = QBlockCheck.request(ref.request, limits.allowsBert, config.maxBodySize)
+        val violation = QBlockCheck.request(ref.request, limits.allowsBert, config.maxRequestBodySize)
         if (violation != null) {
             log.debug { "Refused a Q-Block request from ${ref.inbound.peer}: $violation" }
             if (violation.resetIfNonConfirmable && !ref.inbound.isConfirmable) {
@@ -523,7 +524,7 @@ internal class QBlockServer(
         if (!isBody(response)) return Reply.Single(response, observation)
         val size = blockSize(response, limits, requestedBlockSize(ref)) ?: run {
             // An error ends the client's observation (RFC 7641 §3.2), so the server keeps no observer either.
-            observation?.let { server.observations.remove(it, "registration response 4.13") }
+            observation?.let { server.observations.remove(it, ObserverRemoved.Reason.ERROR_RESPONSE, "4.13") }
             return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The response options leave no room for a block"))
         }
         val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.link.capabilities)
@@ -652,7 +653,9 @@ internal class QBlockServer(
                     body.drop()
                 }
                 // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
-                body.observation?.let { server.observations.remove(it, "address not verified") }
+                body.observation?.let {
+                    server.observations.remove(it, ObserverRemoved.Reason.ERROR_RESPONSE, "address not verified")
+                }
             }
             val kept = if (reply.isNew && AddressVerification.isRepeatSensitive(trigger.request.code)) {
                 AddressVerification.Withheld(trigger.request, body.response)
@@ -713,18 +716,15 @@ internal class QBlockServer(
         val removal = if (!isObserved || !target.carriesObserve) {
             null
         } else {
-            when (outcome) {
-                DeliveryOutcome.Rejected -> "reset by client"
-                DeliveryOutcome.TimedOut -> "notification not acknowledged"
-                is DeliveryOutcome.Failed -> outcome.cause.message ?: "failed"
-                else -> null
-            }
+            ObservationRegistry.removalFor(outcome)
         }
         if (event != null) {
             launch("continue a Q-Block2 body") {
                 step(body, event)
                 val observation = body.observation
-                if (observation != null && removal != null) server.observations.remove(observation, removal)
+                if (observation != null && removal != null) {
+                    server.observations.remove(observation, removal.first, removal.second)
+                }
             }
         }
     }
@@ -882,7 +882,7 @@ internal class QBlockServer(
             // The security layer, its sequence-number store or the messaging layer failed: the observer goes.
             log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
             lock.withLock { stop(body, endpoint.now()) }
-            server.observations.remove(observation, "notification failed: ${e.message}")
+            server.observations.remove(observation, ObserverRemoved.Reason.FAILED, "notification failed: ${e.message}")
         }
     }
 

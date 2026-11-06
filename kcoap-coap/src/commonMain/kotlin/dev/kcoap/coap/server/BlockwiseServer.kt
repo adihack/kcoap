@@ -65,7 +65,7 @@ internal class BlockwiseServer(
                 return@withLock reject(CoapCode.BAD_REQUEST, "Block1 payload of ${payload.size} bytes does not match ${block.size}")
             }
             options.size1?.let { announced ->
-                if (announced > config.maxBodySize) return@withLock tooLarge(key)
+                if (announced > config.maxRequestBodySize) return@withLock tooLarge(key)
             }
             // The key holds every option but the Block and NoCacheKey ones (RFC 9175 §3.3), Content-Format
             // and Request-Tag included, so a block with another Content-Format finds no earlier blocks and
@@ -87,7 +87,7 @@ internal class BlockwiseServer(
                     return@withLock reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "Block ${block.number} is out of sequence")
                 }
             }
-            if (upload.body.size > config.maxBodySize) return@withLock tooLarge(key)
+            if (upload.body.size > config.maxRequestBodySize) return@withLock tooLarge(key)
             // §2.3: the control SZX is the server's preference, at most what the client used.
             val exponent = if (block.isBert && limits.allowsBert && config.maxBlockSize == Blockwise.MAX_BLOCK_SIZE) {
                 block.sizeExponent
@@ -116,9 +116,8 @@ internal class BlockwiseServer(
     /** §2.9.3: 4.13 with Size1 giving the largest acceptable body. */
     private fun tooLarge(key: OperationKey): Block1Result {
         uploads.remove(key)
-        return Block1Result.Respond(
-            CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(config.maxBodySize.toLong()) },
-        )
+        val limit = config.maxRequestBodySize.toLong()
+        return Block1Result.Respond(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
     }
 
     /** The representation a follow-up Block2 request continues, if still cached. */

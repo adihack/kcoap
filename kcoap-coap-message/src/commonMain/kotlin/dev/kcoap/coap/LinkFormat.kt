@@ -3,11 +3,17 @@ package dev.kcoap.coap
 /**
  * One link of the CoRE Link Format (RFC 6690 §2): a target URI-reference and its attributes in order.
  * An attribute without a value, such as `obs` (RFC 7641 §6), has a null value. Values are unquoted.
+ *
+ * The [target] stays the text the document had: a link a server sent is peer input, so to use an absolute
+ * target as a URI, parse it with [CoapUri.parseOrNull].
  */
 public class WebLink(
     public val target: String,
-    public val attributes: List<Pair<String, String?>> = emptyList(),
+    attributes: List<Pair<String, String?>> = emptyList(),
 ) {
+    /** The attributes in document order; a copy of the list given. */
+    public val attributes: List<Pair<String, String?>> = attributes.toList()
+
     /** The first value of [name], or null if absent or a flag. */
     public operator fun get(name: String): String? = attributes.firstOrNull { it.first == name }?.second
 
@@ -92,12 +98,26 @@ public object LinkFormat {
     }
 
     /**
-     * Parses a link-format document. Whitespace between links and parameters is tolerated, as RFC 6690
-     * §2 converts HTTP Link headers by removing it.
+     * Parses a link-format document the application supplies; a document from a peer, such as a
+     * `/.well-known/core` response, goes through [parseOrNull]. Whitespace between links and parameters is
+     * tolerated, as RFC 6690 §2 converts HTTP Link headers by removing it.
      *
      * @throws IllegalArgumentException when [text] is not link format.
      */
-    public fun parse(text: String): List<WebLink> {
+    public fun parse(text: String): List<WebLink> = read(text)
+
+    /**
+     * Parses [text] like [parse], or returns null where [parse] throws: for documents a peer sent, whose
+     * malformation is the peer's, not the application's. `CoapClient.discover` reads `/.well-known/core` with it.
+     */
+    public fun parseOrNull(text: String): List<WebLink>? = try {
+        read(text)
+    } catch (_: MalformedLinkFormat) {
+        null
+    }
+
+    /** The links of [text]; throws only [MalformedLinkFormat]. */
+    private fun read(text: String): List<WebLink> {
         val reader = Reader(text)
         val links = mutableListOf<WebLink>()
         reader.skipWhitespace()
@@ -150,14 +170,19 @@ public object LinkFormat {
         }
 
         fun expect(char: Char) {
-            require(!atEnd && text[position] == char) { "Expected '$char' at $position in link format" }
+            ensure(!atEnd && text[position] == char) { "Expected '$char' at $position in link format" }
             position++
+        }
+
+        /** Fails the document unless [condition] holds. */
+        private inline fun ensure(condition: Boolean, message: () -> String) {
+            if (!condition) throw MalformedLinkFormat(message())
         }
 
         fun link(): WebLink {
             expect('<')
             val end = text.indexOf('>', position)
-            require(end >= 0) { "Unterminated link target at $position" }
+            ensure(end >= 0) { "Unterminated link target at $position" }
             val target = text.substring(position, end)
             position = end + 1
             val attributes = mutableListOf<Pair<String, String?>>()
@@ -167,7 +192,7 @@ public object LinkFormat {
                 position++
                 skipWhitespace()
                 val name = token()
-                require(name.isNotEmpty()) { "Empty parameter name at $position" }
+                ensure(name.isNotEmpty()) { "Empty parameter name at $position" }
                 skipWhitespace()
                 if (!atEnd && text[position] == '=') {
                     position++
@@ -191,11 +216,11 @@ public object LinkFormat {
             expect('"')
             val out = StringBuilder()
             while (true) {
-                require(!atEnd) { "Unterminated quoted string in link format" }
+                ensure(!atEnd) { "Unterminated quoted string in link format" }
                 when (val c = text[position++]) {
                     '"' -> return out.toString()
                     '\\' -> {
-                        require(!atEnd) { "Dangling escape in link format" }
+                        ensure(!atEnd) { "Dangling escape in link format" }
                         out.append(text[position++])
                     }
                     else -> out.append(c)
@@ -204,3 +229,6 @@ public object LinkFormat {
         }
     }
 }
+
+/** What [LinkFormat.parse] throws, and the only failure [LinkFormat.parseOrNull] turns into null. */
+private class MalformedLinkFormat(message: String) : IllegalArgumentException(message)

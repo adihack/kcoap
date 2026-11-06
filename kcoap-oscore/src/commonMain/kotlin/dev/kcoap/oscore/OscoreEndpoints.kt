@@ -95,7 +95,8 @@ public class OscoreIdentity(recipientId: ByteArray, idContext: ByteArray?) : Sec
  * that fails verification.
  *
  * **No context.** A request for which [contexts] returns null fails with [MessageSecurityException] before
- * anything is sent, so a missing context never sends plaintext silently. With [allowUnprotected], null sends
+ * anything is sent, so a missing context never sends plaintext silently; kcoap-coap's client reports it as
+ * `CoapException.Reason.SECURITY` with it as cause, as it does any failure here. With [allowUnprotected], null sends
  * the request unprotected instead, for a client that talks OSCORE to some servers and plain CoAP to others.
  *
  * @param allowUnprotected whether a request [contexts] finds no context for goes out unprotected; false by

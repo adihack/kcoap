@@ -2,6 +2,7 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.transport.ChannelSecurityKind
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.IpLiteral
@@ -16,10 +17,12 @@ import kotlin.time.Duration
  * @property requestTimeout how long to wait for the response to one request (one block), measured
  *   from sending; null waits EXCHANGE_LIFETIME. A Confirmable request without ACK fails earlier, after
  *   MAX_TRANSMIT_WAIT.
- * @property blockSize the block size for Block1 uploads and the Block2 size proposed in requests
- *   (early negotiation, RFC 7959 §2.4); null uses the largest size the datagram (or the server's
- *   Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and lets the server
- *   choose the response block size. Set, it also turns BERT off.
+ * @property preferredBlockSize the block size the client prefers, 16..1024: Block1 uploads use it, and setting it
+ *   turns on early negotiation, so every request without a body proposes it as the Block2 size of the response
+ *   (RFC 7959 §2.4); a server may still choose smaller blocks. Null, the default, uses the largest size the
+ *   datagram (or the server's Max-Message-Size, with BERT where both sides indicated it, RFC 8323 §6) fits and
+ *   lets the server choose the response block size. Set, it also turns BERT off. The server's counterpart is
+ *   its upper bound `CoapServerConfig.maxBlockSize`.
  * @property maxResponseBodySize the largest body assembled from Block2 transfers.
  * @property resolver turns the host of a URI into a transport [Endpoint]; [EndpointResolver.Default] takes IP
  *   literals for every scheme and passes host names to the connectors of RFC 8323 schemes.
@@ -30,12 +33,12 @@ import kotlin.time.Duration
  * @property securityReserve bytes kept free in each message for [security]'s overhead when choosing
  *   block sizes.
  * @property qBlock whether and how requests use Q-Block (RFC 9177) instead of RFC 7959; off by default.
- *   [blockSize] and [maxResponseBodySize] apply to Q-Block bodies too.
+ *   [preferredBlockSize] and [maxResponseBodySize] apply to Q-Block bodies too.
  */
 public class CoapClientConfig(
     public val security: ClientMessageSecurity? = null,
     public val requestTimeout: Duration? = null,
-    public val blockSize: Int? = null,
+    public val preferredBlockSize: Int? = null,
     public val maxResponseBodySize: Int = 1 shl 20,
     public val resolver: EndpointResolver = EndpointResolver.Default,
     public val observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
@@ -45,7 +48,8 @@ public class CoapClientConfig(
 ) {
     init {
         require(requestTimeout == null || requestTimeout.isPositive()) { "Request timeout must be positive: $requestTimeout" }
-        require(blockSize == null || (blockSize in 16..1024 && blockSize and (blockSize - 1) == 0)) {
+        val blockSize = preferredBlockSize
+        require(blockSize == null || blockSize in 16..1024 && blockSize and (blockSize - 1) == 0) {
             "Block size must be a power of two in 16..1024: $blockSize"
         }
         require(maxResponseBodySize > 0) { "Maximum response body size must be positive" }
@@ -53,8 +57,8 @@ public class CoapClientConfig(
     }
 
     override fun toString(): String =
-        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, blockSize=$blockSize, " +
-            "qBlock=${qBlock.mode})"
+        "CoapClientConfig(security=${security != null}, requestTimeout=$requestTimeout, " +
+            "preferredBlockSize=$preferredBlockSize, qBlock=${qBlock.mode})"
 }
 
 /** How a [CoapClient] ends an observation whose collector went away (RFC 7641 §3.6). */
@@ -70,9 +74,26 @@ public enum class ObserveCancellation {
  * Finds the transport endpoint for a URI's host and port. The kind of [Endpoint] it returns picks the
  * endpoint's transport: an [Endpoint.Udp] or [Endpoint.Secure] its datagram transport, an [Endpoint.Tcp] or
  * [Endpoint.WebSocket] a connection.
+ *
+ * **Errors.** A lookup that fails at runtime, as a DNS lookup does without network or for a name without an
+ * address, throws [CoapException] with [CoapException.Reason.UNRESOLVED_HOST] and the underlying failure as cause:
+ * a condition that may pass. `IllegalArgumentException` is kept for a host this resolver cannot resolve by design,
+ * a mistake of configuration that no retry fixes, such as a host name given to [Default], which knows no DNS.
+ * [CoapClient] passes both on, and reports any other exception of [resolve] as
+ * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, so a resolver built on a platform's DNS may let that
+ * platform's exceptions through. That includes the cancellation of a lookup that times out in its own
+ * `withTimeout` while the caller is still active; only the caller's own cancellation passes as one.
+ *
+ * A [CoapClient] does not resolve `coaps` URIs: without DTLS (RFC 7252 §9.1) it fails such a call with
+ * [CoapException.Reason.TRANSPORT_UNAVAILABLE] before the resolver runs.
  */
 public fun interface EndpointResolver {
-    /** @throws IllegalArgumentException when the host cannot be resolved. */
+    /**
+     * The endpoint for [uri]'s host and port.
+     *
+     * @throws CoapException with [CoapException.Reason.UNRESOLVED_HOST] when the lookup fails at runtime.
+     * @throws IllegalArgumentException when this resolver cannot resolve such a host at all.
+     */
     public suspend fun resolve(uri: CoapUri): Endpoint
 
     public companion object {

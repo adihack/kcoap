@@ -234,7 +234,7 @@ class QBlockServerTest {
 
     @Test
     fun rfc9177Section4_3AnUploadWithoutRequestTagOrSize1Gets400AndOneTooLarge413WithSize1() = runTest {
-        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxBodySize = 2048, qBlock = qBlockOn))
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxRequestBodySize = 2048, qBlock = qBlockOn))
         val withoutTag = upload(f.peer, 0).toBuilder().options { remove(CoapOptions.REQUEST_TAG.number) }.build()
         val withoutSize1 = upload(f.peer, 0).toBuilder().options { remove(CoapOptions.SIZE1.number) }.build()
 
@@ -251,7 +251,7 @@ class QBlockServerTest {
 
     @Test
     fun rfc7959Section2_9_3ARequestOfOneMessageBeyondMaxBodySizeGets413AlsoWithQBlock2() = runTest {
-        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxBodySize = 16, qBlock = qBlockOn))
+        val f = fixture(CoapServerConfig(amplification = AmplificationPolicy.OFF, maxRequestBodySize = 16, qBlock = qBlockOn))
         f.peer.send(single(f.peer, CoapCode.POST, "x".repeat(64)))
 
         val answer = f.peer.drain().single()
@@ -590,6 +590,36 @@ class QBlockServerTest {
 
         assertEquals(CoapCode.REQUEST_ENTITY_TOO_LARGE, f.peer.drain(5.seconds).single().code)
         assertEquals(0, counter.observerCount)
+        val removed = f.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.ERROR_RESPONSE, removed.reason)
+        assertEquals("4.13", removed.detail)
+    }
+
+    /**
+     * RFC 9175 §2.4 item 3, RFC 7641 §4.1: a Q-Block registration whose address was verified when it came, but no
+     * longer when its body is ready, gets a 4.01 with Echo instead of the burst, and registers nothing.
+     */
+    @Test
+    fun rfc9175Section2_4AQBlockRegistrationWhoseAddressExpiredWhileItsHandlerRanRegistersNothing() = runTest {
+        val slow = object : ObservableResource("slow") {
+            override suspend fun handleGet(context: RequestContext): CoapResponse {
+                delay(3.seconds)
+                return CoapResponse.content(big)
+            }
+        }
+        val config = CoapServerConfig(amplification = AmplificationPolicy.Q_BLOCK_BURSTS, verifiedAddressLifetime = 2.seconds, qBlock = qBlockOn)
+        val f = fixture(config) { add(slow) }
+        f.peer.send(register(f.peer, "slow"))
+        val echo = assertNotNull(f.peer.drain().single().options.echo, "a registration with Q-Block is challenged first")
+
+        f.peer.send(register(f.peer, "slow") { echo(echo) })
+        val late = f.peer.drain(5.seconds).single()
+        assertEquals(CoapCode.UNAUTHORIZED, late.code, "verified at registration, expired by the response")
+        assertNull(late.options.qBlock2)
+        assertEquals(0, slow.observerCount)
+        val removed = f.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.ERROR_RESPONSE, removed.reason)
+        assertEquals("address not verified", removed.detail)
     }
 
     @Test
@@ -836,7 +866,8 @@ class QBlockServerTest {
         val copies = 1 + TransmissionParameters.Default.maxRetransmit
         assertEquals(List(copies) { 0L }, unanswered.numbers(), "RFC 7641 §4.5")
         assertEquals(0, counter.observerCount)
-        assertTrue(f.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "notification not acknowledged" })
+        val removals = f.events.filterIsInstance<EndpointEvent.ObserverRemoved>().map { it.reason }
+        assertTrue(EndpointEvent.ObserverRemoved.Reason.NOT_ACKNOWLEDGED in removals, "$removals")
     }
 
     @Test

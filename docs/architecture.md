@@ -99,7 +99,8 @@ closed in both roles ([ADR 0008](adr/0008-fail-closed-message-security.md)):
   Request/Response layer takes no decision on them (no Echo retry, no block-wise or Q-Block step, no
   capability, no end of an observation) and fails a request that has no verified answer with
   `CoapException(UNVERIFIED_RESPONSE)`. A security layer that cannot protect a request it should throws
-  instead of sending plaintext; plaintext is an explicit choice (`allowUnprotected`, the EDHOC path).
+  instead of sending plaintext, and the client fails the request with `CoapException(SECURITY)`; plaintext is
+  an explicit choice (`allowUnprotected`, the EDHOC path).
 
 ## The CoAP endpoint as built
 
@@ -294,9 +295,24 @@ the endpoint scope's dispatcher, so the time source must advance with that dispa
 `TimeSource.Monotonic` with a real dispatcher, and under `runTest` `testScheduler.timeSource`, with which
 a 247-second lifetime passes in an instant. The endpoint warns once when it sees the two disagree.
 Request timeouts wait on the same dispatcher clock. Retransmission jitter and the first Message ID come
-from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG (through
-`kotlin.uuid`), with per-session sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per
-endpoint unless the configuration names one.
+from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG, with per-session
+sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per endpoint unless the configuration
+names one.
+
+**Randomness.** Two sources, by layer, and no public `SecureRandom` in kcoap-common:
+
+- The CoAP stack draws its secrets, the default tokens (RFC 7252 §5.3.1) and the Echo values of address
+  verification (RFC 9175 §2.4), from the internal `PlatformCsprng` in kcoap-coap: a synchronous
+  `kotlin.random.Random` built on `kotlin.uuid.Uuid.random()`, which the standard library backs by the
+  platform's CSPRNG on every target (`SecureRandom` on the JVM and Android, `crypto.getRandomValues` in
+  browsers and Node.js, the system CSPRNG on Apple and Linux), so plain CoAP needs no crypto module.
+  Retransmission jitter and the first Message ID, which need no secrecy, come from
+  `CoapEndpointConfig.random`, so tests replay them.
+- The security layers (OSCORE's Echo values, EDHOC's connection identifiers and ephemeral keys) draw from
+  `CryptoBackend.randomBytes`, the injectable seam that known-answer tests and trace replay (RFC 9529) need.
+  A custom backend may implement it with the bytes of `Uuid.random()` or with cryptography-kotlin's
+  `CryptographySystem.getDefaultRandom()`, as `DefaultCryptoBackend` does; a test double that needs
+  determinism overrides it.
 
 **The DTLS readiness rules, as met:**
 
@@ -318,8 +334,36 @@ endpoint unless the configuration names one.
 
 **Observability.** A `MessageInterceptor` chain sees every message at the wire, once per message;
 `EndpointEventListener` gets retransmissions, timeouts, resets, duplicates, malformed datagrams,
-rejections, session ends and observer changes. Logging follows `code-style.md` under the tags
+rejections, session ends and observer changes. `ObserverRemoved` carries a `Reason` enum (deregistered,
+Reset, not acknowledged, resource removed, error response, session ended, failed) with an optional
+`detail`, so a metric can count by it without parsing text. Logging follows `code-style.md` under the tags
 `coap.message`, `coap.exchange`, `coap.server`, `coap.client` and `transport`.
+
+**Errors.** Each facade has one exception type for what goes wrong at runtime, and translates the
+exceptions of the layers below it at its boundary; `IllegalArgumentException` and `IllegalStateException`
+are for mistakes of the caller. For `CoapClient`, `CoapEndpoint` and `CoapServer` that type is
+`CoapException`, whose `Reason` says what failed:
+
+| Signal from below | Becomes |
+|---|---|
+| A peer that does not acknowledge, answer or accept (RFC 7252 §4.2) | `TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET` |
+| `SessionEndedException`, a closed connection | `SESSION_ENDED`, `CONNECTION_CLOSED` |
+| Any exception from `ClientMessageSecurity.protectRequest`, such as `MessageSecurityException` | `SECURITY`, nothing sent |
+| `ResponseVerification.Unverified` as the only answer | `UNVERIFIED_RESPONSE` |
+| `MessageSecurityException` from `unprotectRequest` on the server | An unprotected error response (RFC 8613 §8.2) |
+| `CoapFormatException` | A Reset or a silent drop, and `EndpointEvent.MalformedMessage` |
+| A lookup the `EndpointResolver` could not make at runtime | `UNRESOLVED_HOST` |
+| A `coaps` URI, which needs DTLS (RFC 7252 §6.2), before DTLS exists | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
+| The endpoint's own transport failing, or a call after `close()` | `TRANSPORT_FAILED`, `CLOSED` |
+
+A `CancellationException` passes unchanged only when the calling coroutine was cancelled: a resolver or
+security layer that cancels itself, as its own `withTimeout` does, while the caller is active fails like any
+other exception of that layer. A call after `close()`, or racing it, fails with `CLOSED` at once: the closed
+state is checked under the lock that registers the exchange, so no exchange is added after the terminal
+transition failed the others, and a ping whose connection the terminal transition ended reports that rather
+than a peer that did not answer. URIs, request options and link-format documents a peer sends are read with
+`CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and `LinkFormat.parseOrNull`, which return null instead of
+the `IllegalArgumentException` that `parse` and `fromOptions` keep for the caller's own input.
 
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also

@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
  * its own, and when [QBlockSupport] does not know the peer to support Q-Block. Observations follow the same
  * rules, under message security too.
  *
- * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.blockSize], goes in
+ * **Requests.** A body that does not fit one message, or is larger than [CoapClientConfig.preferredBlockSize], goes in
  * Q-Block1 blocks of one size for the whole body, each a new request on a new token with Size1, the body's
  * Request-Tag (a 4-byte counter with a random start, never reused while the client lives, §4.3) and the
  * request's other options. Every other request carries Q-Block2 0/M=1 with the proposed block size, which
@@ -372,7 +372,7 @@ internal class QBlockClient(private val client: CoapClient) {
             if (body.isEmpty()) return null
             val reserve = client.securityReserve
             val single = request.toBuilder().options { qBlock2(BlockOption(0, true, downloadSizeExponent())) }.build()
-            val limit = client.config.blockSize
+            val limit = client.config.preferredBlockSize
             if (limits.fits(single, reserve) && body.size <= (limit ?: Int.MAX_VALUE)) return null
             val header = base.toBuilder().options {
                 qBlock1(BlockOption(BlockOption.MAX_NUMBER, true, MAX_EXPONENT))
@@ -484,7 +484,7 @@ internal class QBlockClient(private val client: CoapClient) {
                     maxAge(UInt.MAX_VALUE.toLong())
                 }
             }
-            val size = client.config.blockSize
+            val size = client.config.preferredBlockSize
                 ?: Blockwise.fittingBlockSize(limits, estimate, client.securityReserve)
                 ?: Blockwise.MIN_BLOCK_SIZE
             return BlockOption.sizeExponentFor(size)

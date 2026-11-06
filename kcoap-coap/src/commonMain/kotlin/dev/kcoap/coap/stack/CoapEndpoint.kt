@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
@@ -22,6 +23,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -261,7 +264,8 @@ public class CoapEndpoint private constructor(
      *   whose granted [BodyLease] towards [peer] holds the slot (RFC 9177 §7.2).
      * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
      *   transport for [peer], with [CoapException.Reason.CONNECTION_CLOSED] when its connection cannot be
-     *   opened, or like [closeCause] once the endpoint is closed.
+     *   opened, with [CoapException.Reason.SECURITY] when [security] fails to protect the request, which is then
+     *   not sent, or like [closeCause] once the endpoint is closed.
      * @throws IllegalArgumentException for a Confirmable request with [Pacing.Body], which would deadlock
      *   at NSTART 1 (RFC 9177 §7.1), or a lease towards another peer.
      * @throws IllegalStateException for a lease not yet granted or already released.
@@ -294,7 +298,7 @@ public class CoapEndpoint private constructor(
         }
         try {
             val plain = link.address(request, exchange.token, confirmable)
-            val protected = security?.protectRequest(plain, peer)
+            val protected = security?.let { protect(it, plain, peer) }
             exchange.protectedRequest = protected
             val wire = protected?.message?.toBuilder()?.apply {
                 type = plain.type
@@ -311,6 +315,31 @@ public class CoapEndpoint private constructor(
             throw e
         }
         return exchange
+    }
+
+    /**
+     * [security]'s protection of [request] for [peer]. Its failures are translated at this boundary, as for every
+     * client call (CoapException): any exception becomes [CoapException.Reason.SECURITY], with the security
+     * layer's own as cause, whatever its type, so a failing sequence-number store under OSCORE is reported like a
+     * missing context. That includes a cancellation of the layer's own, such as a store's `withTimeout` expiring,
+     * while the caller is still active; the caller's cancellation passes unchanged.
+     */
+    private suspend fun protect(
+        security: ClientMessageSecurity,
+        request: CoapMessage,
+        peer: Endpoint,
+    ): ProtectedRequest? {
+        try {
+            return security.protectRequest(request, peer)
+        } catch (e: Exception) {
+            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
+            log.debug { "Message security did not protect ${request.code} to $peer: ${e.message}" }
+            throw CoapException(
+                "Message security could not protect ${request.code} to $peer: ${e.message}",
+                CoapException.Reason.SECURITY,
+                e,
+            )
+        }
     }
 
     /**
@@ -370,7 +399,8 @@ public class CoapEndpoint private constructor(
      * within [ReliableTransportConfig.pingTimeout], false if not or if the connection failed.
      *
      * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
-     *   transport for [peer], or like [closeCause] once the endpoint is closed.
+     *   transport for [peer], or like [closeCause] once the endpoint is closed, also when it closes while the
+     *   ping waits for its connection or its answer, whatever the transport.
      */
     public suspend fun ping(peer: Endpoint): Boolean = ping(peer, custody = false)
 
@@ -385,11 +415,17 @@ public class CoapEndpoint private constructor(
             linkFor(peer)
         } catch (e: CoapException) {
             if (e.reason == CoapException.Reason.TRANSPORT_UNAVAILABLE) throw e
+            // The terminal transition sets closeCause before it ends the connections and their attempts, so a
+            // connection the closing endpoint ended is reported as the endpoint closed, as over datagrams.
+            closeCause?.let { throw closedError(it) }
             // A connection that cannot be opened is a peer that does not answer.
             log.debug { "Ping of $peer failed: ${e.message}" }
             return false
         }
-        return link.ping(custody)
+        val answered = link.ping(custody)
+        // A connection fails its pending Pings when it closes; closed by this endpoint, that is no answer from the peer.
+        if (!answered) closeCause?.let { throw closedError(it) }
+        return answered
     }
 
     /** Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation. */

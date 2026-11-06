@@ -88,7 +88,9 @@ class ObserveTest {
         assertEquals(values.toSet().size, values.size)
         assertTrue(notifications.drop(1).all { it.type == CoapMessageType.CON })
         assertTrue(fixture.events.any { it is EndpointEvent.ObserverAdded })
-        assertTrue(fixture.events.any { it is EndpointEvent.ObserverRemoved })
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.DEREGISTERED, removed.reason)
+        assertEquals("/counter", removed.path)
     }
 
     @Test
@@ -105,6 +107,9 @@ class ObserveTest {
         delay(5.seconds)
         assertEquals(0, counter.observerCount, "the client's RST removed the observer (§3.5)")
         assertTrue(fixture.traffic.any { it.message?.type == CoapMessageType.RST })
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.RESET, removed.reason)
+        assertNull(removed.detail)
     }
 
     @Test
@@ -163,6 +168,8 @@ class ObserveTest {
         delay(1.seconds)
         server.root.remove("gone")
         assertEquals(listOf(CoapCode.CONTENT, CoapCode.NOT_FOUND), responses.await().map { it.code })
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.RESOURCE_REMOVED, removed.reason)
     }
 
     @Test
@@ -575,6 +582,8 @@ class ObserveTest {
         serverTransport.inject(DatagramEvent.SessionEnded(session, SessionEndReason.TIMEOUT))
         delay(1.seconds)
         assertEquals(0, counter.observerCount)
+        val removals = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>()
+        assertEquals(listOf(EndpointEvent.ObserverRemoved.Reason.SESSION_ENDED), removals.map { it.reason })
     }
 
     @Test

@@ -158,7 +158,7 @@ class UnverifiedResponseTest {
 
     @Test
     fun adr0008AnUnverified413DoesNotRestartABlock1Upload() = runTest {
-        val s = setup(CoapClientConfig(security = Toy, blockSize = 64))
+        val s = setup(CoapClientConfig(security = Toy, preferredBlockSize = 64))
         val pending = async { runCatching { s.client.put(s.peer.uri("/store"), ByteArray(300)) } }
         val first = s.peer.receive()
         assertEquals(0L, first.options.block1?.number)
@@ -320,7 +320,7 @@ class UnverifiedResponseTest {
     @Test
     fun adr0008UnverifiedErrorsNeitherEndNorReachAnEstablishedQBlockObservation() = runTest {
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-        val s = setup(CoapClientConfig(security = Toy, blockSize = 16, qBlock = qBlock))
+        val s = setup(CoapClientConfig(security = Toy, preferredBlockSize = 16, qBlock = qBlock))
         val pending = async { s.client.observe(s.peer.uri("/counter")) { nonConfirmable() }.take(2).toList() }
         val registration = s.peer.receive()
         s.peer.send(s.peer.response(registration, CoapMessageType.NON, "first") {

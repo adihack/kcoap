@@ -224,7 +224,7 @@ class ReliableTransportTest {
         fixture.server(endpointConfig = fixture.endpointConfig(ReliableTransportConfig(maxMessageSize = 2048))) {
             resource("store") { put { CoapResponse.changed() } }
         }
-        val client = fixture.client(CoapClientConfig(blockSize = 512))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 512))
         assertEquals(CoapCode.CHANGED, client.put(fixture.uri("/store"), body(3000)).code)
         assertTrue(fixture.sent(CoapCode.PUT).all { it.options.block1!!.size == 512 && !it.options.block1!!.isBert })
     }
@@ -418,7 +418,8 @@ class ReliableTransportTest {
         assertEquals(CoapException.Reason.CONNECTION_CLOSED, failure.reason)
         assertEquals(CoapException.Reason.CONNECTION_CLOSED, (observation.await().exceptionOrNull() as CoapException).reason)
         assertEquals(0, counter.observerCount)
-        assertTrue(fixture.events.any { it is EndpointEvent.ObserverRemoved })
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.SESSION_ENDED, removed.reason, "RFC 8323 §7.4")
         assertEquals(2, fixture.events.count { it is EndpointEvent.ConnectionClosed })
     }
 

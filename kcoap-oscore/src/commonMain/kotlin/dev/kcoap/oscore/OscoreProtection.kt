@@ -264,11 +264,7 @@ internal object OscoreProtection {
      * host and port only.
      */
     private fun decomposeProxyUri(value: String, inner: OptionSet.Builder, outer: OptionSet.Builder) {
-        val uri = try {
-            CoapUri.parse(value)
-        } catch (e: IllegalArgumentException) {
-            throw OscoreException(OscoreError.DECODE_FAILED, "unparsable Proxy-Uri", e)
-        }
+        val uri = CoapUri.parseOrNull(value) ?: throw OscoreException(OscoreError.DECODE_FAILED, "unparsable Proxy-Uri")
         uri.pathSegments.forEach { inner.add(CoapOption.string(CoapOptions.URI_PATH.number, it)) }
         uri.querySegments.forEach { inner.add(CoapOption.string(CoapOptions.URI_QUERY.number, it)) }
         val authority = CoapUri(uri.scheme, uri.host, uri.port).toString().removeSuffix("/")

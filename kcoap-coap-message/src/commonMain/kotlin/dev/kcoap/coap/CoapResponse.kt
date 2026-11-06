@@ -1,5 +1,7 @@
 package dev.kcoap.coap
 
+import dev.kcoap.common.InternalKcoapApi
+
 /**
  * A response as the application sees it: code, options and the whole body. Block-wise transfers are
  * already reassembled, and the messaging-layer fields (type, Message ID, token) are not part of it.
@@ -35,7 +37,11 @@ public class CoapResponse(
     public fun withOptions(block: OptionSet.Builder.() -> Unit): CoapResponse =
         CoapResponse(code, options.toBuilder().apply(block).build(), body)
 
-    /** This response as a message with [token]; the type and Message ID are left to the messaging layer. */
+    /**
+     * This response as a message with [token], for the stack to send: the type and Message ID are placeholders
+     * that the messaging layer replaces (RFC 7252 §4), and a reliable transport has neither (RFC 8323 §3.2).
+     */
+    @InternalKcoapApi
     public fun toMessage(token: ByteArray): CoapMessage = CoapMessage(CoapMessageType.CON, code, 0, token, options, body)
 
     override fun equals(other: Any?): Boolean =
@@ -78,8 +84,14 @@ public class CoapResponse(
             return CoapResponse(code, OptionSet.EMPTY, diagnostic?.encodeToByteArray() ?: ByteArray(0))
         }
 
-        /** The response carried by [message]. */
-        public fun of(message: CoapMessage): CoapResponse = CoapResponse(message.code, message.options, message.payload)
+        /**
+         * The response [message] carries: its code, options and payload, without the messaging-layer fields.
+         *
+         * @throws IllegalArgumentException when [message] has no response code (RFC 7252 §5.9), such as a request
+         *   or an Empty message.
+         */
+        public fun from(message: CoapMessage): CoapResponse =
+            CoapResponse(message.code, message.options, message.payload)
 
         private fun contentFormatOption(format: Int?): OptionSet =
             if (format == null) OptionSet.EMPTY else OptionSet.build { contentFormat(format) }

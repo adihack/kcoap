@@ -59,6 +59,15 @@ val frame = ReliableMessageCodec.WebSocket.encode(request)  // RFC 8323 §4.2: n
   URIs to and from Uri-Host, Uri-Port, Uri-Path and Uri-Query, with percent-encoding.
 - **Link format, RFC 6690**: parsing and serializing `/.well-known/core` documents, with the `osc`
   attribute of RFC 8613 §9.
+- **Caller input and peer input.** `CoapUri.parse` and `LinkFormat.parse` take text the application
+  supplies and throw `IllegalArgumentException` on a malformed one, a mistake of the caller.
+  `CoapUri.parseOrNull` and `LinkFormat.parseOrNull` take text a peer sent, such as a `/.well-known/core`
+  document and the link targets in it, and return null instead of throwing. `CoapUri.fromOptions` rebuilds a
+  URI from options the application built; `CoapUri.fromOptionsOrNull` from the options of a received request,
+  returning null for one no URI has, such as an empty Uri-Port (the port 0).
+- **Value types**: `CoapRequest` and `CoapResponse` are equal by their parts (the body by content); `CoapUri`,
+  `WebLink` and the messages copy the lists and byte arrays they are given. `CoapResponse.from(message)`
+  takes the response out of a message; `CoapMessageType.fromValue` returns null for a value no type has.
 - **Codecs**: the UDP header (RFC 7252 §3), the TCP and WebSocket framings of RFC 8323 §3.2 and §4.2, and a
   stream decoder that bounds the message size. Malformed input fails with `CoapFormatException`, never with
   another exception.
@@ -82,6 +91,8 @@ layers, tokens and Message IDs, Block-wise, Observe, Q-Block, the client and the
   registry, and `CoapRequest` and `CoapResponse`.
 - `LinkFormatTest`: the RFC 6690 §5 example document both ways, flags, escapes and quoted commas, malformed
   documents, and the §4.1 query filters.
+- `PeerInputFuzzTest`: link-format documents and URIs mutated by `ByteMutator`, as a peer might send them:
+  `parseOrNull` never throws, `IllegalArgumentException` least of all, and `parse` agrees with it.
 - `SignalingOptionsTest`: the RFC 8323 §11.2 registry per signaling code, and how a signaling message
   prints its options (§5.2).
 - `MessageSecurityTypesTest`: the SPI's values on their own: `MessageSecurityException`'s defaults and its

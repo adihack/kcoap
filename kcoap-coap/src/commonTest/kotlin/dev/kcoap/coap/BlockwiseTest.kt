@@ -62,7 +62,7 @@ class BlockwiseTest {
     fun rfc7959Section2_4EarlyNegotiationUsesTheClientBlockSize() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("large") { get { CoapResponse.content(large) } } }
-        val client = fixture.client(CoapClientConfig(blockSize = 64))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64))
 
         assertContentEquals(large, client.get(fixture.uri(server, "/large")).payload)
         assertEquals(BlockOption(0, false, 2), fixture.requests().first().options.block2)
@@ -157,7 +157,7 @@ class BlockwiseTest {
     fun rfc7959Section2_7Block1AndBlock2Combine() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("echo") { post { CoapResponse(CoapCode.CHANGED, payload = payload) } } }
-        val client = fixture.client(CoapClientConfig(blockSize = 512))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 512))
 
         val response = client.post(fixture.uri(server, "/echo"), large)
 
@@ -171,7 +171,7 @@ class BlockwiseTest {
     @Test
     fun rfc7959Section2_9_3TooLargeBodiesGet413WithSize1() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(maxBodySize = 2048)) { resource("upload") { put { CoapResponse.changed() } } }
+        val server = fixture.server(CoapServerConfig(maxRequestBodySize = 2048)) { resource("upload") { put { CoapResponse.changed() } } }
         val client = fixture.client()
 
         val response = client.put(fixture.uri(server, "/upload"), large)
@@ -184,7 +184,7 @@ class BlockwiseTest {
     @Test
     fun aBodyGrowingBeyondTheLimitWithoutSize1Gets413() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(maxBodySize = 1500)) { resource("upload") { put { CoapResponse.changed() } } }
+        val server = fixture.server(CoapServerConfig(maxRequestBodySize = 1500)) { resource("upload") { put { CoapResponse.changed() } } }
         val raw = fixture.transport()
         repeat(2) { number ->
             val block = CoapMessage.request(CoapCode.PUT) {
@@ -413,7 +413,7 @@ class BlockwiseTest {
             }
         }
         val client = fixture.client(
-            CoapClientConfig(blockSize = 256),
+            CoapClientConfig(preferredBlockSize = 256),
             endpointConfig = fixture.endpointConfig(parameters = dev.kcoap.coap.stack.TransmissionParameters(nstart = 4)),
         )
         val first = ByteArray(1000) { 1 }

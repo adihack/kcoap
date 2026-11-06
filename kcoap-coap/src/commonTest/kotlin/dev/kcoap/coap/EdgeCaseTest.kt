@@ -17,6 +17,8 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.MessageInterceptor
+import dev.kcoap.coap.stack.PlatformCsprng
 import dev.kcoap.coap.stack.TokenGenerator
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
@@ -30,8 +32,10 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -136,6 +140,33 @@ class EdgeCaseTest {
     }
 
     @Test
+    fun thePlatformCsprngFillsExactlyTheRangeItIsGiven() {
+        val sentinel: Byte = 0x55
+        for (size in 0..40) {
+            val array = ByteArray(size + 4) { sentinel }
+            assertSame(array, PlatformCsprng.nextBytes(array, 2, size + 2))
+            assertEquals(listOf(sentinel, sentinel), array.take(2), "before the range")
+            assertEquals(listOf(sentinel, sentinel), array.takeLast(2), "after the range")
+            if (size >= 8) assertTrue(array.copyOfRange(2, size + 2).any { it != sentinel }, "random bytes for $size")
+        }
+        // 15 random bytes come from each UUID; 16 take a second one, and two draws differ.
+        assertFalse(PlatformCsprng.nextBytes(16).contentEquals(PlatformCsprng.nextBytes(16)))
+        assertEquals(0, PlatformCsprng.nextBits(0))
+        assertTrue(PlatformCsprng.nextInt(10) in 0 until 10)
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), 3, 2) }
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), 0, 5) }
+        assertFailsWith<IllegalArgumentException> { PlatformCsprng.nextBytes(ByteArray(4), -1, 2) }
+    }
+
+    @Test
+    fun theEndpointConfigurationKeepsACopyOfItsInterceptors() {
+        val interceptors = mutableListOf<MessageInterceptor>(object : MessageInterceptor {})
+        val config = CoapEndpointConfig(interceptors = interceptors)
+        interceptors.clear()
+        assertEquals(1, config.interceptors.size)
+    }
+
+    @Test
     fun rfc9175Section4_2EveryEndpointOfOneConfigurationHasItsOwnTokenSequence() = runTest {
         val fixture = StackFixture(this)
         val shared = CoapEndpointConfig(timeSource = testScheduler.timeSource)
@@ -159,15 +190,18 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun aFailingProtectionFailsTheRequest() = runTest {
+    fun aFailingProtectionFailsTheRequestWithSecurityAndSendsNothing() = runTest {
         val fixture = StackFixture(this)
         val security = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
                 throw MessageSecurityException("No context for $peer")
         }
         val client = fixture.client(CoapClientConfig(security = security))
-        assertFailsWith<MessageSecurityException> { client.get("coap://127.0.0.1:9/x") }
+        val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.SECURITY, error.reason)
+        assertIs<MessageSecurityException>(error.cause)
         assertEquals(0, fixture.traffic.size)
+        assertEquals(0, client.endpoint.exchangeCount(), "the token is free again")
     }
 
     @Test
@@ -241,7 +275,7 @@ class EdgeCaseTest {
     @Test
     fun aBodyLargerThanTheServerAcceptsGets413EvenWithoutBlock1() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(maxBodySize = 50)) { resource("r") { put { CoapResponse.changed() } } }
+        val server = fixture.server(CoapServerConfig(maxRequestBodySize = 50)) { resource("r") { put { CoapResponse.changed() } } }
         val raw = fixture.transport()
         val request = CoapMessage.request(CoapCode.PUT) {
             messageId = 1
@@ -337,14 +371,14 @@ class EdgeCaseTest {
 
     @Test
     fun configurationsAreValidated() {
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(blockSize = 100) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(blockSize = 2048) }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 100) }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 2048) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(requestTimeout = 0.seconds) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(maxResponseBodySize = 0) }
         assertFailsWith<IllegalArgumentException> { CoapClientConfig(securityReserve = -1) }
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(separateResponseDelay = (-1).milliseconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxBlockSize = 100) }
-        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxBodySize = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxRequestBodySize = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxConcurrentTransfers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(confirmableNotificationInterval = 0.seconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(nonConfirmableNotificationInterval = (-1).seconds) }
@@ -386,7 +420,9 @@ class EdgeCaseTest {
             EndpointEvent.Retransmitted(peer, 1, 2), EndpointEvent.TransmissionTimedOut(peer, 1),
             EndpointEvent.ResetReceived(peer, 1), EndpointEvent.DuplicateReceived(peer, 1),
             EndpointEvent.MalformedMessage(peer, "bad"), EndpointEvent.MessageRejected(peer, 1, "why"),
-            EndpointEvent.SessionEnded(peer), EndpointEvent.ObserverAdded(peer, "/a"), EndpointEvent.ObserverRemoved(peer, "/a", "rst"),
+            EndpointEvent.SessionEnded(peer), EndpointEvent.ObserverAdded(peer, "/a"),
+            EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.RESET),
+            EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.FAILED, "why"),
         )
         events.forEach { assertTrue(it.toString().contains("192.0.2.1"), "$it") }
         assertTrue(CoapOptions.URI_PATH.toString() == "Uri-Path(11)")

@@ -33,6 +33,10 @@ public interface ClientMessageSecurity {
      * meant to protect [peer] and cannot, because no context or protection is installed for it, throws
      * [MessageSecurityException] instead, which fails the request before anything is sent (ADR 0008).
      *
+     * kcoap-coap's client reports any exception from here, this one or another, as a `CoapException` with
+     * reason `SECURITY` and the exception as cause, so an implementation may let the failures of what it calls,
+     * such as a sequence-number store, pass.
+     *
      * @throws MessageSecurityException when the request must be protected and cannot be.
      */
     public suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest?
@@ -119,10 +123,15 @@ public interface SecurityIdentity {
 }
 
 /**
- * A protected message that failed verification. On the server side it describes the error response,
- * which is sent unprotected with Max-Age 0 (RFC 8613 §8.2): [responseCode], and as payload either
- * [errorPayload] with [contentFormat] (an EDHOC error message in RFC 9668 §3.3.1, for example) or the
- * [diagnostic] text.
+ * A message that message security could not protect or verify.
+ *
+ * On the server side, from [ServerMessageSecurity.unprotectRequest], it describes the error response, which is
+ * sent unprotected with Max-Age 0 (RFC 8613 §8.2): [responseCode], and as payload either [errorPayload] with
+ * [contentFormat] (an EDHOC error message in RFC 9668 §3.3.1, for example) or the [diagnostic] text.
+ *
+ * On the client side the response fields are unused. From [ClientMessageSecurity.protectRequest] it says that a
+ * request that must be protected cannot be, and kcoap-coap's client fails the request with a `CoapException` of
+ * reason `SECURITY` with this as cause; from [ProtectedRequest.unprotectResponse] it drops the response.
  */
 public class MessageSecurityException(
     message: String,

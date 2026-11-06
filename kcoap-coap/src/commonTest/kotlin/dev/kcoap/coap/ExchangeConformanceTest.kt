@@ -297,7 +297,7 @@ abstract class ExchangeConformanceTest {
 
     private fun qBlockClient(resolver: EndpointResolver) = CoapClientConfig(
         resolver = resolver,
-        blockSize = 64,
+        preferredBlockSize = 64,
         qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true),
     )
 

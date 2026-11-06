@@ -170,7 +170,7 @@ class QBlockObserveTest {
         ) { add(resource) }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, missingBlockMBit = missingBlockMBit)
         val client = fixture.client(
-            CoapClientConfig(blockSize = blockSize, observeCancellation = observeCancellation, qBlock = qBlock),
+            CoapClientConfig(preferredBlockSize = blockSize, observeCancellation = observeCancellation, qBlock = qBlock),
             fixture.endpointConfig(parameters = clientParameters),
         )
         return Setup(fixture, server, client, resource)
@@ -655,7 +655,8 @@ class QBlockObserveTest {
             assertTrue(later.all { it.options.qBlock2!!.number <= (reset / 10) * 10 + 9 }, "no later set of the body follows: $later")
             setup.resource.change()
             assertNull(peer.next(10.seconds), "no more notifications")
-            assertTrue(setup.fixture.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "reset by client" })
+            val removals = setup.fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().map { it.reason }
+            assertTrue(EndpointEvent.ObserverRemoved.Reason.RESET in removals, "$removals")
             assertNothingLeft(setup)
         }
     }
@@ -694,7 +695,7 @@ class QBlockObserveTest {
             setup.resource.change()
             assertNull(peer.next(10.seconds), "no notification")
             val removed = setup.fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>()
-            assertEquals(listOf("reset by client"), removed.map { it.reason })
+            assertEquals(listOf(EndpointEvent.ObserverRemoved.Reason.RESET), removed.map { it.reason })
             assertNothingLeft(setup)
         }
     }
@@ -798,7 +799,8 @@ class QBlockObserveTest {
         delay(5.minutes)
 
         assertEquals(0, setup.resource.observerCount)
-        assertTrue(setup.fixture.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "notification not acknowledged" })
+        val removals = setup.fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().map { it.reason }
+        assertTrue(EndpointEvent.ObserverRemoved.Reason.NOT_ACKNOWLEDGED in removals, "$removals")
         val asked = setup.fixture.sentBy(setup.client.endpoint).first { it.options.qBlock2 != null && it.options.observe == null }
         assertEquals(listOf(2L, 3L), asked.options.qBlock2List.map { it.number }, "the blocks the server gave up on")
         assertTrue(setup.fixture.traffic.first { it.message == asked }.at >= 10.seconds + parameters.maxTransmitSpan)
@@ -978,7 +980,7 @@ class QBlockObserveTest {
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now }, parameters)
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = security != null)
         val client = fixture.client(
-            CoapClientConfig(security = security, blockSize = 64, maxResponseBodySize = maxResponseBodySize, qBlock = qBlock),
+            CoapClientConfig(security = security, preferredBlockSize = 64, maxResponseBodySize = maxResponseBodySize, qBlock = qBlock),
             fixture.endpointConfig(parameters = parameters),
         )
         scripted = Scripted(fixture, server, client)
@@ -1274,7 +1276,7 @@ class QBlockObserveTest {
         val fixture = StackFixture(this)
         val resource = Resource("obs", CoapMessageType.CON) { body(3000, it) }
         val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.OFF)) { add(resource) }
-        val client = fixture.client(CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
         val received = mutableListOf<CoapResponse>()
         backgroundScope.launch { client.observe(fixture.uri(server, "/obs")).collect { received += it } }
         delay(10.seconds)
@@ -1302,7 +1304,7 @@ class QBlockObserveTest {
             ) { add(resource) }
             // Protects nothing, so the server sees plain requests, but the client counts as one with message security.
             val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = withMessageSecurity)
-            val client = fixture.client(CoapClientConfig(security = protectsNothing, blockSize = 64, qBlock = qBlock))
+            val client = fixture.client(CoapClientConfig(security = protectsNothing, preferredBlockSize = 64, qBlock = qBlock))
             val received = mutableListOf<CoapResponse>()
             val observation = backgroundScope.launch {
                 client.observe(fixture.uri(server, "/obs")) { nonConfirmable() }.collect { received += it }

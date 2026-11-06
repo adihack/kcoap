@@ -285,7 +285,7 @@ internal class ClientExchange(
         fun unverified(response: CoapMessage, reason: String): CoapException = CoapException(
             "Unverified ${response.code} to a protected request: $reason",
             CoapException.Reason.UNVERIFIED_RESPONSE,
-            response = CoapResponse.of(response),
+            response = CoapResponse.from(response),
         )
 
         /** Notifications waiting for a slow collector; the oldest are dropped (RFC 7641 §3.3.1 allows skipping states). */

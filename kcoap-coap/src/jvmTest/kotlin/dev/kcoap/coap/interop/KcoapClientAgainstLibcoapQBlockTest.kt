@@ -159,7 +159,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
             transport, scope,
             CoapEndpointConfig(eventListener = { events += it }),
         )
-        val client = CoapClient(endpoint, CoapClientConfig(blockSize = blockSize, qBlock = qBlock))
+        val client = CoapClient(endpoint, CoapClientConfig(preferredBlockSize = blockSize, qBlock = qBlock))
         try {
             withTimeout(timeout) { block(client) }
             assertEquals(0, endpoint.exchangeCount(), "no exchange is left")
@@ -174,7 +174,7 @@ class KcoapClientAgainstLibcoapQBlockTest {
         val qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true)
         val client = CoapClient(
             listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope,
-            CoapClientConfig(blockSize = 64, qBlock = qBlock),
+            CoapClientConfig(preferredBlockSize = 64, qBlock = qBlock),
             CoapEndpointConfig(interceptors = listOf(recorder)),
         )
         try {

@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -72,6 +73,24 @@ class DiscoveryTest {
             resource(".well-known") { resource("core") { get { CoapResponse.content("<not link format") } } }
         }
         assertEquals(CoapException.Reason.BAD_RESPONSE, assertFailsWith<CoapException> { client.discover(fixture.uri(broken)) }.reason)
+    }
+
+    @Test
+    fun rfc6690Section2AMalformedDocumentFromTheServerIsABadResponse() = runTest {
+        val fixture = StackFixture(this)
+        // The server's own document, as a peer that does not speak link format might send.
+        val server = fixture.server(CoapServerConfig(wellKnownCore = false)) {
+            resource(".well-known") {
+                resource("core") { get { CoapResponse.content("</a>;rt=\"open", ContentFormat.LINK_FORMAT) } }
+            }
+        }
+        val client = fixture.client()
+
+        val error = assertFailsWith<CoapException> { client.discover(fixture.uri(server)) }
+        assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
+        assertTrue("Unterminated quoted string" in error.message.orEmpty(), "says what is wrong: ${error.message}")
+        // The parser's exception is kept, as the cause of the one exception the client throws.
+        assertIs<IllegalArgumentException>(error.cause)
     }
 
     @Test
@@ -144,5 +163,24 @@ class DiscoveryTest {
         assertFailsWith<IllegalArgumentException> { ResourceAttributes(contentFormats = listOf(70000)) }
         assertFailsWith<IllegalArgumentException> { ResourceAttributes(maximumSize = -1) }
         assertFailsWith<IllegalArgumentException> { ResourceAttributes(extra = listOf("href" to "x")) }
+    }
+
+    @Test
+    fun resourceAttributesKeepCopiesOfTheirLists() {
+        val types = mutableListOf("temperature-c")
+        val interfaces = mutableListOf("sensor")
+        val formats = mutableListOf(0)
+        val extra = mutableListOf<Pair<String, String?>>("obs" to null)
+        val attributes = ResourceAttributes(types, interfaces, formats, extra = extra)
+        types += "other"
+        interfaces.clear()
+        // Changed after the checks ran, the given lists would otherwise break what init checked.
+        formats += 70000
+        extra += "href" to "x"
+
+        assertEquals(listOf("temperature-c"), attributes.resourceTypes)
+        assertEquals(listOf("sensor"), attributes.interfaces)
+        assertEquals(listOf(0), attributes.contentFormats)
+        assertEquals(listOf<Pair<String, String?>>("obs" to null), attributes.extra)
     }
 }

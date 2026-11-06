@@ -14,6 +14,7 @@ import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.RequestHandler
@@ -302,9 +303,10 @@ public class CoapServer private constructor(
         val echo = options.echo
         val key = OperationKey(peer, unprotected?.identity, request.code.value, Blockwise.operationOptions(options))
         val isQBlock = qBlockAccepted && QBlockServer.carriesQBlock(options)
-        if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxBodySize) {
+        if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxRequestBodySize) {
             // RFC 7959 §2.9.3: a body of one message beyond the bound, Q-Block2 or not; Size1 says what fits.
-            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(config.maxBodySize.toLong()) })
+            val limit = config.maxRequestBodySize.toLong()
+            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
         }
         if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
             // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.
@@ -349,7 +351,7 @@ public class CoapServer private constructor(
         val observe = options.observe
         val isObserveMethod = request.code == CoapCode.GET || request.code == CoapCode.FETCH
         if (observe == OBSERVE_DEREGISTER && isObserveMethod) {
-            observations.remove(peer, request.token, unprotected?.identity, "deregistered")
+            observations.remove(peer, request.token, unprotected?.identity, ObserverRemoved.Reason.DEREGISTERED)
         }
         val registering = observe == OBSERVE_REGISTER && isObserveMethod && observable != null &&
             observable.isObservable && (block2 == null || block2.number == 0L)
@@ -390,7 +392,7 @@ public class CoapServer private constructor(
         if (observation != null && !served.isSuccess) {
             // A representation that fits no block became 5.00, which ends the client's observation
             // (RFC 7641 §3.2), so the server keeps no observer for it either.
-            observations.remove(observation, "registration response ${served.code}")
+            observations.remove(observation, ObserverRemoved.Reason.ERROR_RESPONSE, "registration ${served.code}")
             return Reply.Single(served.withOptions { remove(CoapOptions.OBSERVE.number) })
         }
         return Reply.Single(served, observation)
@@ -416,7 +418,7 @@ public class CoapServer private constructor(
         val options = request.options
         val isObserveMethod = request.code == CoapCode.GET || request.code == CoapCode.FETCH
         if (options.observe == OBSERVE_DEREGISTER && isObserveMethod) {
-            observations.remove(inbound.peer, request.token, unprotected?.identity, "deregistered")
+            observations.remove(inbound.peer, request.token, unprotected?.identity, ObserverRemoved.Reason.DEREGISTERED)
         }
         val observable = (resource as? ObservableResource)?.takeIf { it.isObservable }
         val context = RequestContext(request, inbound.peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
@@ -560,7 +562,9 @@ public class CoapServer private constructor(
         if (!reply.isChallenge && mustVerifyAddress(inbound, request, unprotected, listOf(message), isBurst = false)) {
             val kept = if (AddressVerification.isRepeatSensitive(request.code)) AddressVerification.Withheld(request, response) else null
             // A registration whose response is not sent registers nothing (RFC 7641 §4.1).
-            reply.observation?.let { observations.remove(it, "address not verified") }
+            reply.observation?.let {
+                observations.remove(it, ObserverRemoved.Reason.ERROR_RESPONSE, "address not verified")
+            }
             send(inbound, request, unprotected, challenge(inbound.peer, endpoint.now(), kept))
             return
         }
@@ -576,7 +580,7 @@ public class CoapServer private constructor(
             // Protecting or sending failed, for example the protected response does not fit: no observer
             // stays registered for a registration that was never answered, and a plain 5.00 is tried.
             log.error(e) { "Could not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}" }
-            observation?.let { observations.remove(it, "registration response failed") }
+            observation?.let { observations.remove(it, ObserverRemoved.Reason.FAILED, "registration: ${e.message}") }
             answerUnprotected(inbound, internalError())
             return
         }
@@ -714,7 +718,7 @@ public class CoapServer private constructor(
         if (!response.isSuccess) {
             // The handler's error, or block-wise's 5.00 for a representation that fits no block: either
             // way the client's observation ends with it, so the server's does too.
-            observations.remove(observation, "non-2.xx notification ${response.code}")
+            observations.remove(observation, ObserverRemoved.Reason.ERROR_RESPONSE, "notification ${response.code}")
             response = response.withOptions { remove(CoapOptions.OBSERVE.number) }
         }
         val message = response.toMessage(observation.token)

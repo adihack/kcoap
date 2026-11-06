@@ -166,7 +166,7 @@ class OscoreQBlockEndToEndTest {
         val clientTransport = network.attach()
         val coapClient = CoapClient(
             CoapEndpoint(clientTransport, backgroundScope, endpointConfig(2)),
-            CoapClientConfig(security = recording, blockSize = 64, qBlock = client),
+            CoapClientConfig(security = recording, preferredBlockSize = 64, qBlock = client),
         )
         return Setup(
             network, coapServer, serverTransport, coapClient, clientTransport, stored, observed,
@@ -295,7 +295,7 @@ class OscoreQBlockEndToEndTest {
         // setup's OSCORE client and a plain one, which share the endpoint's capability cache. The server serves
         // both, so its resources are Public (ADR 0008: by default it would refuse the plain client).
         val setup = setup(server = QBlockServerConfig(isEnabled = true), defaultAccess = AccessPolicy.Public)
-        val plain = CoapClient(setup.client.endpoint, CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE)))
+        val plain = CoapClient(setup.client.endpoint, CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE)))
         val big = body(3000, 1)
 
         assertContentEquals(big, plain.get(setup.uri("/big")) { nonConfirmable() }.payload)

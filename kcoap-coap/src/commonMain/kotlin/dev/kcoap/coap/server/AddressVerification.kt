@@ -6,7 +6,7 @@ import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
 import dev.kcoap.coap.stack.ExpiringCache
-import dev.kcoap.coap.stack.SecureRandom
+import dev.kcoap.coap.stack.PlatformCsprng
 import dev.kcoap.common.constantTimeEquals
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
@@ -38,7 +38,7 @@ internal class AddressVerification(
     private val config: CoapServerConfig,
     private val challengeLifetime: Duration,
     private val report: (EndpointEvent) -> Unit,
-    private val randomBytes: (Int) -> ByteArray = { SecureRandom.nextBytes(it) },
+    private val randomBytes: (Int) -> ByteArray = { PlatformCsprng.nextBytes(it) },
 ) {
     private val lock = Mutex()
     private val verified = ExpiringCache<Endpoint, Unit>(config.maxVerifiedAddresses, config.verifiedAddressLifetime)

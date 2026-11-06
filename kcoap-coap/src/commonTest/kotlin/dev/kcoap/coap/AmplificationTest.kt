@@ -512,6 +512,9 @@ class AmplificationTest {
         assertEquals(CoapCode.UNAUTHORIZED, late.code, "verified at registration, expired by the response")
         assertEquals(CoapMessageType.NON, late.type)
         assertEquals(0, slow.observerCount)
+        val removed = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>().single()
+        assertEquals(EndpointEvent.ObserverRemoved.Reason.ERROR_RESPONSE, removed.reason)
+        assertEquals("address not verified", removed.detail)
     }
 
     @Test

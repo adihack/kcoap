@@ -212,11 +212,13 @@ public final class dev/kcoap/coap/CoapOptions {
 public final class dev/kcoap/coap/CoapRequest {
 	public synthetic fun <init> (ILdev/kcoap/coap/CoapUri;Ldev/kcoap/coap/OptionSet;[BZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (ILdev/kcoap/coap/CoapUri;Ldev/kcoap/coap/OptionSet;[BZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
 	public final fun getMethod-xRAr_a8 ()I
 	public final fun getOptions ()Ldev/kcoap/coap/OptionSet;
 	public final fun getPayload ()[B
 	public final fun getPayloadSize ()I
 	public final fun getUri ()Ldev/kcoap/coap/CoapUri;
+	public fun hashCode ()I
 	public final fun isConfirmable ()Z
 	public final fun toBuilder ()Ldev/kcoap/coap/CoapRequest$Builder;
 	public fun toString ()Ljava/lang/String;
@@ -251,7 +253,6 @@ public final class dev/kcoap/coap/CoapResponse {
 	public fun hashCode ()I
 	public final fun isSuccess ()Z
 	public final fun payloadAsText ()Ljava/lang/String;
-	public final fun toMessage ([B)Ldev/kcoap/coap/CoapMessage;
 	public fun toString ()Ljava/lang/String;
 	public final fun withOptions (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/CoapResponse;
 }
@@ -266,7 +267,7 @@ public final class dev/kcoap/coap/CoapResponse$Companion {
 	public final fun deleted ()Ldev/kcoap/coap/CoapResponse;
 	public final fun error-va4rc68 (ILjava/lang/String;)Ldev/kcoap/coap/CoapResponse;
 	public static synthetic fun error-va4rc68$default (Ldev/kcoap/coap/CoapResponse$Companion;ILjava/lang/String;ILjava/lang/Object;)Ldev/kcoap/coap/CoapResponse;
-	public final fun of (Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapResponse;
+	public final fun from (Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapResponse;
 }
 
 public final class dev/kcoap/coap/CoapUri {
@@ -289,7 +290,9 @@ public final class dev/kcoap/coap/CoapUri {
 
 public final class dev/kcoap/coap/CoapUri$Companion {
 	public final fun fromOptions (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILdev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapUri;
+	public final fun fromOptionsOrNull (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILdev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapUri;
 	public final fun parse (Ljava/lang/String;)Ldev/kcoap/coap/CoapUri;
+	public final fun parseOrNull (Ljava/lang/String;)Ldev/kcoap/coap/CoapUri;
 }
 
 public final class dev/kcoap/coap/ContentFormat {
@@ -319,6 +322,7 @@ public final class dev/kcoap/coap/LinkFormat {
 	public static final field TITLE Ljava/lang/String;
 	public final fun filter (Ljava/util/List;Ljava/util/List;)Ljava/util/List;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun parseOrNull (Ljava/lang/String;)Ljava/util/List;
 	public final fun serialize (Ljava/util/List;)Ljava/lang/String;
 }
 

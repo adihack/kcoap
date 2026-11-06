@@ -12,6 +12,14 @@ adds its entry and migration note below.
 
 ### Added
 
+- The CoAP client's error contract (WP-B3): every runtime failure of a `CoapClient`, `CoapEndpoint` or
+  `CoapServer` call is a `CoapException`, with two new reasons, `SECURITY` (message security could not protect
+  the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
+  lower layer's exception as cause. `CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and
+  `LinkFormat.parseOrNull` read what a peer sent and return null instead of throwing; `fromOptionsOrNull` takes
+  the options of a received request, whose empty Uri-Port (the port 0) makes `fromOptions` throw.
+  `RequestContext.path`. `CoapRequest` is equal by its parts, like `CoapResponse`.
+  `EndpointEvent.ObserverRemoved.Reason` and `ObserverRemoved.detail`.
 - kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
   material listed in [third-party material](docs/third-party.md). Copyright 2026 Adrian Sołtys and the
   kcoap contributors.
@@ -261,6 +269,62 @@ adds its entry and migration note below.
   §7.1.1), which it expands to the coordinate. kcoap-dtls has `DtlsLocalCredential` (below).
 
 ### Changed (breaking)
+
+The kcoap-coap and kcoap-coap-message API cleanup (WP-B3):
+
+- **A client request that message security cannot protect fails with `CoapException(SECURITY)`**, whose `cause`
+  is the security layer's exception, instead of letting that exception through: kcoap-oscore's
+  `MessageSecurityException` for a peer without a context, kcoap-edhoc-oscore's `PeerSecurity` before
+  `install`, and any other failure of `protectRequest`, such as a sequence-number store that throws. Nothing is
+  sent, as before. *Migration:* catch `CoapException` and test `reason == CoapException.Reason.SECURITY`
+  where you caught `MessageSecurityException` around a `CoapClient` call; the original is `exception.cause`.
+  Calls of the SPI itself (`ClientMessageSecurity.protectRequest`) still throw `MessageSecurityException`.
+- **`EndpointResolver` reports a lookup that fails at runtime as `CoapException(UNRESOLVED_HOST)`**, and the
+  client reports any exception of a resolver other than `CoapException` and `IllegalArgumentException` that
+  way, with it as cause. `IllegalArgumentException` stays for a host the resolver cannot resolve by design,
+  such as a host name given to `EndpointResolver.Default`. *Migration:* a resolver of your own throws
+  `CoapException("...", CoapException.Reason.UNRESOLVED_HOST, cause)` when a DNS lookup fails, or lets the
+  platform's exception through; catch `CoapException` around client calls for both.
+- **Calls on a closed endpoint fail with `CoapException(CLOSED)` before the host is resolved**, so a client
+  call after `close()` never reaches the resolver or throws its `IllegalArgumentException`. *Migration:* none.
+- **A ping that races `close()` on a TCP or WebSocket connection throws `CoapException`** like the endpoint's
+  `closeCause`, where it returned false, as a ping over UDP already did: while its connection is being opened
+  and while it waits for the Pong. *Migration:* catch `CoapException` around `ping` on every transport.
+- **A resolver or security layer that cancels itself fails the call with `CoapException`**: a lookup whose own
+  `withTimeout` expires while the caller is active is `UNRESOLVED_HOST`, a `protectRequest` that does the same
+  is `SECURITY`, each with the `TimeoutCancellationException` as cause. It used to reach the caller as a
+  `CancellationException`, which ended the caller's coroutine as if it had been cancelled, without a word.
+  `CancellationException` now means only that the calling coroutine was cancelled. *Migration:* none; a
+  `catch (e: CoapException)` around the call now sees such a timeout.
+- **`CoapClient.discover` keeps the reason for a malformed `/.well-known/core`**: its `BAD_RESPONSE` says where
+  the document broke, and the parser's `IllegalArgumentException` is its `cause`. *Migration:* none.
+- **`RequestContext.request` is `RequestContext.message`, and `@InternalKcoapApi`**: the wire message with its
+  type, Message ID and token, which differ by transport, is plumbing between kcoap's modules. The context is the
+  server's application model, with the new `path` next to `method`, `query`, `options` and `payload`.
+  *Migration:* in a handler, read `method`, `path`, `query`, `options`, `payload` or `payloadAsText()`
+  instead of `request.code`, `request.options` and so on; code that needs the token keeps the message with
+  `@OptIn(InternalKcoapApi::class)`, which may change in any release.
+- **`CoapClientConfig.blockSize` is `preferredBlockSize`**, which says what it is: the block size the client
+  prefers, whose setting turns on early negotiation (RFC 7959 §2.4), next to the server's upper bound
+  `CoapServerConfig.maxBlockSize`. *Migration:* rename the named argument.
+- **`CoapServerConfig.maxBodySize` is `maxRequestBodySize`**, the counterpart of the client's
+  `maxResponseBodySize`. *Migration:* rename the named argument.
+- **`EndpointEvent.ObserverRemoved.reason` is the enum `ObserverRemoved.Reason`** (`DEREGISTERED`, `RESET`,
+  `NOT_ACKNOWLEDGED`, `RESOURCE_REMOVED`, `ERROR_RESPONSE`, `SESSION_ENDED`, `FAILED`), a bounded set to count
+  by, and the free text, such as the exception of a failed notification or the code of an error response, is
+  the new nullable `detail`. *Migration:* compare `reason` with the enum constants instead of strings, and log
+  `detail`; keep an `else` branch, since constants may be added before 1.0.
+- **`CoapResponse.of(message)` is `CoapResponse.from(message)`**, and `CoapResponse.toMessage(token)` is
+  `@InternalKcoapApi`, a message the messaging layer completes. *Migration:* rename the call; code that builds
+  wire messages from responses uses `CoapMessage.response(...)` or opts in.
+- **`CoapMessageType.fromValue` returns null for a value no type has** (`CoapMessageType?`), where it threw
+  `IndexOutOfBoundsException`. *Migration:* handle null, or use `CoapMessageType.entries`.
+- **`CoapUri.parse` refuses ports outside 1..65535 and percent-encodings that are not two hex digits** with
+  `IllegalArgumentException`; `%+F` and `%-1` used to decode, and a port of 0 or above 65535 failed in the
+  constructor. *Migration:* none for valid URIs.
+- **`CoapUri`, `WebLink`, `ResourceAttributes` and `CoapEndpointConfig` copy the lists they are given**, so a
+  list changed after the call no longer changes them, or what their `init` checked. *Migration:* none, unless
+  code relied on changing a list after passing it: pass the final list.
 
 `DefaultCryptoBackend` as a final adapter (WP-A5, [ADR 0002](docs/adr/0002-delegation-not-subclassing.md)):
 
@@ -692,6 +756,11 @@ Build governance (WP-C1):
 
 ### Security
 
+- CoAP client (WP-B3): a request to a `coaps` URI went out in plaintext. kcoap has no DTLS yet, and the
+  default resolver mapped `coaps` to a plain UDP endpoint, so the datagram transport sent it unencrypted,
+  against RFC 7252 §6.2. Every call with a `coaps` URI now fails with `CoapException(TRANSPORT_UNAVAILABLE)`
+  before its host is resolved, and nothing is sent. *Migration:* protect `coap` requests with OSCORE until DTLS
+  lands (E1 in [docs/target-architecture.md](docs/target-architecture.md)).
 - EDHOC server (WP-A3): when adding the OSCORE context after message_3, the sequence number store or the
   `EdhocSessionListener` failed or was cancelled, the context could stay in the repository although the client
   was told the handshake failed, PRK_4e3m, PRK_out and PRK_exporter were left for the garbage collector, and

@@ -6,19 +6,24 @@ import dev.kcoap.transport.CoapScheme
  * A CoAP URI (RFC 7252 §6, RFC 8323 §8) and its mapping to request options.
  *
  * [parse] follows the decomposition algorithm of RFC 7252 §6.4 and [toString] the composition of §6.5,
- * so `CoapUri.parse(s).toString()` normalizes `s`.
+ * so `CoapUri.parse(s).toString()` normalizes `s`. [parse] is for URIs the application supplies and throws on a
+ * malformed one; a URI a peer supplied goes through [parseOrNull], which never throws.
  *
  * @property host the host without brackets; IPv6 literals are bracketed again by [toString].
- * @property pathSegments decoded Uri-Path values; an empty list is the root path.
- * @property querySegments decoded Uri-Query values.
  */
 public class CoapUri(
     public val scheme: CoapScheme,
     public val host: String,
     public val port: Int = scheme.defaultPort,
-    public val pathSegments: List<String> = emptyList(),
-    public val querySegments: List<String> = emptyList(),
+    pathSegments: List<String> = emptyList(),
+    querySegments: List<String> = emptyList(),
 ) {
+    /** Decoded Uri-Path values; an empty list is the root path. A copy of the list given. */
+    public val pathSegments: List<String> = pathSegments.toList()
+
+    /** Decoded Uri-Query values. A copy of the list given. */
+    public val querySegments: List<String> = querySegments.toList()
+
     init {
         require(host.isNotEmpty()) { "A CoAP URI needs a host" }
         require(port in 1..65535) { "Port out of range: $port" }
@@ -70,24 +75,40 @@ public class CoapUri(
         private val QUERY_SAFE = "$UNRESERVED$SUB_DELIMS:@/?".replace("&", "")
 
         /**
-         * Parses an absolute `coap`, `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws` or `coaps+ws` URI.
+         * Parses an absolute `coap`, `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws` or `coaps+ws` URI, one the
+         * application supplies; a URI from a peer goes through [parseOrNull].
          *
          * @throws IllegalArgumentException for relative URIs, other schemes, fragments (RFC 7252 §6.4
-         *   step 4), missing hosts and malformed percent-encodings.
+         *   step 4), missing hosts, ports outside 1..65535 and malformed percent-encodings.
          */
-        public fun parse(text: String): CoapUri {
-            val match = URI.matchEntire(text) ?: throw IllegalArgumentException("Not an absolute URI: $text")
+        public fun parse(text: String): CoapUri = decompose(text)
+
+        /**
+         * Parses [text] like [parse], or returns null where [parse] throws. For URIs a peer supplied, such as link
+         * targets in a link-format document (RFC 6690 §2) or a URI built from Location-Path and Location-Query
+         * (RFC 7252 §5.10.7), whose malformation is the peer's, not the application's.
+         */
+        public fun parseOrNull(text: String): CoapUri? = try {
+            decompose(text)
+        } catch (_: MalformedUri) {
+            null
+        }
+
+        /** RFC 7252 §6.4 steps 1–8; throws only [MalformedUri]. */
+        private fun decompose(text: String): CoapUri {
+            val match = URI.matchEntire(text) ?: throw MalformedUri("Not an absolute URI: $text")
             val (schemeText, hostText, portText, pathText, queryText, fragment) = match.destructured
-            val scheme = CoapScheme.fromScheme(schemeText) ?: throw IllegalArgumentException("Not a CoAP scheme: $schemeText")
-            require(fragment.isEmpty()) { "CoAP URIs must not have a fragment: $text" }
+            val scheme = CoapScheme.fromScheme(schemeText) ?: throw MalformedUri("Not a CoAP scheme: $schemeText")
+            if (fragment.isNotEmpty()) throw MalformedUri("CoAP URIs must not have a fragment: $text")
 
             val host = if (hostText.startsWith("[")) {
                 hostText.removeSurrounding("[", "]").lowercase()
             } else {
                 percentDecode(hostText).lowercase()
             }
-            require(host.isNotEmpty()) { "A CoAP URI needs a host: $text" }
-            val port = if (portText.isEmpty()) scheme.defaultPort else portText.toInt()
+            if (host.isEmpty()) throw MalformedUri("A CoAP URI needs a host: $text")
+            val port = if (portText.isEmpty()) scheme.defaultPort else portText.toIntOrNull() ?: -1
+            if (port !in 1..65535) throw MalformedUri("Port out of range: $portText")
 
             // RFC 7252 §6.4 step 8: an empty path or "/" gives no Uri-Path options.
             val path = if (pathText.isEmpty() || pathText == "/") emptyList() else pathText.removePrefix("/").split('/').map(::percentDecode)
@@ -95,7 +116,14 @@ public class CoapUri(
             return CoapUri(scheme, host, port, path, query)
         }
 
-        /** Rebuilds a URI from received request options (RFC 7252 §6.5), as a server or proxy sees it. */
+        /**
+         * Rebuilds a URI from request options (RFC 7252 §6.5), as a server or proxy sees it: Uri-Host and Uri-Port
+         * where present, else [destinationHost] and [destinationPort]. For options the application built; the
+         * options of a received request are a peer's input and go through [fromOptionsOrNull].
+         *
+         * @throws IllegalArgumentException when the host is empty or the port is outside 1..65535, such as an
+         *   empty Uri-Port option, which is the value 0 (RFC 7252 §3.2).
+         */
         public fun fromOptions(scheme: CoapScheme, destinationHost: String, destinationPort: Int, options: OptionSet): CoapUri =
             CoapUri(
                 scheme = scheme,
@@ -105,16 +133,30 @@ public class CoapUri(
                 querySegments = options.uriQuery,
             )
 
-        internal fun percentDecode(text: String): String {
+        /**
+         * Rebuilds a URI like [fromOptions], or returns null where [fromOptions] throws: for the options of a
+         * received request, whose Uri-Port of 0 (a valid option, RFC 7252 §5.10.1) or other bad value is the
+         * peer's, not the application's.
+         */
+        public fun fromOptionsOrNull(scheme: CoapScheme, destinationHost: String, destinationPort: Int, options: OptionSet): CoapUri? {
+            val host = options.uriHost ?: destinationHost
+            val port = options.uriPort ?: destinationPort
+            if (host.isEmpty() || port !in 1..65535) return null
+            return CoapUri(scheme, host, port, options.uriPath, options.uriQuery)
+        }
+
+        private fun percentDecode(text: String): String {
             if ('%' !in text) return text
             val out = mutableListOf<Byte>()
             var i = 0
             while (i < text.length) {
                 val c = text[i]
                 if (c == '%') {
-                    require(i + 3 <= text.length) { "Truncated percent-encoding in $text" }
+                    if (i + 3 > text.length) throw MalformedUri("Truncated percent-encoding in $text")
                     val hex = text.substring(i + 1, i + 3)
-                    out += (hex.toIntOrNull(16) ?: throw IllegalArgumentException("Invalid percent-encoding %$hex")).toByte()
+                    // Two hex digits only: toIntOrNull alone would take a sign, as in "%+F".
+                    if (!hex.all(::isHexDigit)) throw MalformedUri("Invalid percent-encoding %$hex")
+                    out += hex.toInt(16).toByte()
                     i += 3
                 } else {
                     out += c.toString().encodeToByteArray().toList()
@@ -124,7 +166,9 @@ public class CoapUri(
             return out.toByteArray().decodeToString()
         }
 
-        internal fun percentEncode(text: String, safe: String): String = buildString {
+        private fun isHexDigit(c: Char): Boolean = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
+
+        private fun percentEncode(text: String, safe: String): String = buildString {
             for (byte in text.encodeToByteArray()) {
                 val c = (byte.toInt() and 0xFF).toChar()
                 if (c.isLetterOrDigit() && c.code < 128 || c in safe) {
@@ -136,3 +180,6 @@ public class CoapUri(
         }
     }
 }
+
+/** What [CoapUri.parse] throws, and the only failure [CoapUri.parseOrNull] turns into null. */
+private class MalformedUri(message: String) : IllegalArgumentException(message)

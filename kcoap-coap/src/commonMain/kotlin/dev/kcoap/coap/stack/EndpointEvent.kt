@@ -6,6 +6,8 @@ import kotlin.time.Duration
 /**
  * Something that happened on a [CoapEndpoint], for metrics and diagnostics. Messages themselves are
  * seen through a [MessageInterceptor]; events cover what has no message of its own.
+ *
+ * New subtypes may be added before 1.0, so a `when` over events should have an `else` branch.
  */
 public sealed interface EndpointEvent {
     /** The peer the event concerns. */
@@ -229,9 +231,51 @@ public sealed interface EndpointEvent {
         override fun toString(): String = "ObserverAdded(peer=$peer, path=$path)"
     }
 
-    /** A client was removed from the observers of [path]; [reason] says why (RST, timeout, deregistration). */
-    public class ObserverRemoved(override val peer: Endpoint, public val path: String, public val reason: String) : EndpointEvent {
-        override fun toString(): String = "ObserverRemoved(peer=$peer, path=$path, reason=$reason)"
+    /**
+     * A client was removed from the observers of [path]; [reason] says why, a bounded set fit for counting, and
+     * [detail], when there is one, adds what a log needs, such as the exception of a failed notification.
+     */
+    public class ObserverRemoved(
+        override val peer: Endpoint,
+        public val path: String,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why an observer was removed. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /** The client deregistered with a GET or FETCH carrying Observe 1 (RFC 7641 §3.6). */
+            DEREGISTERED,
+
+            /** The client answered a notification with a Reset (RFC 7641 §3.6, §4.5). */
+            RESET,
+
+            /** A Confirmable notification was not acknowledged after MAX_RETRANSMIT retransmissions (RFC 7641 §4.5). */
+            NOT_ACKNOWLEDGED,
+
+            /** The resource was removed, and its observers got a final 4.04 Not Found (RFC 7641 §3.2). */
+            RESOURCE_REMOVED,
+
+            /**
+             * The registration or a notification was answered with an error code, which ends the observation
+             * (RFC 7641 §3.2, §4.2), or with the 4.01 and Echo of an address check (RFC 9175 §2.4).
+             */
+            ERROR_RESPONSE,
+
+            /**
+             * The DTLS session or the connection that carried the observation ended (RFC 7252 §9.1.1, RFC 8323
+             * §7.4).
+             */
+            SESSION_ENDED,
+
+            /**
+             * A notification or the registration's response could not be produced, protected or sent, as when
+             * message security or its sequence-number store fails, or a link failed; [detail] says how.
+             */
+            FAILED,
+        }
+
+        override fun toString(): String =
+            "ObserverRemoved(peer=$peer, path=$path, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 }
 

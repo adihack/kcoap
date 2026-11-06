@@ -3,6 +3,7 @@ package dev.kcoap.coap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -43,7 +44,20 @@ class LinkFormatTest {
         assertEquals(links[0].hashCode(), LinkFormat.parse("</a>;obs;sz=262144")[0].hashCode())
         for (broken in listOf("<a", "</a>;", "</a> x", "</a>;t=\"open", "</a>;t=\"\\", "a")) {
             assertFailsWith<IllegalArgumentException>(broken) { LinkFormat.parse(broken) }
+            assertNull(LinkFormat.parseOrNull(broken), broken)
         }
+        val document = " </a>;obs;sz=262144 , </b> ; title=\"x, \\\"y\\\"\";rt=\"one two\";ct=\"0 40\" "
+        assertEquals(links, LinkFormat.parseOrNull(document))
+    }
+
+    @Test
+    fun aWebLinkKeepsACopyOfItsAttributes() {
+        val attributes = mutableListOf<Pair<String, String?>>("rt" to "temperature-c")
+        val link = WebLink("/sensors/temp", attributes)
+        attributes += "obs" to null
+        assertEquals(listOf<Pair<String, String?>>("rt" to "temperature-c"), link.attributes)
+        assertFalse(link.isObservable)
+        assertEquals(emptyList(), WebLink("/plain").attributes)
     }
 
     @Test

@@ -65,7 +65,7 @@ class QBlockEndToEndTest {
                 }
             }
         }
-        val client = fixture.client(CoapClientConfig(blockSize = 64, qBlock = QBlockClientConfig(mode)), fixture.endpointConfig(parameters = parameters))
+        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(mode)), fixture.endpointConfig(parameters = parameters))
         return Setup(fixture, server, client, stored)
     }
 

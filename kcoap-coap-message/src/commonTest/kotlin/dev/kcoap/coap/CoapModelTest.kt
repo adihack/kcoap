@@ -7,6 +7,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -27,6 +28,13 @@ class CoapModelTest {
         assertFailsWith<IllegalArgumentException> { CoapCode(256) }
         assertFailsWith<IllegalArgumentException> { CoapCode.of(8, 0) }
         assertEquals(CoapMessageType.RST, CoapMessageType.fromValue(3))
+    }
+
+    @Test
+    fun rfc7252Section3MessageTypesByValue() {
+        assertEquals(CoapMessageType.entries, (0..3).map { CoapMessageType.fromValue(it) })
+        assertNull(CoapMessageType.fromValue(4))
+        assertNull(CoapMessageType.fromValue(-1))
     }
 
     @Test
@@ -214,13 +222,91 @@ class CoapModelTest {
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%zz") }
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%2") }
         assertFailsWith<IllegalArgumentException> { CoapUri(CoapScheme.COAP, "h", port = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:0/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:65536/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:99999999999/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://[]/") }
+        // RFC 3986 §2.1: a percent-encoding is two hex digits, never a signed number.
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%+F") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%-1") }
+    }
+
+    @Test
+    fun parseOrNullTakesWhatParseTakesAndNothingElse() {
+        val valid = "coap://Example.COM:5683/~sensors/temp%20a?first=1&rt=x%26y"
+        assertEquals(CoapUri.parse(valid), CoapUri.parseOrNull(valid))
+        val malformed = listOf(
+            "/relative", "http://example.com/", "coap://example.com/#frag", "coap:///path", "coap://h/%zz",
+            "coap://h/%2", "coap://h:0/", "coap://h:65536/", "coap://h:99999999999/", "coap://[]/", "coap://h/%+F",
+            "", "<>",
+        )
+        for (text in malformed) assertNull(CoapUri.parseOrNull(text), text)
+    }
+
+    /** RFC 7252 §5.10.1, §6.5: an empty Uri-Port is a valid option, the port 0, which no URI has. */
+    @Test
+    fun rfc7252Section6_5FromOptionsOrNullTakesWhatFromOptionsTakesAndNothingElse() {
+        val options = OptionSet.build {
+            uriHost("sensor.example")
+            uriPort(6000)
+            uriPathSegments(listOf("a", "b"))
+            uriQuery("q=1")
+        }
+        val uri = CoapUri.parse("coap://sensor.example:6000/a/b?q=1")
+        assertEquals(uri, CoapUri.fromOptions(CoapScheme.COAP, "192.0.2.1", 5683, options))
+        assertEquals(uri, CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, options))
+        // Without Uri-Host and Uri-Port, the request's destination.
+        assertEquals(
+            CoapUri.parse("coap://192.0.2.1/"),
+            CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, OptionSet.build { }),
+        )
+
+        val portZero = OptionSet.build { uriPort(0) }
+        assertEquals(0, portZero.uriPort, "an empty Uri-Port")
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, portZero))
+        assertFailsWith<IllegalArgumentException> { CoapUri.fromOptions(CoapScheme.COAP, "192.0.2.1", 5683, portZero) }
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 0, OptionSet.build { }))
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "", 5683, OptionSet.build { }))
+    }
+
+    @Test
+    fun aUriKeepsCopiesOfItsSegments() {
+        val path = mutableListOf("a")
+        val query = mutableListOf("q=1")
+        val uri = CoapUri(CoapScheme.COAP, "h", pathSegments = path, querySegments = query)
+        path += "b"
+        query.clear()
+        assertEquals(listOf("a"), uri.pathSegments)
+        assertEquals(listOf("q=1"), uri.querySegments)
+        assertEquals("coap://h/a?q=1", uri.toString())
+    }
+
+    @Test
+    fun requestsAreEqualByTheirParts() {
+        val uri = CoapUri.parse("coap://[::1]/x")
+        fun request(block: CoapRequest.Builder.() -> Unit = {}) =
+            CoapRequest.Builder(CoapCode.POST, uri).payload("body").accept(50).apply(block).build()
+        val request = request()
+
+        assertEquals(request, request())
+        assertEquals(request.hashCode(), request().hashCode())
+        assertEquals(request, request.toBuilder().build())
+        val different = listOf(
+            CoapRequest.Builder(CoapCode.PUT, uri).payload("body").accept(50).build(),
+            CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/y")).payload("body").accept(50).build(),
+            request { accept(40) },
+            request { payload("other") },
+            request { nonConfirmable() },
+        )
+        different.forEach { assertNotEquals(request, it, "$it") }
+        assertFalse(request.equals("0.02 POST coap://[::1]/x"))
     }
 
     @Test
     fun requestsAndResponsesValidateAndRender() {
         val response = CoapResponse.content("hi")
         assertEquals("2.05 Content [Content-Format: 0] 2 bytes", response.toString())
-        assertEquals(response, CoapResponse.of(response.toMessage(byteArrayOf(1))))
+        assertEquals(response, CoapResponse.from(response.toMessage(byteArrayOf(1))))
         assertEquals(response.hashCode(), CoapResponse.content("hi").hashCode())
         assertFalse(response == CoapResponse.content("ho"))
         assertTrue(response.isSuccess)
@@ -230,6 +316,7 @@ class CoapModelTest {
         assertEquals("4.04 Not Found", CoapResponse.error(CoapCode.NOT_FOUND).toString())
         assertFailsWith<IllegalArgumentException> { CoapResponse(CoapCode.GET) }
         assertFailsWith<IllegalArgumentException> { CoapResponse.error(CoapCode.CONTENT) }
+        assertFailsWith<IllegalArgumentException> { CoapResponse.from(CoapMessage.request(CoapCode.GET)) }
 
         val request = CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/x")).payload("body").accept(50).nonConfirmable().build()
         assertEquals("0.02 POST coap://[::1]/x [Accept: 50] 4 bytes NON", request.toString())

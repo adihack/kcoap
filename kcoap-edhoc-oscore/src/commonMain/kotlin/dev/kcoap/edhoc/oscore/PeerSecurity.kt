@@ -29,7 +29,8 @@ import kotlinx.coroutines.sync.withLock
  * with the client's own resolver, as the client does for its requests.
  *
  * A request to a server without a protection fails with [MessageSecurityException] before anything is sent,
- * also after [remove], so a missing [install] never sends plaintext silently (ADR 0008). A client that talks to
+ * which the client reports as `CoapException.Reason.SECURITY` with it as cause, also after [remove], so a
+ * missing [install] never sends plaintext silently (ADR 0008). A client that talks to
  * some servers without message security sets [allowUnprotected]. That includes discovery before the handshake:
  * `client.discover(server)` asks `/.well-known/core`, which is not in [unprotectedPaths] by default, so finding the
  * EDHOC resource (`rt=core.edhoc`) takes a plain client, or `/.well-known/core` added to [unprotectedPaths]; so does
