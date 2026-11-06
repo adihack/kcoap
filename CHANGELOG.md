@@ -31,9 +31,9 @@ adds its entry and migration note below.
   the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
   lower layer's exception as cause. `CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and
   `LinkFormat.parseOrNull` read what a peer sent and return null instead of throwing; `fromOptionsOrNull` takes
-  the options of a received request, whose empty Uri-Port (the port 0) makes `fromOptions` throw.
-  `RequestContext.path`. `CoapRequest` is equal by its parts, like `CoapResponse`.
-  `EndpointEvent.ObserverRemoved.Reason` and `ObserverRemoved.detail`.
+  the options of a received request, whose empty Uri-Port (the port 0) makes `fromOptions` throw. Also new:
+  `RequestContext.path`, and `EndpointEvent.ObserverRemoved.Reason` with `ObserverRemoved.detail`, which say why
+  an observer was removed. `CoapRequest` is equal by its parts, like `CoapResponse`.
 - kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
   material listed in [third-party material](docs/third-party.md). Copyright 2026 Adrian Sołtys and the
   kcoap contributors.
