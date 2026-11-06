@@ -81,6 +81,7 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
       <img src="/assets/kcoap-logo.svg" alt="" width="32" height="32">
       <span>kcoap</span>
     </a>
+    <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <nav class="site-nav" id="site-nav" aria-label="Main">
       <ul>
         <li><a href="/start/">Get started</a></li>
@@ -93,7 +94,6 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
     <div class="header-actions">
       <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
       <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
-      <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
   </div>
 </header>
@@ -107,11 +107,11 @@ Pages other than the home page open with a page head, then sections. A typical p
 <main id="main">
   <section class="page-head">
     <div class="container">
-      <ol class="breadcrumb" aria-label="Breadcrumb">
+      <nav aria-label="Breadcrumb"><ol class="breadcrumb">
         <li><a href="/">Home</a></li>
         <li><a href="/start/">Get started</a></li>
         <li aria-current="page">JVM</li>
-      </ol>
+      </ol></nav>
       <p class="eyebrow">Get started</p>
       <h1>JVM servers and desktop</h1>
       <p class="lede">One or two sentences that say what this page gives the reader.</p>
@@ -136,7 +136,7 @@ Pages other than the home page open with a page head, then sections. A typical p
 Sections alternate between `.section` and `.section .section-soft`. Long text sits in a `.prose` block
 (760 px measure) inside the `.container`, so it lines up with the page head on the left; do not put both
 classes on one element. Wide content (grids, tables, figures) sits in `.container` directly.
-`.container-narrow` is a centered 820 px container.
+`.container-narrow` keeps the page's left edge and limits its children to 820 px, for text-heavy sections.
 
 ## 4. The footer
 
@@ -248,11 +248,14 @@ card is static. `.card-foot` is a bottom line (for a `.link-arrow`).
 
 ### Tables
 
-Wrap every table so it scrolls inside itself on phones:
+Wrap every table so it scrolls inside itself on phones. The wrapper is a named region that can take focus,
+so a keyboard user can scroll it (site.js keeps only the wrappers that overflow in the tab order), and the
+table is named by the same heading:
 
 ```html
-<div class="table-wrap">
-  <table>
+<h2 id="protocols">The state of every protocol</h2>
+<div class="table-wrap" role="region" tabindex="0" aria-labelledby="protocols">
+  <table aria-labelledby="protocols">
     <thead><tr><th scope="col">Protocol</th><th scope="col">RFC</th><th scope="col">State</th></tr></thead>
     <tbody>
       <tr><th scope="row">Observe</th><td>7641</td><td><span class="badge badge-partial">partial</span> ...</td></tr>
@@ -269,9 +272,15 @@ covers code. An unlabelled block still works; it gets extra top padding for the 
 ```html
 <div class="code-block">
   <p class="code-block-label">build.gradle.kts</p>
-  <pre><code>...escaped code with token spans...</code></pre>
+  <pre tabindex="0"><code>...escaped code with token spans...</code></pre>
 </div>
 ```
+
+Every `<pre>` has `tabindex="0"`, so its code scrolls from the keyboard; site.js takes the ones that do not
+overflow out of the tab order. Keep code lines to 80 characters: put a trailing comment above its line,
+split long calls, and write version-catalog arrays one entry per line. Only a one-line TOML table such as
+`kcoap-coap = { module = "...", version.ref = "kcoap" }` may be longer, since TOML 1.0 cannot break it.
+`scripts/check-site` checks both. The copy button is named after the block's label ("Copy build.gradle.kts").
 
 `site.js` adds the copy button to every `.code-block` (skip one with `data-no-copy`). Escape `<`, `>` and
 `&` in code. Syntax colouring is optional and hand-written: wrap tokens in `<span class="tok-k">` (keyword),
@@ -303,9 +312,11 @@ choice follows them from page to page. The labels must match exactly across a gr
 - `<ol class="steps">` with an `<h3>` in each `<li>`: numbered setup steps (the number badge is CSS).
 - `<dl class="facts">`: term and value pairs (minimum versions, coordinates).
 - `<ul class="checks">`: a list with a teal check per item; `<li class="is-open">` gets an amber ring for an
-  open item.
+  open item. The state is also text, for screen readers and forced colours: every item starts with
+  `<span class="visually-hidden">Done: </span>` or, when open, `<span class="visually-hidden">Open: </span>`.
 - `<ol class="meter">` of `<li class="meter-block is-done|is-active">`: progress drawn as blocks, with a
-  `.meter-legend` list under it (the home page's release-freeze meter).
+  `.meter-legend` list under it (the home page's release-freeze meter). Each block ends with its state in
+  text, `A1<span class="visually-hidden">, merged</span>` (or `, in progress`, `, not started`); no `title`.
 
 ### Platform links
 
@@ -318,17 +329,22 @@ the home page's strip; copy them from there.
 ```html
 <figure class="figure">
   <svg class="diagram diagram-narrow" viewBox="0 0 440 388" role="img"
-       aria-labelledby="fig-name-title fig-name-desc">
+       aria-labelledby="fig-name-title" aria-describedby="fig-name-desc">
     <title id="fig-name-title">Short title</title>
     <desc id="fig-name-desc">A full text version of what the diagram shows.</desc>
     ...
   </svg>
+  <details class="diagram-text"><summary>Read the diagram as text</summary><p>The same text as the desc.</p></details>
   <figcaption>One or two sentences.</figcaption>
 </figure>
 ```
 
 - Draw diagrams 440 units wide: on phones the figure runs edge to edge and the diagram scales to about
-  0.85, so 13-unit text stays near 11 px. Desktop caps `.diagram-narrow` at 520 px.
+  0.85. Below 600 px the small text classes grow (`d-sub` and `d-mono` to 14 units, the smallest to
+  12.5-13.5) so labels stay near 11 px or more, so leave room for that in boxes and between lifelines, and
+  check a new diagram at 360 px. Desktop caps `.diagram-narrow` at 520 px.
+- Use `d-arrow-amber`, `d-head-amber` and `d-box-amber-soft` for amber lines: they draw with
+  `--c-amber-line`, which keeps 3:1 against the light background; `--c-amber` is for fills under dark text.
 - Colour comes only from classes, so diagrams follow the theme: boxes `d-box`, `d-box-2`, `d-box-soft`,
   `d-box-accent`, `d-box-amber`, `d-box-amber-soft`, `d-box-dashed`, `d-box-lost`; lines `d-line`,
   `d-line-soft`, `d-lifeline`, `d-arrow`, `d-arrow-accent`, `d-arrow-amber`, `d-arrow-lost`; arrow heads
@@ -339,8 +355,9 @@ the home page's strip; copy them from there.
 - Prefix every id inside an SVG with `fig-<name>-` (titles, descriptions, markers) so ids stay unique on the
   page. The five home-page diagrams (`fig-stack`, `fig-edhoc`, `fig-qblock`, `fig-platforms`,
   `fig-interop`) can be copied as they are to `/features/`; rename their ids if two copies share a page.
-- Each figure gets a text alternative: the `<desc>`, and for sequences a `<details class="diagram-text">`
-  with `<summary>Text version</summary>` and an ordered list, when the steps matter.
+- Each figure gets a text alternative twice: the `<desc>`, which `aria-describedby` reads out (the name is the
+  title alone), and a visible `<details class="diagram-text">` with the same text, or a table where the
+  diagram is one, as for the interop matrix.
 
 ### Icons
 
@@ -377,9 +394,9 @@ and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the 
 
 ## 7. Dated facts to update
 
-The home page's release-freeze meter shows the work packages as of 6 November 2026 (8 merged, A5 in
-progress, B3, D1, D2 and C3 not started; `docs/releasing.md` "Release freeze"). Update the blocks, the
-legend and the date when a package merges, and `/releases/` with them.
-On `/releases/`, that means the meter, the table of work packages, the fact tile “8 of 13 merged”, the
-“Before 0.1.0 is tagged” list, the static “No release yet” note and the date in the error message of
-`assets/releases.js`. `web/README.md` lists the same places.
+The home page's release-freeze meter shows the work packages as of 6 November 2026 (12 merged; C3 not
+started; `docs/releasing.md` "Release freeze"). Update the blocks, their hidden state text, the legend and
+the date when C3 starts or merges, and `/releases/` with them.
+On `/releases/`, that means the meter, the table of work packages, the fact tile “12 of 13 merged”, the
+“Before 0.1.0 is tagged” list and the static “No release yet” note. `web/README.md` lists the same places
+and the other states the pages describe.
