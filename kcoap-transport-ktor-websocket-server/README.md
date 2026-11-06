@@ -32,8 +32,8 @@ val server = CoapServer(listOf(KtorWebSocketListener.start(CIO, port = 8080)), s
 
 It is a module of its own so that WebSocket clients, browsers above all, never depend on ktor-server.
 
-Verified by `KtorWebSocketTransportTest` (JVM) and `NativeWebSocketLoopbackTest` (Linux; macOS and the
-iOS simulator pending the first apple-job run) in `kcoap-transport-ktor-websocket` (real loopback
+Verified by `KtorWebSocketTransportTest` (JVM) and `NativeWebSocketLoopbackTest` (Linux, macOS and the
+iOS simulator) in `kcoap-transport-ktor-websocket` (real loopback
 sockets, standalone and mounted, and a `coaps+ws` listener refusing a plain session),
 `BrowserAgainstJvmListenerTest` there (a browser's WebSocket against
 the listener on the JVM), `ReliableLoopbackTest` and the libcoap interop tests, where `coap-client`
