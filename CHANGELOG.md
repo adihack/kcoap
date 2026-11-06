@@ -12,6 +12,23 @@ adds its entry and migration note below.
 
 ### Added
 
+- `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
+  `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
+  also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. It constrains
+  the multiplatform module and the JVM artifact of every published module; the constraints are generated from the
+  modules the build publishes, never written by hand, and `verifyBomConstraints` (part of `check` and
+  `scripts/test unit`) checks the published POM and module metadata against the build's publications. It is
+  published with the modules, to the same repositories.
+- Documentation (WP-C3): [docs/getting-started.md](docs/getting-started.md), which modules each use case needs (by
+  protocol, transport and platform), adding them through the BOM, and a first client and server, OSCORE, EDHOC and
+  the post-quantum backend, compiled and run by `GettingStartedExamplesTest`;
+  [docs/platforms.md](docs/platforms.md) completed with the minimum versions, the algorithms and EDHOC suites per
+  target from the conformance suite's capability report, the ways to terminate TLS in front of kcoap, and the
+  mobile lifecycle; a README for kcoap-common and for kcoap-bom; ADRs 0011 to 0015 for decisions earlier work
+  packages settled (the error model, the configuration shapes, durable state, the shared crypto blocks, randomness
+  by layer); and a full pass over docs/architecture.md, docs/roadmap.md and docs/code-style.md (ownership of arrays
+  and keys, the API vocabulary, errors, final implementations). The README installs through the BOM and says that
+  before 1.0 a minor release may break the API.
 - `KcoapException` (kcoap-common), the root of the exception of every protocol facade (WP-D2); see "Changed
   (breaking)". A Swift smoke test (WP-D2, which took over PL-3): the unpublished module kcoap-swift-smoke links a
   `KcoapSmoke` framework of kcoap-coap for the Apple targets, and its Swift script, which the macOS CI job compiles

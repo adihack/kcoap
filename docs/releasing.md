@@ -27,6 +27,9 @@ No `v*` tag until the API-breaking work packages of the refactoring plan have me
 I1, P1, C2 and B4 do not block a release. Protecting `v*` tags (Settings → Rules → Rulesets) keeps an
 accidental tag from publishing early.
 
+**The freeze list is complete.** C3, its last package, merged into `feat/protocol-core` on 2026-11-06, after A1–A5,
+W1, B1–B3, C1, D1 and D2. What stands between the branch and a tag is the checklist below.
+
 Before tagging 0.1.0:
 
 - the freeze list above has merged and CI is green on `main`;
@@ -36,8 +39,10 @@ Before tagging 0.1.0:
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - the `dev.kcoap` namespace shows as verified in the Central Portal, and the Maven Central and signing
   secrets are set ([below](#before-the-first-maven-central-release)); the license is already set;
-- `./gradlew publishToMavenLocal` works, a sample consumer builds against it, and the POMs
-  (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM;
+- `./gradlew publishToMavenLocal` works, a sample consumer builds against it through `kcoap-bom`
+  ([getting started](getting-started.md#add-kcoap-to-a-build); WP-P1's JVM and js consumers), the POMs
+  (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM, and
+  `verifyBomConstraints` is green, so the BOM constrains exactly the published modules;
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
   release matches the CHANGELOG entry ([versioning](versioning.md)).
 
@@ -49,6 +54,11 @@ kcoap-dtls, whose SPIs have no engine yet; it joins the published set, with its 
 engine lands (roadmap E1). kcoap-swift-smoke, the Swift smoke test of the macOS CI job, is never published:
 it applies `kcoap.unpublished` and the Kotlin plugin, not a tier plugin. An unpublished module is still built
 and tested, but has no Maven publication, no API reference page and no ABI dumps.
+
+And `kcoap-bom`, the bill of materials, which applies `kcoap.bom`: a Java platform, published with the same
+coordinates scheme and POM, whose constraints are the multiplatform and JVM artifacts of every published module,
+generated from the modules that apply `kcoap.publishing` and checked by `verifyBomConstraints`
+([ADR 0016](adr/0016-bom-from-published-modules.md)). It has no code, so no ABI dumps and no API reference page.
 
 ## ABI dumps
 
@@ -147,7 +157,7 @@ workflow's own token cannot turn it on.
 ```
 
 The artifacts land under `kcoap.group` (`dev/kcoap/<module>/<version>`), one per published module and
-target; kcoap-dtls is not among them.
+target, and `kcoap-bom`; kcoap-dtls is not among them.
 
 Consumers of GitHub Packages need a GitHub token with `read:packages`:
 
