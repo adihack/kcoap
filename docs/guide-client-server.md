@@ -96,10 +96,14 @@ suspend fun useServer(scope: CoroutineScope) {
   `EndpointResolver.Default` takes IP literals for every scheme and `localhost`, and leaves host names of
   `coap+tcp` and `coap+ws` to the connector; a `coap://` host name needs a resolver of your own. A resolver
   throws `CoapException` with `UNRESOLVED_HOST` when a lookup fails at runtime, and
-  `IllegalArgumentException` only for a host it cannot resolve by design.
-- `discover` reads the server's `/.well-known/core` with `LinkFormat.parseOrNull`; the link targets it
-  returns are the server's text, so parse an absolute one with `CoapUri.parseOrNull`, which returns null
-  instead of throwing.
+  `IllegalArgumentException` only for a host it cannot resolve by design. A lookup that times out in its own
+  `withTimeout` is reported as `UNRESOLVED_HOST` too, so a `CancellationException` from a call always means
+  that the calling coroutine was cancelled.
+- `discover` reads the server's `/.well-known/core`; a malformed document is `BAD_RESPONSE`, saying where it
+  broke. The link targets it returns are the server's text, so parse an absolute one with
+  `CoapUri.parseOrNull`, which returns null instead of throwing.
+- A `coaps://` URI fails with `TRANSPORT_UNAVAILABLE` before its host is resolved: kcoap has no DTLS yet, and
+  nothing goes out in plaintext (RFC 7252 §6.2). Protect `coap://` requests with OSCORE instead.
 
 ### Errors
 
@@ -117,11 +121,11 @@ host name given to `EndpointResolver.Default`.
 | `SECURITY` | Message security could not protect the request; nothing was sent | Fix the context or install a protection (run EDHOC) |
 | `UNVERIFIED_RESPONSE` | Only an error message security could not verify came back | Re-establish the context (run EDHOC); the request may have run |
 | `UNRESOLVED_HOST` | The resolver could not resolve the host | Retry once the network is back |
-| `TRANSPORT_UNAVAILABLE` | The endpoint has no transport for the URI's scheme | Give the endpoint that transport |
+| `TRANSPORT_UNAVAILABLE` | The endpoint has no transport for the URI's scheme, or the scheme is `coaps`, which needs DTLS | Give the endpoint that transport; use OSCORE over `coap` until DTLS lands |
 | `TRANSPORT_FAILED`, `CLOSED` | The endpoint's transport failed, or the endpoint was closed | Create a new endpoint |
 
 A call after `close()` fails with `CLOSED` at once, before its host is looked up, and so does one that
-races `close()`.
+races `close()`, a ping on any transport included.
 
 ## Client and server on one port
 

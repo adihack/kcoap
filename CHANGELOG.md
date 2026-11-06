@@ -15,9 +15,11 @@ adds its entry and migration note below.
 - The CoAP client's error contract (WP-B3): every runtime failure of a `CoapClient`, `CoapEndpoint` or
   `CoapServer` call is a `CoapException`, with two new reasons, `SECURITY` (message security could not protect
   the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
-  lower layer's exception as cause. `CoapUri.parseOrNull` and `LinkFormat.parseOrNull` read what a peer sent
-  and return null instead of throwing. `RequestContext.path`. `CoapRequest` is equal by its parts, like
-  `CoapResponse`. `EndpointEvent.ObserverRemoved.Reason` and `ObserverRemoved.detail`.
+  lower layer's exception as cause. `CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and
+  `LinkFormat.parseOrNull` read what a peer sent and return null instead of throwing; `fromOptionsOrNull` takes
+  the options of a received request, whose empty Uri-Port (the port 0) makes `fromOptions` throw.
+  `RequestContext.path`. `CoapRequest` is equal by its parts, like `CoapResponse`.
+  `EndpointEvent.ObserverRemoved.Reason` and `ObserverRemoved.detail`.
 - kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
   material listed in [third-party material](docs/third-party.md). Copyright 2026 Adrian Sołtys and the
   kcoap contributors.
@@ -285,6 +287,17 @@ The kcoap-coap and kcoap-coap-message API cleanup (WP-B3):
   platform's exception through; catch `CoapException` around client calls for both.
 - **Calls on a closed endpoint fail with `CoapException(CLOSED)` before the host is resolved**, so a client
   call after `close()` never reaches the resolver or throws its `IllegalArgumentException`. *Migration:* none.
+- **A ping that races `close()` on a TCP or WebSocket connection throws `CoapException`** like the endpoint's
+  `closeCause`, where it returned false, as a ping over UDP already did: while its connection is being opened
+  and while it waits for the Pong. *Migration:* catch `CoapException` around `ping` on every transport.
+- **A resolver or security layer that cancels itself fails the call with `CoapException`**: a lookup whose own
+  `withTimeout` expires while the caller is active is `UNRESOLVED_HOST`, a `protectRequest` that does the same
+  is `SECURITY`, each with the `TimeoutCancellationException` as cause. It used to reach the caller as a
+  `CancellationException`, which ended the caller's coroutine as if it had been cancelled, without a word.
+  `CancellationException` now means only that the calling coroutine was cancelled. *Migration:* none; a
+  `catch (e: CoapException)` around the call now sees such a timeout.
+- **`CoapClient.discover` keeps the reason for a malformed `/.well-known/core`**: its `BAD_RESPONSE` says where
+  the document broke, and the parser's `IllegalArgumentException` is its `cause`. *Migration:* none.
 - **`RequestContext.request` is `RequestContext.message`, and `@InternalKcoapApi`**: the wire message with its
   type, Message ID and token, which differ by transport, is plumbing between kcoap's modules. The context is the
   server's application model, with the new `path` next to `method`, `query`, `options` and `payload`.
@@ -743,6 +756,11 @@ Build governance (WP-C1):
 
 ### Security
 
+- CoAP client (WP-B3): a request to a `coaps` URI went out in plaintext. kcoap has no DTLS yet, and the
+  default resolver mapped `coaps` to a plain UDP endpoint, so the datagram transport sent it unencrypted,
+  against RFC 7252 §6.2. Every call with a `coaps` URI now fails with `CoapException(TRANSPORT_UNAVAILABLE)`
+  before its host is resolved, and nothing is sent. *Migration:* protect `coap` requests with OSCORE until DTLS
+  lands (E1 in [docs/target-architecture.md](docs/target-architecture.md)).
 - EDHOC server (WP-A3): when adding the OSCORE context after message_3, the sequence number store or the
   `EdhocSessionListener` failed or was cancelled, the context could stay in the repository although the client
   was told the handshake failed, PRK_4e3m, PRK_out and PRK_exporter were left for the garbage collector, and

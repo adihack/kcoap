@@ -353,12 +353,17 @@ are for mistakes of the caller. For `CoapClient`, `CoapEndpoint` and `CoapServer
 | `MessageSecurityException` from `unprotectRequest` on the server | An unprotected error response (RFC 8613 §8.2) |
 | `CoapFormatException` | A Reset or a silent drop, and `EndpointEvent.MalformedMessage` |
 | A lookup the `EndpointResolver` could not make at runtime | `UNRESOLVED_HOST` |
+| A `coaps` URI, which needs DTLS (RFC 7252 §6.2), before DTLS exists | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
 | The endpoint's own transport failing, or a call after `close()` | `TRANSPORT_FAILED`, `CLOSED` |
 
-A call after `close()`, or racing it, fails with `CLOSED` at once: the closed state is checked under the lock
-that registers the exchange, so no exchange is added after the terminal transition failed the others. URIs
-and link-format documents a peer sends are read with `CoapUri.parseOrNull` and `LinkFormat.parseOrNull`,
-which return null instead of the `IllegalArgumentException` that `parse` keeps for the caller's own text.
+A `CancellationException` passes unchanged only when the calling coroutine was cancelled: a resolver or
+security layer that cancels itself, as its own `withTimeout` does, while the caller is active fails like any
+other exception of that layer. A call after `close()`, or racing it, fails with `CLOSED` at once: the closed
+state is checked under the lock that registers the exchange, so no exchange is added after the terminal
+transition failed the others, and a ping whose connection the terminal transition ended reports that rather
+than a peer that did not answer. URIs, request options and link-format documents a peer sends are read with
+`CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and `LinkFormat.parseOrNull`, which return null instead of
+the `IllegalArgumentException` that `parse` and `fromOptions` keep for the caller's own input.
 
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also

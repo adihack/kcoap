@@ -116,12 +116,13 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   connection (`SESSION_ENDED`, `CONNECTION_CLOSED`), message security (`SECURITY` when the request could not
   be protected and nothing was sent, `UNVERIFIED_RESPONSE`), the host lookup (`UNRESOLVED_HOST`, which an
   `EndpointResolver` throws for a lookup that fails at runtime; any other exception of a resolver is reported
-  as it too), limits (`MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED`), or the endpoint (`TRANSPORT_UNAVAILABLE`,
-  `TRANSPORT_FAILED`, `CLOSED`). `IllegalArgumentException` and `IllegalStateException` are kept for
-  mistakes of the caller, such as a malformed URI string, and error codes are returned as responses. A call
-  after `close()` fails with `CLOSED` without resolving its host, and one racing `close()` too: the closed
-  state is checked under the lock that registers the exchange. Link-format documents from servers are read
-  with `LinkFormat.parseOrNull` (a malformed one is `BAD_RESPONSE`).
+  as it too, its own timeout included), limits (`MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED`), or the endpoint
+  (`TRANSPORT_UNAVAILABLE`, also for every `coaps` URI until DTLS exists, `TRANSPORT_FAILED`, `CLOSED`).
+  `IllegalArgumentException` and `IllegalStateException` are kept for mistakes of the caller, such as a
+  malformed URI string, `CancellationException` for a cancelled caller, and error codes are returned as
+  responses. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
+  too, a ping on a connection included: the closed state is checked under the lock that registers the
+  exchange. A malformed link-format document from a server is `BAD_RESPONSE`, with the parser's message.
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at
