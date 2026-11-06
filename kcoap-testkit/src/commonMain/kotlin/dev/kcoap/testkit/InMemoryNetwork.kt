@@ -67,6 +67,17 @@ public class InMemoryNetwork(
         InMemoryTransport(this, local, maxDatagramSize).also { transports[local] = it }
     }
 
+    /**
+     * Sends [bytes] to [to] as if from [from], whether or not a transport is attached there: a datagram with a
+     * forged source address, which a UDP receiver cannot tell from a real one (RFC 7252 §11.4). What the receiver
+     * sends back to an address nobody is attached to is dropped as [DatagramFate.UNREACHABLE], as a spoofed source
+     * never answers. [filter], [conditions] and [tap] apply as to every datagram. Flood tests use it to send from
+     * any number of addresses without a transport for each.
+     */
+    public suspend fun spoof(from: Endpoint.Udp, to: Endpoint, bytes: ByteArray) {
+        route(from, to, bytes.copyOf())
+    }
+
     internal suspend fun detach(transport: InMemoryTransport) {
         lock.withLock { transports.remove(transport.localEndpoint) }
     }
