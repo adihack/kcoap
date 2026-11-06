@@ -2,6 +2,7 @@ package dev.kcoap.coap.client
 
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.transport.ChannelSecurityKind
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.IpLiteral
@@ -70,9 +71,22 @@ public enum class ObserveCancellation {
  * Finds the transport endpoint for a URI's host and port. The kind of [Endpoint] it returns picks the
  * endpoint's transport: an [Endpoint.Udp] or [Endpoint.Secure] its datagram transport, an [Endpoint.Tcp] or
  * [Endpoint.WebSocket] a connection.
+ *
+ * **Errors.** A lookup that fails at runtime, as a DNS lookup does without network or for a name without an
+ * address, throws [CoapException] with [CoapException.Reason.UNRESOLVED_HOST] and the underlying failure as cause:
+ * a condition that may pass. `IllegalArgumentException` is kept for a host this resolver cannot resolve by design,
+ * a mistake of configuration that no retry fixes, such as a host name given to [Default], which knows no DNS.
+ * [CoapClient] passes both on, and reports any other exception of [resolve] as
+ * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, so a resolver built on a platform's DNS may let that
+ * platform's exceptions through.
  */
 public fun interface EndpointResolver {
-    /** @throws IllegalArgumentException when the host cannot be resolved. */
+    /**
+     * The endpoint for [uri]'s host and port.
+     *
+     * @throws CoapException with [CoapException.Reason.UNRESOLVED_HOST] when the lookup fails at runtime.
+     * @throws IllegalArgumentException when this resolver cannot resolve such a host at all.
+     */
     public suspend fun resolve(uri: CoapUri): Endpoint
 
     public companion object {

@@ -20,6 +20,7 @@ import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -37,19 +38,37 @@ import kotlinx.coroutines.withContext
  * directions (RFC 7959, or Q-Block of RFC 9177 when [CoapClientConfig.qBlock] turns it on and the server
  * supports it), separate responses are awaited (RFC 7252 §5.2.2), a 4.01 with Echo is answered
  * once with that Echo value (RFC 9175 §2.3), and message security protects each message
- * ([CoapClientConfig.security]). Error codes are returned as responses; a request that gets no response
- * at all throws [CoapException].
+ * ([CoapClientConfig.security]).
+ *
+ * **Errors.** Error codes (4.xx, 5.xx) are returned as responses, not thrown. A call fails with:
+ * - [CoapException] for everything that goes wrong at runtime, whatever the layer; its [CoapException.reason]
+ *   says what: the peer did not answer ([CoapException.Reason.TRANSMISSION_TIMEOUT],
+ *   [CoapException.Reason.RESPONSE_TIMEOUT]) or refused ([CoapException.Reason.RESET]), the DTLS session or
+ *   connection ended ([CoapException.Reason.SESSION_ENDED], [CoapException.Reason.CONNECTION_CLOSED]), the
+ *   response broke the protocol ([CoapException.Reason.BAD_RESPONSE], [CoapException.Reason.BLOCKWISE_FAILED]),
+ *   message security could not protect the request ([CoapException.Reason.SECURITY]) or verify its only answer
+ *   ([CoapException.Reason.UNVERIFIED_RESPONSE]), the host could not be resolved
+ *   ([CoapException.Reason.UNRESOLVED_HOST]), a limit was reached ([CoapException.Reason.MESSAGE_TOO_LARGE],
+ *   [CoapException.Reason.IDENTIFIERS_EXHAUSTED]), or the endpoint cannot serve it
+ *   ([CoapException.Reason.TRANSPORT_UNAVAILABLE], [CoapException.Reason.TRANSPORT_FAILED],
+ *   [CoapException.Reason.CLOSED]). Lower layers' exceptions arrive as its cause, never on their own.
+ * - `IllegalArgumentException` or `IllegalStateException` only for a mistake of the caller: a URI string that
+ *   is not a CoAP URI, observing with a method other than GET or FETCH, or a host the configured
+ *   [EndpointResolver] cannot resolve by design, such as a name given to [EndpointResolver.Default].
+ * - `CancellationException` when the calling coroutine is cancelled, which cancels the exchange.
  *
  * Under message security the client acts only on responses it verified (ADR 0008). A protected request answered
  * only by an error that came without message security, such as OSCORE's unprotected 4.01 (RFC 8613 §8.2), is
  * not repeated for its Echo option nor continued block-wise: it throws [CoapException] with
  * [CoapException.Reason.UNVERIFIED_RESPONSE], whose [CoapException.response] is that error. A security layer
  * that cannot protect a request it should, such as kcoap-oscore's without a context for the peer, fails it
- * with its `MessageSecurityException` before anything is sent.
+ * before anything is sent, with [CoapException.Reason.SECURITY] and the layer's `MessageSecurityException` as
+ * cause.
  *
- * Cancelling the calling coroutine cancels the exchange. Once the endpoint
- * is closed, by [close], by its scope or by a failed transport, every call throws [CoapException] with
- * [CoapEndpoint.closeCause]'s reason, and every [observe] flow fails with it.
+ * Once the endpoint is closed, by [close], by its scope or by a failed transport, every call throws
+ * [CoapException] with [CoapEndpoint.closeCause]'s reason, at once and without resolving the host, and every
+ * [observe] flow fails with it. A call racing [CoapEndpoint.close] fails the same way: whether the endpoint is
+ * closed is decided under the lock that registers the exchange, so no request waits for a response after it.
  *
  * The client is safe to use from any number of coroutines; it runs on the dispatcher of the endpoint's
  * scope, so on Android or iOS give it one such as `lifecycleScope + Dispatchers.Default`. Creating it
@@ -130,7 +149,7 @@ public class CoapClient private constructor(
      * them.
      */
     public suspend fun request(request: CoapRequest): CoapResponse {
-        val peer = config.resolver.resolve(request.uri)
+        val peer = resolve(request.uri)
         log.debug { "$request to $peer" }
         val message = message(request)
         qBlock?.send(peer, message, request.isConfirmable)?.let { return it }
@@ -270,7 +289,7 @@ public class CoapClient private constructor(
      */
     public fun observe(request: CoapRequest): Flow<CoapResponse> = flow {
         require(request.method == CoapCode.GET || request.method == CoapCode.FETCH) { "Only GET and FETCH can be observed" }
-        val peer = config.resolver.resolve(request.uri)
+        val peer = resolve(request.uri)
         val registration = message(request).toBuilder().options { observe(0) }.build()
         val observation = acquire(peer, registration, request.isConfirmable)
         try {
@@ -307,7 +326,7 @@ public class CoapClient private constructor(
      * CoAP ping of the server at [uri]: an Empty Confirmable message over UDP (RFC 7252 §4.3), true if it
      * answered with a Reset (or ACK); a Ping over a reliable transport (RFC 8323 §5.4), true if the Pong came.
      */
-    public suspend fun ping(uri: CoapUri): Boolean = endpoint.ping(config.resolver.resolve(uri))
+    public suspend fun ping(uri: CoapUri): Boolean = endpoint.ping(resolve(uri))
 
     /** CoAP ping of the server at the CoAP URI [uri]. */
     public suspend fun ping(uri: String): Boolean = ping(CoapUri.parse(uri))
@@ -340,6 +359,28 @@ public class CoapClient private constructor(
     }
 
     // ---------------------------------------------------------------- internals
+
+    /**
+     * The peer for [uri], through [CoapClientConfig.resolver], with its failures translated as its contract
+     * says: a [CoapException], such as [CoapException.Reason.UNRESOLVED_HOST], and an `IllegalArgumentException`
+     * for a host the resolver cannot resolve by design pass unchanged; any other exception is a lookup that failed
+     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause. On a closed endpoint nothing is looked
+     * up: the call fails like [CoapEndpoint.closeCause] at once.
+     */
+    private suspend fun resolve(uri: CoapUri): Endpoint {
+        endpoint.closeCause?.let { throw endpoint.closedError(it) }
+        return try {
+            config.resolver.resolve(uri)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: CoapException) {
+            throw e
+        } catch (e: IllegalArgumentException) {
+            throw e
+        } catch (e: Exception) {
+            throw CoapException("Cannot resolve ${uri.host}: ${e.message}", CoapException.Reason.UNRESOLVED_HOST, e)
+        }
+    }
 
     /** The request message without token and Message ID: URI options (RFC 7252 §6.4), options, body. */
     private fun message(request: CoapRequest): CoapMessage = CoapMessage.request(request.method) {

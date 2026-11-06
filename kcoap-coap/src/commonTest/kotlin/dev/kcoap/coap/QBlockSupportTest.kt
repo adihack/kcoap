@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -528,7 +529,9 @@ class QBlockSupportTest {
         assertContentEquals(body(300), setup.client.get(setup.server.uri("/edhoc")).payload)
         assertTrue(setup.requests().none { it.hasQBlock() }, "no probe went out, and the request used RFC 7959")
         assertNull(setup.client.known(peer, isProtected = true), "nothing was learnt, so nothing is kept")
-        assertFailsWith<MessageSecurityException> { setup.client.get(setup.server.uri("/big")) }
+        val refused = assertFailsWith<CoapException> { setup.client.get(setup.server.uri("/big")) }
+        assertEquals(CoapException.Reason.SECURITY, refused.reason)
+        assertIs<MessageSecurityException>(refused.cause)
         assertEquals(listOf("/edhoc"), setup.requests().map { it.options.path }.distinct(), "nothing else went out")
 
         installed = true

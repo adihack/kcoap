@@ -3,14 +3,19 @@ package dev.kcoap.coap.stack
 import dev.kcoap.coap.CoapResponse
 
 /**
- * A CoAP exchange that could not complete because of the peer, the network or the endpoint itself: no
- * acknowledgement or a Reset over datagrams, a secure session or connection that ended, a response that
- * violates the protocol or could not be verified, or an endpoint that is closed, has no transport for the peer,
- * or whose transport failed. [reason] says which; the reasons of one transport shape say so.
+ * A CoAP exchange that could not complete because of the peer, the network, message security or the endpoint
+ * itself: no acknowledgement or a Reset over datagrams, a secure session or connection that ended, a response
+ * that violates the protocol or could not be verified, a request that message security could not protect, a host
+ * that could not be resolved, or an endpoint that is closed, has no transport for the peer, or whose transport
+ * failed. [reason] says which; the reasons of one transport shape say so. This is the one exception type that
+ * `CoapClient`, [CoapEndpoint] and `CoapServer` calls fail with at runtime; `IllegalArgumentException` and
+ * `IllegalStateException` are kept for mistakes of the caller, such as a malformed URI string.
  *
  * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses. The exception is a
  * protected request answered only by an error that message security could not verify, which ends with
  * [Reason.UNVERIFIED_RESPONSE] and carries that error as [response].
+ *
+ * New reasons may be added before 1.0; a `when` over [reason] should have an `else` branch.
  *
  * @property response the response the exchange ended with without acting on it: for
  *   [Reason.UNVERIFIED_RESPONSE], the unverified response as it came; null for every other reason.
@@ -95,5 +100,22 @@ public class CoapException(
          * answers this way too, and running the key establishment again, such as EDHOC, is the usual remedy.
          */
         UNVERIFIED_RESPONSE,
+
+        /**
+         * Message security on this side failed, so nothing was sent: the client's `ClientMessageSecurity` could not
+         * protect the request. The cause is the security layer's exception, such as kcoap-oscore's
+         * `MessageSecurityException` for a peer without a security context, exhausted sequence numbers (RFC 8613
+         * §7.2.1) or a sequence-number store that failed. A configuration or key-management matter rather than a
+         * failure of the peer: retrying succeeds only once the context is fixed, for example by running EDHOC.
+         */
+        SECURITY,
+
+        /**
+         * The host of the request's URI could not be resolved, so nothing was sent: the client's `EndpointResolver`
+         * failed at runtime, as a DNS lookup does without network or for a name without an address. The cause is the
+         * resolver's exception, if any. A condition that may pass, unlike a resolver that cannot resolve such a
+         * host at all, which is a mistake of configuration and throws `IllegalArgumentException`.
+         */
+        UNRESOLVED_HOST,
     }
 }

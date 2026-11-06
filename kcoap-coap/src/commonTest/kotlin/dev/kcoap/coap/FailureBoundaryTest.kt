@@ -34,6 +34,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -238,7 +239,9 @@ class FailureBoundaryTest {
         }
         val client = fixture.client(CoapClientConfig(security = failing))
 
-        assertFailsWith<MessageSecurityException> { client.get(fixture.uri("/r")) }
+        val error = assertFailsWith<CoapException> { client.get(fixture.uri("/r")) }
+        assertEquals(CoapException.Reason.SECURITY, error.reason)
+        assertIs<MessageSecurityException>(error.cause)
         assertEquals(0, client.endpoint.exchangeCount())
         server.close()
     }

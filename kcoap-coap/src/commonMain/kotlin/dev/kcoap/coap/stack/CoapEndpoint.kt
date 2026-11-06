@@ -4,6 +4,7 @@ import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.ClientMessageSecurity
+import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
@@ -261,7 +262,8 @@ public class CoapEndpoint private constructor(
      *   whose granted [BodyLease] towards [peer] holds the slot (RFC 9177 §7.2).
      * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
      *   transport for [peer], with [CoapException.Reason.CONNECTION_CLOSED] when its connection cannot be
-     *   opened, or like [closeCause] once the endpoint is closed.
+     *   opened, with [CoapException.Reason.SECURITY] when [security] fails to protect the request, which is then
+     *   not sent, or like [closeCause] once the endpoint is closed.
      * @throws IllegalArgumentException for a Confirmable request with [Pacing.Body], which would deadlock
      *   at NSTART 1 (RFC 9177 §7.1), or a lease towards another peer.
      * @throws IllegalStateException for a lease not yet granted or already released.
@@ -294,7 +296,7 @@ public class CoapEndpoint private constructor(
         }
         try {
             val plain = link.address(request, exchange.token, confirmable)
-            val protected = security?.protectRequest(plain, peer)
+            val protected = security?.let { protect(it, plain, peer) }
             exchange.protectedRequest = protected
             val wire = protected?.message?.toBuilder()?.apply {
                 type = plain.type
@@ -311,6 +313,31 @@ public class CoapEndpoint private constructor(
             throw e
         }
         return exchange
+    }
+
+    /**
+     * [security]'s protection of [request] for [peer]. Its failures are translated at this boundary, as for every
+     * client call (CoapException): any exception but a cancellation becomes [CoapException.Reason.SECURITY],
+     * with the security layer's own as cause, whatever its type, so a failing sequence-number store under OSCORE
+     * is reported like a missing context.
+     */
+    private suspend fun protect(
+        security: ClientMessageSecurity,
+        request: CoapMessage,
+        peer: Endpoint,
+    ): ProtectedRequest? {
+        try {
+            return security.protectRequest(request, peer)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.debug { "Message security did not protect ${request.code} to $peer: ${e.message}" }
+            throw CoapException(
+                "Message security could not protect ${request.code} to $peer: ${e.message}",
+                CoapException.Reason.SECURITY,
+                e,
+            )
+        }
     }
 
     /**

@@ -168,15 +168,18 @@ class EdgeCaseTest {
     }
 
     @Test
-    fun aFailingProtectionFailsTheRequest() = runTest {
+    fun aFailingProtectionFailsTheRequestWithSecurityAndSendsNothing() = runTest {
         val fixture = StackFixture(this)
         val security = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
                 throw MessageSecurityException("No context for $peer")
         }
         val client = fixture.client(CoapClientConfig(security = security))
-        assertFailsWith<MessageSecurityException> { client.get("coap://127.0.0.1:9/x") }
+        val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.SECURITY, error.reason)
+        assertIs<MessageSecurityException>(error.cause)
         assertEquals(0, fixture.traffic.size)
+        assertEquals(0, client.endpoint.exchangeCount(), "the token is free again")
     }
 
     @Test
