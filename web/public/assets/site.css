@@ -1735,7 +1735,8 @@ pre {
     box-shadow: none;
   }
 
-  .figure figcaption {
+  .figure figcaption,
+  .figure .diagram-text {
     padding-inline: 8px;
   }
 
@@ -2030,13 +2031,40 @@ pre {
   margin-top: 0.25rem;
 }
 
+.diagram-text th small {
+  display: block;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+
+.diagram-text .table-wrap {
+  margin-bottom: 0;
+}
+
+/*
+ * On phones a diagram is drawn at about 0.8 of its viewBox, so the smaller labels grow to stay at 11 px
+ * or more; the boxes leave room for these sizes. The text version above the caption has the same content.
+ */
 @media (max-width: 599px) {
-  .diagram .d-caps {
-    font-size: 12px;
+  .diagram .d-sub,
+  .diagram .d-mono {
+    font-size: 14px;
   }
 
   .diagram .d-small {
+    font-size: 13.5px;
+  }
+
+  .diagram .d-mono-small {
     font-size: 13px;
+  }
+
+  .diagram .d-block-num {
+    font-size: 13.5px;
+  }
+
+  .diagram .d-caps {
+    font-size: 12.5px;
   }
 }
 
