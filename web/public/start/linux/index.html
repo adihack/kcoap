@@ -47,7 +47,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -228,7 +228,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 
         <h2 id="security">Keys and state on a gateway</h2>
         <ul>
-          <li><strong>Pre-shared OSCORE keys</strong> need a durable <code>SequenceNumberStore</code>. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The Linux recipe</a> uses POSIX calls with <code>fsync</code> on the file and its directory. It is not compiled or tested on Linux yet.</li>
+          <li><strong>Pre-shared OSCORE keys</strong> need a durable <code>SequenceNumberStore</code>. <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md#writing-a-durable-store">The Linux recipe</a> uses POSIX calls with <code>fsync</code> on the file and its directory. It is not compiled or tested on Linux yet.</li>
           <li><strong>EDHOC</strong> derives new keys for each session and needs no durable store. Bound the security contexts on a long-running gateway: <code>InMemoryContextRepository</code> never evicts.</li>
           <li><strong>No post-quantum EDHOC on Linux native yet</strong>: ML-KEM and ML-DSA come only from <code>kcoap-crypto-bc</code>, which is for the JVM and Android.</li>
         </ul>
@@ -239,7 +239,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h3>ARM gateways</h3>
         <p>There is no <code>linuxArm64</code> target yet; it is planned. On an ARM gateway with a Java 17 runtime, the JVM artifacts are today’s route. No ARM machine runs in CI.</p>
         <h3>TLS</h3>
-        <p>There is no TLS on Linux native: ktor has none there, so neither a <code>coaps+tcp</code> client nor <code>coaps+ws</code> runs on the gateway. Terminate TLS in a proxy in front of it, such as stunnel or nginx’s <code>stream</code> module, as <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0010-server-side-tls.md">ADR 0010</a> recommends for native gateways. DTLS for <code>coaps://</code> comes last.</p>
+        <p>There is no TLS on Linux native: ktor has none there, so neither a <code>coaps+tcp</code> client nor <code>coaps+ws</code> runs on the gateway. Terminate TLS in a proxy in front of it, such as stunnel or nginx’s <code>stream</code> module, as <a href="https://github.com/adihack/kcoap/blob/main/docs/adr/0010-server-side-tls.md">ADR 0010</a> recommends for native gateways. DTLS for <code>coaps://</code> comes last.</p>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
@@ -255,7 +255,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 
         <h2 id="next-steps">Next steps</h2>
         <ul>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>: Observe, endpoint tuning and Q-Block for large bodies over lossy links.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a>: Observe, endpoint tuning and Q-Block for large bodies over lossy links.</li>
           <li>Serving browsers through the gateway: the <a href="/start/browser/">browser guide</a>.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
         </ul>
@@ -300,18 +300,18 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

@@ -48,7 +48,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/" aria-current="page">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -91,7 +91,7 @@
         </div>
         <p class="release-status" data-release-status role="status"></p>
       </div>
-      <p class="muted">The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">changelog</a> lists every notable change by release, with a migration note for each breaking change; what changes after 0.1.0 goes under “Unreleased” until the next release.</p>
+      <p class="muted">The <a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">changelog</a> lists every notable change by release, with a migration note for each breaking change; what changes after 0.1.0 goes under “Unreleased” until the next release.</p>
     </div>
   </section>
 
@@ -142,7 +142,7 @@
           </tbody>
         </table>
       </div>
-      <p class="muted">TLS for stream transports (T1), browser interop (I1), a crypto conformance suite (C2), consumer samples (P1) and the rest of the CoAP errors and observability work (B4) merged too, but did not block the release. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
+      <p class="muted">TLS for stream transports (T1), browser interop (I1), a crypto conformance suite (C2), consumer samples (P1) and the rest of the CoAP errors and observability work (B4) merged too, but did not block the release. <a href="https://github.com/adihack/kcoap/blob/main/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
     </div>
   </section>
 
@@ -154,7 +154,7 @@
         <p class="lede">A release is a <code>v*</code> tag. The version is the tag without the <code>v</code>; between releases the build holds the next version with <code>-SNAPSHOT</code>.</p>
         <ol class="steps">
           <li><h3>Test</h3><p>The whole CI workflow runs again: unit tests on every target, the coverage floor, interop with libcoap and libedhoc, the Apple targets and the API reference. Nothing is published if any of it fails.</p></li>
-          <li><h3>Publish</h3><p>A macOS runner builds every module for every target, signs each artifact with the release key <code>5833 7699 D9CB 8E6F 5EB1 BDFB 4A7E 4910 69FA EAB3</code>, publishes them to GitHub Packages and uploads them to the Central Portal. The maintainer checks that deployment and publishes it to Maven Central by hand, a step that cannot be undone. The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#the-release-signing-key">releasing guide</a> says how to check a signature.</p></li>
+          <li><h3>Publish</h3><p>A macOS runner builds every module for every target, signs each artifact with the release key <code>5833 7699 D9CB 8E6F 5EB1 BDFB 4A7E 4910 69FA EAB3</code>, publishes them to GitHub Packages and uploads them to the Central Portal. The maintainer checks that deployment and publishes it to Maven Central by hand, a step that cannot be undone. The <a href="https://github.com/adihack/kcoap/blob/main/docs/releasing.md#the-release-signing-key">releasing guide</a> says how to check a signature.</p></li>
           <li><h3>Release notes</h3><p>A GitHub Release whose notes are the version’s summary from the changelog, followed by the merged pull requests. A version with a <code>-</code>, such as <code>0.2.0-rc1</code>, is marked as a pre-release.</p></li>
           <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages. For 0.1.0 the deploy failed, so the reference is not online yet; it goes online once its deploy is fixed.</p></li>
         </ol>
@@ -238,7 +238,7 @@
           </tbody>
         </table>
       </div>
-      <p class="muted"><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/versioning.md">The full versioning policy</a> · <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md">The releasing guide</a></p>
+      <p class="muted"><a href="https://github.com/adihack/kcoap/blob/main/docs/versioning.md">The full versioning policy</a> · <a href="https://github.com/adihack/kcoap/blob/main/docs/releasing.md">The releasing guide</a></p>
     </div>
   </section>
 
@@ -305,18 +305,18 @@
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

@@ -47,7 +47,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -239,9 +239,9 @@ security.<span class="tok-f">install</span>(client, gateway, protection)
 <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coaps+ws://gateway.example/lights"</span>).<span class="tok-f">payloadAsText</span>())</code></pre></div>
         <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>The README’s quick start with the WebSocket connector; names checked. EDHOC over a real WebSocket in a browser has not run anywhere yet: the full-stack EDHOC test runs on js and wasmJs on Node.js, over the in-memory network.</span></p>
         <ul>
-          <li><strong>Prefer EDHOC to pre-shared keys in a browser.</strong> Pre-shared OSCORE keys need durable sequence numbers, and a user can clear a site’s storage at any time. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The IndexedDB recipe</a> exists, but is not compiled or tested.</li>
+          <li><strong>Prefer EDHOC to pre-shared keys in a browser.</strong> Pre-shared OSCORE keys need durable sequence numbers, and a user can clear a site’s storage at any time. <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md#writing-a-durable-store">The IndexedDB recipe</a> exists, but is not compiled or tested.</li>
           <li><strong>Through a proxy</strong>, such as libcoap’s <code>coap-server</code> forwarding to UDP devices, OSCORE and EDHOC stay end to end; TLS ends at the proxy. CI runs this path with a WebSocket-only kcoap client on the JVM through libcoap 4.3.5b’s forward-proxy to a UDP device, with OSCORE, EDHOC and the combined request; not yet from a real browser. kcoap’s client has no proxy setting yet: the test adds the Proxy-Scheme and Uri-Host options itself.</li>
-          <li><strong>Limits of libcoap’s proxy</strong> (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>): devices must listen on port 5683; request bodies must fit one message on each side, so post-quantum EDHOC does not cross it; and every browser behind it is one peer to the device, so EDHOC’s per-peer limits cover the whole gateway.</li>
+          <li><strong>Limits of libcoap’s proxy</strong> (<a href="https://github.com/adihack/kcoap/blob/main/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>): devices must listen on port 5683; request bodies must fit one message on each side, so post-quantum EDHOC does not cross it; and every browser behind it is one peer to the device, so EDHOC’s per-peer limits cover the whole gateway.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
@@ -274,8 +274,8 @@ security.<span class="tok-f">install</span>(client, gateway, protection)
 
         <h2 id="next-steps">Next steps</h2>
         <ul>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/architecture.md#browsers">Architecture: browsers</a>, with the proxy setup and the WebCrypto table.</li>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-transport-ktor-websocket/README.md">WebSocket client module</a>: engines and the subprotocol.</li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/architecture.md#browsers">Architecture: browsers</a>, with the proxy setup and the WebCrypto table.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/kcoap-transport-ktor-websocket/README.md">WebSocket client module</a>: engines and the subprotocol.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
         </ul>
 
@@ -319,18 +319,18 @@ security.<span class="tok-f">install</span>(client, gateway, protection)
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

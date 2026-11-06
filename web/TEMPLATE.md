@@ -12,8 +12,9 @@ own copy of the head, the header and the footer below. Copy them exactly; change
   links), all JavaScript in `/assets/site.js`. SVG presentation attributes (`fill`, `stroke`, `transform`,
   `viewBox`) are fine.
 - **One `h1` per page**, `lang="en"`, the skip link, `<main id="main">`.
-- **Repository links** use exactly `https://github.com/adihack/kcoap/blob/feat/protocol-core/<path>` (or
-  `tree/` for folders), so one replacement switches them to `main` after PR #1 merges.
+- **Repository links** use exactly `https://github.com/adihack/kcoap/blob/main/<path>` (or
+  `tree/` for folders), the default branch; `scripts/check-site` fails when two links name different
+  branches.
 - **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
@@ -121,7 +122,7 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -207,18 +208,18 @@ Copy it as is, followed by `</body></html>`.
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

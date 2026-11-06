@@ -47,7 +47,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -208,7 +208,7 @@ kcoap = [
         server.<span class="tok-f">close</span>()
     }
 }</code></pre></div>
-        <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Shortened from the sample’s <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/app/src/main/kotlin/dev/kcoap/sample/android/LoopbackGets.kt"><code>LoopbackGets.kt</code></a>, which CI builds and shrinks with R8; the sample also sends the same GET under OSCORE. This shortened form is not compiled on its own.</span></p>
+        <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Shortened from the sample’s <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/app/src/main/kotlin/dev/kcoap/sample/android/LoopbackGets.kt"><code>LoopbackGets.kt</code></a>, which CI builds and shrinks with R8; the sample also sends the same GET under OSCORE. This shortened form is not compiled on its own.</span></p>
         <p>Run it from a coroutine scope that lives as long as the screen, and cancel the scope when Android destroys the Activity:</p>
 <div class="code-block"><p class="code-block-label">MainActivity.kt</p><pre tabindex="0"><code><span class="tok-k">import</span> android.app.<span class="tok-t">Activity</span>
 <span class="tok-k">import</span> android.os.<span class="tok-t">Bundle</span>
@@ -240,7 +240,7 @@ kcoap = [
         <h2 id="security">Keys and state in an app</h2>
         <ul>
           <li><strong>One set of OSCORE contexts per process.</strong> Derive each context once, in the <code>Application</code> or a singleton, never per Activity. Android can run two Activities of an app at once, and two live contexts under one name hand out the same sequence numbers, which reuses nonces.</li>
-          <li><strong>Sequence numbers outside Auto Backup.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>. The sample’s <code>FileSequenceNumberStore</code> follows <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">the JVM and Android recipe</a> with API 26 calls only, and keeps its files in <code>noBackupFilesDir</code>: a sequence number restored from a backup reuses nonces.</li>
+          <li><strong>Sequence numbers outside Auto Backup.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>. The sample’s <code>FileSequenceNumberStore</code> follows <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md#writing-a-durable-store">the JVM and Android recipe</a> with API 26 calls only, and keeps its files in <code>noBackupFilesDir</code>: a sequence number restored from a backup reuses nonces.</li>
           <li><strong>EDHOC needs no durable store.</strong> Its keys are new for each session. Cipher suite 2 (P-256) is the one every platform runs.</li>
           <li><strong>Post-quantum EDHOC</strong> comes from <code>kcoap-crypto-bc</code>, as <code>BouncyCastleCryptoBackend(DefaultCryptoBackend())</code>. The sample’s <code>postQuantum</code> flavor builds and shrinks with it, but it has not run on a device.</li>
         </ul>
@@ -257,7 +257,7 @@ kcoap = [
         <h3>TLS</h3>
         <p><code>KtorTlsConnector</code>, the <code>coaps+tcp</code> client of the JVM guide, is in the same jar. On Android it checks the server’s chain with the host through the platform, so your network security configuration applies per domain. It has not run on Android yet.</p>
         <h3>What holds API level 26</h3>
-        <p><code>checkAndroidApi</code> checks every kcoap jvm jar against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
+        <p><code>checkAndroidApi</code> checks every kcoap jvm jar against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
         <h3>Not done yet on Android</h3>
         <ul>
           <li>No run on an emulator or a device, and no report of which algorithms each API level offers.</li>
@@ -281,8 +281,8 @@ kcoap = [
 
         <h2 id="next-steps">Next steps</h2>
         <ul>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md">Android sample</a>: what it checks, what an app needs, and the API level findings.</li>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a> and the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md">OSCORE guide</a>.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/README.md">Android sample</a>: what it checks, what an app needs, and the API level findings.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a> and the <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md">OSCORE guide</a>.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
         </ul>
 
@@ -326,18 +326,18 @@ kcoap = [
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>
