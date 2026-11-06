@@ -39,7 +39,7 @@ class ServerCertificateCheckTest {
     fun theRebuiltPathEndsAtTheTrustAnchor() {
         val leaf = TestCertificates.issue(authority, "server", dnsNames = listOf("coap.example.org"))
         val chains = mutableListOf<List<X509Certificate>>()
-        val check = ServerCertificateCheck(trust, "coap.example.org") { _, chain -> chains += chain; true }
+        val check = ServerCertificateCheck(trust, "coap.example.org", { _, chain -> chains += chain; true })
         // The authority, sent twice after the leaf, is not followed: the anchor ends the path first.
         check.checkServerTrusted(arrayOf(leaf.certificate, authority.certificate, authority.certificate), "ECDHE_ECDSA")
         assertEquals(listOf(leaf.certificate, authority.certificate), chains.single())

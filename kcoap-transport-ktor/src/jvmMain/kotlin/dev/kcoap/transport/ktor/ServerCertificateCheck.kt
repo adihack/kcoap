@@ -7,14 +7,16 @@ import kotlin.concurrent.Volatile
 
 /**
  * The trust manager one [KtorTlsConnector] handshake runs, for the server at [host]: the chain is validated by
- * [trust] (the platform's PKIX trust manager), must name [host] (RFC 9525 §6, [ServerIdentity]) and pass
- * [pinner]; any failure throws [CertificateException], which ends the handshake. What passed is kept in
+ * [trust] (the platform's PKIX trust manager), through [hostAware] with the host where the platform has such a
+ * check (Android, for its network security configuration), must name [host] (RFC 9525 §6, [ServerIdentity]) and
+ * pass [pinner]; any failure throws [CertificateException], which ends the handshake. What passed is kept in
  * [validatedChain], end-entity certificate first and trust anchor last.
  */
 internal class ServerCertificateCheck(
     private val trust: X509TrustManager,
     private val host: String,
     private val pinner: CertificatePinner?,
+    private val hostAware: HostAwareTrust? = null,
 ) : X509TrustManager {
     /** Set once a chain passed every check; read after the handshake. */
     @Volatile
@@ -23,7 +25,11 @@ internal class ServerCertificateCheck(
 
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
         if (chain.isNullOrEmpty()) throw CertificateException("The server sent no certificate")
-        trust.checkServerTrusted(chain, authType)
+        if (hostAware != null) {
+            hostAware.checkServerTrusted(chain, authType, host)
+        } else {
+            trust.checkServerTrusted(chain, authType)
+        }
         if (!ServerIdentity.isNamedBy(chain[0], host)) {
             throw CertificateException("The server certificate does not name $host (RFC 9525 §6)")
         }

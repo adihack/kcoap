@@ -60,6 +60,9 @@ public class KtorTlsConnector(
     /** Loaded on the first connection: the platform store is read from disk. */
     private val trust: X509TrustManager by lazy { config.trust.trustManager() }
 
+    /** The platform's host-aware check of [trust], on Android; null on the JVM. */
+    private val hostAware: HostAwareTrust? by lazy { HostAwareTrust.find(trust) }
+
     override val schemes: Set<CoapScheme> = setOf(CoapScheme.COAPS_TCP)
 
     /**
@@ -78,7 +81,7 @@ public class KtorTlsConnector(
                 "cannot offer; only port ${CoapScheme.COAPS_TCP.defaultPort} implies coaps+tcp without it. Set " +
                 "TlsClientConfig.allowsAnyPortWithoutAlpn for a server that accepts clients without ALPN"
         }
-        val check = ServerCertificateCheck(trust, peer.host, config.pinner)
+        val check = ServerCertificateCheck(trust, peer.host, config.pinner, hostAware)
         val socket = aSocket(selector).tcp().connect(peer.host, peer.port) { noDelay = true }
         val secure = try {
             // The TLS socket's own coroutines must not belong to the caller, whose job ends with this call.

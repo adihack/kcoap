@@ -13,8 +13,11 @@ import javax.net.ssl.X509TrustManager
 public sealed interface TlsTrust {
     /**
      * The platform trust store: the JVM's default `TrustManagerFactory` with its default key store, which is the
-     * JDK's `cacerts` unless `javax.net.ssl.trustStore` names another; on Android, the system's trusted CAs as the
-     * app's network security configuration admits them.
+     * JDK's `cacerts` unless `javax.net.ssl.trustStore` names another. On Android it is the system's trusted CAs
+     * as the app's network security configuration admits them for the server's host, a `<domain-config>`'s trust
+     * anchors and `<pin-set>` included: the chain is checked with the host through
+     * `android.net.http.X509TrustManagerExtensions`, without which a configuration with a `<domain-config>`
+     * refuses every chain. That path has not run on Android yet.
      */
     public data object Platform : TlsTrust
 
