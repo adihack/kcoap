@@ -144,26 +144,4 @@ class CoapEndpointConfigTest {
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIdsPerPeer = 65_537 } }
         assertNull(CoapEndpointConfig { separateResponseDelay = null }.separateResponseDelay, "null turns it off")
     }
-
-    @Test
-    @Suppress("DEPRECATION")
-    fun theDeprecatedConstructorBuildsTheSameConfiguration() {
-        val config = CoapEndpointConfig(
-            parameters = parameters,
-            separateResponseDelay = 500.milliseconds,
-            tokenGenerator = tokens,
-            timeSource = clock,
-            random = random,
-            interceptors = listOf(tracer),
-            eventListener = listener,
-            loggerFactory = loggers,
-            reliable = reliable,
-            maxDeduplicationEntries = 10,
-            maxConcurrentRequests = 2,
-            maxExchangesPerPeer = 3,
-        )
-        assertEverythingSet(config)
-        assertEquals(CoapEndpointConfig.Default.toString(), CoapEndpointConfig().toString())
-        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxExchangesPerPeer = 0) }
-    }
 }

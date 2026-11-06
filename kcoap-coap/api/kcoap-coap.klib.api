@@ -468,8 +468,6 @@ final class dev.kcoap.coap.client/CoapClient { // dev.kcoap.coap.client/CoapClie
 }
 
 final class dev.kcoap.coap.client/CoapClientConfig { // dev.kcoap.coap.client/CoapClientConfig|null[0]
-    constructor <init>(dev.kcoap.coap.security/ClientMessageSecurity? = ..., kotlin.time/Duration? = ..., kotlin/Int? = ..., kotlin/Int = ..., dev.kcoap.coap.client/EndpointResolver = ..., dev.kcoap.coap.client/ObserveCancellation = ..., kotlin/Boolean = ..., kotlin/Int = ..., dev.kcoap.coap.client/QBlockClientConfig = ...) // dev.kcoap.coap.client/CoapClientConfig.<init>|<init>(dev.kcoap.coap.security.ClientMessageSecurity?;kotlin.time.Duration?;kotlin.Int?;kotlin.Int;dev.kcoap.coap.client.EndpointResolver;dev.kcoap.coap.client.ObserveCancellation;kotlin.Boolean;kotlin.Int;dev.kcoap.coap.client.QBlockClientConfig){}[0]
-
     final val echoRetry // dev.kcoap.coap.client/CoapClientConfig.echoRetry|{}echoRetry[0]
         final fun <get-echoRetry>(): kotlin/Boolean // dev.kcoap.coap.client/CoapClientConfig.echoRetry.<get-echoRetry>|<get-echoRetry>(){}[0]
     final val maxResponseBodySize // dev.kcoap.coap.client/CoapClientConfig.maxResponseBodySize|{}maxResponseBodySize[0]
@@ -794,8 +792,6 @@ final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndp
 }
 
 final class dev.kcoap.coap.stack/CoapEndpointConfig { // dev.kcoap.coap.stack/CoapEndpointConfig|null[0]
-    constructor <init>(dev.kcoap.coap.stack/TransmissionParameters = ..., kotlin.time/Duration? = ..., dev.kcoap.coap.stack/TokenGenerator? = ..., kotlin.time/TimeSource = ..., kotlin.random/Random = ..., kotlin.collections/List<dev.kcoap.coap.stack/MessageInterceptor> = ..., dev.kcoap.coap.stack/EndpointEventListener = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.coap.stack/ReliableTransportConfig = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // dev.kcoap.coap.stack/CoapEndpointConfig.<init>|<init>(dev.kcoap.coap.stack.TransmissionParameters;kotlin.time.Duration?;dev.kcoap.coap.stack.TokenGenerator?;kotlin.time.TimeSource;kotlin.random.Random;kotlin.collections.List<dev.kcoap.coap.stack.MessageInterceptor>;dev.kcoap.coap.stack.EndpointEventListener;dev.kcoap.log.LoggerFactory;dev.kcoap.coap.stack.ReliableTransportConfig;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
-
     final val eventListener // dev.kcoap.coap.stack/CoapEndpointConfig.eventListener|{}eventListener[0]
         final fun <get-eventListener>(): dev.kcoap.coap.stack/EndpointEventListener // dev.kcoap.coap.stack/CoapEndpointConfig.eventListener.<get-eventListener>|<get-eventListener>(){}[0]
     final val interceptors // dev.kcoap.coap.stack/CoapEndpointConfig.interceptors|{}interceptors[0]

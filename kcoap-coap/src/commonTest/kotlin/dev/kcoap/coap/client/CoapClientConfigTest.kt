@@ -108,23 +108,4 @@ class CoapClientConfigTest {
         assertFailsWith<IllegalArgumentException> { CoapClientConfig { maxResponseBodySize = -1 } }
         assertEquals(0, CoapClientConfig { securityReserve = 0 }.securityReserve)
     }
-
-    @Test
-    @Suppress("DEPRECATION")
-    fun theDeprecatedConstructorBuildsTheSameConfiguration() {
-        val config = CoapClientConfig(
-            security = security,
-            requestTimeout = 5.seconds,
-            preferredBlockSize = 64,
-            maxResponseBodySize = 4096,
-            resolver = resolver,
-            observeCancellation = ObserveCancellation.FORGET,
-            echoRetry = false,
-            securityReserve = 32,
-            qBlock = qBlock,
-        )
-        assertEverythingSet(config)
-        assertEquals(CoapClientConfig.Default.toString(), CoapClientConfig().toString())
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 100) }
-    }
 }

@@ -55,8 +55,6 @@ public final class dev/kcoap/coap/client/CoapClient {
 
 public final class dev/kcoap/coap/client/CoapClientConfig {
 	public static final field Companion Ldev/kcoap/coap/client/CoapClientConfig$Companion;
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getEchoRetry ()Z
 	public final fun getMaxResponseBodySize ()I
 	public final fun getObserveCancellation ()Ldev/kcoap/coap/client/ObserveCancellation;
@@ -397,8 +395,6 @@ public final class dev/kcoap/coap/stack/CoapEndpointConfig {
 	public static final field DEFAULT_MAX_EXCHANGES_PER_PEER I
 	public static final field DEFAULT_MAX_RESERVED_MESSAGE_IDS I
 	public static final field DEFAULT_MAX_RESERVED_MESSAGE_IDS_PER_PEER I
-	public synthetic fun <init> (Ldev/kcoap/coap/stack/TransmissionParameters;Lkotlin/time/Duration;Ldev/kcoap/coap/stack/TokenGenerator;Lkotlin/time/TimeSource;Lkotlin/random/Random;Ljava/util/List;Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/coap/stack/ReliableTransportConfig;IIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ldev/kcoap/coap/stack/TransmissionParameters;Lkotlin/time/Duration;Ldev/kcoap/coap/stack/TokenGenerator;Lkotlin/time/TimeSource;Lkotlin/random/Random;Ljava/util/List;Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/coap/stack/ReliableTransportConfig;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getEventListener ()Ldev/kcoap/coap/stack/EndpointEventListener;
 	public final fun getInterceptors ()Ljava/util/List;
 	public final fun getLoggerFactory ()Ldev/kcoap/log/LoggerFactory;

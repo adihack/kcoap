@@ -33,9 +33,10 @@ W1, B1–B3, C1, D1 and D2. What stands between the branch and a tag is the chec
 Before tagging 0.1.0:
 
 - the freeze list above has merged and CI is green on `main`;
-- nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is already on its way
-  out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig` and
-  `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone;
+- **done (WP-P1):** nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is
+  already on its way out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig`
+  and `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone, and no other `@Deprecated` declaration
+  is left in the published modules;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)); the
   license is already set, and the `dev.kcoap` namespace is verified;

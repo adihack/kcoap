@@ -38,3 +38,9 @@ also had the DSL as a third way to make an endpoint.
   Swift until the Apple facade (roadmap E4).
 - Two ways remain to configure: a builder for two classes, a constructor for the rest. The rule for which one a new
   configuration gets is this record: a builder only when it is certain to grow.
+
+## As built
+
+- WP-D1 added the builders and deprecated the two constructors. WP-P1 removed the constructors before the first
+  release, as the consequences above planned: `CoapEndpointConfig` and `CoapClientConfig` have only a private
+  constructor, and the published modules hold no `@Deprecated` declaration for 0.1.0.

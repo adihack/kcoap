@@ -185,47 +185,6 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
         }
     }
 
-    /**
-     * The configuration with these values. Deprecated: build it with `CoapEndpointConfig { ... }` or a
-     * [Builder], which take the same named values and, unlike this constructor, can gain options without
-     * breaking compiled code.
-     *
-     * @throws IllegalArgumentException when a value is out of range, as [Builder.build] does.
-     */
-    @Deprecated(
-        "Build the configuration with CoapEndpointConfig { ... } or CoapEndpointConfig.Builder; this constructor " +
-            "is removed before the first release.",
-    )
-    public constructor(
-        parameters: TransmissionParameters = TransmissionParameters.Default,
-        separateResponseDelay: Duration? = 1.seconds,
-        tokenGenerator: TokenGenerator? = null,
-        timeSource: TimeSource = TimeSource.Monotonic,
-        random: Random = Random.Default,
-        interceptors: List<MessageInterceptor> = emptyList(),
-        eventListener: EndpointEventListener = EndpointEventListener.None,
-        loggerFactory: LoggerFactory = LoggerFactory.Global,
-        reliable: ReliableTransportConfig = ReliableTransportConfig(),
-        maxDeduplicationEntries: Int = DEFAULT_MAX_DEDUPLICATION_ENTRIES,
-        maxConcurrentRequests: Int = DEFAULT_MAX_CONCURRENT_REQUESTS,
-        maxExchangesPerPeer: Int = DEFAULT_MAX_EXCHANGES_PER_PEER,
-    ) : this(
-        Builder().also {
-            it.parameters = parameters
-            it.separateResponseDelay = separateResponseDelay
-            it.tokenGenerator = tokenGenerator
-            it.timeSource = timeSource
-            it.random = random
-            it.interceptors = interceptors
-            it.eventListener = eventListener
-            it.loggerFactory = loggerFactory
-            it.reliable = reliable
-            it.maxDeduplicationEntries = maxDeduplicationEntries
-            it.maxConcurrentRequests = maxConcurrentRequests
-            it.maxExchangesPerPeer = maxExchangesPerPeer
-        },
-    )
-
     /** A [Builder] holding this configuration's values, to build a changed copy. */
     public fun toBuilder(): Builder = Builder(this)
 
