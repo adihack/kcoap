@@ -352,9 +352,10 @@ One exception root, and `@Throws` for Swift (WP-D2):
   }
   ```
 
-  A Kotlin/Native override of a message-security SPI operation either declares no `@Throws` (it inherits the
-  SPI's) or the same list; a different list no longer compiles. On the JVM the annotation adds `throws` clauses
-  to these methods, which only Java code sees.
+  An implementation of the message-security SPI that declares no `@Throws`, as kcoap's own do, inherits the
+  SPI's list; Kotlin/Native accepts an override with a `@Throws` of its own only when it names the same
+  exceptions, `MessageSecurityException` and `CancellationException`. On the JVM the annotation adds `throws`
+  clauses to these methods, which only Java code sees.
 
 Two configuration builders and explicit `Endpoint` classes (WP-D1):
 

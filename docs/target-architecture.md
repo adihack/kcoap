@@ -891,7 +891,7 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > - **Caller mistakes** stay unlisted everywhere but `CoapUri.parse`, as §3.6 has it: the `String` overloads of
 >   `CoapClient` end a Swift process on a malformed URI, so the KDoc tells Swift callers to parse first.
 > - **The smoke module** applies `kcoap.unpublished` with the Kotlin plugin directly, since no tier covers the
->   Apple targets alone, and Kover, which the root report needs in every module. `swiftSmoke` (an `Exec` task)
+>   Apple targets alone, and Kover, as every module has for the root's coverage report. `swiftSmoke` (an `Exec` task)
 >   compiles the script against the link task's output directory and runs it; `scripts/test swift` and a step of
 >   the CI `apple` job call it. Linux cross-compiles the Apple klibs but skips the link and the script, so the Swift
 >   side is verified by CI only.
