@@ -14,6 +14,10 @@ Nothing is released yet. The repository carries `0.1.0-SNAPSHOT`, and the first 
 - Every published module is released at once, with the same version: `dev.kcoap:<module>:<version>`.
   Use one version for all kcoap modules in a build. The modules call each other's internal plumbing
   (`@InternalKcoapApi`, below), which may change in any release, so mixed versions are not supported.
+  Importing the bill of materials, `implementation(platform("dev.kcoap:kcoap-bom:<version>"))`, sets that one
+  version for every kcoap module of the build, those that arrive as dependencies included. Each module also
+  depends on the BOM of its own version, so in a Gradle build a library that brings a newer kcoap module moves
+  all of them to that version together ([kcoap-bom](../kcoap-bom/README.md#version-alignment)).
 - A release is a `v*` tag, and its version is the tag without the `v` ([releasing](releasing.md)).
   Between releases, `kcoap.version` in `gradle.properties` holds the next version with `-SNAPSHOT`.
 

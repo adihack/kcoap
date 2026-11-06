@@ -251,9 +251,9 @@ deterministic. libcoap protects a fixed set of requests and responses (Observe, 
 Proxy-Uri, unknown options, Appendix B.2 re-derivation) and the bytes are captured on loopback. The
 Kotlin side protects the same messages and must produce identical bytes, and must verify libcoap's output.
 
-### DTLS against Bouncy Castle
+### DTLS against Bouncy Castle (planned, with the DTLS engine)
 
-On the JVM, Bouncy Castle `bctls` (PSK, raw public keys, AES-128-CCM-8, Connection ID) runs in the
+kcoap has no DTLS engine yet; it comes last (roadmap E1). Once it exists: on the JVM, Bouncy Castle `bctls` (PSK, raw public keys, AES-128-CCM-8, Connection ID) runs in the
 same process. With fixed randoms and ephemeral keys on both sides, the handshake flights and records
 are compared byte for byte, for both roles.
 
@@ -468,9 +468,10 @@ What the runs showed about libcoap 4.3.5b's proxy (details and source lines in A
 3. Loss, duplication and reordering injected between the peers (CoAP retransmission, EDHOC
    deduplication per RFC 9528 §7, OSCORE replay window, DTLS flight retransmission and record replay).
 
-### DTLS and TLS against libcoap
+### DTLS and TLS against libcoap (planned, with the DTLS engine)
 
-libcoap builds against several DTLS libraries, so one oracle gives a matrix of independent DTLS
+kcoap has no DTLS yet and no TLS listener ([ADR 0010](../docs/adr/0010-server-side-tls.md)); today only kcoap's TLS
+clients run against libcoap (above, "Over TLS"). libcoap builds against several DTLS libraries, so one oracle gives a matrix of independent DTLS
 stacks. Feature support per libcoap's README:
 
 | libcoap backend | PSK | RPK | Certificates | DTLS 1.3 |
@@ -484,7 +485,7 @@ stacks. Feature support per libcoap's README:
 Each runs `coap-client` and `coap-server` against kcoap in both roles: PSK and RPK with the CCM-8
 suites, certificates with SubjectAltName and CN matching, session resumption, and Connection ID where
 the build reports it (`coap_dtls_cid_is_supported()`). The TLS-capable builds (all but TinyDTLS) also
-cover `coaps+tcp` and `coaps+ws`. TinyDTLS is the closest match to what constrained devices run.
+cover `coaps+tcp` and `coaps+ws`, with kcoap as the server once it has a TLS listener. TinyDTLS is the closest match to what constrained devices run.
 
 Browser path: browser → libcoap `coap-server` as proxy (`coaps+ws` in, `coap`/`coaps` out) → device,
 with OSCORE + EDHOC end to end. Without TLS, `coap+ws` in and `coap` out, it runs now (above, "The browser
@@ -499,7 +500,7 @@ configuration in kcoap's connectors (WP-T1) and, for `coaps`, kcoap's DTLS.
 | aiocoap (Python) | A second opinion on the RFC 9668 combined flow |
 | lakers (Rust) | A second EDHOC opinion (method 3, suite 2 only) |
 | EDHOC-Fuzzer (Java) | Protocol state fuzzing of the kcoap Initiator and Responder |
-| DTLS-Fuzzer, TLS-Attacker (Java) | State-machine learning and malformed-message tests of the kcoap DTLS client and server |
+| DTLS-Fuzzer, TLS-Attacker (Java) | State-machine learning and malformed-message tests of the kcoap DTLS client and server, once the engine exists |
 
 Nobody implements suites 5, 6 or 25.
 

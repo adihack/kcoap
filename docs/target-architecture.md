@@ -940,6 +940,34 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
   - The BOM's constraints equal the published-module list.
   - No doc claims `coaps` or a `coaps+tcp` server before T1 or E1 lands (review checklist).
 
+> **Amendment (C3).** Done as listed, the last package of the release freeze, with each finding re-checked against
+> the tree after the other packages had landed. Already done by then, so C3 only checked them: MB-10 item 2 (the
+> scheme-registry text went with B1 and ADR 0004), item 4 for kcoap-crypto (A4 wrote its README with U5 item 1's
+> key-store recipe), U7 items 3–4 (W1's runtime-capability transports and C1's comments), U8 item 4 (B3's
+> "Randomness" paragraph), U10's documentation (A4, SEC1), MB-4's wording (A5), API-03 item 7's error rules (D2,
+> completed here) and MB-8 item 6's ABI validation (C1). U4 item 4 waits for E3. The shapes:
+> - **kcoap-bom** is a Java platform made by a `kcoap.bom` convention plugin, which constrains, for every module
+>   that applies `kcoap.publishing`, the multiplatform module and its JVM artifact (Maven reads no module metadata,
+>   so a Maven build names the JVM artifact). Publishing moved into `configureKcoapMavenPublishing`, shared by both
+>   plugins, so the BOM has the modules' coordinates, POM and repositories. The same plugin makes every published
+>   module depend on the BOM as a platform from `commonMain`, Gradle's version alignment, so a library that brings
+>   one module at a higher version lifts the others with it. `verifyBomConstraints` (in `check` and
+>   `scripts/test unit`) compares the published POM and every variant of the module metadata with the build's own
+>   publications, and `BomPluginTest` (TestKit) covers the plugin, a stray and a missing constraint, a variant
+>   without constraints and the alignment included. A scratch consumer resolved the BOM's versions for jvm,
+>   iosArm64, linuxX64 and js from `commonMain`. The root coverage aggregate now takes only modules that apply
+>   Kover, since the BOM has no code.
+> - **getting-started.md** carries the §2.6 table by protocol, by transport and by platform, and its examples are
+>   compiled and run by `GettingStartedExamplesTest` in kcoap-edhoc-oscore's jvmTest, which takes kcoap-crypto-bc
+>   as a test dependency for the post-quantum backend (a one-line ownership deviation in that build file).
+> - **platforms.md** copies the capability report as it printed on Linux (jvm, linuxX64, js and wasmJs on the
+>   Node.js versions the Kotlin plugin downloads, Bouncy Castle on the JVM) and derives the EDHOC suites from it;
+>   Apple is CI-only and Android waits for PL-2. The build sets no Apple deployment target, so the page names none.
+> - **ADRs 0011 to 0016**: §4.1 asks for one per settled §5 decision, and five had none (the error model, the
+>   configuration shapes, durable state, the shared crypto blocks, randomness by layer); 0016 is the BOM.
+> - Beyond the list: the interop plan marks its DTLS oracles as planned, and `kcoap.kmp-library`'s "XCFramework
+>   later" comment points to E4 (MB-9 item 3).
+
 **WP-P1: Consumer samples and platform checks**
 
 - **Findings:** MB-9; critique D (Android, browser size).

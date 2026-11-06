@@ -9,6 +9,9 @@ class Fixture(private val directory: File, vararg plugins: String) {
     /** Versions that replace the catalog's, as calls in the settings script. */
     private val catalogVersions = mutableListOf<String>()
 
+    /** Subprojects of a multi-module fixture, as paths for `include`. */
+    private val includes = mutableListOf<String>()
+
     init {
         writeSettings()
         file(
@@ -50,6 +53,15 @@ class Fixture(private val directory: File, vararg plugins: String) {
         writeSettings()
     }
 
+    /**
+     * Makes the fixture a multi-module build with the subprojects at [paths] (`":bom"`), whose build files
+     * [file] writes (`"bom/build.gradle.kts"`).
+     */
+    fun include(vararg paths: String): Fixture = apply {
+        includes += paths
+        writeSettings()
+    }
+
     /** Writes [content], without its common indentation, to [path] inside the fixture. */
     fun file(path: String, content: String): Fixture = apply {
         directory.resolve(path).apply { parentFile.mkdirs() }.writeText(content.trimIndent() + "\n")
@@ -80,7 +92,7 @@ class Fixture(private val directory: File, vararg plugins: String) {
                     create("libs") { $catalog }
                 }
             }
-            """,
+            """ + includes.joinToString("") { "\ninclude(\"$it\")" },
         )
     }
 

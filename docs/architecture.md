@@ -1,30 +1,54 @@
 # Architecture
 
 Status: **built for UDP, TCP and WebSockets, on every target**. The CoAP endpoint with client and
-server APIs, OSCORE, EDHOC (including the post-quantum suite), the EDHOC→OSCORE glue, the crypto
-backends, the UDP transport and CoAP over TCP and WebSockets (RFC 8323) exist and are cross-tested;
-the protocol modules build for the JVM, Apple, Linux and the web (`js`, `wasmJs`) and pass the same
-common tests on each. TLS for `coaps+tcp` exists as a client on the JVM (WP-T1); DTLS is designed here and
-comes later. This records how
-kcoap stays one protocol core while running in mobile apps, browsers and server applications. The
-RFC checklist is in `rfc-compliance.md`.
+server APIs, Block-wise, Observe and Q-Block, OSCORE, EDHOC (including the post-quantum suite), the
+EDHOC→OSCORE glue, the crypto backends, the UDP transport and CoAP over TCP and WebSockets (RFC 8323) exist and
+are cross-tested; the protocol modules build for the JVM, Apple, Linux and the web (`js`, `wasmJs`) and pass the
+same common tests on each. TLS exists as a client only: `coaps+tcp` on the JVM (WP-T1) and `coaps+ws` on the
+WebSocket engine's TLS; servers terminate TLS at a reverse proxy ([ADR 0010](adr/0010-server-side-tls.md)). DTLS is
+designed here and comes last. This records how kcoap stays one protocol core while running in mobile apps, browsers
+and server applications, as built; [target-architecture.md](target-architecture.md) says where it is going, the
+[ADRs](adr/README.md) why, and [rfc-compliance.md](rfc-compliance.md) what of each RFC is implemented.
 
 ## Module dependencies
 
+`A ──► B` means that A's main code depends on B, as `api` unless marked `impl`. Every module also declares
+kcoap-common, which every module uses ([code style](code-style.md#dependencies-and-api)), so that edge is left out
+below.
+
 ```
-kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default
-              │                ├─ kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
-              │                ├─ kcoap-crypto-testsuite (backend conformance; tests only)
-              │                └─ kcoap-cose ─┐
-              ├─ kcoap-cbor ──────────────────┤
-              ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP; TLS client on the JVM)
-              │                   ├─ kcoap-transport-ktor-websocket ── kcoap-transport-ktor-websocket-server
-              │                   ├─ kcoap-testkit
-              │                   └─ kcoap-dtls
-              └─ kcoap-coap-message ─┬─ kcoap-coap ─────────────────────┐
-                    (transport)      └─ kcoap-oscore (cose, crypto) ────┼── kcoap-edhoc-oscore
-                                      kcoap-edhoc (cbor, cose, crypto) ─┘
+ glue      kcoap-edhoc-oscore ──► kcoap-edhoc, kcoap-oscore, kcoap-coap, kcoap-coap-message, kcoap-crypto,
+                                  kcoap-transport, impl kcoap-cbor, impl kotlinx-coroutines
+ stack     kcoap-coap ──► kcoap-coap-message, kcoap-transport, kotlinx-coroutines   (CoapException)
+           kcoap-oscore ──► kcoap-coap-message, kcoap-cose, kcoap-crypto, kcoap-transport,
+                            impl kcoap-cbor, impl kotlinx-coroutines                  (not the stack)
+           kcoap-edhoc ──► kcoap-cose, kcoap-cbor, kcoap-crypto                       (not CoAP)
+           kcoap-dtls ──► kcoap-transport, kcoap-crypto              (interfaces; unpublished until its engine)
+ wire      kcoap-coap-message ──► kcoap-transport                                      (no coroutines)
+           kcoap-cose ──► kcoap-cbor, kcoap-crypto
+ seams     kcoap-crypto ──► kcoap-common      (CryptoBackend, common fallbacks, x509)
+           kcoap-cbor ──► kcoap-common
+           kcoap-transport ──► kcoap-common   (no third-party dependencies)
+ base      kcoap-common                       (no dependencies)
+
+ adapters  kcoap-crypto-default ──► kcoap-crypto, impl cryptography-kotlin, impl kotlinx-coroutines   UNIVERSAL
+           kcoap-crypto-bc ──► kcoap-crypto, impl Bouncy Castle                                 JVM_LIBRARY
+           kcoap-transport-ktor ──► kcoap-transport, ktor-network, kotlinx-coroutines,
+                                    impl ktor-network-tls                                       SOCKETS
+           kcoap-transport-ktor-websocket ──► kcoap-transport, ktor-client-core, kotlinx-coroutines;
+                                    impl the default engine: Darwin on Apple, CIO on JVM and Linux, Js on the web
+                                                                                                UNIVERSAL
+           kcoap-transport-ktor-websocket-server ──► kcoap-transport-ktor-websocket, ktor-server-core,
+                                    ktor-server-websockets (no engine)                          SOCKETS
+ support   kcoap-testkit ──► kcoap-transport, kotlinx-coroutines                                UNIVERSAL
+           kcoap-crypto-testsuite ──► kcoap-crypto, kotlin-test, kotlinx-coroutines-test         UNIVERSAL
+           kcoap-bom: no code; constrains every published module to one version
 ```
+
+No core module (the base, seams, wire, stack and glue rows) depends on an adapter, and none has main code outside
+`commonMain`, which `verifyCommonOnly` checks ([ADR 0007](adr/0007-build-governance.md)). Adapters declare the
+smallest target tier their library supports: UNIVERSAL is every target, SOCKETS the JVM and native targets without
+the web, JVM_LIBRARY the JVM ([platforms](platforms.md#modules-per-target)).
 
 Protocol modules depend on SPIs, never on a backend or transport: applications choose
 `kcoap-crypto-default` or a backend of their own, and `kcoap-transport-ktor` or their own transport.
@@ -32,7 +56,8 @@ Protocol modules depend on SPIs, never on a backend or transport: applications c
 classical backend the application passes, `BouncyCastleCryptoBackend(DefaultCryptoBackend())` in most.
 `kcoap-crypto-testsuite` is a test library: every backend's tests extend its conformance suite, which checks
 the `supports` contract and NIST's ACVP vectors on each target the backend builds for, so no main code
-depends on it.
+depends on it. `kcoap-bom` is the bill of materials: its constraints are generated from the modules the build
+publishes, so a consumer pins one version for all of them ([ADR 0016](adr/0016-bom-from-published-modules.md)).
 
 `kcoap-coap-message` is CoAP's wire vocabulary: the message model, options, URIs, link format, the codecs and
 the message-security SPI, with no coroutines. `kcoap-coap` builds the endpoint stack on it and exports it
@@ -45,10 +70,11 @@ messages of another stack, a proxy or a gateway. `kcoap-edhoc-oscore` needs both
 
 | Pattern | Used for |
 |---|---|
-| SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `LogSink`, `SecurityContextRepository` (`InMemoryContextRepository`) |
+| SPI interface with a default implementation | `CryptoBackend` (`DefaultCryptoBackend`), `DatagramTransport`, `Connector` and `ConnectionListener` (the ktor adapters), `ClientMessageSecurity`/`ServerMessageSecurity` (OSCORE), `CredentialResolver` (`TrustedCredentials`), `EndpointResolver` (`EndpointResolver.Default`), `TokenGenerator`, `LogSink`, `SecurityContextRepository` (`InMemoryContextRepository`) |
+| SPI with no implementation shipped yet | `CertificateValidator` (EDHOC `x5chain`, later DTLS; a common-code validator is roadmap item 13), `DatagramSecurity` (`@ExperimentalKcoapApi` until the DTLS engine) |
 | SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run. `MutableSecurityContextRepository` for an EDHOC server: `EdhocServer` adds a context per handshake, so production servers supply one with a bound; `InMemoryContextRepository` has none |
 | Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend; a key-store backend around a software one, overriding only the private-key operations (kcoap-crypto README). Backends are final and extended only this way ([ADR 0002](adr/0002-delegation-not-subclassing.md)) |
-| Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
+| Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing; `AccessPolicy` per resource (`Public`, `MessageSecurityRequired`, `Authenticated`, or a lambda) |
 | Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
 | State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
 | Callbacks (`fun interface`) and `Flow` | `EadHandler`, `EdhocSessionListener`, `EndpointEventListener`, Observe as `Flow` |
@@ -60,17 +86,21 @@ messages of another stack, a proxy or a gateway. `kcoap-edhoc-oscore` needs both
 RFC 8613 Figure 1 already draws the stack. kcoap follows it and adds the channel-security layer:
 
 ```
-App API            CoapClient / CoapServer: suspend calls, Flow for Observe, streamed bodies
-Request/Response   tokens, Observe, inner Block-wise, Echo / Request-Tag, EDHOC resource
+App API            CoapClient / CoapServer: suspend calls, Flow for Observe, ByteArray bodies
+Request/Response   tokens, Observe, inner Block-wise, Q-Block, Echo / Request-Tag, access policies,
+                   EDHOC resource
 OSCORE             protect / verify, identical on every transport           (end to end)
-Outer Block-wise   only when a proxy has to fragment
+Outer Block-wise   only when a proxy has to fragment                         (not built)
 Messaging          UdpMessaging:      CON/NON/ACK/RST, MID dedup, retransmission, NSTART
                    ReliableMessaging: CSM, Ping/Pong, Release/Abort, BERT
 Framing            UDP header | TCP/TLS length framing | WebSocket (Len = 0)
-Channel security   DTLS 1.2 over datagrams | TLS over byte streams          (hop by hop)
+Channel security   DTLS 1.2 over datagrams (comes last) | TLS over byte streams (clients, in the adapters)
 ──────────────── transport interface ────────────────
 Adapters           one per runtime capability or library, thin
 ```
+
+Bodies are byte arrays, assembled by Block-wise or Q-Block and bounded by `maxRequestBodySize` and
+`maxResponseBodySize`; streamed bodies are planned as new functions beside them (roadmap E6).
 
 Block-wise appears twice on purpose: RFC 8613 allows it before OSCORE (inner, end to end) and after
 OSCORE (outer, for proxies), so the layers compose instead of forming a fixed stack.
@@ -250,9 +280,10 @@ observation fails at once with the same reason, and `awaitClosed()` waits for th
 send the transport refuses with `IllegalArgumentException` (an endpoint it cannot carry) fails that
 message at once with `TRANSPORT_FAILED` instead of looking like a silent peer; any other send failure is
 left to retransmission, like a lost datagram. Recreating an endpoint after a failure is the application's
-decision. `CoapServer.close()` on a shared endpoint cancels its running handlers and takes no new
-observers; a request on a connection whose handler it cancelled before the answer gets 5.03, since RFC
-8323 §3.3 has every request on a connection answered.
+decision; [platforms.md](platforms.md#mobile-lifecycle) says what that means for mobile apps.
+`CoapServer.close()` on a shared endpoint cancels its running handlers and takes no new observers; a request on a
+connection whose handler it cancelled before the answer gets 5.03, since RFC 8323 §3.3 has every request on a
+connection answered.
 
 **Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
 answering spoofed traffic turns a server into an amplifier against the address it names. Everything a
@@ -291,9 +322,11 @@ twice), or nothing (`OFF`).
 
 **Sans-IO where it pays off.** `UdpMessaging` is the part with the subtle timing rules (back-off,
 deduplication lifetimes, NSTART, superseding), so it takes datagrams and time and returns effects, and
-its tests need neither a transport nor a clock. It is `internal` for now: the plan's second API level, a
-public sans-IO engine for Netty or Vert.x event loops, would also need the exchange, block-wise and
-Observe layers in that form, which they are not yet.
+its tests need neither a transport nor a clock; `ReliableMessaging` (RFC 8323) and the four Q-Block state machines
+work the same way. They are `internal` for now: the plan's second API level, a public sans-IO engine for Netty or
+Vert.x event loops, would also need the exchange, block-wise and Observe layers in that form, which they are not
+yet, and waits until the `PeerLink` seam has been stable for a release
+([target-architecture.md](target-architecture.md) §5).
 
 **Time and randomness.** Every timer reads `CoapEndpointConfig.timeSource` and waits with the delays of
 the endpoint scope's dispatcher, so the time source must advance with that dispatcher's clock:
@@ -304,7 +337,8 @@ from an injected `Random`; tokens from a `TokenGenerator` backed by the platform
 sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per endpoint unless the configuration
 names one.
 
-**Randomness.** Two sources, by layer, and no public `SecureRandom` in kcoap-common:
+**Randomness.** Two sources, by layer, and no public `SecureRandom` in kcoap-common
+([ADR 0015](adr/0015-randomness-by-layer.md)):
 
 - The CoAP stack draws its secrets, the default tokens (RFC 7252 §5.3.1) and the Echo values of address
   verification (RFC 9175 §2.4), from the internal `PlatformCsprng` in kcoap-coap: a synchronous
@@ -503,8 +537,9 @@ public interface MessageConnection : Connection {     // WebSocket
 }
 
 public interface Connector {                          // opens connections for coap+tcp, coap+ws, ...
-    public val schemes: Set<CoapScheme>
+    public val schemes: Set<CoapScheme>                // a TLS scheme only if it runs TLS for it
     public suspend fun connect(peer: Endpoint): Connection
+    public suspend fun close() {}
 }
 
 public interface ConnectionListener {                 // a TCP server socket, a WebSocket endpoint
@@ -577,10 +612,12 @@ The rules every layer above must follow so that DTLS drops in without changes:
 5. **Use the shared clock** for every timer, so the DTLS engine runs on the same virtual time in tests.
 6. **Never send multicast through a secured transport.**
 
-What the DTLS feature itself adds later: the `DtlsEngine` implementation, a `DatagramSecurity` that
-drives it, the RFC 6920 identifier and RFC 7252 §9.1.3.3 name check, the TLS 1.2 PRF, and the DER↔raw
-ECDSA conversion. ECDH and ECDSA on P-256 arrive earlier with EDHOC. kcoap-dtls is built and tested but
-not published until then.
+What the DTLS feature itself adds later (roadmap E1): the `DtlsEngine` implementation, a `DatagramSecurity` that
+drives it, the RFC 6920 identifier and RFC 7252 §9.1.3.3 name check, the TLS 1.2 PRF, a `DatagramTransport`
+capability that says the transport runs DTLS (so the client stops refusing `coaps` for it), and Connection IDs
+(RFC 9146). ECDH and ECDSA on P-256 and the DER↔raw ECDSA conversion (`EcdsaSignatureCodec`) are in place already,
+for EDHOC and X.509; certificate mode also needs the X.509 path validator (roadmap item 13). kcoap-dtls is built
+and tested but not published until then.
 
 ### What has to be supported
 
@@ -646,7 +683,7 @@ rules structural instead of something the messaging layer has to remember:
   messaging layer fails the pending Confirmable messages of the old endpoint instead of resending them.
 - CoAP is only sent as DTLS application data, and the CoAP client should be the DTLS client.
 
-### Server side
+### Server side (with the engine)
 
 - Stateless cookie exchange (HelloVerifyRequest, RFC 6347 §4.2.1) before any handshake state is
   allocated, with a rotating cookie secret.
@@ -660,14 +697,22 @@ rules structural instead of something the messaging layer has to remember:
 
 ### TLS for coaps+tcp and coaps+ws
 
-RFC 8323 §9.1 applies RFC 7925 to TLS too, with PreSharedKey, RawPublicKey or Certificate depending on
-the device, and RFC 7525 recommendations for less constrained deployments.
+RFC 8323 §9.1 applies RFC 7925 to TLS too, with PreSharedKey, RawPublicKey or Certificate depending on the device,
+and RFC 7525 recommendations for less constrained deployments. TLS lives in the connectors and listeners of each
+runtime ([ADR 0003](adr/0003-tls-in-connectors.md)); what exists per runtime is in
+[platforms.md](platforms.md#tls-support-per-runtime).
 
-- **Certificate mode** uses the platform TLS: JSSE or Conscrypt (through Ktor or Netty),
-  Network.framework, and the browser for `wss://`. This is the only option in browsers.
-- **PSK and RawPublicKey over TCP** need kcoap's own engine in stream mode, inside a `coaps+tcp`
-  connector and listener like any other TLS (docs/adr/0003-tls-in-connectors.md). The TLS 1.2 handshake
-  is the same as DTLS 1.2 minus cookies, fragmentation and retransmission, so this is a small addition.
+- **Built: Certificate mode, clients.** `KtorTlsConnector` (kcoap-transport-ktor, JVM and Android) runs `coaps+tcp`
+  on ktor-network-tls, TLS 1.2 in ktor's own implementation, validates the server's chain against the platform trust
+  store or given anchors, checks the host name itself (RFC 9525 §6) and takes a pinning hook. `coaps+ws` runs on the
+  WebSocket engine's TLS where that engine authenticates the server (URLSession on Apple, the browser's `wss`), or
+  on an `HttpClient` the application passes.
+- **Servers: a TLS-terminating reverse proxy** in front of the plain listeners, for every runtime
+  ([ADR 0010](adr/0010-server-side-tls.md)); a JVM listener on JSSE's `SSLEngine` (ALPN, TLS 1.3, client
+  certificates) is the later option, and a Network.framework adapter would bring TLS to Apple servers (E10).
+- **Planned: PSK and RawPublicKey over TCP** need kcoap's own engine in stream mode, inside a `coaps+tcp` connector
+  and listener like any other TLS. The TLS 1.2 handshake is the same as DTLS 1.2 minus cookies, fragmentation and
+  retransmission, so this follows the DTLS engine.
 
 ### Later: DTLS 1.3
 
@@ -682,8 +727,8 @@ The RFCs have three things that behave like streams. They are abstracted at diff
 | What | RFC | Layer | Kotlin shape |
 |---|---|---|---|
 | CoAP over TCP, TLS, WebSocket | RFC 8323 | transport | `ByteStreamConnection`, `MessageConnection` |
-| Observe notifications | RFC 7641 | API | `Flow<Response>` |
-| Large bodies | RFC 7959, RFC 9177 | API | streamed body (kotlinx-io `Source` / `Sink`) |
+| Observe notifications | RFC 7641 | API | `Flow<CoapResponse>`, cold: collecting registers, cancelling deregisters |
+| Large bodies | RFC 7959, RFC 9177 | API | `ByteArray`, assembled by Block-wise or Q-Block and bounded by the body-size limits; a streamed body (a `Source`/`Sink` or `Flow` API beside the `ByteArray` one) is planned, roadmap E6 |
 
 EDHOC has no streams: it is message based and transport agnostic. Over CoAP its messages are
 correlated by a prefixed connection identifier (RFC 9528 Appendix A.2), and kcoap-edhoc-oscore carries them
@@ -698,39 +743,41 @@ and BERT for larger blocks. Schemes: `coap+tcp` (5683), `coaps+tcp` (5684, ALPN 
 
 ## Platform adapters
 
-| Platform | UDP | DTLS | TCP / TLS | WebSocket | HTTP (RFC 8613 §11) |
-|---|---|---|---|---|---|
-| JVM server | NIO or Netty | kcoap (or BC) | Netty / JSSE | Ktor server / Netty | Ktor |
-| Android | ktor-network / NIO | kcoap (or BC) | ktor-network | Ktor client (OkHttp) | Ktor client |
-| iOS | Network.framework or ktor-network | kcoap | Network.framework | Ktor client (Darwin) | Ktor client |
-| Browser (JS / Wasm) | **no** | **no** | **no** | Ktor client (JS) | `fetch` |
-| Node.js | `dgram` | kcoap | `net` / `tls` | Ktor client | `fetch` |
+Built, per runtime ([platforms.md](platforms.md) has the minimum versions and the TLS details):
 
-Built so far: UDP and TCP on ktor-network (`kcoap-transport-ktor`) for the JVM, Apple and Linux; the
-WebSocket client on the ktor client (`kcoap-transport-ktor-websocket`), which takes any engine, so the
-browser needs no other adapter; and the WebSocket server on the ktor server
-(`kcoap-transport-ktor-websocket-server`). TLS for TCP exists as a client on the JVM (`KtorTlsConnector`, on
-ktor-network-tls, which has no TLS on native targets); servers terminate TLS at a reverse proxy
-([ADR 0010](adr/0010-server-side-tls.md), [platforms.md](platforms.md#tls-support-per-runtime)).
+| Runtime | UDP (`coap`) | TCP (`coap+tcp`) | TLS (`coaps+tcp`) | WebSocket client (`coap+ws`, `coaps+ws`) | WebSocket server | DTLS (`coaps`) |
+|---|---|---|---|---|---|---|
+| JVM server | `KtorUdpTransport` (ktor-network) | `KtorTcpConnector`, `KtorTcpListener` | client: `KtorTlsConnector`; server: a reverse proxy | `KtorWebSocketConnector` on CIO, or the application's `HttpClient` for `coaps+ws` | `KtorWebSocketListener` on the engine the application passes | — (E1) |
+| Android | as on the JVM | as on the JVM | client: `KtorTlsConnector` | as on the JVM; OkHttp through an application's `HttpClient` | not for apps | — (E1) |
+| iOS, macOS | `KtorUdpTransport` (BSD sockets) | `KtorTcpConnector`, `KtorTcpListener` | — (no TLS in ktor-network on native) | `KtorWebSocketConnector` on the Darwin engine (URLSession) | `KtorWebSocketListener` on the engine passed (CIO, without TLS) | — (E1) |
+| Linux | `KtorUdpTransport` | `KtorTcpConnector`, `KtorTcpListener` | — (a proxy for servers) | `KtorWebSocketConnector` on CIO (no TLS) | `KtorWebSocketListener` on the engine passed (CIO, without TLS) | — (E1) |
+| Browser (js, wasmJs) | **no** | **no** | **no** | `KtorWebSocketConnector` on the browser's WebSocket | no | **no** |
+| Node.js (js, wasmJs) | no adapter (ruled out, §3.10 of the plan) | no adapter | no | `KtorWebSocketConnector` on Node's WebSocket | no | no |
 
-Multicast needs native APIs: NIO `join()` on the JVM, Network.framework plus Apple's multicast
-entitlement on iOS. iOS also needs the Local Network permission for LAN peers.
+All adapters are thin: they move bytes, frames and datagrams, own TLS where there is any, and hold no CoAP logic,
+pooling or retry, which the endpoint does for every transport. In tests, `kcoap-testkit`'s `InMemoryNetwork` and
+`InMemoryConnections` stand in for all of them on virtual time.
+
+Planned, each as an adapter of its own: a Network.framework adapter for Apple platforms (UDP, TCP and TLS with the
+system's policies: cellular, VPN On Demand, multicast; E10), a JVM listener on JSSE's `SSLEngine` (ADR 0010), JVM
+server adapters for epoll and `SO_REUSEPORT` if benchmarks ask for them, and OSCORE over HTTP (RFC 8613 §11) when
+there are users for it. Multicast needs native APIs: NIO `join()` on the JVM, Network.framework plus Apple's
+multicast entitlement on iOS. iOS also needs the Local Network permission for LAN peers.
 
 ## Browsers
 
 kcoap runs in browsers and in Node.js as the `js` and `wasmJs` targets, from the same common code as
-everywhere else. What works there today:
+everywhere else:
 
-| Works in the browser now | Comes with the WebSocket transport (RFC 8323, in progress) |
-|---|---|
-| CoAP messages, options, URIs, the UDP and RFC 8323 codecs | `coap+ws` / `coaps+ws` to a proxy, the reliable messaging layer (CSM, Ping/Pong) |
-| OSCORE: contexts, protect/verify, replay windows, Observe | OSCORE end to end through the proxy, as RFC 8613 §11 intends |
-| EDHOC: all methods, suites 0–3, 6 and 24; EDHOC→OSCORE, the combined request | EDHOC over CoAP to a real device |
-| The client and server API over a `DatagramTransport` the application supplies, `kcoap-testkit` | — |
+- CoAP messages, options, URIs and both codecs; the client and server stack over `kcoap-transport-ktor-websocket`
+  (`coap+ws`, and `coaps+ws` on the browser's own TLS), or over a `DatagramTransport` the application supplies;
+- OSCORE, EDHOC (every method; the suites WebCrypto can run) and the EDHOC→OSCORE glue with the combined request,
+  end to end through a proxy to a device.
 
-`kcoap-transport-ktor` builds no web targets: browsers have no UDP. (ktor-network does reach UDP and
-TCP on Node.js through `node:dgram` and `node:net`, so a Node.js target for it is possible; a browser
-WebSocket transport needs a module that builds for the web, since this one depends on ktor-network.)
+Browsers have no UDP or TCP, so `kcoap-transport-ktor` builds no web targets. A Node.js socket transport is ruled
+out too: one js artifact serves browsers and Node.js, so socket code in it would ship to browsers
+([target-architecture.md](target-architecture.md) §3.10). The WebSocket client's js tests run on Node.js against an
+npm `ws` server and in a headless browser against a JVM listener ([testing](testing.md#continuous-integration)).
 
 **Cryptography in the browser** is WebCrypto through `DefaultCryptoBackend`, plus common code. The
 backend never asks which platform it is on; it asks the provider what it has, and fills gaps with
@@ -761,29 +808,54 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
           OSCORE + EDHOC end to end, untouched by the proxy
 ```
 
-- libcoap's `coap-server` is such a proxy: it speaks WebSockets and forwards between all six CoAP
-  schemes. It doubles as the interop setup.
+- libcoap's `coap-server -P` is such a proxy. The interop suite runs a WebSocket-only kcoap client through it to a
+  kcoap UDP device, with OSCORE, EDHOC and the combined request end to end, and pins the proxy's deviations
+  ([ADR 0009](adr/0009-browser-topology-interop.md)).
 - DTLS and TLS end at the proxy. End-to-end security for browsers comes only from OSCORE + EDHOC,
   which do not protect the messaging layer or the token and therefore survive the translation.
-- RFC 8613 §11 carries OSCORE over HTTP directly: POST, `OSCORE` header, `application/oscore`.
+- RFC 8613 §11 carries OSCORE over HTTP directly: POST, `OSCORE` header, `application/oscore`. kcoap has no
+  HTTP transport yet; it waits for users who need it.
 
 ## Servers
 
-- **Two API levels from one core**: a sans-IO engine (bytes and time in, bytes and timers out) for
-  embedding in a Netty or Vert.x event loop, and a coroutine endpoint on top.
-- **One engine per socket**, no locks inside. On Linux, several sockets with `SO_REUSEPORT`; the kernel
-  keeps a client on the same socket.
-- **State keyed by security context, not by address**: OSCORE context, or DTLS session and CID.
-  Combined with a shared store this survives NAT rebinding and node changes.
-- Rate limiting (RFC 8516 Too Many Requests) and amplification mitigation (RFC 9175 Echo).
+What a server has today, all in the one endpoint (see "Resource bounds" and "Address verification" above):
+
+- **Every peer-driven resource bounded**, with server-sized defaults: deduplication entries, concurrent requests,
+  exchanges per peer, observers in total, per peer and per resource, pending and open connections, verified
+  addresses, held-back responses, Q-Block bodies; an EDHOC server bounds its pending handshakes in total and per
+  peer and expires them. At a bound the endpoint refuses only the extra work and reports
+  `EndpointEvent.LimitReached`.
+- **Amplification mitigation** (RFC 9175 §2.4): address verification with Echo before large answers to
+  unauthenticated clients.
+- **State keyed by security context where the protocol allows it**: OSCORE contexts are not bound to addresses, so
+  a client that changes address keeps its context; exchanges, observations and block-wise state follow the RFCs and
+  are keyed by `Endpoint`.
+- **Hooks for metrics**: `EndpointEventListener`, `MessageInterceptor`, `EdhocServerEventListener`; no metrics
+  library.
+
+Planned: 4.29 Too Many Requests (RFC 8516) and the hardening of SRV-2
+([plan-qblock-and-platforms.md](plan-qblock-and-platforms.md)); a public sans-IO API level, so the protocol cores
+can run in a Netty or Vert.x event loop, once the internal `PeerLink` seam has been stable for a release
+([target-architecture.md](target-architecture.md) §5); several sockets per endpoint (`SO_REUSEPORT`) and
+replay windows and EDHOC sessions shared across nodes, if benchmarks and deployments ask for them.
 
 ## Extension points
 
 - **Clock and timers**, injectable, so tests run on virtual time.
-- **Randomness and ephemeral keys**, injectable, for RFC 9529 and DTLS trace replay.
+- **Randomness and ephemeral keys**, injectable, for RFC 9529 and DTLS trace replay
+  ([ADR 0015](adr/0015-randomness-by-layer.md)).
+- **Transports**: `DatagramTransport`, `Connector` and `ConnectionListener` (kcoap-transport); an application's own
+  transport, a BLE or LoRa link say, is a `DatagramTransport` with `Endpoint.Opaque` peers.
+- **Resolution**: `EndpointResolver` turns a URI into an `Endpoint`; DNS for datagram host names is the
+  application's resolver.
+- **Message security**: `ClientMessageSecurity` and `ServerMessageSecurity` (kcoap-coap-message), which OSCORE
+  implements and RFC 9668 decorates.
+- **Authorization**: an `AccessPolicy` per resource, which sees the method, the path, both identities and the peer
+  ([ADR 0008](adr/0008-fail-closed-message-security.md)).
 - **Storage**: OSCORE contexts (`SecurityContextRepository`, and `MutableSecurityContextRepository` where
-  EDHOC adds them), persisted sequence numbers (RFC 8613 Appendix B.1.1), replay windows, EDHOC state
-  between messages, DTLS session tickets.
+  EDHOC adds them) and persisted sequence numbers (RFC 8613 Appendix B.1.1), supplied by the application
+  ([ADR 0013](adr/0013-durable-state-is-the-applications.md)); replay windows, EDHOC state between messages and DTLS
+  session tickets are not persistable yet.
 - **Credentials**: resolvers for EDHOC credentials, PSKs and raw public keys; one `CertificateValidator`
   shared by EDHOC (`x5chain`) and DTLS/TLS. Certificates and raw public keys are parsed in kcoap-crypto's
   `x509` package (`X509Certificate`, `SubjectPublicKeyInfo`), which both protocols use and which throws
@@ -805,7 +877,8 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
   DTLS (`DtlsLocalCredential`) take the same handles, and protocol code releases the keys it owns with
   `PrivateKey.destroy()`.
 - **EAD handlers** for EDHOC.
-- **Logging and metrics** as hooks, no logging framework dependency.
+- **Logging and metrics** as hooks, no logging framework dependency: a `LoggerFactory` per component, `LogSink`s,
+  `EndpointEventListener`, `MessageInterceptor` ([logging](logging.md)).
 
 ## Decisions taken for multiplatform
 
@@ -825,25 +898,46 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
    and gaps get common-code fallbacks where they are small and safe (the AES block, SHAKE256, point
    decompression in kcoap-crypto's `Sec1`). Tests skip by capability too, and `kcoap-crypto-testsuite`
    checks on every target that each backend's answers are true: what it says it runs works, and what it says
-   it lacks throws `UnsupportedAlgorithmException`.
+   it lacks throws `UnsupportedAlgorithmException` ([platforms](platforms.md#algorithms-and-edhoc-suites-per-target)
+   has its report per target).
+6. **Tiers by runtime capability, cores checked to stay common.** Adapters are split by the library they wrap, not
+   by platform, and declare the smallest tier it supports; `verifyCommonOnly` keeps core main code in `commonMain`,
+   and the ABI dumps keep the public API deliberate ([ADR 0007](adr/0007-build-governance.md)). Done.
+7. **One exception root for Swift.** Every protocol facade fails with a `KcoapException`, which the public suspend
+   entry points list in `@Throws`, so Swift gets an `NSError` ([ADR 0011](adr/0011-error-model.md)). Done.
 
 ## Modules
 
 | Module | Scope | State |
 |---|---|---|
-| `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, security interfaces | interfaces |
-| `kcoap-coap-message` | Message model, options, URIs, link format, the UDP and RFC 8323 codecs, the message-security SPI; no coroutines | done |
-| `kcoap-coap` | The endpoint with client and server over UDP and RFC 8323 connections, block-wise and BERT, Observe, Q-Block, `CoapException` | UDP, TCP and WebSocket done |
-| `kcoap-oscore` | RFC 8613 behind the message-security SPI, on `kcoap-coap-message` only | done |
-| `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
-| `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
-| `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |
+| `kcoap-bom` | The bill of materials: one version for every published module, generated from the published-module list | done |
+| `kcoap-common` | Logging API and sinks, hex, constant-time compare and `wipe`, `KcoapException`, the opt-in markers | done |
+| `kcoap-crypto` | The `CryptoBackend` SPI with `supports`; AES-CCM, HKDF, SHAKE256/KMAC256, `Sec1`, `EcdsaSignatureCodec`; the `x509` package; `CertificateValidator` | done; no validator yet (roadmap item 13) |
+| `kcoap-crypto-default` | The default backend on cryptography-kotlin: JCA, CryptoKit and CommonCrypto, OpenSSL 3, WebCrypto | done |
+| `kcoap-crypto-bc` | ML-KEM and ML-DSA on Bouncy Castle, a decorator of a classical backend; JVM only | done |
 | `kcoap-crypto-testsuite` | Conformance suite for crypto backends, for tests: the `supports` contract, NIST's ACVP ML-KEM and ML-DSA vectors, the capability report per target | done |
-| `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders, not published; engine last |
-| `kcoap-swift-smoke` | The Swift smoke test: a `KcoapSmoke` framework of kcoap-coap for the Apple targets and a Swift script against it, run by the macOS CI job | test only, not published |
+| `kcoap-cbor` | Deterministic CBOR (RFC 8949 §4.2) and CBOR sequences (RFC 8742) | done; strict decoding open (checklist foundations-1) |
+| `kcoap-cose` | COSE structures, headers, COSE_Key, CWT Claims Sets (RFC 9052, 9053, 8392) | done for what OSCORE and EDHOC need |
+| `kcoap-transport` | Transport interfaces, `Endpoint`, `PeerIdentity`, `CoapScheme`, `IpLiteral`, `DatagramSecurity` | done; `DatagramSecurity` experimental until the DTLS engine |
+| `kcoap-coap-message` | Message model, options, URIs, link format, the UDP and RFC 8323 codecs, the message-security SPI; no coroutines | done |
+| `kcoap-coap` | The endpoint with client and server over UDP and RFC 8323 connections, block-wise and BERT, Observe, Q-Block, Echo and Request-Tag, access policies, `CoapException` | UDP, TCP and WebSocket done |
+| `kcoap-oscore` | RFC 8613 behind the message-security SPI, on `kcoap-coap-message` only | done; Outer Block-wise, protected signaling and Appendix B.2 open |
+| `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites, credentials, EAD | done; suite 25, CWT and C509 credentials open |
+| `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | forward flow and combined request done; reverse flow open |
 | `kcoap-transport-ktor` | UDP and TCP on ktor-network, and a TLS client for `coaps+tcp` on ktor-network-tls (JVM only); JVM, Apple and Linux (no web targets: ktor-network) | UDP, TCP and the JVM TLS client done (WP-T1); server-side TLS at a reverse proxy for now ([ADR 0010](adr/0010-server-side-tls.md)) |
 | `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine; every target, browsers included (UNIVERSAL tier) | done |
 | `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone on the engine the application passes (no engine dependency) or mounted in an application; JVM, Apple and Linux (SOCKETS tier, no web targets: a browser cannot accept connections) | done |
-| `kcoap-transport-netty` | JVM server: epoll, `SO_REUSEPORT`, multicast | planned |
-| `kcoap-transport-apple` | Network.framework: UDP, multicast, TLS | planned |
-| `kcoap-dtls-bc` | Optional Bouncy Castle `DtlsEngine` for the JVM | planned |
+| `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, the stress helper, for tests | done |
+| `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | interfaces only, not published; engine last (E1) |
+| `kcoap-swift-smoke` | The Swift smoke test: a `KcoapSmoke` framework of kcoap-coap for the Apple targets and a Swift script against it, run by the macOS CI job | test only, not published |
+
+Planned modules, none of which exists yet ([target-architecture.md](target-architecture.md) §4.4):
+
+| Module | Scope | When |
+|---|---|---|
+| kcoap-crypto-pq | Pure-Kotlin ML-KEM and ML-DSA for every target, ML-DSA verification first | E3 |
+| kcoap-apple | A curated Swift facade and an XCFramework as a SwiftPM binary target | E4, after the first publish |
+| Key-store adapters | Android KeyStore, Secure Enclave and Keychain, non-extractable WebCrypto keys, PKCS#11, as `CryptoBackend` decorators | E7 |
+| A Network.framework adapter | UDP, TCP, TLS and multicast on Apple platforms with the system's network policies | E10 |
+| A JVM TLS listener | `coaps+tcp` servers on JSSE's `SSLEngine`, with ALPN and client certificates | when ADR 0010's triggers occur |
+| A Bouncy Castle `DtlsEngine` | An optional JVM engine, and a differential oracle for kcoap's own | with or after E1 |

@@ -11,10 +11,10 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | Page | What you find there |
 |---|---|
 | [README](../README.md) | What kcoap is, its highlights and the state of every protocol |
-| [Installation](../README.md#installation) | The `dev.kcoap` coordinates and how to use a local snapshot until the first release |
+| [Getting started](getting-started.md) | Which modules each use case needs (client, server, OSCORE, EDHOC, post-quantum, each transport, each platform), adding them with one version through `kcoap-bom`, and a first client and server, OSCORE and EDHOC, compiled and run by the tests |
+| [Installation](../README.md#installation) | The `dev.kcoap` coordinates, the BOM, and how to use a local snapshot until the first release |
 | [Quick start](../README.md#quick-start) | An OSCORE server and client, then EDHOC with the combined request, in a few lines each |
-| [Platforms](../README.md#platforms) | Which targets build which modules, and what each platform's cryptography offers |
-| [Platform details](platforms.md) | What differs per runtime; so far the TLS each one has for `coaps+tcp` and `coaps+ws`, client and server |
+| [Platforms](platforms.md) | The minimum versions per target, the algorithms and EDHOC suites each target runs, the TLS each runtime has (client and server) and the ways to terminate it, the mobile lifecycle |
 
 ## Guides
 
@@ -27,6 +27,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [EDHOC with OSCORE over CoAP](../kcoap-edhoc-oscore/README.md) | The EDHOC resource and server, the client handshake, the combined request and what handlers learn about the peer |
 | [Android app](../samples/android-consumer/README.md) | A sample app at minSdk 26 with R8, what an app needs, and the API-level findings for kcoap's libraries |
 | [Browsers](architecture.md#browsers) | What runs in a browser, how it reaches UDP devices through a WebSocket proxy, and what WebCrypto lacks |
+| [Mobile lifecycle](platforms.md#mobile-lifecycle) | What kcoap does when a phone suspends the app or changes networks, and what the app must do on Android and iOS |
 
 ## Architecture and design decisions
 
@@ -46,6 +47,12 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [ADR 0008](adr/0008-fail-closed-message-security.md) | Fail-closed message security: access policies on the server, only verified responses acted on by the client |
 | [ADR 0009](adr/0009-browser-topology-interop.md) | The browser topology is cross-tested through libcoap's own forward-proxy, with the device on the default port |
 | [ADR 0010](adr/0010-server-side-tls.md) | Server-side TLS: termination at a reverse proxy now, a JVM SSLEngine listener later |
+| [ADR 0011](adr/0011-error-model.md) | One exception type per facade under `KcoapException`; SPI signals translated at each layer's boundary; `@Throws` for Swift |
+| [ADR 0012](adr/0012-configuration-shapes.md) | Builders only for the two configurations certain to grow; named-argument constructors elsewhere; no endpoint DSL; explicit `Endpoint` classes |
+| [ADR 0013](adr/0013-durable-state-is-the-applications.md) | Durable state is an SPI the application supplies: no default sequence-number store, recipes instead of store modules |
+| [ADR 0014](adr/0014-shared-crypto-blocks.md) | Shared crypto building blocks (X.509, SEC1, ECDSA DER) live in kcoap-crypto; no kcoap-x509 module |
+| [ADR 0015](adr/0015-randomness-by-layer.md) | Randomness by layer: the CoAP stack's own CSPRNG, the security layers' `CryptoBackend.randomBytes`; no public `SecureRandom` |
+| [ADR 0016](adr/0016-bom-from-published-modules.md) | One version for every module through `kcoap-bom`, generated from the published modules and checked against them |
 
 ## Protocol compliance and interop
 
@@ -60,7 +67,8 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | Page | What you find there |
 |---|---|
 | [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published with the first release |
-| [kcoap-common](../kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers, `KcoapException`, the root of every protocol's exception (no README yet; see the API reference) |
+| [kcoap-bom](../kcoap-bom/README.md) | The bill of materials: one version for every published module, for Gradle and Maven builds, and how its constraints are generated |
+| [kcoap-common](../kcoap-common/README.md) | Logging API and sinks, hex, constant-time helpers, the opt-in markers, `KcoapException`, the root of every protocol's exception |
 | [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |
 | [kcoap-crypto-default](../kcoap-crypto-default/README.md) | The default backend per platform, its capabilities and fallbacks, and its R8 rules |
 | [kcoap-crypto-bc](../kcoap-crypto-bc/README.md) | The post-quantum backend: ML-KEM and ML-DSA on Bouncy Castle |
