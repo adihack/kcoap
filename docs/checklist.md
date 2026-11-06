@@ -57,8 +57,8 @@ the module lists of the CoAP and OSCORE sections; no status changed.
 WP-A4 (kcoap-crypto as the home of shared crypto blocks) later updated foundations-2, foundations-3,
 foundations-5, foundations-x4, kmp-2 and testing-cicd-2; no status changed.
 
-The Q-Block notification fixes (the `QBlockStressTest` failures on loaded CI runners) later updated
-coap-core-2, coap-core-11, coap-core-13 and testing-cicd-6; no status changed.
+QB-FIX (acknowledge a Confirmable block only once it is queued, and recover Q-Block2 bodies promptly) later
+updated coap-core-2, coap-core-4, coap-core-11, coap-core-13 and testing-cicd-6; no status changed.
 
 The project documents (the Apache-2.0 license, the DCO, the community files, the documentation hub and
 the versioning policy) later updated architecture-5, architecture-x4, testing-cicd-7 and testing-cicd-8,
