@@ -11,7 +11,11 @@ connections, and reaches a CoAP server as a client through `kcoap-transport-ktor
     you pass, with WebSocket pings off (§4.4).
   - In an application that runs its own ktor server, create a `KtorWebSocketListener()` and mount it
     with `routing { coapOverWebSockets(listener) }`. TLS (`coaps+ws`) is then the application's
-    connector; pass `CoapScheme.COAPS_WS` so peers are named `wss://`.
+    connector; pass `CoapScheme.COAPS_WS` so peers are named `wss://`. Such a listener says its
+    connections run TLS (RFC 8323 §9.2), so it closes a session that reached it on a plain connector
+    (the request's `local.scheme` neither `https` nor `wss`) with 1008 and never accepts it: mounted on
+    an engine with both a plain and a TLS connector, it serves only the TLS one. Behind a
+    TLS-terminating proxy keep `coap+ws` ([ADR 0010](../docs/adr/0010-server-side-tls.md)).
 
 The module brings no server engine: the application depends on the one it runs. CIO
 (`io.ktor:ktor-server-cio`, `io.ktor.server.cio.CIO`) runs on the JVM and natively and is the one the
@@ -29,6 +33,7 @@ It is a module of its own so that WebSocket clients, browsers above all, never d
 
 Verified by `KtorWebSocketTransportTest` (JVM) and `NativeWebSocketLoopbackTest` (Linux; macOS and the
 iOS simulator pending the first apple-job run) in `kcoap-transport-ktor-websocket` (real loopback
-sockets, standalone and mounted), `BrowserAgainstJvmListenerTest` there (a browser's WebSocket against
+sockets, standalone and mounted, and a `coaps+ws` listener refusing a plain session),
+`BrowserAgainstJvmListenerTest` there (a browser's WebSocket against
 the listener on the JVM), `ReliableLoopbackTest` and the libcoap interop tests, where `coap-client`
 reaches it over `coap+ws`.

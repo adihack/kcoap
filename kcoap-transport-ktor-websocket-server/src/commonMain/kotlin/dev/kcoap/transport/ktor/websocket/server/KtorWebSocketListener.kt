@@ -42,6 +42,13 @@ import kotlinx.coroutines.channels.Channel
  * Each accepted peer is an [Endpoint.WebSocket] named after the scheme and the client's address, such as
  * `ws://192.0.2.7:52144`.
  *
+ * A listener for `coaps+ws` reports a scheme that says its connections run TLS (RFC 8323 §9.2), which a CoAP
+ * client on the same endpoint relies on, so it checks that each session arrived over TLS: one whose request the
+ * engine received on a plain connector (`request.local.scheme` neither `https` nor `wss`) is closed with 1008,
+ * policy violation (RFC 6455 §7.4.1), and never accepted. This matters where an application mounts the endpoint
+ * on an engine with both a plain and a TLS connector. Behind a TLS-terminating proxy the engine sees plain HTTP,
+ * so the listener there serves `coap+ws` (docs/adr/0010-server-side-tls.md).
+ *
  * @property scheme [CoapScheme.COAP_WS], or [CoapScheme.COAPS_WS] when the server runs TLS.
  */
 public class KtorWebSocketListener(
@@ -76,13 +83,22 @@ public class KtorWebSocketListener(
         }
     }
 
-    /** Hands [session] to [accept] and keeps it open, as ktor ends a session when its handler returns. */
+    /**
+     * Hands [session] to [accept] and keeps it open, as ktor ends a session when its handler returns. A `coaps+ws`
+     * listener first closes a session that did not arrive over TLS.
+     */
     internal suspend fun serve(session: DefaultWebSocketServerSession) {
         val point = session.call.request.origin
         val host = IpLiteral.canonical(point.remoteAddress) ?: point.remoteAddress
         val authority = if (':' in host) "[$host]" else host
         val prefix = if (scheme == CoapScheme.COAPS_WS) "wss" else "ws"
         val peer = Endpoint.WebSocket("$prefix://$authority:${point.remotePort}")
+        val arrivedOver = session.call.request.local.scheme
+        if (scheme == CoapScheme.COAPS_WS && arrivedOver.lowercase() !in TLS_REQUEST_SCHEMES) {
+            log.warn { "Refused a WebSocket from $peer: this listener serves coaps+ws, but it arrived over $arrivedOver" }
+            session.close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "coaps+ws needs TLS"))
+            return
+        }
         val connection = KtorWebSocketConnection(session, peer)
         if (pending.trySend(connection).isFailure) {
             session.close(CloseReason(CloseReason.Codes.GOING_AWAY, "not accepting"))
@@ -96,6 +112,9 @@ public class KtorWebSocketListener(
 
     public companion object {
         private const val STOP_TIMEOUT_MILLIS = 1000L
+
+        /** What ktor engines report as the scheme of a request that arrived on a TLS connector. */
+        private val TLS_REQUEST_SCHEMES = setOf("https", "wss")
 
         /** RFC 8323 §8.3: `coap+ws` defaults to port 80. */
         private const val DEFAULT_PORT = 80
