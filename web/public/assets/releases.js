@@ -2,9 +2,10 @@
  * kcoap.dev /releases/: lists kcoap's latest releases from the GitHub REST API.
  *
  * Progressive enhancement: without this script the page shows its static "no release yet" note, which is
- * true until the first release. With it, the feed shows a loading state, then the releases GitHub lists,
- * the honest "no release yet" state when the list is empty, or an error state when GitHub cannot be asked
- * (network, rate limit of 60 requests an hour per visitor, or an unexpected answer).
+ * true until the first release. With it, a status line under that note says GitHub is being asked, then
+ * that GitHub lists no release, or why GitHub could not be asked (network, the rate limit of 60 requests
+ * an hour per visitor, a timeout, an unexpected answer). Only when GitHub lists releases does the list
+ * replace the note. The note and the status line keep their place, so the page does not jump.
  *
  * The request is anonymous: no credentials, no cookies, and only the Accept header, which needs no CORS
  * preflight. The Content-Security-Policy allows connect-src https://api.github.com and nothing else.
@@ -31,55 +32,38 @@
     return a;
   }
 
-  function callout(kind, title, paragraphs) {
-    var box = el("div", "callout" + (kind ? " callout-" + kind : ""));
-    box.appendChild(el("span", "callout-title", title));
-    paragraphs.forEach(function (parts) {
-      var p = el("p");
-      parts.forEach(function (part) {
-        p.appendChild(typeof part === "string" ? document.createTextNode(part) : part);
-      });
-      box.appendChild(p);
+  function status(feed, parts) {
+    var line = feed.querySelector("[data-release-status]");
+    if (!line) {
+      line = el("p", "release-status");
+      line.setAttribute("data-release-status", "");
+      line.setAttribute("role", "status");
+      feed.appendChild(line);
+    }
+    while (line.firstChild) line.removeChild(line.firstChild);
+    parts.forEach(function (part) {
+      line.appendChild(typeof part === "string" ? document.createTextNode(part) : part);
     });
-    return box;
-  }
-
-  function replace(feed, node) {
-    while (feed.firstChild) feed.removeChild(feed.firstChild);
-    feed.appendChild(node);
   }
 
   function showLoading(feed) {
-    var p = el("p", "release-loading");
-    p.setAttribute("role", "status");
     var loader = el("span", "block-loader");
     loader.setAttribute("aria-hidden", "true");
     loader.appendChild(el("span"));
     loader.appendChild(el("span"));
     loader.appendChild(el("span"));
-    p.appendChild(loader);
-    p.appendChild(document.createTextNode("Asking GitHub for kcoap’s releases…"));
-    feed.setAttribute("aria-busy", "true");
-    replace(feed, p);
+    status(feed, [loader, "Asking GitHub for kcoap’s releases…"]);
   }
 
   function showEmpty(feed) {
-    replace(feed, callout("status", "No release yet", [
-      ["GitHub lists no kcoap release yet; this was checked as the page loaded. The first release, 0.1.0, ",
-        "follows the release freeze below. Until then, build kcoap from source as ",
-        link("/start/", "Get started"), " shows."],
-      [link(RELEASES, "GitHub Releases"), " will list it."]
-    ]));
+    status(feed, ["Checked GitHub just now: no release yet."]);
   }
 
   function showError(feed, rateLimited) {
     var why = rateLimited
       ? "GitHub’s API answers each visitor 60 times an hour, and that limit is used up for now."
-      : "GitHub’s API could not be reached, or did not answer with a list of releases.";
-    replace(feed, callout("", "Could not ask GitHub", [
-      [why + " As of 6 November 2026 kcoap had no release; ", link(RELEASES, "GitHub Releases"),
-        " has the current list."]
-    ]));
+      : "GitHub’s API could not be reached in time, or did not answer with a list of releases.";
+    status(feed, [why + " ", link(RELEASES, "GitHub Releases"), " has the current list."]);
   }
 
   function formatDate(iso) {
@@ -135,21 +119,30 @@
       }
       list.appendChild(item);
     });
-    var wrap = el("div");
-    wrap.appendChild(list);
     var more = el("p", "muted");
     more.appendChild(link(RELEASES, "Every release, with its notes, on GitHub", "link-arrow"));
-    wrap.appendChild(more);
-    replace(feed, wrap);
+    while (feed.firstChild) feed.removeChild(feed.firstChild);
+    feed.appendChild(list);
+    feed.appendChild(more);
+    status(feed, ["The latest releases, as GitHub listed them when the page loaded."]);
   }
 
   function init() {
     var feed = document.querySelector("[data-release-feed]");
     if (!feed || !window.fetch || !window.Promise) return;
     showLoading(feed);
+    /* The first outcome wins: the answer, a failure, or the timeout, which needs no AbortController. */
+    var settled = false;
+    function settle(show) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      show();
+    }
     var controller = window.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () {
       if (controller) controller.abort();
+      settle(function () { showError(feed, false); });
     }, TIMEOUT_MS);
     var options = { headers: { Accept: "application/vnd.github+json" }, credentials: "omit", referrerPolicy: "no-referrer" };
     if (controller) options.signal = controller.signal;
@@ -167,15 +160,13 @@
         var releases = data.filter(function (r) {
           return r && !r.draft && typeof r.tag_name === "string" && r.tag_name;
         });
-        if (releases.length) showList(feed, releases);
-        else showEmpty(feed);
+        settle(function () {
+          if (releases.length) showList(feed, releases);
+          else showEmpty(feed);
+        });
       })
       .catch(function (error) {
-        showError(feed, error && error.message === "rate-limited");
-      })
-      .then(function () {
-        clearTimeout(timer);
-        feed.removeAttribute("aria-busy");
+        settle(function () { showError(feed, error && error.message === "rate-limited"); });
       });
   }
 
