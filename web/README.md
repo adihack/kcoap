@@ -22,7 +22,12 @@ web/
     ├── _headers         security and cache headers (read by Cloudflare, not served)
     ├── robots.txt, sitemap.xml, favicon.ico, apple-touch-icon.png
     └── assets/
-        ├── site.css     the whole design system, light and dark
+        ├── site.css     the design system every page links: tokens (light and dark), base, layout,
+        │                header, footer, and the components /features/ uses too
+        ├── figures.css  figures and diagrams: /, /features/, /releases/, 404
+        ├── components.css  steps, meter, tabs, platform links, fact tiles, release feed: the other pages
+        ├── guide.css    the guide layout: /start/ and its guides
+        ├── home.css     the home page's sections: /
         ├── site.js      theme toggle, mobile menu, copy buttons, tabs, scroll regions
         ├── releases.js  /releases/ only: the latest releases from the GitHub API
         └── kcoap-logo.svg, og-image.png
@@ -30,7 +35,8 @@ web/
 
 Every page is a directory with an `index.html`, served with a trailing slash. Each page carries its own
 copy of the head, header and footer; [TEMPLATE.md](TEMPLATE.md) has them, the rules every page follows
-(no inline CSS or JavaScript, one `h1`, repository links with one fixed prefix) and every component class.
+(no inline CSS or JavaScript, one `h1`, repository links with one fixed prefix), which stylesheets each kind
+of page links, and every component class.
 
 ## Preview and check
 
@@ -140,7 +146,7 @@ unrelated to the website, and neither gets in the way of the other.
   the values joined by a comma, so no path matches two rules that set the same header, and no rule has a
   splat inside the path, which the documentation does not describe; `scripts/check-site` checks both. The
   comment at the top of `_headers` says why one CSP covers every page.
-- Cache: the pages, `site.css` and the scripts keep Cloudflare's default
+- Cache: the pages, the stylesheets and the scripts keep Cloudflare's default
   `Cache-Control: public, max-age=0, must-revalidate` with an ETag, since they keep their names between
   deploys and must match; the images may be cached for a day.
 - Zone features that rewrite HTML at the edge would change what `scripts/check-site` checked. Email

@@ -8,8 +8,9 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 ## Rules every page follows
 
 - **No inline CSS or JavaScript.** The Content-Security-Policy forbids `<style>`, `style="..."`, inline
-  `<script>` and `on*=` attributes. All CSS is in `/assets/site.css`, all JavaScript in `/assets/site.js`.
-  SVG presentation attributes (`fill`, `stroke`, `transform`, `viewBox`) are fine.
+  `<script>` and `on*=` attributes. All CSS is in the stylesheets in `/assets/` (section 1 says which a page
+  links), all JavaScript in `/assets/site.js`. SVG presentation attributes (`fill`, `stroke`, `transform`,
+  `viewBox`) are fine.
 - **One `h1` per page**, `lang="en"`, the skip link, `<main id="main">`.
 - **Repository links** use exactly `https://github.com/adihack/kcoap/blob/feat/protocol-core/<path>` (or
   `tree/` for folders), so one replacement switches them to `main` after PR #1 merges.
@@ -17,14 +18,15 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
 - **Size:** keep each page with its images under about 150 KB before compression.
-- **Assets are not fingerprinted.** `site.css`, `site.js` and the images keep their names between deploys, so
-  cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or a short
-  `max-age`), not as immutable.
+- **Assets are not fingerprinted.** The stylesheets, `site.js` and the images keep their names between
+  deploys, so cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or
+  a short `max-age`), not as immutable.
 
 ## 1. The head
 
-Change the five marked values: title, description, canonical path, and the same path and texts in the Open
-Graph and Twitter tags. The title is "Page name · kcoap" on every page except the home page.
+Change the marked values: title, description, canonical path, the same path and texts in the Open Graph and
+Twitter tags, and the stylesheets after `site.css` (below). The title is "Page name · kcoap" on every page
+except the home page.
 
 ```html
 <!doctype html>
@@ -42,6 +44,8 @@ Graph and Twitter tags. The title is "Page name · kcoap" on every page except t
 <link rel="icon" href="/assets/kcoap-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/components.css">                    <!-- CHANGE -->
+<link rel="stylesheet" href="/assets/guide.css">                         <!-- CHANGE -->
 <script src="/assets/site.js"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="kcoap">
@@ -64,6 +68,22 @@ Graph and Twitter tags. The title is "Page name · kcoap" on every page except t
 
 `site.js` is loaded in the head without `defer` on purpose: it applies a remembered theme before the first
 paint and adds the `js` class that the mobile menu and tabs rely on. Drop the `<!-- CHANGE -->` comments.
+
+Every page links `site.css` first, then only the other stylesheets it uses, always in this order:
+`figures.css`, `components.css`, `guide.css`, `home.css`. Each sheet keeps its rules in the order they had
+when `site.css` was the only stylesheet, so this order keeps every result of the cascade; the header of
+`site.css` says which sheet holds what.
+
+| Page | Stylesheets, in order |
+|---|---|
+| `/` | `site.css`, `figures.css`, `components.css`, `home.css` |
+| `/start/` and every guide under it | `site.css`, `components.css`, `guide.css` |
+| `/features/` | `site.css`, `figures.css` |
+| `/releases/` | `site.css`, `figures.css`, `components.css` |
+| `/sponsors/` | `site.css`, `components.css` |
+| `404.html` | `site.css`, `figures.css` |
+
+A new page links the sheets its classes need, and no others.
 
 A page with a script of its own loads it right after `site.js`, with `defer` (only `/releases/` has one:
 `<script src="/assets/releases.js" defer></script>`). `404.html` is served at every missing path, so it has
@@ -195,7 +215,8 @@ Copy it as is, followed by `</body></html>`.
 
 ## 5. Components
 
-All classes are defined in `site.css`, whose header lists its sections.
+The classes are defined in the stylesheets in `/assets/`: in `site.css` unless this section names another
+sheet. Each sheet's header lists its sections.
 
 ### Layout
 
@@ -208,7 +229,7 @@ All classes are defined in `site.css`, whose header lists its sections.
 | `.lede`, `.muted` | larger intro text; secondary text |
 | `.grid .grid-2` / `.grid-3` | responsive card grids |
 | `.split`, `.split-reverse` | text beside a figure from 960 px; the reverse puts the figure first |
-| `.prose` | long-form text with styled lists and headings |
+| `.prose` | long-form text with styled lists and headings (`guide.css`) |
 | `.page-head`, `.breadcrumb` | the top of every page but the home page |
 
 ### Buttons and links
@@ -287,7 +308,7 @@ split long calls, and write version-catalog arrays one entry per line. Only a on
 `tok-s` (string), `tok-c` (comment), `tok-f` (function call), `tok-t` (type), `tok-n` (number). Shell
 commands carry no `$` prompt, so a copy pastes cleanly.
 
-### Tabs
+### Tabs (`components.css`)
 
 ```html
 <div class="tabs" data-tabs data-tab-group="gradle" data-tabs-label="Build file format">
@@ -309,6 +330,8 @@ choice follows them from page to page. The labels must match exactly across a gr
 
 ### Steps, facts, checks, meter
 
+Steps and the meter are in `components.css`, facts and checks in `site.css`.
+
 - `<ol class="steps">` with an `<h3>` in each `<li>`: numbered setup steps (the number badge is CSS).
 - `<dl class="facts">`: term and value pairs (minimum versions, coordinates).
 - `<ul class="checks">`: a list with a teal check per item; `<li class="is-open">` gets an amber ring for an
@@ -319,13 +342,13 @@ choice follows them from page to page. The labels must match exactly across a gr
   meter). Each block ends with its state in text, `A1<span class="visually-hidden">, merged</span>` (or
   `, not started`); no `title`.
 
-### Platform links
+### Platform links (`components.css`)
 
 `<ul class="platform-strip">` of `<li><a class="platform-link" href="/start/jvm/">ICON<span><strong>JVM</strong><span>Servers and desktop</span></span></a></li>`:
 one, two or three columns by width. The six icons (server, phone, apple, gateway, browser, terminal) are in
 the home page's strip; copy them from there.
 
-### Figures and diagrams
+### Figures and diagrams (`figures.css`)
 
 ```html
 <figure class="figure">
@@ -369,21 +392,21 @@ the GitHub link uses the repository glyph from the header.
 
 ### Inner pages
 
-| Class | Use |
-|---|---|
-| `ul.fact-tiles` > `li.fact-tile` > `.fact-tile-label` + `.fact-tile-value` | four key facts under a page head’s lede |
-| `.container.doc-layout` > `nav.toc` + `div.doc-body.prose` | a guide: the text with an “On this page” list (`p.toc-title` and an `ol` of `#id` links to its `h2`s), beside it from 1100 px and above it below that |
-| `p.code-note` with the check-circle icon, or `p.code-note.code-note-names` with the info icon | under a code block: how the sample was checked (compiled in CI, or names checked only) |
-| `.code-block.code-block-output` with `data-no-copy` | expected output of a sample, labelled “Output” |
-| `nav.pager` > `a.pager-prev` / `a.pager-next` > `.pager-label` + `.pager-title` | previous and next guide at the end of a guide |
-| `ul.jump-links` | chips that jump to the sections of a long page |
-| `table.matrix` | a comparison table whose row headers stick while it scrolls |
-| `table.table-stack` with `data-label` on cells | a table whose rows become stacked blocks on phones; each cell’s label comes from `data-label` |
-| `.state-col`, `.row-ids` | a narrow column of state badges; the checklist row ids under a cell, as a link |
-| `dl.qa-list` | questions and answers, such as troubleshooting |
-| `.feature-icon`, `.feature-code`, `.evidence` (`.evidence-title`) | a feature section on `/features/`: its icon, a code sample under the split, the box of tests and open items |
-| `[data-release-feed]`, `.release-list`, `.release-item`, `.release-meta`, `.release-notes`, `.release-loading`, `.block-loader` | the GitHub releases on `/releases/`, rendered by `releases.js` |
-| `.notfound`, `.notfound-code`, `.diagram-lost` | the 404 page |
+| Class | Use | Sheet |
+|---|---|---|
+| `ul.fact-tiles` > `li.fact-tile` > `.fact-tile-label` + `.fact-tile-value` | four key facts under a page head’s lede | `components.css` |
+| `.container.doc-layout` > `nav.toc` + `div.doc-body.prose` | a guide: the text with an “On this page” list (`p.toc-title` and an `ol` of `#id` links to its `h2`s), beside it from 1100 px and above it below that | `guide.css` |
+| `p.code-note` with the check-circle icon, or `p.code-note.code-note-names` with the info icon | under a code block: how the sample was checked (compiled in CI, or names checked only) | `site.css` |
+| `.code-block.code-block-output` with `data-no-copy` | expected output of a sample, labelled “Output” | `guide.css` |
+| `nav.pager` > `a.pager-prev` / `a.pager-next` > `.pager-label` + `.pager-title` | previous and next guide at the end of a guide | `guide.css` |
+| `ul.jump-links` | chips that jump to the sections of a long page | `site.css` |
+| `table.matrix` | a comparison table whose row headers stick while it scrolls | `guide.css` |
+| `table.table-stack` with `data-label` on cells | a table whose rows become stacked blocks on phones; each cell’s label comes from `data-label` | `site.css` |
+| `.state-col`, `.row-ids` | a narrow column of state badges; the checklist row ids under a cell, as a link | `site.css` |
+| `dl.qa-list` | questions and answers, such as troubleshooting | `guide.css` |
+| `.feature-icon`, `.feature-code`, `.evidence` (`.evidence-title`) | a feature section on `/features/`: its icon, a code sample under the split, the box of tests and open items | `site.css` |
+| `[data-release-feed]`, `.release-list`, `.release-item`, `.release-meta`, `.release-notes`, `.release-status`, `.block-loader` | the GitHub releases on `/releases/`, rendered by `releases.js` | `components.css` |
+| `.notfound`, `.notfound-code`, `.diagram-lost` | the 404 page | `figures.css` |
 
 Diagrams added for these pages: `fig-vectors`, `fig-failclosed`, `fig-sansio`, `fig-crypto` (on `/features/`)
 and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the “lost” red.

@@ -1,0 +1,495 @@
+/*
+ * kcoap.dev: the components that /features/ and the 404 page do not use.
+ *
+ * Linked after site.css (and figures.css) by /, /start/ and its guides, /releases/ and /sponsors/; each of
+ * them uses some of these. site.css explains how the stylesheets are split and in which order a page
+ * links them.
+ *
+ * Contents
+ *   1. Steps and the release meter
+ *   2. Tabs
+ *   3. Platform links and the status card
+ *   4. Fact tiles and the GitHub release feed
+ *   5. Print
+ */
+
+/* 1. Steps and the release meter --------------------------------------------------------------------- */
+
+/* Numbered steps. */
+.steps {
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.75rem;
+}
+
+.steps > li {
+  counter-increment: step;
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding-left: 3.25rem;
+}
+
+.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font-weight: 800;
+}
+
+.steps h3 {
+  font-size: 1.125rem;
+  margin-bottom: 0.35rem;
+  padding-top: 0.3rem;
+}
+
+@media (max-width: 599px) {
+  .steps > li {
+    padding-left: 0;
+  }
+
+  .steps > li::before {
+    position: static;
+    margin-bottom: 0.75rem;
+  }
+}
+
+/* Progress made of blocks, in the logo's language: .meter > .meter-block(.is-done). */
+.meter {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.meter li + li {
+  margin-top: 0;
+}
+
+@media (min-width: 1100px) {
+  .meter {
+    grid-template-columns: repeat(13, minmax(0, 1fr));
+  }
+}
+
+.meter-block {
+  display: grid;
+  place-items: center;
+  height: 2.1rem;
+  padding: 0;
+  border: 1.5px dashed var(--c-border-strong);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
+.meter-block.is-done {
+  border: 1.5px solid var(--c-accent);
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+}
+
+.meter-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  color: var(--c-text-3);
+}
+
+.meter-legend li + li {
+  margin-top: 0;
+}
+
+.meter-legend li::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 0.4rem;
+  border-radius: 3px;
+  vertical-align: -1px;
+  border: 1.5px dashed var(--c-border-strong);
+}
+
+.meter-legend .is-done::before {
+  border: 0;
+  background: var(--c-accent);
+}
+
+/* In forced colors the backgrounds go, so the done blocks keep theirs in system colours. */
+@media (forced-colors: active) {
+  .meter-block.is-done {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: CanvasText;
+    color: Canvas;
+  }
+}
+
+/* 2. Tabs -------------------------------------------------------------------------------------------- */
+
+/*
+ * Markup: <div class="tabs" data-tabs> with one <div class="tab-panel" data-tab-label="..."> per variant.
+ * Without JavaScript every panel shows, each under its own .tab-panel-title. site.js builds the tab list.
+ */
+.tab-list {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-bg-soft);
+  width: max-content;
+  max-width: 100%;
+}
+
+.tab {
+  flex: none;
+  min-height: 36px;
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--c-text);
+}
+
+.tab:focus-visible {
+  outline-offset: -1px;
+}
+
+.tab[aria-selected="true"] {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  box-shadow: var(--shadow-1);
+}
+
+.tab-panel-title {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--c-text-2);
+}
+
+.js .tabs-ready .tab-panel-title {
+  display: none;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.tab-panel > :last-child {
+  margin-bottom: 0;
+}
+
+/* 3. Platform links and the status card -------------------------------------------------------------- */
+
+/* Platform links: icon tiles linking to /start/<platform>/. */
+.platform-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform-strip li + li {
+  margin-top: 0;
+}
+
+@media (min-width: 560px) {
+  .platform-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .platform-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.platform-link {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  height: 100%;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--c-text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.platform-link:hover {
+  color: var(--c-text);
+  border-color: var(--c-accent-line);
+  box-shadow: var(--shadow-2);
+}
+
+.platform-link svg {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border-radius: 10px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.platform-link strong {
+  display: block;
+  font-size: var(--fs-base);
+  line-height: 1.3;
+}
+
+.platform-link span {
+  display: block;
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--c-text-3);
+}
+
+/* Status and release teaser. */
+.status-card {
+  padding: clamp(22px, 3vw, 36px);
+  border-radius: var(--radius-xl);
+}
+
+.status-card h3 {
+  font-size: var(--fs-xl);
+}
+
+.status-big {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.status-big code {
+  font-size: clamp(1.25rem, 1rem + 1vw, 1.6rem);
+  font-weight: 700;
+  padding: 0.15em 0.45em;
+  background: var(--c-surface-2);
+}
+
+/* 4. Fact tiles and the GitHub release feed ---------------------------------------------------------- */
+
+/* Key facts under a page head: a row of tiles. */
+.fact-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+  max-width: 980px;
+  margin: 2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-tiles li + li {
+  margin-top: 0;
+}
+
+.fact-tile {
+  padding: 0.85rem 1rem 0.9rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.fact-tile-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+}
+
+.fact-tile-value {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--c-text);
+}
+
+/* Text right after a tab set or a code block gets some air. */
+.tabs + p,
+.tabs + .code-note {
+  margin-top: 1.25rem;
+}
+
+/* Releases fetched from GitHub by releases.js. */
+.release-feed {
+  min-height: 7rem;
+  margin-bottom: 1.5rem;
+}
+
+/* One line under the note that says what GitHub answered; its height is reserved, so nothing jumps. */
+.release-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 1.6rem;
+  margin: 0.75rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-3);
+}
+
+.release-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.release-list li + li {
+  margin-top: 0;
+}
+
+.release-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.release-item h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.release-item h3 a {
+  color: var(--c-text);
+}
+
+.release-meta {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+.release-notes {
+  grid-column: 1 / -1;
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.release-notes li + li {
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 599px) {
+  .release-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .release-meta {
+    white-space: normal;
+  }
+}
+
+/* Three blocks, the middle one amber, that pulse while a request is in flight. */
+.block-loader {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.block-loader span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c-accent);
+}
+
+.block-loader span:nth-child(2) {
+  background: var(--c-amber);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .block-loader span {
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  .block-loader span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .block-loader span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* 5. Print ------------------------------------------------------------------------------------------- */
+
+/* Every tab panel prints, each under its title. */
+@media print {
+  .tab-panel[hidden] {
+    display: block !important;
+  }
+
+  .js .tabs-ready .tab-panel-title {
+    display: block;
+  }
+}
