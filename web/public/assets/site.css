@@ -348,6 +348,15 @@ img {
   height: auto;
 }
 
+/* The line icons: <svg class="icon" viewBox="0 0 24 24"> (web/TEMPLATE.md, "Icons"). */
+.icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 abbr[title] {
   text-decoration: underline dotted;
   text-underline-offset: 0.2em;

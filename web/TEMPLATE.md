@@ -105,19 +105,19 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
       <img src="/assets/kcoap-logo.svg" alt="" width="32" height="32">
       <span>kcoap</span>
     </a>
-    <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon icon-menu" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon icon-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <nav class="site-nav" id="site-nav" aria-label="Main">
       <ul>
         <li><a href="/start/">Get started</a></li>
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
-      <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
-      <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+      <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
+      <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
     </div>
   </div>
 </header>
@@ -389,10 +389,13 @@ the home page's strip; copy them from there.
 
 ### Icons
 
-Icons are drawn for this site: 24×24 viewBox, `fill="none" stroke="currentColor" stroke-width="1.75"
-stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"`. Copy them from
-`index.html`. Do not use third-party icon sets or brand logos (no GitHub, Android, Apple or Kotlin marks):
-the GitHub link uses the repository glyph from the header.
+Icons are drawn for this site as lines on a 24×24 grid: `<svg class="icon" viewBox="0 0 24 24"
+aria-hidden="true" focusable="false">`, with any other class after `icon` (`class="icon icon-menu"`). The
+`icon` class in `site.css` gives them their stroke (`currentColor`, 1.75 wide, round caps and joins) and no
+fill, so the markup carries only the shapes: written on each icon, those five attributes cost about 90 bytes,
+and `/` and `/features/` have about 40 icons each. Copy the icons from `index.html`. Do not use third-party
+icon sets or brand logos (no GitHub, Android, Apple or Kotlin marks): the GitHub link uses the repository
+glyph from the header.
 
 ### Inner pages
 

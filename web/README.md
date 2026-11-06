@@ -91,16 +91,18 @@ So the styles are split by the pages that use them, and each page links only the
 
 | Sheet | Holds | Linked by |
 |---|---|---|
-| `site.css` | tokens, base, layout, header, footer; buttons, badges, cards, callouts, tables, facts, checks, code, the `/features/` sections | every page |
+| `site.css` | tokens, base, icons, layout, header, footer; buttons, badges, cards, callouts, tables, facts, checks, code, the `/features/` sections | every page |
 | `figures.css` | figures and diagrams, the 404 page | `/`, `/features/`, `/releases/`, 404 |
 | `components.css` | steps, the release meter, tabs, platform links, the status card, fact tiles, the release feed | every page but `/features/` and 404 |
 | `guide.css` | the guide layout: contents list, long-form text, questions and answers, pager, matrix | `/start/` and its guides |
 | `home.css` | the home page's sections | `/` |
 
-`/features/` sets the shape: it has the most HTML (94 KB, 40 KB of it the inline SVG of eight diagrams and
-the icons), so `site.css` holds what it needs, and the components it does not use, a few small ones aside,
-sit in the sheets it does not link. On 6 November 2026 `/features/` weighs 146 KB, `/` 145 KB and the guides
-81 to 95 KB; with the one stylesheet they weighed 167 KB, 148 KB and 94 to 109 KB.
+`/features/` sets the shape: it has the most HTML (91 KB, 37 KB of it the inline SVG of eight diagrams and the
+icons), so `site.css` holds what it needs, and the components it does not use, a few small ones aside, sit in
+the sheets it does not link. The line icons take their stroke from the `icon` class instead of five attributes
+each ([TEMPLATE.md](TEMPLATE.md#icons)), which saves 3.2 KB on `/features/` and 3.8 KB on `/`. On 6 November
+2026 `/features/` weighs 143 KB, `/` 142 KB and the guides 80 to 95 KB; with the one stylesheet and the
+icons' attributes they weighed 167 KB, 148 KB and 94 to 109 KB.
 
 Pages link the sheets in a fixed order, `site.css` first ([TEMPLATE.md](TEMPLATE.md#1-the-head)); each sheet
 keeps its rules in the order they had when `site.css` was the only stylesheet, so the cascade gives the same
