@@ -66,7 +66,7 @@
         <p class="hero-brand"><img src="/assets/kcoap-logo.svg" alt="" width="56" height="56">kcoap</p>
         <h1 id="hero-title"><span class="visually-hidden">kcoap: </span>CoAP, OSCORE and EDHOC for <span class="accent">Kotlin Multiplatform</span></h1>
         <p class="lede">One implementation in common Kotlin for Android, iOS, macOS, JVM servers, Linux gateways, browsers and Node.js. Checked against the RFCs’ own test vectors, and in live interop with libcoap and libedhoc.</p>
-        <p class="status-line"><span class="status-pill">In development</span> <span>Version <code>0.1.0-SNAPSHOT</code>. Nothing is released yet: you build it from source today.</span></p>
+        <p class="status-line"><span class="status-pill">In development</span> <span>Version <code>0.1.0</code> is on Maven Central.</span></p>
         <div class="btn-row">
           <a class="btn btn-primary btn-lg" href="/start/">Get started <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
           <a class="btn btn-secondary btn-lg" href="https://github.com/adihack/kcoap"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg> View on GitHub</a>
@@ -414,8 +414,8 @@ kcoap = [
       <div class="grid grid-2">
         <article class="card status-card">
           <h3>Releases</h3>
-          <p class="status-big"><code>0.1.0-SNAPSHOT</code> <span class="badge badge-partial badge-dot">nothing released yet</span></p>
-          <p>No release could ship before the API-breaking work packages of the refactoring plan had merged. All of them have, as of 6 November 2026:</p>
+          <p class="status-big"><code>0.1.0</code> <span class="badge badge-done badge-dot">released</span></p>
+          <p>0.1.0 came out on 6 November 2026, once the API-breaking work packages of the refactoring plan had merged, all thirteen of them:</p>
           <ol class="meter" aria-label="Work packages in the release freeze">
             <li class="meter-block is-done">A1<span class="visually-hidden">, merged</span></li>
             <li class="meter-block is-done">A2<span class="visually-hidden">, merged</span></li>
@@ -434,7 +434,7 @@ kcoap = [
           <ul class="meter-legend">
             <li class="is-done">13 merged</li>
           </ul>
-          <p class="mt-2">A release is a <code>v*</code> tag: CI runs in full, then the artifacts go to GitHub Packages, and to Maven Central once it is set up.</p>
+          <p class="mt-2">A release is a <code>v*</code> tag: CI runs in full, then the artifacts go to GitHub Packages and Maven Central.</p>
           <p class="card-foot"><a class="link-arrow" href="/releases/">Releases and versioning</a></p>
         </article>
         <article class="card status-card">
@@ -444,8 +444,7 @@ kcoap = [
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>TLS</strong>: a <code>coaps+tcp</code> client on the JVM only, and no TLS server of kcoap’s own; servers terminate TLS at a reverse proxy.</li>
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>OSCORE Appendix B.2</strong>: re-deriving the ID Context is deferred.</li>
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>Swift-facing API</strong>: no XCFramework, Swift package or <code>Flow</code> bridge yet.</li>
-            <li class="is-open"><span class="visually-hidden">Open: </span><strong>Maven Central</strong>: ready, with the <code>dev.kcoap</code> namespace verified and the publishing token and signing key set; nothing is published before 0.1.0 is tagged.</li>
-            <li class="is-open"><span class="visually-hidden">Open: </span><strong>API reference</strong>: goes online with the first release.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span><strong>API reference</strong>: not online yet; it goes online once its deploy is fixed.</li>
           </ul>
           <p class="card-foot"><a class="link-arrow" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md">The full checklist</a></p>
         </article>

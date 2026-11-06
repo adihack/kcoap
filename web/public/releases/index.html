@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Releases · kcoap</title>
-<meta name="description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<meta name="description" content="kcoap&#x27;s releases: 0.1.0, the first, is on Maven Central. The latest releases on GitHub, what 0.1.0 waited for, how a tag becomes a release, and the versioning policy in short.">
 <link rel="canonical" href="https://kcoap.dev/releases/">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="kcoap">
 <meta property="og:title" content="Releases · kcoap">
-<meta property="og:description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<meta property="og:description" content="kcoap&#x27;s releases: 0.1.0, the first, is on Maven Central. The latest releases on GitHub, what 0.1.0 waited for, how a tag becomes a release, and the versioning policy in short.">
 <meta property="og:url" content="https://kcoap.dev/releases/">
 <meta property="og:image" content="https://kcoap.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -28,7 +28,7 @@
 <meta property="og:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Releases · kcoap">
-<meta name="twitter:description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<meta name="twitter:description" content="kcoap&#x27;s releases: 0.1.0, the first, is on Maven Central. The latest releases on GitHub, what 0.1.0 waited for, how a tag becomes a release, and the versioning policy in short.">
 <meta name="twitter:image" content="https://kcoap.dev/assets/og-image.png">
 <meta name="twitter:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 </head>
@@ -67,12 +67,12 @@
       </ol></nav>
       <p class="eyebrow">Releases</p>
       <h1>Releases and versions</h1>
-      <p class="lede">kcoap has not released a version yet. The first release, 0.1.0, waits for the API-breaking work of the refactoring plan to land, so that it does not break its users right after.</p>
+      <p class="lede">kcoap 0.1.0, the first release, came out on 6 November 2026, on Maven Central and GitHub Packages. It waited for the API-breaking work of the refactoring plan to land, so that it would not break its users right after.</p>
       <ul class="fact-tiles" aria-label="Release status">
-        <li class="fact-tile"><span class="fact-tile-label">Version now</span><span class="fact-tile-value"><code>0.1.0-SNAPSHOT</code></span></li>
-        <li class="fact-tile"><span class="fact-tile-label">First release</span><span class="fact-tile-value">0.1.0</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Latest release</span><span class="fact-tile-value"><code>0.1.0</code></span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Released</span><span class="fact-tile-value">6 November 2026</span></li>
         <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">13 of 13 merged</span></li>
-        <li class="fact-tile"><span class="fact-tile-label">Published to</span><span class="fact-tile-value">Nowhere yet</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Published to</span><span class="fact-tile-value">Maven Central, GitHub Packages</span></li>
       </ul>
     </div>
   </section>
@@ -82,16 +82,16 @@
       <div class="section-head">
         <p class="eyebrow">On GitHub</p>
         <h2 id="latest">Latest releases</h2>
-        <p class="lede">Read live from GitHub when this page loads. Each release lists its changes, generated from the merged pull requests.</p>
+        <p class="lede">Read live from GitHub when this page loads. Each release opens with the summary of its changelog entry, followed by the merged pull requests.</p>
       </div>
       <div class="release-feed" data-release-feed>
         <div class="callout callout-status">
-          <span class="callout-title">No release yet</span>
-          <p>kcoap had no release on 6 November 2026. The first, 0.1.0, follows the release freeze below; until then, build kcoap from source as <a href="/start/">Get started</a> shows. <a href="https://github.com/adihack/kcoap/releases">GitHub Releases</a> will list it.</p>
+          <span class="callout-title">0.1.0, the first release</span>
+          <p>kcoap 0.1.0 came out on 6 November 2026. <a href="https://github.com/adihack/kcoap/releases/tag/v0.1.0">Its GitHub Release</a> has the notes, and <a href="/start/">Get started</a> shows how to add it from Maven Central.</p>
         </div>
         <p class="release-status" data-release-status role="status"></p>
       </div>
-      <p class="muted">The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">changelog</a> already lists every notable change since development began, under “Unreleased”, with a migration note for each breaking change.</p>
+      <p class="muted">The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">changelog</a> lists every notable change by release, with a migration note for each breaking change; what changes after 0.1.0 goes under “Unreleased” until the next release.</p>
     </div>
   </section>
 
@@ -99,8 +99,8 @@
     <div class="container">
       <div class="section-head">
         <p class="eyebrow">Release freeze</p>
-        <h2 id="freeze">What has to merge first</h2>
-        <p class="lede">No <code>v*</code> tag until thirteen work packages have merged: the ones that change the public API. All thirteen had merged on 6 November 2026:</p>
+        <h2 id="freeze">What 0.1.0 waited for</h2>
+        <p class="lede">No <code>v*</code> tag was pushed until thirteen work packages had merged: the ones that change the public API. All thirteen had merged on 6 November 2026, the day of the release:</p>
       </div>
       <div class="card status-card">
         <ol class="meter" aria-label="Work packages in the release freeze">
@@ -142,7 +142,7 @@
           </tbody>
         </table>
       </div>
-      <p class="muted">TLS for stream transports (T1), browser interop (I1), a crypto conformance suite (C2), consumer samples (P1) and the rest of the CoAP errors and observability work (B4) have merged, but do not block a release. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
+      <p class="muted">TLS for stream transports (T1), browser interop (I1), a crypto conformance suite (C2), consumer samples (P1) and the rest of the CoAP errors and observability work (B4) merged too, but did not block the release. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
     </div>
   </section>
 
@@ -154,14 +154,14 @@
         <p class="lede">A release is a <code>v*</code> tag. The version is the tag without the <code>v</code>; between releases the build holds the next version with <code>-SNAPSHOT</code>.</p>
         <ol class="steps">
           <li><h3>Test</h3><p>The whole CI workflow runs again: unit tests on every target, the coverage floor, interop with libcoap and libedhoc, the Apple targets and the API reference. Nothing is published if any of it fails.</p></li>
-          <li><h3>Publish</h3><p>A macOS runner builds every module for every target and publishes them to GitHub Packages and Maven Central, each artifact signed with the release key <code>5833 7699 D9CB 8E6F 5EB1 BDFB 4A7E 4910 69FA EAB3</code>. The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#the-release-signing-key">releasing guide</a> says how to check a signature.</p></li>
-          <li><h3>Release notes</h3><p>A GitHub Release with notes generated from the merged pull requests. A version with a <code>-</code>, such as <code>0.2.0-rc1</code>, is marked as a pre-release.</p></li>
-          <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages.</p></li>
+          <li><h3>Publish</h3><p>A macOS runner builds every module for every target, signs each artifact with the release key <code>5833 7699 D9CB 8E6F 5EB1 BDFB 4A7E 4910 69FA EAB3</code>, publishes them to GitHub Packages and uploads them to the Central Portal. The maintainer checks that deployment and publishes it to Maven Central by hand, a step that cannot be undone. The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#the-release-signing-key">releasing guide</a> says how to check a signature.</p></li>
+          <li><h3>Release notes</h3><p>A GitHub Release whose notes are the version’s summary from the changelog, followed by the merged pull requests. A version with a <code>-</code>, such as <code>0.2.0-rc1</code>, is marked as a pre-release.</p></li>
+          <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages. For 0.1.0 the deploy failed, so the reference is not online yet; it goes online once its deploy is fixed.</p></li>
         </ol>
       </div>
       <figure class="figure">
-        <svg class="diagram diagram-narrow" viewBox="0 0 440 491" role="img" aria-labelledby="fig-release-title" aria-describedby="fig-release-desc"><title id="fig-release-title">How a tag becomes a release</title><desc id="fig-release-desc">Pushing a v* tag, such as v0.1.0, starts the release workflow. Step 1 runs the whole CI workflow; if any of it fails, nothing is published. Step 2 publishes every module for every target from a macOS runner, to GitHub Packages and to Maven Central, signed with the release key. Step 3 creates the GitHub Release with notes generated from the merged pull requests. Step 4 deploys the API reference, built by Dokka, to GitHub Pages.</desc><defs><marker id="rel-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head" d="M0 0 10 5 0 10z"/></marker></defs><rect class="d-box-amber" x="1" y="1" width="438" height="58" rx="12"/><text class="d-title d-on-amber" x="19" y="26">A v* tag is pushed</text><text class="d-mono-small d-on-amber" x="19" y="45">git push origin v0.1.0</text><path class="d-arrow" d="M220 59V81" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="84" width="438" height="58" rx="12"/><text class="d-title" x="19" y="109">1 · Test</text><text class="d-sub" x="19" y="128">the whole CI workflow; nothing is published if it fails</text><rect class="d-box" x="1" y="170" width="438" height="58" rx="12"/><text class="d-title" x="19" y="195">2 · Publish, on macOS</text><text class="d-sub" x="19" y="214">every module, every target, from one host</text><path class="d-arrow" d="M220 142V167" marker-end="url(#rel-head)"/><path class="d-line" d="M220 228V242M110 242H330M110 242V256M330 242V256"/><rect class="d-box-soft" x="1" y="258" width="214" height="58" rx="12"/><text class="d-title" x="108" y="283" text-anchor="middle">GitHub Packages</text><text class="d-sub" x="108" y="302" text-anchor="middle">every release, signed</text><rect class="d-box-soft" x="225" y="258" width="214" height="58" rx="12"/><text class="d-title" x="332" y="283" text-anchor="middle">Maven Central</text><text class="d-sub" x="332" y="302" text-anchor="middle">every release, signed</text><path class="d-line" d="M110 316V330M330 316V330M110 330H330"/><path class="d-arrow" d="M220 330V345" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="348" width="438" height="58" rx="12"/><text class="d-title" x="19" y="373">3 · GitHub Release</text><text class="d-sub" x="19" y="392">notes from the merged pull requests</text><path class="d-arrow" d="M220 406V428" marker-end="url(#rel-head)"/><rect class="d-box-accent" x="1" y="431" width="438" height="58" rx="12"/><text class="d-title d-on-accent" x="19" y="456">4 · API reference</text><text class="d-sub d-on-accent-2" x="19" y="475">Dokka, deployed to GitHub Pages</text></svg>
-        <details class="diagram-text"><summary>Read the diagram as text</summary><p>Pushing a v* tag, such as v0.1.0, starts the release workflow. Step 1 runs the whole CI workflow; if any of it fails, nothing is published. Step 2 publishes every module for every target from a macOS runner, to GitHub Packages and to Maven Central, signed with the release key. Step 3 creates the GitHub Release with notes generated from the merged pull requests. Step 4 deploys the API reference, built by Dokka, to GitHub Pages.</p></details>
+        <svg class="diagram diagram-narrow" viewBox="0 0 440 491" role="img" aria-labelledby="fig-release-title" aria-describedby="fig-release-desc"><title id="fig-release-title">How a tag becomes a release</title><desc id="fig-release-desc">Pushing a v* tag, such as v0.1.0, starts the release workflow. Step 1 runs the whole CI workflow; if any of it fails, nothing is published. Step 2 builds every module for every target on a macOS runner, signs each artifact with the release key, publishes them to GitHub Packages and uploads them to the Central Portal, where the maintainer publishes the deployment to Maven Central by hand. Step 3 creates the GitHub Release, whose notes are the version’s summary from the changelog followed by the merged pull requests. Step 4 deploys the API reference, built by Dokka, to GitHub Pages.</desc><defs><marker id="rel-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head" d="M0 0 10 5 0 10z"/></marker></defs><rect class="d-box-amber" x="1" y="1" width="438" height="58" rx="12"/><text class="d-title d-on-amber" x="19" y="26">A v* tag is pushed</text><text class="d-mono-small d-on-amber" x="19" y="45">git push origin v0.1.0</text><path class="d-arrow" d="M220 59V81" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="84" width="438" height="58" rx="12"/><text class="d-title" x="19" y="109">1 · Test</text><text class="d-sub" x="19" y="128">the whole CI workflow; nothing is published if it fails</text><rect class="d-box" x="1" y="170" width="438" height="58" rx="12"/><text class="d-title" x="19" y="195">2 · Publish, on macOS</text><text class="d-sub" x="19" y="214">every module, every target, from one host</text><path class="d-arrow" d="M220 142V167" marker-end="url(#rel-head)"/><path class="d-line" d="M220 228V242M110 242H330M110 242V256M330 242V256"/><rect class="d-box-soft" x="1" y="258" width="214" height="58" rx="12"/><text class="d-title" x="108" y="283" text-anchor="middle">GitHub Packages</text><text class="d-sub" x="108" y="302" text-anchor="middle">every release, signed</text><rect class="d-box-soft" x="225" y="258" width="214" height="58" rx="12"/><text class="d-title" x="332" y="283" text-anchor="middle">Maven Central</text><text class="d-sub" x="332" y="302" text-anchor="middle">published by hand, signed</text><path class="d-line" d="M110 316V330M330 316V330M110 330H330"/><path class="d-arrow" d="M220 330V345" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="348" width="438" height="58" rx="12"/><text class="d-title" x="19" y="373">3 · GitHub Release</text><text class="d-sub" x="19" y="392">the changelog summary, then the merged pull requests</text><path class="d-arrow" d="M220 406V428" marker-end="url(#rel-head)"/><rect class="d-box-accent" x="1" y="431" width="438" height="58" rx="12"/><text class="d-title d-on-accent" x="19" y="456">4 · API reference</text><text class="d-sub d-on-accent-2" x="19" y="475">Dokka, deployed to GitHub Pages</text></svg>
+        <details class="diagram-text"><summary>Read the diagram as text</summary><p>Pushing a v* tag, such as v0.1.0, starts the release workflow. Step 1 runs the whole CI workflow; if any of it fails, nothing is published. Step 2 builds every module for every target on a macOS runner, signs each artifact with the release key, publishes them to GitHub Packages and uploads them to the Central Portal, where the maintainer publishes the deployment to Maven Central by hand. Step 3 creates the GitHub Release, whose notes are the version’s summary from the changelog followed by the merged pull requests. Step 4 deploys the API reference, built by Dokka, to GitHub Pages.</p></details>
         <figcaption>The release workflow, from tag to API reference.</figcaption>
       </figure>
     </div>
@@ -171,21 +171,23 @@
     <div class="container container-narrow">
       <div class="section-head">
         <p class="eyebrow">Checklist</p>
-        <h2 id="before">Before 0.1.0 is tagged</h2>
-        <p class="lede">The releasing guide lists what has to be true first. On 6 November 2026:</p>
+        <h2 id="before">What 0.1.0 needed</h2>
+        <p class="lede">The releasing guide’s checklist for the first release, as it stood after the release on 6 November 2026:</p>
       </div>
       <div class="card">
         <ul class="checks mb-0">
-          <li class="is-open"><span class="visually-hidden">Open: </span>The release freeze has merged and CI is green on <code>main</code>. The freeze is complete on <code>feat/protocol-core</code>; pull request #1, which brings it to <code>main</code>, is still a draft.</li>
+          <li><span class="visually-hidden">Done: </span>The release freeze merged, pull request #1 brought it to <code>main</code>, and the whole CI workflow passed again on the tagged commit.</li>
           <li><span class="visually-hidden">Done: </span>Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed (work package P1).</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span>CHANGELOG.md has an entry for the version, with migration notes.</li>
+          <li><span class="visually-hidden">Done: </span>CHANGELOG.md has an entry for 0.1.0, with migration notes; its summary is the body of the GitHub Release.</li>
           <li><span class="visually-hidden">Done: </span>The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev, since 6 November 2026.</li>
           <li><span class="visually-hidden">Done: </span>The Maven Central user token and the release signing key are set as repository secrets, since 6 November 2026.</li>
           <li><span class="visually-hidden">Done: </span>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
           <li><span class="visually-hidden">Done: </span>Snapshots publish to Maven Local, <code>kcoap-bom</code> with them, which <code>verifyBomConstraints</code> checks against the published modules; CI builds an Android consumer app against them.</li>
-          <li><span class="visually-hidden">Done: </span>A JVM consumer and a js consumer build against the snapshot through <code>kcoap-bom</code>, the js one within a bundle-size budget and in headless Chrome (work package P1); their CI jobs have not run yet.</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span>The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
+          <li><span class="visually-hidden">Done: </span>A JVM consumer and a js consumer build against the snapshot through <code>kcoap-bom</code>, the js one within a bundle-size budget and in headless Chrome (work package P1); their CI jobs passed for the release.</li>
+          <li><span class="visually-hidden">Done: </span>The ABI dumps are current: CI checked them again for the tag.</li>
+          <li><span class="visually-hidden">Done: </span>A ruleset protects <code>v*</code> tags, and GitHub Pages serves from GitHub Actions.</li>
+          <li><span class="visually-hidden">Done: </span>The Central Portal deployment is published: <code>dev.kcoap:&lt;module&gt;:0.1.0</code> and <code>kcoap-bom</code> are on Maven Central.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The API reference is not online yet. Its deploy from the tag failed, because the <code>github-pages</code> environment accepts deployments from <code>main</code> only. It goes online once that rule also allows <code>v*</code> tags and the job runs again.</li>
         </ul>
       </div>
     </div>
@@ -244,28 +246,28 @@
     <div class="container">
       <div class="section-head">
         <p class="eyebrow">Channels</p>
-        <h2 id="where">Where releases will be</h2>
+        <h2 id="where">Where releases are</h2>
       </div>
       <div class="grid grid-2">
         <article class="card">
           <div class="card-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 2.75 8.25 4.5v9.5L12 21.25 3.75 16.75v-9.5z"/><path d="m3.75 7.25 8.25 4.5 8.25-4.5M12 11.75v9.5"/></svg></div>
           <h3>Maven Central</h3>
-          <p>After the first release, under the verified <code>dev.kcoap</code> namespace: <code>dev.kcoap:&lt;module&gt;:&lt;version&gt;</code> from <code>mavenCentral()</code>, with no other repository. <span class="badge badge-todo">not yet</span></p>
+          <p>Every release, under the verified <code>dev.kcoap</code> namespace: <code>dev.kcoap:&lt;module&gt;:&lt;version&gt;</code> from <code>mavenCentral()</code>, with no other repository. <span class="badge badge-done">0.1.0</span></p>
         </article>
         <article class="card">
           <div class="card-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 2.75 8.25 4.5v9.5L12 21.25 3.75 16.75v-9.5z"/><path d="m3.75 7.25 8.25 4.5 8.25-4.5M12 11.75v9.5"/></svg></div>
           <h3>GitHub Packages</h3>
-          <p>Every release, from <code>https://maven.pkg.github.com/adihack/kcoap</code>. Gradle needs a GitHub token with <code>read:packages</code> to read it, even for a public package. <span class="badge badge-todo">not yet</span></p>
+          <p>Every release, from <code>https://maven.pkg.github.com/adihack/kcoap</code>. Gradle needs a GitHub token with <code>read:packages</code> to read it, even for a public package. <span class="badge badge-done">0.1.0</span></p>
         </article>
         <article class="card">
           <div class="card-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 12.25V4.5a1 1 0 0 1 1-1h7.75l8.25 8.25-8.75 8.75z"/><path d="M8 8h.01"/></svg></div>
           <h3>GitHub Releases</h3>
-          <p>One per tag, with notes generated from the merged pull requests. The artifacts are in the Maven repositories, not attached to the release. <a href="https://github.com/adihack/kcoap/releases">GitHub Releases</a>.</p>
+          <p>One per tag: the version’s summary from the changelog, then the merged pull requests. The artifacts are in the Maven repositories, not attached to the release. <a href="https://github.com/adihack/kcoap/releases">GitHub Releases</a>.</p>
         </article>
         <article class="card">
           <div class="card-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4.75A1.75 1.75 0 0 1 5.75 3H20v15H5.75A1.75 1.75 0 0 0 4 19.75z"/><path d="M4 19.75A1.75 1.75 0 0 0 5.75 21.5H20V18"/></svg></div>
           <h3>API reference</h3>
-          <p>Published to <code>adihack.github.io/kcoap</code> with the first release; it is not online yet. Until then, <code>./gradlew dokkaGenerate</code> builds it into <code>build/dokka/html</code>.</p>
+          <p>Published to <code>adihack.github.io/kcoap</code> with every release. It is not online yet: the deploy for 0.1.0 failed, and the reference goes online once its deploy is fixed. Until then, <code>./gradlew dokkaGenerate</code> in a clone of kcoap builds it into <code>build/dokka/html</code>. <span class="badge badge-todo">not online yet</span></p>
         </article>
       </div>
     </div>

@@ -434,9 +434,12 @@ and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the 
 
 ## 7. Dated facts to update
 
-The home page's release-freeze meter shows the work packages as of 6 November 2026 (all 13 merged, C3
-last; `docs/releasing.md` "Release freeze"). Update the blocks, their hidden state text, the legend and
-the date if the freeze list changes, and `/releases/` with them.
-On `/releases/`, that means the meter, the table of work packages, the fact tile “13 of 13 merged”, the
-“Before 0.1.0 is tagged” list and the static “No release yet” note. `web/README.md` lists the same places
-and the other states the pages describe.
+The release-freeze meter on the home page and on `/releases/` records what 0.1.0 waited for: all 13 work
+packages, merged by 6 November 2026, C3 last (`docs/releasing.md` "Release freeze"). It stays as that record,
+together with the table of work packages and the fact tile “13 of 13 merged” on `/releases/`.
+
+The release itself is a dated fact on several pages: the footer’s status line on every page (section 4), the
+hero’s status line and the release card on the home page, the install steps on `/start/` and in the platform
+guides, and on `/releases/` the fact tiles, the static note about the latest release, the “What 0.1.0 needed”
+list and the badges of the channels. Update them with each release. `web/README.md` lists the same places and
+the other states the pages describe.
