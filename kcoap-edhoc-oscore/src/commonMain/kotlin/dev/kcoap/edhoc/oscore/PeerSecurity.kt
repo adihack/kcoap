@@ -3,6 +3,7 @@ package dev.kcoap.edhoc.oscore
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.coap.client.resolvePeer
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
@@ -64,14 +65,20 @@ public class PeerSecurity(
      * ([dev.kcoap.coap.client.CoapClientConfig.resolver]) finds, as for the client's requests. A resolver that
      * maps one name to different addresses over time needs [install] again for each.
      *
+     * The resolver's failures reach the caller as they reach the client's requests
+     * ([dev.kcoap.coap.client.EndpointResolver]): a lookup that fails at runtime, whatever the resolver threw for
+     * it, a platform's DNS exception or the cancellation of its own `withTimeout` included, is a `CoapException`
+     * with `UNRESOLVED_HOST` and that failure as cause, which Swift catches as an `NSError`. Nothing is installed
+     * then.
+     *
      * @return the endpoint the protection was installed for.
-     * @throws dev.kcoap.coap.stack.CoapException with `UNRESOLVED_HOST` when the resolver's lookup fails at runtime,
-     *   as the resolver's contract says ([dev.kcoap.coap.client.EndpointResolver]).
-     * @throws IllegalArgumentException when the resolver cannot resolve the host of [server].
+     * @throws dev.kcoap.coap.stack.CoapException with `UNRESOLVED_HOST` when the resolver's lookup fails at runtime.
+     * @throws IllegalArgumentException when the resolver cannot resolve the host of [server] by design, such as a
+     *   host name given to `EndpointResolver.Default`.
      */
     @Throws(KcoapException::class, CancellationException::class)
     public suspend fun install(client: CoapClient, server: CoapUri, security: ClientMessageSecurity): Endpoint {
-        val peer = client.config.resolver.resolve(server)
+        val peer = client.resolvePeer(server)
         install(peer, security)
         return peer
     }

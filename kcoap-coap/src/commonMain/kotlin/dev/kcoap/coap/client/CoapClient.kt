@@ -25,12 +25,10 @@ import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -399,11 +397,9 @@ public class CoapClient private constructor(
 
     /**
      * The peer for [uri], through [CoapClientConfig.resolver], with its failures translated as its contract
-     * says: a [CoapException], such as [CoapException.Reason.UNRESOLVED_HOST], and an `IllegalArgumentException`
-     * for a host the resolver cannot resolve by design pass unchanged; any other exception is a lookup that failed
-     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause. That includes a cancellation of the
-     * resolver's own, such as its `withTimeout` expiring, while the caller is still active; the caller's
-     * cancellation passes unchanged.
+     * says ([resolvePeer]): a lookup that fails at runtime, a cancellation of the resolver's own included, is
+     * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, while a [CoapException], an
+     * `IllegalArgumentException` and the caller's cancellation pass unchanged.
      *
      * Nothing is looked up on a closed endpoint, where the call fails like [CoapEndpoint.closeCause] at once, nor
      * for a `coaps` URI: without DTLS (RFC 7252 §9.1) its request would go out in plaintext, against RFC 7252
@@ -417,16 +413,7 @@ public class CoapClient private constructor(
                 CoapException.Reason.TRANSPORT_UNAVAILABLE,
             )
         }
-        return try {
-            config.resolver.resolve(uri)
-        } catch (e: CoapException) {
-            throw e
-        } catch (e: IllegalArgumentException) {
-            throw e
-        } catch (e: Exception) {
-            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
-            throw CoapException("Cannot resolve ${uri.host}: ${e.message}", CoapException.Reason.UNRESOLVED_HOST, e)
-        }
+        return resolvePeer(uri)
     }
 
     /** The request message without token and Message ID: URI options (RFC 7252 §6.4), options, body. */
