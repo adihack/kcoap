@@ -26,7 +26,7 @@ import kotlin.time.TimeSource
  * | Bound | Default | At the bound |
  * |---|---|---|
  * | [maxDeduplicationEntries], [maxDeduplicationEntriesPerPeer] | 50 000, 10 000 | forgets the oldest message that may be processed again (RFC 7252 §4.5), else drops the new one |
- * | [maxReservedMessageIds], [maxReservedMessageIdsPerPeer] | 262 144, 65 536 | refuses the message that needs a new Message ID (§4.4 forbids reuse) |
+ * | [maxReservedMessageIds], [maxReservedMessageIdsPerPeer] | 262 144, 65 536 | refuses the message that needs a new Message ID (§4.4 forbids reuse), a response to a Non-confirmable request already at three quarters |
  * | [maxExchanges], [maxExchangesPerPeer] | 16 384, 256 | forgets the oldest Non-confirmable message kept for a Reset, else gives up the oldest Confirmable one unacknowledged after a retransmission, else refuses |
  * | [maxConcurrentRequests] | 256 | 5.03 with Max-Age to a Confirmable request, drops a Non-confirmable one |
  *
@@ -111,10 +111,15 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
      * reserves it for EXCHANGE_LIFETIME, since RFC 7252 §4.4 forbids reusing it towards that peer before, and a
      * flood of spoofed Non-confirmable requests makes the endpoint send one response, and so reserve one ID,
      * each. Beyond the bound such a message is refused instead: a request fails with
-     * [CoapException.Reason.IDENTIFIERS_EXHAUSTED], a separate response or notification is not sent, and each is
-     * reported with `MESSAGE_IDS`. Piggybacked responses reuse the request's ID and are never refused. The default
-     * allows four peers at the most RFC 7252 §4.4 allows one (65 536 per EXCHANGE_LIFETIME), about 1 000
-     * messages a second in all, and takes about 26 MB when full.
+     * [CoapException.Reason.IDENTIFIERS_EXHAUSTED], a separate response is not sent, a notification is sent
+     * later with the latest state while the observer stays (RFC 7641 §4.5), and each is reported with
+     * `MESSAGE_IDS`. A quarter of the bound, and of [maxReservedMessageIdsPerPeer], is kept from Non-confirmable
+     * responses to Non-confirmable requests, which a client may lose anyway (§5.2.3) and a flood from forged
+     * addresses makes the endpoint send: they are refused at three quarters, so the rest is left for the
+     * endpoint's own requests, notifications and separate responses to Confirmable requests. Piggybacked
+     * responses reuse the request's ID and are never refused. The default allows four peers at the most
+     * RFC 7252 §4.4 allows one (65 536 per EXCHANGE_LIFETIME), about 1 000 messages a second in all, and takes
+     * about 26 MB when full.
      */
     public val maxReservedMessageIds: Int = builder.maxReservedMessageIds
 
@@ -154,8 +159,9 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
      * for a Reset (RFC 7252 §4.3 lets a sender ignore a Reset), then of the oldest Confirmable message that is
      * still unacknowledged after a retransmission, which is given up early as if it had timed out and reported
      * with `EXCHANGES`: a peer that answers acknowledges within ACK_TIMEOUT, while a spoofed source only draws
-     * retransmissions (§11.3). Otherwise a request fails with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] and a
-     * separate response or notification is not sent, each reported with `EXCHANGES`.
+     * retransmissions (§11.3). Otherwise a request fails with [CoapException.Reason.IDENTIFIERS_EXHAUSTED], a
+     * separate response is not sent, and a notification is sent later with the latest state while the observer
+     * stays (RFC 7641 §4.5), each reported with `EXCHANGES`.
      */
     public val maxExchanges: Int = builder.maxExchanges
 

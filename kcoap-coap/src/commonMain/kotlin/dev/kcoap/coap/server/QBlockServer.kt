@@ -16,6 +16,7 @@ import dev.kcoap.coap.stack.BodyMode
 import dev.kcoap.coap.stack.DeliveryOutcome
 import dev.kcoap.coap.stack.DeliveryOwner
 import dev.kcoap.coap.stack.CoapEndpoint
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
 import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
@@ -878,12 +879,25 @@ internal class QBlockServer(
             observation.link.notify(outgoing, target.type == CoapMessageType.CON, owner, slotHold = null)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            // The security layer, its sequence-number store or the messaging layer failed: the observer goes.
-            log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
+        } catch (e: CoapException) {
+            if (e.reason != CoapException.Reason.IDENTIFIERS_EXHAUSTED) return failed(body, observation, num, e)
+            // A bound of the endpoint refused the block (RFC 7252 §11.3): the body sends nothing more by itself, its
+            // client may still ask for what it misses (§4.4), and the observer stays for the next body.
             lock.withLock { stop(body, endpoint.now()) }
-            server.observations.remove(observation, ObserverRemoved.Reason.FAILED, "notification failed: ${e.message}")
+            observation.refused(e)
+        } catch (e: Exception) {
+            failed(body, observation, num, e)
         }
+    }
+
+    /**
+     * The security layer, its sequence-number store or the messaging layer failed on block [num] of [body]: the
+     * observer goes.
+     */
+    private suspend fun failed(body: ServedBody, observation: ServerObservation, num: Long, e: Exception) {
+        log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
+        lock.withLock { stop(body, endpoint.now()) }
+        server.observations.remove(observation, ObserverRemoved.Reason.FAILED, "notification failed: ${e.message}")
     }
 
     /**

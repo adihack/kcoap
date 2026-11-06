@@ -53,6 +53,21 @@ class MessageIdAllocatorTest {
     }
 
     @Test
+    fun rfc7252Section11_3DroppableMessagesLeaveAQuarterOfEachBoundToTheOthers() {
+        val ids = MessageIdAllocator(initial = 0, maxReserved = 8, maxReservedPerPeer = 4)
+        repeat(3) { ids.allocate(peer, Duration.ZERO, lifetime) }
+        val perPeer = ids.refusal(peer, Duration.ZERO, droppable = true)
+        assertEquals(Limit.MESSAGE_IDS_PER_PEER, perPeer, "three of four towards one peer")
+        assertNull(ids.refusal(peer, Duration.ZERO), "the last quarter is for messages that are not droppable")
+        ids.allocate(peer, Duration.ZERO, lifetime)
+
+        val third = Endpoint.Udp("192.0.2.3", 5683)
+        repeat(2) { ids.allocate(other, Duration.ZERO, lifetime) }
+        assertEquals(Limit.MESSAGE_IDS, ids.refusal(third, Duration.ZERO, droppable = true), "six of eight in all")
+        assertNull(ids.refusal(third, Duration.ZERO))
+    }
+
+    @Test
     fun rfc7252Section9_1_1AnEndedSessionGivesItsReservationsBack() {
         val ids = MessageIdAllocator(initial = 0, maxReserved = 2)
         ids.allocate(peer, Duration.ZERO, lifetime)

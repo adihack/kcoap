@@ -13,6 +13,12 @@ import kotlin.time.Duration
  * the endpoint send, so at most [maxReserved] IDs are reserved in all and [maxReservedPerPeer] towards one
  * peer, which the ID space bounds at 65 536 anyway. A reservation is never given up early, since §4.4 forbids
  * reusing the ID, so beyond a bound [refusal] refuses the new message instead.
+ *
+ * A quarter of each bound is kept from *droppable* messages: Non-confirmable responses to Non-confirmable
+ * requests, which any source address, forged or not, makes the endpoint send one for each request, and whose
+ * loss the client already copes with (§5.2.3). They are refused once three quarters are reserved, so such a
+ * flood leaves IDs for what the endpoint must send: its own requests, notifications, separate responses to
+ * Confirmable requests and Q-Block bodies of notifications.
  */
 internal class MessageIdAllocator(
     initial: Int,
@@ -30,16 +36,19 @@ internal class MessageIdAllocator(
 
     /**
      * The bound that keeps [peer] from getting a new ID at [now], after dropping the reservations expired by then,
-     * or null when it may have one.
+     * or null when it may have one. A [droppable] message may take three quarters of each bound only.
      */
-    fun refusal(peer: Endpoint, now: Duration): Limit? {
+    fun refusal(peer: Endpoint, now: Duration, droppable: Boolean = false): Limit? {
         prune(now)
         return when {
-            (perPeer[peer] ?: 0) >= maxReservedPerPeer -> Limit.MESSAGE_IDS_PER_PEER
-            reservations.size >= maxReserved -> Limit.MESSAGE_IDS
+            (perPeer[peer] ?: 0) >= maxReservedPerPeer.forDroppable(droppable) -> Limit.MESSAGE_IDS_PER_PEER
+            reservations.size >= maxReserved.forDroppable(droppable) -> Limit.MESSAGE_IDS
             else -> null
         }
     }
+
+    /** This bound less the quarter kept from droppable messages, for a [droppable] one. */
+    private fun Int.forDroppable(droppable: Boolean): Int = if (droppable) this - this / 4 else this
 
     /**
      * Reserves and returns a free ID for [peer] until [until]; the caller checked [refusal] first.

@@ -123,13 +123,15 @@ internal class UdpMessaging(
     // ---------------------------------------------------------------- sending
 
     /**
-     * A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4).
+     * A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4). A [droppable] message, a
+     * Non-confirmable response to a Non-confirmable request, gets one only while a quarter of each bound is left
+     * for the others ([MessageIdAllocator]).
      *
      * @throws CoapException with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] beyond the bounds on reserved IDs,
      *   reported as [EndpointEvent.LimitReached].
      */
-    fun allocateMessageId(peer: Endpoint, now: Duration): Int {
-        messageIds.refusal(peer, now)?.let { limit ->
+    fun allocateMessageId(peer: Endpoint, now: Duration, droppable: Boolean = false): Int {
+        messageIds.refusal(peer, now, droppable)?.let { limit ->
             effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, limit))
             debug(peer, -1) { "No new Message ID: $limit" }
             throw CoapException("No Message ID free towards $peer ($limit)", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
@@ -379,7 +381,11 @@ internal class UdpMessaging(
      * response (§5.2.2, §5.2.3) of [separateType] for a Confirmable request, or Non-confirmable for a
      * Non-confirmable one. Returns the transmission of a separate response, or null if piggybacked.
      * [repeatable] says that nothing acted on the request, so the deduplication cache may forget it for room
-     * (§4.5); an idempotent request may be forgotten once answered anyway.
+     * (§4.5); an idempotent request may be forgotten once answered anyway. A response to a Non-confirmable request
+     * is droppable for [allocateMessageId]: §5.2.3 lets it be lost, and its client asks again.
+     *
+     * @throws CoapException with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] when a separate response finds no
+     *   Message ID or no room, as [allocateMessageId] and [send] do.
      */
     fun respond(
         now: Duration,
@@ -401,8 +407,9 @@ internal class UdpMessaging(
             if (bytes != null) transmit(from, ack, bytes)
             return null
         }
-        val type = if (requestType == CoapMessageType.CON) separateType else CoapMessageType.NON
-        val separate = response.withHeader(type, allocateMessageId(from, now))
+        val confirmableRequest = requestType == CoapMessageType.CON
+        val type = if (confirmableRequest) separateType else CoapMessageType.NON
+        val separate = response.withHeader(type, allocateMessageId(from, now, droppable = !confirmableRequest))
         return send(now, from, separate, owner)
     }
 

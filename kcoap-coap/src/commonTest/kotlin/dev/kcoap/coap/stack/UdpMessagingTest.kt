@@ -851,6 +851,30 @@ class UdpMessagingTest {
     }
 
     @Test
+    fun rfc7252Section5_2_3ResponsesToNonConfirmableRequestsLeaveAQuarterOfTheMessageIdsToTheRest() {
+        val messaging = messaging(maxReservedMessageIds = 4)
+        val sources = List(4) { Endpoint.Udp("198.51.100.${it + 1}", 5683) }
+        sources.forEachIndexed { id, from -> messaging.receive(Duration.ZERO, request(CoapMessageType.NON, id), from) }
+        messaging.takeEffects()
+        val answer = response(CoapMessageType.NON, 0)
+        val answered = sources.mapIndexed { id, from ->
+            runCatching { messaging.respond(Duration.ZERO, from, id, CoapMessageType.NON, answer) }
+        }
+        assertEquals(listOf(true, true, true, false), answered.map { it.isSuccess }, "three of four IDs at most")
+        val refused = assertIs<CoapException>(answered.last().exceptionOrNull())
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, refused.reason)
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.MESSAGE_IDS), messaging.takeEffects().limits())
+
+        // The last quarter is left for a message that must go, here a separate response to a Confirmable request.
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 9))
+        messaging.acknowledge(peer, 9)
+        messaging.takeEffects()
+        val separate = messaging.respond(1.seconds, peer, 9, CoapMessageType.CON, response(CoapMessageType.CON, 0))
+        assertEquals(CoapMessageType.CON, separate?.message?.type)
+        assertEquals(4, messaging.stateSizes.second)
+    }
+
+    @Test
     fun rfc7641Section4_5_2ASupersedingNotificationWithoutAFreeMessageIdWaitsForTheNextTimeout() {
         val messaging = messaging(FixedRandom(0.0), maxReservedMessageIds = 1)
         val messageId = messaging.allocateMessageId(peer, Duration.ZERO)

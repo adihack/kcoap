@@ -138,21 +138,24 @@ public sealed interface EndpointEvent {
             EXCHANGES_PER_PEER,
 
             /**
-             * [CoapEndpointConfig.maxExchanges]: a request to [peer] failed, or a separate response or
-             * notification to [peer] was not sent; or a Confirmable message to [peer] that a retransmission had
-             * not got acknowledged either was given up early, to make room for a new one.
+             * [CoapEndpointConfig.maxExchanges]: a request to [peer] failed, a separate response to [peer] was not
+             * sent, or a notification to [peer] was not sent yet (it goes later, with the latest state); or a
+             * Confirmable message to [peer] that a retransmission had not got acknowledged either was given up
+             * early, to make room for a new one.
              */
             EXCHANGES,
 
             /**
              * [CoapEndpointConfig.maxReservedMessageIds]: a message to [peer] that needed a new Message ID, a
-             * request, a separate response or a notification, was not sent (RFC 7252 §4.4).
+             * request, a separate response or a notification, was not sent (RFC 7252 §4.4), a notification not
+             * yet (it goes later, with the latest state). A response to a Non-confirmable request is refused
+             * already at three quarters of the bound.
              */
             MESSAGE_IDS,
 
             /**
              * [CoapEndpointConfig.maxReservedMessageIdsPerPeer]: a message to [peer] that needed a new Message
-             * ID was not sent (RFC 7252 §4.4).
+             * ID was not sent (RFC 7252 §4.4), as for `MESSAGE_IDS`.
              */
             MESSAGE_IDS_PER_PEER,
 

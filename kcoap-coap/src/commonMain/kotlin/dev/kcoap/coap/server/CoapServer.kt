@@ -61,7 +61,8 @@ import kotlinx.coroutines.SupervisorJob
  * client gets an answer instead of a timeout, and nothing escapes to the application's exception handler.
  * A security failure is answered as the security layer says (RFC 8613 §8.2), anything else with an
  * unprotected 5.00 Internal Server Error with Max-Age 0. A failure while sending a notification removes
- * that observer. When even the 5.00 cannot be sent, the failure is logged.
+ * that observer, unless a bound of the endpoint refused it (RFC 7252 §11.3): then the latest state goes later
+ * (RFC 7641 §4.5). When even the 5.00 cannot be sent, the failure is logged.
  *
  * The server is safe to use from any number of coroutines. Its handlers run on the endpoint's scope, one
  * coroutine per request, and [close] cancels those still running.
@@ -111,7 +112,7 @@ public class CoapServer private constructor(
         routes: ResourceBuilder.() -> Unit = {},
     ) : this(CoapEndpoint(scope, endpointConfig, listeners = listeners), config, true, routes)
 
-    private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_SERVER)
+    internal val log = endpoint.config.loggerFactory.logger(LogTags.COAP_SERVER)
     private val rootResource = DslResource("")
     internal val observations = ObservationRegistry(this)
     private val blockwise = BlockwiseServer(config, endpoint.parameters.exchangeLifetime)

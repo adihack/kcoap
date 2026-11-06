@@ -1,5 +1,6 @@
 package dev.kcoap.coap
 
+import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapServer
@@ -17,12 +18,16 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 
 /**
  * RFC 7252 §11.3, §11.4: a UDP source address proves nothing, so a flood of Confirmable requests from any number
@@ -69,6 +74,11 @@ class SpoofedFloodTest {
 
     private fun StackFixture.bounded(block: CoapEndpointConfig.Builder.() -> Unit): CoapEndpointConfig =
         endpointConfig().toBuilder().apply(block).build()
+
+    /** Observes [uri] with [client] and sends the payload of every notification here. */
+    private suspend fun Channel<String>.collect(client: CoapClient, uri: String) {
+        client.observe(uri).collect { send(it.payloadAsText()) }
+    }
 
     @Test
     fun rfc7252Section4_5AFloodOfGetsKeepsTheDeduplicationCacheBoundedAndALegitimatePeerServed() = runTest {
@@ -134,23 +144,93 @@ class SpoofedFloodTest {
     }
 
     @Test
-    fun rfc7252Section4_4AFloodOfNonConfirmableGetsKeepsTheReservedMessageIdsBounded() = runTest {
+    fun rfc7252Section4_4AFloodOfNonConfirmableGetsLeavesMessageIdsForWhatTheEndpointMustSend() = runTest {
         val fixture = StackFixture(this)
+        val gauge = Gauge("g")
         val server = fixture.server(endpointConfig = fixture.bounded { maxReservedMessageIds = 300 }) {
             resource("r") { get { CoapResponse.content("ok") } }
+            resource("slow") {
+                get {
+                    delay(3.seconds)
+                    CoapResponse.content("done")
+                }
+            }
+            add(gauge)
         }
-        // Every Non-confirmable request gets a Non-confirmable response, with a Message ID of its own.
+        val client = fixture.client(CoapClientConfig { requestTimeout = 10.seconds })
+        val notifications = Channel<String>(Channel.UNLIMITED)
+        backgroundScope.launch { notifications.collect(client, fixture.uri(server, "/g")) }
+        assertEquals("0", notifications.receive())
+
+        // Every Non-confirmable request gets a Non-confirmable response, with a Message ID of its own: they take
+        // three quarters of the IDs at most, since a client copes with losing them (RFC 7252 §5.2.3).
         fixture.flood(server, 1_000) { request(CoapCode.GET, CoapMessageType.NON, it, "r") }
         delay(1.seconds)
+        assertEquals(225, server.endpoint.messagingSizes()!!.reservedMessageIds)
+        assertEquals(775, fixture.limits(Limit.MESSAGE_IDS))
 
-        assertEquals(300, server.endpoint.messagingSizes()!!.reservedMessageIds)
-        assertEquals(700, fixture.limits(Limit.MESSAGE_IDS))
-        // A piggybacked response needs no new Message ID, so a Confirmable GET is still served.
-        val client = fixture.client(CoapClientConfig { requestTimeout = 5.seconds })
+        // A piggybacked response needs no new Message ID, so a Confirmable GET is served.
         assertEquals("ok", client.get(fixture.uri(server, "/r")).payloadAsText())
+        // The last quarter is left for what must go: a notification, the separate response to a slow request ...
+        gauge.value = 1
+        assertEquals("1", withTimeout(5.seconds) { notifications.receive() })
+        assertEquals("done", client.get(fixture.uri(server, "/slow")).payloadAsText())
+        // ... and a request of the endpoint's own, here of a client that shares the server's endpoint.
+        val other = fixture.server { resource("x") { get { CoapResponse.content("x") } } }
+        assertEquals("x", CoapClient(server.endpoint).get(fixture.uri(other, "/x")).payloadAsText())
+        assertEquals(1, gauge.observerCount)
+        assertEquals(775, fixture.limits(Limit.MESSAGE_IDS), "nothing else was refused")
+
         // §4.4 forbids reusing the IDs before EXCHANGE_LIFETIME; then Non-confirmable responses go out again.
         delay(server.endpoint.parameters.exchangeLifetime)
         assertEquals("ok", client.get(fixture.uri(server, "/r")) { nonConfirmable() }.payloadAsText())
+    }
+
+    @Test
+    fun rfc7252Section4_4AFloodFromOneSourceKeepsItsMessageIdsBoundedAndServesOthers() = runTest {
+        val fixture = StackFixture(this)
+        val server = fixture.server(endpointConfig = fixture.bounded { maxReservedMessageIdsPerPeer = 100 }) {
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        fixture.flood(server, 1, perSource = 400) { request(CoapCode.GET, CoapMessageType.NON, it, "r") }
+        delay(1.seconds)
+
+        assertEquals(75, server.endpoint.messagingSizes()!!.reservedMessageIds, "three quarters of the source's bound")
+        assertEquals(325, fixture.limits(Limit.MESSAGE_IDS_PER_PEER))
+        assertEquals(0, fixture.limits(Limit.MESSAGE_IDS))
+        // Another peer has IDs of its own, also for a Non-confirmable response.
+        assertEquals("ok", fixture.client().get(fixture.uri(server, "/r")) { nonConfirmable() }.payloadAsText())
+    }
+
+    @Test
+    fun rfc7641Section4_5ANotificationAFullEndpointRefusesKeepsTheObserverAndTheLatestStateFollows() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge("g")
+        val server = fixture.server(endpointConfig = fixture.bounded { maxReservedMessageIds = 3 }) { add(gauge) }
+        val notifications = Channel<String>(Channel.UNLIMITED)
+        val client = fixture.client()
+        backgroundScope.launch { notifications.collect(client, fixture.uri(server, "/g")) }
+        assertEquals("0", notifications.receive())
+
+        // Three notifications take the three Message IDs for EXCHANGE_LIFETIME; the fourth finds none.
+        for (value in 1..4) {
+            gauge.value = value
+            delay(1.seconds)
+        }
+        assertEquals(listOf("1", "2", "3"), List(3) { notifications.receive() })
+        assertTrue(fixture.limits(Limit.MESSAGE_IDS) >= 1)
+        assertEquals(1, gauge.observerCount, "the refusal says nothing about the client")
+        assertTrue(fixture.events.none { it is EndpointEvent.ObserverRemoved })
+        assertNull(notifications.tryReceive().getOrNull())
+
+        // RFC 7641 §4.5: once the IDs expired, the latest state goes out after the back-off, without another change.
+        delay(server.endpoint.parameters.exchangeLifetime + 1.minutes)
+        assertEquals("4", notifications.receive())
+        assertEquals(1, gauge.observerCount)
+        assertTrue(fixture.events.none { it is EndpointEvent.ObserverRemoved })
+        // With IDs free again, the next change goes out at once.
+        gauge.value = 5
+        assertEquals("5", withTimeout(5.seconds) { notifications.receive() })
     }
 
     @Test
@@ -192,8 +272,15 @@ class SpoofedFloodTest {
         pending.forEach { it.cancel() }
     }
 
+    /** An observable value; setting it notifies the observers. */
     private class Gauge(name: String) : ObservableResource(name) {
-        override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("1")
+        var value = 0
+            set(value) {
+                field = value
+                notifyObservers()
+            }
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("$value")
     }
 
     @Test
