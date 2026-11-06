@@ -217,12 +217,13 @@ Notes:
 - A merge commit needs a sign-off too when it resolves a conflict or brings in anything its parents do
   not have. A merge that git would make on its own is skipped. Rebasing instead of merging avoids the
   question ([pull requests](#pull-requests)).
-- Commits from before the DCO was adopted are exempt (`.github/dco-baseline`).
+- Commits from before the DCO was adopted are exempt (`.github/dco-baseline`). The check reads that file
+  from the base of the range only, so a branch cannot exempt its own commits.
 - Check your branch before you push: `scripts/check-dco upstream/main HEAD`.
 
-The **DCO** workflow runs the same check on every pull request and names each commit that fails. It
-runs from the base branch, so changes to the workflow or to `scripts/check-dco` in a pull request take
-effect only after it has merged.
+The **DCO** workflow runs the same check on every pull request and names each commit that fails; a
+ruleset on `main` requires it to pass. It runs from the base branch, so changes to the workflow, to
+`scripts/check-dco` or to `.github/dco-baseline` in a pull request take effect only after it has merged.
 
 ## Pull requests
 
