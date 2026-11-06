@@ -375,11 +375,21 @@ A browser has only WebSockets, so it reaches devices on UDP through a gateway. `
 puts libcoap v4.3.5b in that place, between two kcoap endpoints: a kcoap client with only
 `KtorWebSocketConnector`, then `coap-server -A 127.0.0.1 -p <port> -w <ws port> -X 1152 -v 7 -P ,kcoap-proxy`
 as a forward-proxy (RFC 7252 §5.7.2) that takes `coap+ws` in and sends `coap` out, then a kcoap `CoapServer` on
-UDP 127.0.0.1:5683. Each request names the device with Proxy-Scheme `coap` and Uri-Host `127.0.0.1` (RFC 7252
-§5.10.2); under OSCORE those stay outside as Class U options and the path goes inside (RFC 8613 §4.1.3.3).
-OSCORE and EDHOC run end to end between the two kcoap sides, and the device authorizes on who the client is,
-never on the peer address, which is the proxy's for every client. The proxy's log is kept in
+UDP port 5683 of a loopback address of the test's own (127.a.b.c, chosen at random; Linux routes all of
+127.0.0.0/8 to the loopback interface). Each request names the device with Proxy-Scheme `coap` and that address
+as Uri-Host (RFC 7252 §5.10.2); under OSCORE those stay outside as Class U options and the path goes inside
+(RFC 8613 §4.1.3.3). Uri-Port is left out, although RFC 7252 §6.4 step 7 calls for Uri-Port 5683 in a request
+sent to a proxy on another port (§6.5 reads a missing one as the proxy's own): libcoap 4.3.5b would repeat it
+(below), and it reads a missing Uri-Port as the Proxy-Scheme's default port. OSCORE and EDHOC run end to end
+between the two kcoap sides, and the device authorizes on who the client is, never on the peer address, which
+is the proxy's for every client. The proxy's log is kept in
 `kcoap-edhoc-oscore/build/interop-logs/<test>-proxy.log`.
+
+Runs at the same time do not collide: each test has its own loopback address, which the proxy's `localhost`
+names. Nothing may hold UDP port 5683 on the wildcard address, though, which the manual `coap-server -p 5683`
+recipes above do while they run. Every proxy container goes when its test ends, also when its log cannot be
+written, and stops by itself after ten minutes (`timeout`), for a test JVM that was killed
+(`LibcoapProxyTest`).
 
 ```bash
 ./gradlew :kcoap-edhoc-oscore:jvmTest --tests '*BrowserTopologyInteropTest*'
@@ -391,14 +401,16 @@ interop/libcoap/coap.sh coap-server -A 127.0.0.1 -p 5690 -w 8080 -X 1152 -v 7 -P
 | `oscoreGetThroughTheProxyIsAuthorizedByTheClientsOscoreIdentity` | A protected GET on provisioned contexts: the Appendix B.1.2 challenge and the repeat with its Echo; the device admits the client by its `OscoreIdentity`, while a second client that OSCORE authenticates gets a protected 4.03 and one without OSCORE a 4.01. A 3000-byte download and upload in inner Block2 and Block1, with Q-Block off over WebSockets and under OSCORE although the client is set to `QBlockMode.PROBE` (plan, "Web browser"). The proxy's log shows the target in Proxy-Scheme and Uri-Host, no Uri-Path and no outer block option |
 | `edhocHandshakeThroughTheProxyThenOscoreWithTheDerivedContext` | EDHOC method 0, suite 0: message_1 and message_3 in the clear (Content-Format 65, message_2 as 64), then OSCORE on the derived context; the device sees an `EdhocIdentity` with the client's credential, whose `oscore` is the C_R |
 | `combinedRequestOfRfc9668ThroughTheProxy` | Method 3: message_3 rides on the first OSCORE request with the EDHOC option, which libcoap prints as `21` and passes on, Safe-to-Forward (RFC 9668 §3.1); only message_1 reaches the EDHOC resource |
+| `edhocAuthenticatedClientWhoseCredentialIsNotAdmittedGetsAProtected403ThroughTheProxy` | EDHOC completes, but `/lights` admits no credential: a 4.03 protected with the derived context comes back as an outer 2.04, and the handler does not run |
+| `oscoreObservationThroughTheProxyDeliversVerifiedNotifications` | An OSCORE observation (RFC 8613 §4.1.3.5): outer FETCH with Observe in and out, the registration's response and two notifications back as outer 2.05 with Observe, each verified |
 | `edhocErrorOfTheDeviceReachesTheBrowserThroughTheProxy` | A device that trusts no client credential: its 4.00 with the EDHOC error message (Content-Format 64) reaches the client as `EdhocPeerErrorException` |
 
 What the runs showed about libcoap 4.3.5b's proxy (details and source lines in ADR 0009), each pinned by the
 `upstream…` test named unless said otherwise:
 
 - **The direct proxy ignores the target.** With `-P ,<names>` it opens `coap://localhost:5683` for every request,
-  so the device listens on 127.0.0.1:5683, the target the requests name, and the proxy's `/etc/hosts` maps
-  `localhost` to 127.0.0.1 alone. It also puts the zeroed target's empty Uri-Port (0) into the forwarded request;
+  so the device listens on port 5683 of the address the requests name, and the proxy's `/etc/hosts` maps
+  `localhost` to that address alone. It also puts the zeroed target's empty Uri-Port (0) into the forwarded request;
   a request that names a port of its own then has two, and libcoap drops the second and every option after it
   (`upstreamLibcoapDirectProxyForwardsToPort5683WhateverTheRequestNames`). With a next hop (`-P <uri>,<names>`)
   it opens the target instead of the next hop and passes Proxy-Scheme or Proxy-Uri on, which the device answers
@@ -409,14 +421,19 @@ What the runs showed about libcoap 4.3.5b's proxy (details and source lines in A
   (`upstreamLibcoapProxyDropsAnOscoreRequestThatNamesItsTargetInProxyUri`).
 - **A Content-Format is added** to a forwarded response that has a payload and none, text/plain; outside a
   protected response OSCORE discards it as a Class E option (`upstreamLibcoapProxyAddsContentFormatToAProtectedResponse`).
+- **A deregistration goes on a new token.** The proxy gives every request it forwards a token of its own, so
+  the Observe 1 that deregisters on the registration's token (RFC 7641 §3.6) reaches the device on another one;
+  the device keeps notifying and the proxy passes the notifications on
+  (`upstreamLibcoapProxyForwardsADeregistrationOnANewTokenSoTheDeviceKeepsNotifying`).
 - **Request bodies of several blocks are corrupted** (not pinned): the proxy reads the blocks after the first
   from the incoming request after freeing it, so 40 bytes of a 2445-byte body arrived changed in every run. That
   is undefined behaviour, so no test can expect a stable outcome. The tests keep request bodies within one
   message on each side of the proxy, as OSCORE's inner blocks do. It stops post-quantum EDHOC (suite -24), whose
   2.4 KB message_3 the device then fails to decrypt. Response bodies cross intact.
 - Through the proxy every client reaches the device from the proxy's address, so `EdhocServer`'s per-peer bound
-  on pending sessions counts the gateway as one peer, and on the client `PeerSecurity` keys protections by the
-  proxy's endpoint.
+  on pending sessions, and the binding of a pending session to the peer that sent message_1, cover the whole
+  gateway (checklist edhoc-oscore-x2), and on the client `PeerSecurity` keys protections by the proxy's
+  endpoint.
 - libcoap logs a message after handling it, block-buffered when its output is not a terminal; the proxy runs
   with `docker run -t` so its log has each message at once.
 
@@ -473,8 +490,8 @@ Nobody implements suites 5, 6 or 25.
   see "EDHOC against libedhoc" above.
 - **libcoap has no EDHOC**; our application glue provides `/.well-known/edhoc` and the combined request.
 - **libcoap's forward-proxy** reaches only the default port of its own host, drops OSCORE requests that use
-  Proxy-Uri and corrupts request bodies of several blocks: see "The browser topology through libcoap's proxy"
-  and ADR 0009.
+  Proxy-Uri, forwards a deregistration on a new token and corrupts request bodies of several blocks: see "The
+  browser topology through libcoap's proxy" and ADR 0009.
 - **Hop-Limit**: libcoap processes it as Outer (Class U), as draft-ietf-core-oscore-capable-proxies
   specifies; the published RFCs still make it Class E. See `docs/rfc-compliance.md`.
 
