@@ -387,7 +387,7 @@ The table goes into docs/architecture.md.
 - **CHANGELOG.md** (created in WP-0): every breaking WP adds an "Unreleased" entry with a migration note. Every WP that settles a decision listed in §5 adds an ADR to `docs/adr/`.
 - **Release freeze.**
   - No `v*` tag until A1–A5, W1, B1–B3, C1, D1, D2 and C3 have merged. That is the API-breaking set.
-  - T1, I1, P1 and C2 do not block the release.
+  - T1, I1, P1, C2 and B4 do not block the release.
   - WP-0 writes this into docs/releasing.md. Protecting `v*` tags in the GitHub settings is the user's action.
 
 | Files | Owners, in order |
@@ -399,7 +399,7 @@ The table goes into docs/architecture.md.
 | kcoap-edhoc/\*\* | A2 → A4 → D2 |
 | kcoap-edhoc-oscore/\*\* | A1 (`OscoreFromEdhoc.kt` only) and A2 (renames only, in `EdhocClientHandshake.kt` and `EdhocServer.kt`) → A3 → I1 (jvmTest) → D2 |
 | kcoap-oscore/\*\* | A1 → A3 → B1 (commonTest and jvmTest) → B2 (build file) → D2 |
-| kcoap-coap/\*\* | S1 → C1 (`OptionCodec` annotation only) → B1 → B2 → B3 → D1 → D2 |
+| kcoap-coap/\*\* | S1 → C1 (`OptionCodec` annotation only) → B1 → B2 → B3 → D1 → D2 → B4 |
 | kcoap-transport/\*\* | C1 → D1 |
 | kcoap-transport-ktor\*/\*\* | C1 (build scopes) → W1 → T1 |
 | docs/architecture.md | Only the section a WP invalidates (A1, A4, B1, B2); C3 does the final full pass |
@@ -422,7 +422,7 @@ The table goes into docs/architecture.md.
 ```
 WP-0 ─┬─► C1 ─┬─► W1
       ├─► S1 ─┤
-      │       └─(C1+S1)─► B1 ─► B2 ─► B3 ─► D1 ─► D2   (D2 also needs A3, A4)
+      │       └─(C1+S1)─► B1 ─► B2 ─► B3 ─► D1 ─► D2 ─► B4   (D2 also needs A3, A4)
       ├─► A1 ─┐               └─► T1
       └─► A2 ─┼─► A3 ──────────────(A3+B1)─► I1
               └─► A4 ─► A5 ─► C2 ─(B2+C2)─► C3 ─► P1   (P1 also needs W1)
@@ -753,13 +753,53 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > - **API-07 item 2**: `CoapResponse.toMessage(token)` is `@InternalKcoapApi`. `EndpointEvent` and
 >   `CoapException` say in their KDoc that subtypes and reasons may be added before 1.0 (EO-7 item 9).
 >
-> Not done, outside the scope as written: refusing `coaps` on a datagram transport without DTLS (EO-2 item 4,
-> left to B3 by S1), which needs a channel-security capability on `DatagramTransport` in kcoap-transport (D1's);
-> enums for `MessageRejected` and `MalformedMessage`; the dropped verification failure as the cause of
-> `RESPONSE_TIMEOUT` and a `ResponseRejected` event (EO-3 items 1 and 7); EO-7 items 3–8; EO-8; and
+> - **`coaps` fails closed** (EO-2 item 4, left to B3 by S1). kcoap has no DTLS, and `EndpointResolver.Default`
+>   maps a `coaps` URI to a plain `Endpoint.Udp`, so its request went out in plaintext, against RFC 7252 §6.2.
+>   `CoapClient` now refuses every `coaps` URI with `TRANSPORT_UNAVAILABLE` before its host is resolved, and the
+>   third test of EO-2 item 5 shows that nothing is sent
+>   (`ClientErrorContractTest.rfc7252Section6_2ACoapsRequestWithoutDtlsIsRefusedBeforeAnythingIsSent`). The
+>   refusal is unconditional, since no `DatagramTransport` can say that it runs DTLS: E1 adds that capability
+>   (`channelSecurity`, EO-2 item 4) in kcoap-transport and lifts the refusal for a transport that reports DTLS.
+> - **A cancellation that is not the caller's** is a failure of its layer: a resolver or `protectRequest` whose own
+>   `withTimeout` expires while the caller is active fails with `UNRESOLVED_HOST` or `SECURITY`, with the
+>   timeout as cause, as `ReliableConnections` already treats a connect attempt's own timeout.
+> - **A ping that races `close()`** on a connection fails with the endpoint's `closeCause`, as on datagrams, both
+>   while its connection is being opened and while it waits for the Pong.
+> - **`CoapUri.fromOptionsOrNull`** beside `fromOptions`, for the options of a received request: an empty Uri-Port
+>   (the port 0) is a valid option that no URI has. `discover` keeps the parser's message and exception in its
+>   `BAD_RESPONSE`.
+>
+> Not done, outside the scope as written, and moved to WP-B4 below: enums for `MessageRejected` and
+> `MalformedMessage` (EO-7 item 2); the dropped verification failure as the cause of `RESPONSE_TIMEOUT` and a
+> `ResponseRejected` event (EO-3 items 1 and 7); EO-7 items 3, 4 and 6–8; EO-8 for kcoap-coap; and
 > `CoapResponseException` (EO-11). Ownership deviations: KDoc lines in kcoap-oscore's `OscoreEndpoints` and
 > kcoap-edhoc-oscore's `PeerSecurity`, kcoap-oscore's Proxy-Uri parse, and test expectations in kcoap-oscore
 > (jvmTest) and kcoap-edhoc-oscore (commonTest) for the renames and `SECURITY`.
+
+**WP-B4: CoAP errors and observability, the rest**
+
+- **Findings:** EO-3 (1, 7); EO-7 (2–4, 6–8); EO-8 (1, 2, 4, 5) for kcoap-coap; EO-11. These are the
+  errors/observability findings for coap (§4.5) that B3 did not do. EO-7 item 5 (EDHOC) and the kcoap-oscore and
+  kcoap-edhoc parts of EO-8 stay with the package that owns those files.
+- **Scope:**
+  - A response dropped because it failed verification (RFC 8613 §8.4) is the cause of the `RESPONSE_TIMEOUT` that
+    ends its exchange, with the count of such responses in the message, and an `EndpointEvent.ResponseRejected`.
+  - `MessageRejected` and `MalformedMessage` carry a bounded reason enum and an optional `detail`, as
+    `ObserverRemoved` does since B3.
+  - `RequestCompleted` and `SecurityRejected` events from the server; `CoapEndpoint.stats()` and
+    `CoapServer.stats()`; `EndpointEventListener.plus`.
+  - Peer-controlled rejections logged once, at DEBUG and without a stack trace, in kcoap-coap; events for the
+    three ignored-input sites of `UdpMessaging`; the default log threshold and docs/logging.md; "log or throw,
+    never both" in docs/code-style.md.
+  - `CoapResponseException` for resource handlers, in `dev.kcoap.coap.server`.
+- **Depends on:** D2 (kcoap-coap ownership).
+- **Risk:** low. New `EndpointEvent` subtypes break an exhaustive `when` in consumers, which its KDoc allows
+  before 1.0, and so do the two reason types; it is not in the release freeze, since before 1.0 a minor
+  release may break ([versioning.md](versioning.md)).
+- **Accept:** a virtual-time test shows a response that fails verification and a later `RESPONSE_TIMEOUT` with
+  that failure as cause, and a `ResponseRejected` event; every new reason enum is asserted in a test; a handler
+  that throws `CoapResponseException` with 4.04 gets 4.04 to the client, also as a notification, which ends the
+  observation; standard gate.
 
 **WP-T1: TLS for stream transports**
 
@@ -879,7 +919,7 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 
 | Feature | Notes |
 |---|---|
-| E1. DTLS 1.2 engine | Pure Kotlin, sans-IO, on `CryptoBackend`; uses A4's x509 package and codec; publishes kcoap-dtls and drops the experimental marker from `DatagramSecurity` |
+| E1. DTLS 1.2 engine | Pure Kotlin, sans-IO, on `CryptoBackend`; uses A4's x509 package and codec; publishes kcoap-dtls and drops the experimental marker from `DatagramSecurity`. Adds the `DatagramTransport` capability that says a transport runs DTLS (EO-2 item 4) and lifts the client's refusal of `coaps` (B3) for such a transport |
 | E2. `X509PathValidator` | Constrained profile, injected `Clock`, tested against an x509-limbo subset; needed before DTLS certificate mode |
 | E3. kcoap-crypto-pq | ML-DSA verify first; needs a public incremental XOF and SHA3; constant-time rules; must pass C2 on every target |
 | E4. kcoap-apple | Curated Swift facade, owned scope, optional SKIE, XCFramework as an SPM binary target |
@@ -897,7 +937,7 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 |---|---|
 | CLR-\* in kcoap-coap | S1, landing before B1 so that each fix can be reverted on its own |
 | CLR-\* in oscore / edhoc / edhoc-oscore | A1 / A2 / A3 |
-| Errors/observability in coap | B3 |
+| Errors/observability in coap | B3; what it did not do, B4 |
 | Errors/observability in other modules | The package that owns those files |
 | Crypto | A4 / A5 |
 | Build | C1 |

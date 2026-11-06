@@ -24,7 +24,7 @@ git push origin v0.1.0
 
 No `v*` tag until the API-breaking work packages of the refactoring plan have merged
 ([target-architecture.md](target-architecture.md), section 4): A1–A5, W1, B1–B3, C1, D1, D2 and C3. T1,
-I1, P1 and C2 do not block a release. Protecting `v*` tags (Settings → Rules → Rulesets) keeps an
+I1, P1, C2 and B4 do not block a release. Protecting `v*` tags (Settings → Rules → Rulesets) keeps an
 accidental tag from publishing early.
 
 Before tagging 0.1.0:
