@@ -44,8 +44,12 @@ import kotlin.time.Duration.Companion.seconds
  *   asks for `0/M=0`; other methods list `0/M=0`, as the RFC allows.
  *
  * [BodyMode.CON]: the server retransmits each block until MAX_TRANSMIT_SPAN has passed, so the same recovery
- * runs with MAX_TRANSMIT_SPAN in place of NON_RECEIVE_TIMEOUT, as §4.4 says a client can; no Continue and no
- * requests at once. [BodyMode.RELIABLE]: nothing can be missing; only the lifetime below applies.
+ * runs with MAX_TRANSMIT_SPAN in place of NON_RECEIVE_TIMEOUT, as §4.4 says a client can; no Continue. Once
+ * every block a request for missing blocks asked for has come, the server is answering, so the next missing
+ * blocks are asked for at once, one request per answered one (§7.1 leaves further requests to the
+ * implementation); a body that misses several sets then takes one MAX_TRANSMIT_SPAN, not one per set. A request
+ * for the whole body (`0/M=1`) is answered with all of it and has no such follow-up.
+ * [BodyMode.RELIABLE]: nothing can be missing; only the lifetime below applies.
  *
  * A partial body is kept for min(NON_PARTIAL_TIMEOUT, Max-Age) (§4.4), but at least as long as the retry
  * ladder (124 s by default), since a Max-Age of 60 s or 0 would end the recovery before it could work. The
@@ -84,6 +88,9 @@ internal class QBlock2Receiver(
         var reportedSet = -1L
         var continuedSet = -1L
         var isDelivered = false
+
+        /** The blocks the last request for some missing blocks asked for, which [BodyMode.CON] follows up. */
+        var awaited: List<Long> = emptyList()
 
         /** When the partial body is given up: [lifetime] after the latest new block. */
         val expiresAt: Duration get() = lastActivity + lifetime
@@ -176,12 +183,8 @@ internal class QBlock2Receiver(
         val deadline = nextDeadline() ?: return emptyList()
         if (now < deadline) return emptyList()
         if (body.retries >= timing.nonMaxRetransmit) return discard(body, "Missing blocks asked for NON_MAX_RETRANSMIT times")
-        val highestSet = sets.of(body.received.highest)
-        val missing = body.received.missing(0..sets.last(highestSet, body.count), timing.maxPayloads)
-            .ifEmpty { sets.numbers(highestSet + 1, body.count).toList() }
         body.retries++
-        body.lastRequestAt = now
-        return listOf(QBlockAction.RequestMissing(options(body, missing)))
+        return requestMissing(now, body)
     }
 
     /**
@@ -241,6 +244,7 @@ internal class QBlock2Receiver(
             body.isDelivered = true
             return listOf(QBlockAction.Deliver(null, assembled(body)))
         }
+        if (mode == BodyMode.CON) return followUp(now, body)
         if (mode != BodyMode.NON) return emptyList()
         val set = sets.of(block.number)
         val gaps = if (set > body.reportedSet) body.received.missing(0 until sets.first(set), timing.maxPayloads) else emptyList()
@@ -259,6 +263,34 @@ internal class QBlock2Receiver(
             return listOf(QBlockAction.SendContinue(sets.first(top + 1)))
         }
         return emptyList()
+    }
+
+    /**
+     * Asks for the gaps up to the end of the highest set that arrived, at most MAX_PAYLOADS, or the next set if
+     * there are none, and notes what the request awaits: nothing for a request for the whole body (`0/M=1`),
+     * which is answered with all of it.
+     */
+    private fun requestMissing(now: Duration, body: Body): List<QBlockAction<Nothing>> {
+        val highestSet = sets.of(body.received.highest)
+        val missing = body.received.missing(0..sets.last(highestSet, body.count), timing.maxPayloads)
+            .ifEmpty { sets.numbers(highestSet + 1, body.count).toList() }
+        val options = options(body, missing)
+        body.awaited = if (options.any { it.number == 0L && it.more }) emptyList() else missing
+        body.lastRequestAt = now
+        return listOf(QBlockAction.RequestMissing(options))
+    }
+
+    /**
+     * [BodyMode.CON]: the body is incomplete, and every block the last request for missing blocks asked for has
+     * come, so the server is answering. §4.4 lets a client ask for missing blocks after MAX_TRANSMIT_SPAN, and
+     * §7.1 leaves any further request to the implementation, so the next missing blocks are asked for at once
+     * instead of after another MAX_TRANSMIT_SPAN; the new request replaces what is awaited, so one answered
+     * request yields one request.
+     */
+    private fun followUp(now: Duration, body: Body): List<QBlockAction<Nothing>> {
+        val awaited = body.awaited
+        if (awaited.isEmpty() || awaited.any { it !in body.received }) return emptyList()
+        return requestMissing(now, body)
     }
 
     /** The Q-Block2 options asking for [missing], which is ascending. */

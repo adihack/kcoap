@@ -16,6 +16,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /** The client side of Q-Block2 (RFC 9177 §4.4, §4.5, §7) on its own: acceptance, assembly and recovery. */
@@ -303,6 +304,32 @@ class QBlock2ReceiverTest {
         assertEquals(emptyList(), receiver.feed(0, 2), "no request at once and no Continue")
         assertEquals(45.seconds, receiver.nextDeadline(), "MAX_TRANSMIT_SPAN")
         assertEquals(listOf((listOf(1L) + (3L..9L)).joinToString { "$it/0/64" }), receiver.onTimer(45.seconds).requested())
+    }
+
+    /**
+     * RFC 9177 §4.4 lets the client of a Confirmable body ask for missing blocks after MAX_TRANSMIT_SPAN, and §7.1
+     * leaves further requests to the implementation. Once every block of a request has come, the server is
+     * answering, so the next missing set is asked for at once rather than one set per MAX_TRANSMIT_SPAN; one
+     * answered request yields one request, and the timer still guards it.
+     */
+    @Test
+    fun rfc9177Section4_4AConfirmableBodyAsksForTheNextSetAsSoonAsTheLastRequestIsAnswered() {
+        val receiver = receiver(mode = BodyMode.CON)
+        val size = 47 * 64 - 10
+        val span = timing.parameters.maxTransmitSpan
+        assertEquals(emptyList(), receiver.feed(*(0L..9L).toList().toLongArray(), size = size))
+        assertEquals(listOf((10L..19L).joinToString { "$it/0/64" }), receiver.onTimer(span).requested(), "after MAX_TRANSMIT_SPAN")
+
+        val answered = span + 1.milliseconds
+        val actions = (10L..19L).map { receiver.onBlock(answered, download(it, size)) }
+
+        assertEquals(List(9) { emptyList<String>() }, actions.dropLast(1).map { it.requested() }, "nothing while the answer comes")
+        assertEquals(listOf((20L..29L).joinToString { "$it/0/64" }), actions.last().requested(), "the next set at once")
+        assertEquals(emptyList(), receiver.feed(19, at = answered, size = size).requested(), "a duplicate asks for nothing")
+        assertEquals(answered + span, receiver.nextDeadline(), "the timer guards the new request")
+        val gaps = (20L..29L).filter { it != 24L }.flatMap { receiver.onBlock(answered, download(it, size)) }
+        assertEquals(emptyList(), gaps.requested(), "a request answered in part waits for the timer")
+        assertEquals(listOf("24/0/64"), receiver.onTimer(answered + span).requested())
     }
 
     /** Feeds one block every 10 s, running every timer that falls due in between. */
