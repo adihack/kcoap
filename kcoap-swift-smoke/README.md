@@ -15,6 +15,9 @@ when any of them fails:
 3. A malformed URI: `try CoapUri.Companion.shared.parse(text:)` throws an `NSError` whose Kotlin exception is an
    `IllegalArgumentException`.
 
+A watchdog ends the script with 1 and a `FAIL` line after 60 seconds, and the CI step has a 15-minute limit, so a
+call whose result never reaches Swift fails the job quickly instead of holding the runner.
+
 Both work because the functions list the exceptions in `@Throws`: `KcoapException` and `CancellationException`
 on the public suspend entry points, `IllegalArgumentException` on `CoapUri.parse`
 ([architecture](../docs/architecture.md), "Errors"). Kotlin/Native turns an exception of a listed type into an
@@ -23,7 +26,9 @@ on the public suspend entry points, `IllegalArgumentException` on `CoapUri.parse
 [`SmokeFixture`](src/commonMain/kotlin/dev/kcoap/swiftsmoke/SmokeFixture.kt) holds what Swift cannot write: a
 client on kcoap-testkit's in-memory network where nothing answers, its `CoroutineScope`, a request timeout (a
 `kotlin.time.Duration`) and a GET request (a `CoapCode`), both value classes that reach Swift without a type of
-their own. `SmokeFixtureTest` checks the same three things in Kotlin on the Apple targets.
+their own. `SmokeFixtureTest` checks the same three things in Kotlin on the Apple targets. Every other `@Throws`
+list is checked on the JVM by kcoap-edhoc-oscore's `ThrowsDeclarationsTest`, since the common annotation writes the
+same list into the class files.
 
 ## Running it
 

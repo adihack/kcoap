@@ -8,7 +8,9 @@
 //      CoapException (a KcoapException) with reason RESPONSE_TIMEOUT, instead of ending the process;
 //   3. CoapUri.parse throws an NSError for a malformed URI, with the Kotlin IllegalArgumentException in its userInfo.
 //
-// Every check prints one line; the process exits with 1 when any of them failed, and 0 otherwise.
+// Every check prints one line; the process exits with 1 when any of them failed, and 0 otherwise. A watchdog ends
+// it with 1 after 60 s, so a completion handler that never reaches Swift fails the CI step with a message rather than
+// hanging the runner.
 
 import Foundation
 import KcoapSmoke
@@ -22,9 +24,16 @@ let unansweredUri = "coap://127.0.0.1:5683/smoke"
 /// The URI of check 3: its IPv6 literal has no closing bracket.
 let malformedUri = "coap://[::1/broken"
 
+/// How long the whole script may take; check 2 waits for a 300 ms timeout, everything else is immediate.
+let watchdogSeconds = 60.0
+
 @main
 struct SmokeMain {
     static func main() async {
+        DispatchQueue.global().asyncAfter(deadline: .now() + watchdogSeconds) {
+            print("FAIL  the smoke test did not finish within \(Int(watchdogSeconds)) s")
+            exit(1)
+        }
         var failures = 0
         func check(_ condition: Bool, _ what: String) {
             if condition {

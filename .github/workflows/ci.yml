@@ -81,6 +81,9 @@ jobs:
       # directory) and runs it. It builds a CoapClientConfig with explicit values and catches a request timeout
       # and a malformed URI as NSError, checking the Kotlin exception in userInfo; any mismatch exits non-zero.
       - name: Swift smoke test
+        # The Swift side runs only here (Linux cannot link the framework): a hang must fail within minutes, not
+        # at GitHub's 360-minute job limit. The script also has a 60 s watchdog of its own that says so.
+        timeout-minutes: 15
         run: |
           xcrun swiftc --version
           scripts/test swift
