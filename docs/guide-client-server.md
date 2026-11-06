@@ -104,6 +104,8 @@ suspend fun useServer(scope: CoroutineScope) {
   `CoapUri.parseOrNull`, which returns null instead of throwing.
 - A `coaps://` URI fails with `TRANSPORT_UNAVAILABLE` before its host is resolved: kcoap has no DTLS yet, and
   nothing goes out in plaintext (RFC 7252 §6.2). Protect `coap://` requests with OSCORE instead.
+- A `coaps+tcp://` or `coaps+ws://` URI needs TLS (RFC 8323 §9): it fails the same way unless a connector or
+  listener of the endpoint runs TLS for its scheme, and when the resolver maps it to a peer not reached over TLS.
 
 ### Errors
 
@@ -121,7 +123,7 @@ host name given to `EndpointResolver.Default`.
 | `SECURITY` | Message security could not protect the request; nothing was sent | Fix the context or install a protection (run EDHOC) |
 | `UNVERIFIED_RESPONSE` | Only an error message security could not verify came back | Re-establish the context (run EDHOC); the request may have run |
 | `UNRESOLVED_HOST` | The resolver could not resolve the host | Retry once the network is back |
-| `TRANSPORT_UNAVAILABLE` | The endpoint has no transport for the URI's scheme, or the scheme is `coaps`, which needs DTLS | Give the endpoint that transport; use OSCORE over `coap` until DTLS lands |
+| `TRANSPORT_UNAVAILABLE` | The endpoint has no transport for the URI's scheme; the scheme is `coaps`, which needs DTLS; or it is `coaps+tcp` or `coaps+ws` without a transport that runs TLS for it, or resolved to a peer not reached over TLS | Give the endpoint that transport; use OSCORE over `coap` until DTLS lands |
 | `TRANSPORT_FAILED`, `CLOSED` | The endpoint's transport failed, or the endpoint was closed | Create a new endpoint |
 
 A call after `close()` fails with `CLOSED` at once, before its host is looked up, and so does one that
@@ -215,8 +217,10 @@ suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: I
   Custody (§5.4.1).
 - A request or ping to a scheme the endpoint has no transport for, such as `coap://` on a client made from
   connectors only, fails at once with `CoapException.Reason.TRANSPORT_UNAVAILABLE`, naming the scheme.
-- `coaps+ws` works with `wss://` on the engine's TLS. `coaps+tcp` needs a TLS connector, which is not
-  built yet.
+- `coaps+tcp` goes over `KtorTlsConnector` (kcoap-transport-ktor, on the JVM), which checks the server's
+  certificate against the platform trust store or given anchors and takes a pinning hook; `coaps+ws` over `wss://`
+  on the engine's TLS. Which runtime has which TLS, and how servers terminate it, is in
+  [platforms.md](platforms.md#tls-support-per-runtime).
 
 ```kotlin
 val reliableConfig = CoapEndpointConfig {

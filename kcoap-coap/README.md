@@ -117,7 +117,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   be protected and nothing was sent, `UNVERIFIED_RESPONSE`), the host lookup (`UNRESOLVED_HOST`, which an
   `EndpointResolver` throws for a lookup that fails at runtime; any other exception of a resolver is reported
   as it too, its own timeout included), limits (`MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED`), or the endpoint
-  (`TRANSPORT_UNAVAILABLE`, also for every `coaps` URI until DTLS exists, `TRANSPORT_FAILED`, `CLOSED`).
+  (`TRANSPORT_UNAVAILABLE`, also for every `coaps` URI until DTLS exists, and for a `coaps+tcp` or `coaps+ws` URI
+  without a transport that runs TLS for it, `TRANSPORT_FAILED`, `CLOSED`).
   `IllegalArgumentException` and `IllegalStateException` are kept for mistakes of the caller, such as a
   malformed URI string, `CancellationException` for a cancelled caller, and error codes are returned as
   responses. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
@@ -166,7 +167,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 ## Not yet
 
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
-TLS for `coaps+tcp` (no TLS connector yet; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
+a TLS listener and a `coaps+tcp` client off the JVM (docs/platforms.md; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
 (RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
 (§8–9), which wait for multicast and proxying.

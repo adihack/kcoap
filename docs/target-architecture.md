@@ -835,6 +835,15 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** medium.
 - **Accept:** coaps+tcp client interop with libcoap built with a TLS backend; docs/platforms.md lists the TLS support that actually exists per runtime.
 
+> **Amendment (T1).** ktor-network-tls 3.6.1 runs a TLS client on the JVM only: TLS 1.2 in ktor's own
+> implementation, without ALPN; on Linux native and Apple its handshake is a stub that throws
+> (`NativeTlsUnavailableTest`, `LinuxSecureWebSocketTest`), and it has no server side, which settles the "client-only"
+> question of §6. So `KtorTlsConnector` is in kcoap-transport-ktor's `jvmMain`, checks host names itself (RFC 9525
+> §6), and refuses ports other than 5684 unless the application allows it (RFC 8323 §8.2 wants ALPN there). B3's
+> refusal covered `coaps` only; T1 lets `coaps+tcp` and `coaps+ws` requests go out only where a connector or listener
+> serves the scheme, and only to a peer the resolver maps to TLS. The server side is
+> [ADR 0010](adr/0010-server-side-tls.md): proxy termination now, an SSLEngine listener later.
+
 **WP-I1: Browser-topology interop**
 
 - **Findings:** critique D.

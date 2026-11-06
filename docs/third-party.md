@@ -40,7 +40,7 @@ means the JVM (Android included), `iosArm64`, `iosSimulatorArm64`, `macosArm64`,
 | `kcoap-crypto-default` | all | cryptography-kotlin (`cryptography-core`, `cryptography-provider-optimal`), kotlinx-coroutines-core |
 | `kcoap-crypto-bc` | JVM | Bouncy Castle (`bcprov-jdk18on`) |
 | `kcoap-crypto-testsuite` | all | kotlin-test (`kotlin-test-junit5` on the JVM), kotlinx-coroutines-test |
-| `kcoap-transport-ktor` | sockets | ktor (`ktor-network`) |
+| `kcoap-transport-ktor` | sockets | ktor (`ktor-network`; `ktor-network-tls` on the JVM, for `KtorTlsConnector`) |
 | `kcoap-transport-ktor-websocket` | all | ktor (`ktor-client-core`); the engine `ktor-client-cio` on the JVM and Linux, `ktor-client-darwin` on Apple targets; browsers and Node.js use their own WebSocket |
 | `kcoap-transport-ktor-websocket-server` | sockets | ktor (`ktor-server-core`, `ktor-server-websockets`); no server engine, the application chooses one |
 | `kcoap-dtls` | not published | none |

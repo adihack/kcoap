@@ -188,6 +188,28 @@ What the runs showed about libcoap v4.3.5b (kcoap follows RFC 8323 and works aro
   `-X 1152`. kcoap sends what the peer's CSM allows, as RFC 8323 §5.3.1 says, so a default libcoap
   WebSocket peer (8 MiB announced) should be given a smaller `-X` until this is fixed upstream.
 
+### Over TLS (RFC 8323 §9)
+
+The image's libcoap is built with OpenSSL (`--with-openssl`, OpenSSL 3.0 from Ubuntu 24.04): given a certificate,
+`coap-server -p <port>` also serves `coaps+tcp` (and DTLS) on `<port>+1`, and `-w ,<port>` serves `coaps+ws`.
+`Libcoap.startTlsServer` has openssl in the container make a throwaway EC P-256 certificate authority and a server
+certificate for `DNS:localhost`, both valid for a day, before `coap-server` starts; the keys never leave the
+container, and the test reads the two certificates back with `docker exec`. Nothing is downloaded or rebuilt.
+
+```bash
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*Tls*'
+```
+
+| Test class | Peer | What runs |
+|---|---|---|
+| `KcoapClientAgainstLibcoapTlsTest` | `coap-server -p <port> -c server.pem -j server.key -w ,<wss port> -v 4` | `coaps+tcp` through `KtorTlsConnector` trusting the test CA (`TlsTrust.Anchors`): GET of `/`, a 3000-byte PUT and GET of `/example_data`, Ping, discovery; the pinning hook with the server's key (accepted) and another (refused); the platform trust store (refused); `coaps+tcp://127.0.0.1` against a certificate for `localhost` (refused, RFC 9525 §6.4); a plain TCP connector, which does not serve `coaps+tcp`; `coaps+ws` through `KtorWebSocketConnector` on a CIO client that trusts the test CA, and on the default client (refused) |
+
+What the runs showed about libcoap v4.3.5b over TLS: it negotiates TLS 1.2 with ktor-network-tls
+(`ECDHE-ECDSA` with AES-GCM) and TLS 1.3 with clients that offer it; it selects ALPN `coap` when a client offers
+it, and accepts a client that offers no ALPN on any port. kcoap's TLS connector cannot offer ALPN, so for the
+test's ports, which are not 5684, it is allowed past RFC 8323 §8.2's rule with `allowsAnyPortWithoutAlpn`. kcoap has no TLS listener ([ADR 0010](../docs/adr/0010-server-side-tls.md)), so
+libcoap's client runs against kcoap over TLS only once a proxy or a listener is in place.
+
 `interop/libcoap/coap.sh` runs any libcoap example program the way the tests do, for manual checks:
 
 ```bash
