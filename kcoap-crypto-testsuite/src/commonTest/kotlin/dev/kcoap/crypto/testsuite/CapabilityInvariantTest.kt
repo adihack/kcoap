@@ -1,12 +1,14 @@
 package dev.kcoap.crypto.testsuite
 
 import dev.kcoap.common.hexToBytes
+import dev.kcoap.common.toHex
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.AeadAuthenticationException
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
+import dev.kcoap.crypto.KemEncapsulation
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
@@ -171,7 +173,7 @@ class CapabilityInvariantTest {
             }
         }
 
-        assertViolation(backend, AeadAlgorithm.AES_CCM_16_64_128, answer = true, "decrypt accepts a changed ciphertext")
+        assertViolation(backend, AeadAlgorithm.AES_CCM_16_64_128, answer = true, "decrypt accepts a changed tag")
         assertViolation(
             backend, AeadAlgorithm.A128GCM, answer = true,
             "encrypt does not reproduce the GCM specification's test case 2",
@@ -179,8 +181,46 @@ class CapabilityInvariantTest {
         assertViolation(backend, AeadAlgorithm.A256GCM, answer = true, "aead has a 8-byte tag and a 12-byte nonce")
         assertViolation(
             backend, AeadAlgorithm.AES_CCM_16_128_128, answer = true,
-            "decrypt of a changed ciphertext threw IllegalStateException (tag mismatch) instead of " +
+            "decrypt of a changed tag threw IllegalStateException (tag mismatch) instead of " +
                 "AeadAuthenticationException",
+        )
+
+        // Checks the tag of a ciphertext it made without the body: a changed tag or changed associated data is
+        // rejected, and it reproduces the known answer, but a forged body passes.
+        val bodyBlind = object : CryptoBackend by base {
+            override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead {
+                val real = base.aead(algorithm, key)
+                val madeByTag = HashMap<String, ByteArray>()
+                return object : Aead by real {
+                    override suspend fun encrypt(nonce: ByteArray, plaintext: ByteArray, associatedData: ByteArray) =
+                        real.encrypt(nonce, plaintext, associatedData).also { madeByTag[tagOf(it)] = it }
+
+                    override suspend fun decrypt(nonce: ByteArray, ciphertext: ByteArray, associatedData: ByteArray) =
+                        real.decrypt(nonce, madeByTag[tagOf(ciphertext)] ?: ciphertext, associatedData)
+
+                    private fun tagOf(sealed: ByteArray) =
+                        sealed.copyOfRange(sealed.size - tagLength, sealed.size).toHex()
+                }
+            }
+        }
+        assertViolation(bodyBlind, AeadAlgorithm.A128GCM, answer = true, "decrypt accepts a changed ciphertext body")
+    }
+
+    /** A property of the `Aead` that throws is reported like an operation that throws, not passed on. */
+    @Test
+    fun anAeadWhosePropertiesThrowIsAViolation() = runTest {
+        val backend = object : CryptoBackend by base {
+            override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead {
+                val real = base.aead(algorithm, key)
+                return object : Aead by real {
+                    override val nonceLength: Int get() = error("session closed")
+                }
+            }
+        }
+
+        assertViolation(
+            backend, AeadAlgorithm.A256GCM, answer = true,
+            "nonceLength threw IllegalStateException (session closed)",
         )
     }
 
@@ -268,6 +308,55 @@ class CapabilityInvariantTest {
         assertViolation(
             rejectsItsOwn, SignatureAlgorithm.EDDSA, answer = true,
             "verify rejects a signature of the backend's own",
+        )
+    }
+
+    /**
+     * `PrivateKey.destroy` must not throw (kcoap-crypto's `Keys.kt`): one that does is a violation, but not in
+     * place of an operation that failed before it, which is the failure reported.
+     */
+    @Test
+    fun aKeyThatThrowsOnDestroyIsAViolationThatHidesNoOther() = runTest {
+        val backend = object : CryptoBackend by base {
+            override suspend fun generateKeyPair(type: KeyType): KeyPair =
+                base.generateKeyPair(type).let { KeyPair(it.publicKey, StuckKey(it.privateKey)) }
+
+            override suspend fun sign(
+                algorithm: SignatureAlgorithm,
+                privateKey: PrivateKey,
+                data: ByteArray,
+            ): ByteArray = error("signing failed")
+        }
+
+        assertViolation(
+            backend, KeyType.ED25519, answer = true,
+            "destroy threw IllegalStateException (entry not deleted)",
+        )
+        assertViolation(
+            backend, SignatureAlgorithm.ES256, answer = true,
+            "sign threw IllegalStateException (signing failed)",
+        )
+    }
+
+    /** A key-store handle whose entry cannot be deleted. */
+    private class StuckKey(private val key: PrivateKey) : PrivateKey(key.type) {
+        override fun destroy() {
+            key.destroy()
+            error("entry not deleted")
+        }
+    }
+
+    @Test
+    fun anEncapsulationWhoseSecretIsAlreadyDestroyedIsAViolation() = runTest {
+        val kem = ToyKem(base)
+        val backend = object : CryptoBackend by kem {
+            override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation =
+                kem.encapsulate(algorithm, publicKey).also { it.destroy() }
+        }
+
+        assertViolation(
+            backend, KemAlgorithm.ML_KEM_512, answer = true,
+            "sharedSecret threw IllegalStateException (The shared secret was destroyed)",
         )
     }
 

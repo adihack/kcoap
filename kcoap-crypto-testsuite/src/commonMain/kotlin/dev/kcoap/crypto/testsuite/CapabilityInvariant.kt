@@ -22,9 +22,10 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * The operations of a question are those the default `supports` members probe, checked further where a wrong
  * result would go unnoticed otherwise:
- * - an AEAD: `aead`, then `encrypt` and `decrypt`, which round trip, reject a changed ciphertext or changed
- *   associated data with `AeadAuthenticationException`, and reproduce RFC 3610 (AES-CCM-16-64-128), the GCM
- *   specification's test cases (AES-GCM) or RFC 8439 §2.8.2 (ChaCha20/Poly1305);
+ * - an AEAD: `aead`, then `encrypt` and `decrypt`, which round trip, reject a changed ciphertext body, a
+ *   changed tag or changed associated data with `AeadAuthenticationException`, and reproduce RFC 3610
+ *   (AES-CCM-16-64-128), the GCM specification's test cases (AES-GCM) or RFC 8439 §2.8.2
+ *   (ChaCha20/Poly1305);
  * - a key type: `generateKeyPair`, whose public key has `publicKeyLength` bytes (P-256 and P-384 keys
  *   uncompressed), and for the Diffie-Hellman types `keyAgreement`, which agrees both ways in `keyLength`
  *   bytes and, for X25519, reproduces RFC 7748 §6.1;
@@ -41,7 +42,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * every backend, since common code can always compute it (`CryptoBackend.digest`).
  *
  * The checks generate key pairs and destroy them again; on a backend that keeps keys in hardware they cost
- * what its probes would.
+ * what its probes would. A `PrivateKey.destroy` that throws breaks its contract and is a violation too, unless
+ * an operation of the question failed before it: then that failure is the one reported.
  */
 public object CapabilityInvariant {
     /** Every question the `supports` members take: each AEAD, key type, signature algorithm, KEM and hash. */
@@ -105,8 +107,10 @@ public object CapabilityInvariant {
         val known = KnownAnswers.sealings[algorithm]
         val key = known?.key ?: ByteArray(algorithm.keyLength) { (it + 1).toByte() }
         val aead = step("aead") { backend.aead(algorithm, key) }
-        expect(aead.tagLength == algorithm.tagLength && aead.nonceLength == algorithm.nonceLength) {
-            "aead has a ${aead.tagLength}-byte tag and a ${aead.nonceLength}-byte nonce"
+        val tagLength = step("tagLength") { aead.tagLength }
+        val nonceLength = step("nonceLength") { aead.nonceLength }
+        expect(tagLength == algorithm.tagLength && nonceLength == algorithm.nonceLength) {
+            "aead has a $tagLength-byte tag and a $nonceLength-byte nonce"
         }
         val associatedData = "kcoap".encodeToByteArray()
         for ((index, plaintext) in listOf(ByteArray(0), ByteArray(37) { it.toByte() }).withIndex()) {
@@ -118,7 +122,10 @@ public object CapabilityInvariant {
             }
             val opened = step("decrypt") { aead.decrypt(nonce, sealed, associatedData) }
             expect(opened.contentEquals(plaintext)) { "decrypt does not return what was encrypted" }
-            rejects("a changed ciphertext") { aead.decrypt(nonce, sealed.flipped(sealed.lastIndex), associatedData) }
+            if (plaintext.isNotEmpty()) {
+                rejects("a changed ciphertext body") { aead.decrypt(nonce, sealed.flipped(0), associatedData) }
+            }
+            rejects("a changed tag") { aead.decrypt(nonce, sealed.flipped(sealed.lastIndex), associatedData) }
             rejects("changed associated data") { aead.decrypt(nonce, sealed, associatedData.flipped(0)) }
         }
         if (known != null) {
@@ -183,7 +190,7 @@ public object CapabilityInvariant {
     private suspend fun kem(backend: CryptoBackend, algorithm: KemAlgorithm) {
         withKeyPair(backend, algorithm.keyType) { pair ->
             val encapsulation = step("encapsulate") { backend.encapsulate(algorithm, pair.publicKey) }
-            val secret = encapsulation.sharedSecret()
+            val secret = step("sharedSecret") { encapsulation.sharedSecret() }
             encapsulation.destroy()
             val ciphertext = encapsulation.ciphertext
             expect(ciphertext.size == algorithm.ciphertextLength) {
@@ -226,7 +233,7 @@ public object CapabilityInvariant {
     /** A generated key pair of [type], checked and destroyed after [use]. */
     private suspend inline fun withKeyPair(backend: CryptoBackend, type: KeyType, use: (KeyPair) -> Unit) {
         val pair = step("generateKeyPair") { backend.generateKeyPair(type) }
-        try {
+        destroyingAfter(pair) {
             expect(pair.type == type) { "generateKeyPair($type) returned a ${pair.type} key" }
             expect(pair.publicKey.size == type.publicKeyLength) {
                 "generateKeyPair returned a ${pair.publicKey.size}-byte public key, not ${type.publicKeyLength}"
@@ -235,8 +242,6 @@ public object CapabilityInvariant {
                 expect(pair.publicKey[0] == UNCOMPRESSED) { "generateKeyPair returned a compressed public key" }
             }
             use(pair)
-        } finally {
-            pair.privateKey.destroy()
         }
     }
 
@@ -253,10 +258,26 @@ public object CapabilityInvariant {
         } catch (_: Unsupported) {
             return
         }
+        destroyingAfter(pair) { use(pair) }
+    }
+
+    /**
+     * Runs [block], then destroys [pair]'s private key. A `destroy` that throws is a [Wrong] when [block]
+     * completed; when [block] failed, its failure is the one that propagates, and the other is dropped.
+     */
+    private inline fun destroyingAfter(pair: KeyPair, block: () -> Unit) {
+        var failed = false
         try {
-            use(pair)
+            block()
+        } catch (e: Throwable) {
+            failed = true
+            throw e
         } finally {
-            pair.privateKey.destroy()
+            try {
+                pair.privateKey.destroy()
+            } catch (e: Throwable) {
+                if (!failed) throw if (e is CancellationException) e else Wrong("destroy threw ${describe(e)}")
+            }
         }
     }
 
