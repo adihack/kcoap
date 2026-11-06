@@ -88,7 +88,8 @@ import kotlinx.coroutines.withContext
  * its host is resolved: nothing goes out in plaintext. A `coaps+tcp` or `coaps+ws` URI needs TLS (RFC 8323 §9)
  * and fails the same way unless a connector or listener of the endpoint serves its scheme, which a transport
  * does only when it runs TLS for it, as kcoap-transport-ktor's `KtorTlsConnector` (`coaps+tcp`, on the JVM) and
- * the WebSocket connector (`coaps+ws`) do.
+ * the WebSocket connector (`coaps+ws`, where its engine authenticates the server: Apple, browsers, Node.js, or
+ * an `HttpClient` the application passes) do.
  *
  * ```
  * val client = CoapClient(KtorUdpTransport.bind(), scope)

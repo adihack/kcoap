@@ -40,7 +40,7 @@ class KtorWebSocketTransportTest {
         try {
             val endpoint = listener.localEndpoint!!
             assertTrue(endpoint.uri.startsWith("ws://127.0.0.1:") && endpoint.uri.endsWith("/.well-known/coap"), endpoint.uri)
-            assertEquals(setOf(CoapScheme.COAP_WS, CoapScheme.COAPS_WS), connector.schemes)
+            assertEquals(setOf(CoapScheme.COAP_WS), connector.schemes, "CIO does not authenticate wss servers")
             coroutineScope {
                 val accepted = async { listener.accept() }
                 val client = assertIs<MessageConnection>(connector.connect(endpoint))

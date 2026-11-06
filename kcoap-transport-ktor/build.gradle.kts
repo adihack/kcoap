@@ -16,6 +16,13 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.ktor.network.tls)
         }
+        // CioWebSocketNameCheckTest pins how ktor's CIO client, on the same ktor-network-tls, checks names: why the
+        // WebSocket connector's default client serves no coaps+ws on the JVM.
+        jvmTest.dependencies {
+            implementation(project(":kcoap-transport-ktor-websocket"))
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.cio)
+        }
         // NativeTlsUnavailableTest pins that ktor-network-tls has no TLS on the native targets, so its arrival
         // there is noticed.
         nativeTest.dependencies {

@@ -32,6 +32,13 @@ kotlin {
             // Loopback tests against the server adapter and plain ktor servers.
             implementation(project(":kcoap-transport-ktor-websocket-server"))
             implementation(libs.ktor.server.cio)
+            // A CoAP client on the default connector, which must refuse coaps+ws where its engine does not
+            // authenticate wss servers (DefaultConnectorCoapsWsTest).
+            implementation(project(":kcoap-coap"))
+        }
+        linuxTest.dependencies {
+            // The same refusal on Linux native, where CIO has no TLS (LinuxSecureWebSocketTest).
+            implementation(project(":kcoap-coap"))
         }
         nativeTest.dependencies {
             // The default client (Darwin on Apple, CIO on Linux) against the server adapter on CIO.

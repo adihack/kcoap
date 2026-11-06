@@ -15,3 +15,16 @@ import io.ktor.client.HttpClient
  * | `js`, `wasmJs` | Js (the browser's or Node.js's WebSocket) |
  */
 internal expect fun defaultClient(): HttpClient
+
+/**
+ * Whether [defaultClient] authenticates a `wss` server as `coaps+ws` needs it (RFC 8323 §9.2, RFC 6455 §4.1):
+ * a chain valid under the platform's trust store that names the URI's host (RFC 9525 §6). Only then does
+ * `KtorWebSocketConnector()` list `coaps+ws`, the connector's word that it runs TLS for it.
+ *
+ * - JVM and Android: false. CIO's TLS is ktor-network-tls, whose name check accepts a certificate without DNS
+ *   names for any host name; CIO checks an IP literal by the name its reverse DNS lookup gives.
+ * - Linux: false. CIO has no TLS on Linux native.
+ * - iOS and macOS: true. URLSession checks the chain against the system's trust store, and the host name.
+ * - `js` and `wasmJs`: true. The browser's or Node.js's own `wss` does.
+ */
+internal expect val defaultClientAuthenticatesServers: Boolean
