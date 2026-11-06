@@ -42,6 +42,7 @@ body:
         - kcoap-crypto
         - kcoap-crypto-default
         - kcoap-crypto-bc
+        - kcoap-crypto-testsuite
         - kcoap-transport
         - kcoap-transport-ktor
         - kcoap-transport-ktor-websocket
