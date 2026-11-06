@@ -16,6 +16,7 @@ import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.ResponseMode
 import dev.kcoap.log.LogTags
+import dev.kcoap.transport.ChannelSecurityKind
 import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
@@ -78,7 +79,9 @@ import kotlinx.coroutines.withContext
  * The URI's scheme picks the transport: `coap` goes over the endpoint's datagram transport, `coap+tcp`,
  * `coaps+tcp`, `coap+ws` and `coaps+ws` (RFC 8323 §8) over connections that its connectors open on
  * demand. On connections, message sizes and block sizes follow the server's Max-Message-Size, with BERT
- * blocks when both sides support them (RFC 8323 §6).
+ * blocks when both sides support them (RFC 8323 §6). A `coaps` URI needs DTLS (RFC 7252 §6.2, §9.1), which
+ * kcoap does not have yet, so every call with one fails with [CoapException.Reason.TRANSPORT_UNAVAILABLE] before
+ * its host is resolved: nothing goes out in plaintext.
  *
  * ```
  * val client = CoapClient(KtorUdpTransport.bind(), scope)
@@ -362,11 +365,20 @@ public class CoapClient private constructor(
      * The peer for [uri], through [CoapClientConfig.resolver], with its failures translated as its contract
      * says: a [CoapException], such as [CoapException.Reason.UNRESOLVED_HOST], and an `IllegalArgumentException`
      * for a host the resolver cannot resolve by design pass unchanged; any other exception is a lookup that failed
-     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause. On a closed endpoint nothing is looked
-     * up: the call fails like [CoapEndpoint.closeCause] at once.
+     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause.
+     *
+     * Nothing is looked up on a closed endpoint, where the call fails like [CoapEndpoint.closeCause] at once, nor
+     * for a `coaps` URI: without DTLS (RFC 7252 §9.1) its request would go out in plaintext, against RFC 7252
+     * §6.2, so it fails closed with [CoapException.Reason.TRANSPORT_UNAVAILABLE].
      */
     private suspend fun resolve(uri: CoapUri): Endpoint {
         endpoint.closeCause?.let { throw endpoint.closedError(it) }
+        if (uri.scheme.security == ChannelSecurityKind.DTLS) {
+            throw CoapException(
+                "${uri.scheme.scheme} needs DTLS (RFC 7252 §9.1), which this endpoint does not have; nothing was sent to ${uri.host}",
+                CoapException.Reason.TRANSPORT_UNAVAILABLE,
+            )
+        }
         return try {
             config.resolver.resolve(uri)
         } catch (e: CancellationException) {

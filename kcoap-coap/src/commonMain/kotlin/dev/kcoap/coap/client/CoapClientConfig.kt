@@ -82,6 +82,9 @@ public enum class ObserveCancellation {
  * [CoapClient] passes both on, and reports any other exception of [resolve] as
  * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, so a resolver built on a platform's DNS may let that
  * platform's exceptions through.
+ *
+ * A [CoapClient] does not resolve `coaps` URIs: without DTLS (RFC 7252 §9.1) it fails such a call with
+ * [CoapException.Reason.TRANSPORT_UNAVAILABLE] before the resolver runs.
  */
 public fun interface EndpointResolver {
     /**

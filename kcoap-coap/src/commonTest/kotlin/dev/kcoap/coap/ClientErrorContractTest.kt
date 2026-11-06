@@ -97,6 +97,31 @@ class ClientErrorContractTest {
         assertEquals(0, lookups, "a closed endpoint looks nothing up")
     }
 
+    /** RFC 7252 §6.2: `coaps` datagrams MUST be secured with DTLS, which kcoap does not have yet. */
+    @Test
+    fun rfc7252Section6_2ACoapsRequestWithoutDtlsIsRefusedBeforeAnythingIsSent() = runTest {
+        val fixture = StackFixture(this)
+        var lookups = 0
+        val resolver = EndpointResolver { uri ->
+            lookups++
+            EndpointResolver.Default.resolve(uri)
+        }
+        val client = fixture.client(CoapClientConfig(resolver = resolver))
+
+        val errors = listOf(
+            assertFailsWith<CoapException> { client.get("coaps://127.0.0.1/x") },
+            assertFailsWith<CoapException> { client.post("coaps://127.0.0.1:5684/x", "secret".encodeToByteArray()) },
+            assertFailsWith<CoapException> { client.ping("coaps://127.0.0.1") },
+            assertFailsWith<CoapException> { client.observe("coaps://127.0.0.1/x").collect() },
+            assertFailsWith<CoapException> { client.discover("coaps://127.0.0.1") },
+        )
+        assertEquals(List(5) { CoapException.Reason.TRANSPORT_UNAVAILABLE }, errors.map { it.reason })
+        assertTrue("coaps needs DTLS" in errors.first().message.orEmpty(), errors.first().message)
+        assertTrue(fixture.traffic.isEmpty(), "nothing went out in plaintext")
+        assertEquals(0, lookups, "refused before the host is resolved")
+        assertEquals(0, client.endpoint.exchangeCount())
+    }
+
     @Test
     fun aResolverThatFailsAtRuntimeGivesUnresolvedHostWithItsFailureAsCause() = runTest {
         val fixture = StackFixture(this)
