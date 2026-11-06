@@ -17,8 +17,9 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 - **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
-- **Size:** a page with every stylesheet, script and image it loads stays within 150 KB before compression.
-  `scripts/check-site` checks it and prints each page's weight ([README](README.md#page-weight)).
+- **Size:** a page with every stylesheet, script and image it loads, its tab icon included, stays within 150 KB
+  before compression. `scripts/check-site` checks it and prints each page's weight
+  ([README](README.md#page-weight)).
 - **Assets are not fingerprinted.** The stylesheets, `site.js` and the images keep their names between
   deploys, so cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or
   a short `max-age`), not as immutable.

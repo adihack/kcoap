@@ -28,9 +28,10 @@ The directory defaults to web/public next to this script. Every HTML page in it 
 - done and open said in text: every item of a .checks list starts with a visually hidden "Done: " or
   "Open: " that matches its is-open class, and every .meter-block ends with a visually hidden state;
 - repository links (github.com/adihack/kcoap/blob|tree/<branch>/) that all name the same branch;
-- at most 150 KB per page, counting the HTML and every stylesheet, script and image it loads, each file once
-  (the site icons in the head aside: a browser fetches one of them for the whole site, not one per page);
-  the output lists every page's weight and its gzip size;
+- at most 150 KB per page, counting the HTML and every stylesheet, script and image it loads, each file once,
+  the tab icons (favicon.ico, the SVG logo) included; only the home-screen icon (apple-touch-icon.png) is left
+  out, which a browser fetches for a home screen or a bookmark, not to show a page; the output lists every
+  page's weight and its gzip size;
 - stylesheets: every page links site.css first and the others in the order of SHEET_ORDER, which keeps the
   cascade as one stylesheet had it, and only sheets it uses; every class in a page's HTML, or set by a script
   it loads (SCRIPT_CLASSES), is named by a rule in a stylesheet the page links; and every class a stylesheet
@@ -55,11 +56,12 @@ from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
 
 SITE = "https://kcoap.dev"
-# The HTML and every stylesheet, script and image a page loads, each file once (web/README.md, "Page weight").
+# The HTML and every stylesheet, script and image a page loads, its tab icon too, each file once (web/README.md,
+# "Page weight").
 MAX_PAGE_BYTES = 150 * 1024
-# <link rel> values of the site icons, which the page weight leaves out: a browser fetches one of them, for
-# its tab or a home screen, once for the whole site. The SVG icon is the logo, which the header's <img> counts.
-SITE_ICON_RELS = {"icon", "shortcut", "apple-touch-icon", "mask-icon"}
+# <link rel> values of the icons that the page weight leaves out: a browser fetches them for a home screen, a
+# bookmark or a pinned tab, not to show a page. The tab icons (rel="icon": favicon.ico, the SVG logo) count.
+UNCOUNTED_ICON_RELS = {"apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"}
 # The stylesheets in the order a page links them (site.css first, the others only where used). Each keeps its
 # rules in the order they had in the one site.css they came from, so this order keeps the cascade as it was.
 SHEET_ORDER = ["assets/site.css", "assets/figures.css", "assets/components.css", "assets/guide.css",
@@ -135,7 +137,7 @@ class Page(HTMLParser):
         self.h1 = 0
         self.links = []          # (tag, attribute, url) for hyperlinks
         self.resources = []      # (tag, attribute, url) for things the browser loads
-        self.site_icons = set()  # (url, line) of the site icons, which the page weight leaves out
+        self.uncounted_icons = set()  # (url, line) of the home-screen icons, which the page weight leaves out
         self.stylesheets = []    # (href, line) of every <link rel="stylesheet">, in order
         self.scripts = []        # src of every <script src>
         self.classes = {}        # every class in the markup, with the line it first appears on
@@ -198,8 +200,8 @@ class Page(HTMLParser):
                 self.canonical.append(a.get("href", ""))
             if rels & RESOURCE_RELS:
                 self.resources.append(("link", "href", a.get("href", ""), line))
-            if rels & SITE_ICON_RELS:
-                self.site_icons.add((a.get("href", ""), line))
+            if rels & UNCOUNTED_ICON_RELS and "icon" not in rels:
+                self.uncounted_icons.add((a.get("href", ""), line))
             if "stylesheet" in rels:
                 self.stylesheets.append((a.get("href", ""), line))
         elif tag == "h1":
@@ -721,7 +723,7 @@ def check(root):
             if target is None:
                 err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> is missing ({reason})")
                 continue
-            if (url, line) in page.site_icons:
+            if (url, line) in page.uncounted_icons:
                 continue
             counted.add(target)
             if target.suffix == ".css":
@@ -841,7 +843,7 @@ def main(argv):
         print(e)
     if weights:
         print(f"Page weight, limit {MAX_PAGE_BYTES // 1024} KB: the HTML and every stylesheet, script and image "
-              f"it loads; gzip -9, file by file:")
+              f"it loads, the tab icon included; gzip -9, file by file:")
         width = max(len(path) for path, _, _ in weights)
         for path, total, compressed in weights:
             print(f"  {path:{width}}  {total / 1024:6.1f} KB  gzip {compressed / 1024:5.1f} KB")

@@ -63,8 +63,8 @@ fails on:
   (github.com only in `releases.js`, network calls only there) and SVG files;
 - a `<pre>` without `tabindex="0"`, a code line over 80 characters (one-line TOML tables aside), and a
   check-list item or meter block without its state in text;
-- a page over 150 KB with every stylesheet, script and image it loads ([Page weight](#page-weight)); it
-  prints every page's weight and gzip size either way;
+- a page over 150 KB with every stylesheet, script and image it loads, the tab icon included
+  ([Page weight](#page-weight)); it prints every page's weight and gzip size either way;
 - a class in a page, or set by `site.js` or `releases.js`, that no stylesheet the page links names; a class
   a stylesheet names that no page linking it uses (dead CSS); a page that links a sheet it uses nothing
   from, or links the sheets in another order than `site.css`'s header gives;
@@ -75,17 +75,19 @@ fails on:
 ## Page weight
 
 Each page, with every stylesheet, script and image it loads, each file counted once, stays within 150 KB
-(150 × 1024 bytes) before compression. `scripts/check-site` fails on a page over it and prints every page's
-weight and its gzip size, so the numbers show in CI and in the Cloudflare build log. The site icons in the
-head (`favicon.ico`, `apple-touch-icon.png`) are left out: a browser fetches one of them, for its tab or a
-home screen, once for the whole site, and the SVG icon is the logo that the header's `<img>` counts already.
+(150 × 1024 bytes) before compression. That includes the tab icon: a browser that does not take the SVG logo
+for its tab fetches `favicon.ico` (4.4 KB) on a first visit, so both count, the logo once, as the header's
+`<img>` loads it too. Only `apple-touch-icon.png` is left out: a browser fetches it for a home screen or a
+bookmark, not to show a page. `scripts/check-site` fails on a page over the limit and prints every page's
+weight and its gzip size, so the numbers show in CI and in the Cloudflare build log.
 
 The budget counts the stylesheets and scripts, not only the HTML and its images, because a first visit
 downloads all of them before the page looks and works as it should: a stylesheet that every page links is
 part of every page's weight. It is not about hosting limits. Cloudflare compresses text, and gzip brings the
-heaviest page, `/features/`, to about 33 KB (36 KB before the stylesheets were split). It is about discipline
-and headroom: hand-written pages grow a little with every change, and a fixed budget shows each addition
-before they add up.
+heaviest page, `/features/`, to about 33 KB plus the favicon, whose PNG images are compressed already (36 KB
+before the stylesheets were split); the home page, whose four sheets compress one by one, comes to 2 KB more
+than with one sheet. It is about discipline and headroom: hand-written pages grow a little with every change,
+and a fixed budget shows each addition before they add up.
 
 So the styles are split by the pages that use them, and each page links only the sheets it uses:
 
@@ -101,8 +103,8 @@ So the styles are split by the pages that use them, and each page links only the
 icons), so `site.css` holds what it needs, and the components it does not use, a few small ones aside, sit in
 the sheets it does not link. The line icons take their stroke from the `icon` class instead of five attributes
 each ([TEMPLATE.md](TEMPLATE.md#icons)), which saves 3.2 KB on `/features/` and 3.8 KB on `/`. On 6 November
-2026 `/features/` weighs 143 KB, `/` 142 KB and the guides 80 to 95 KB; with the one stylesheet and the
-icons' attributes they weighed 167 KB, 148 KB and 94 to 109 KB.
+2026, the favicon included, `/features/` weighs 148 KB, `/` 146 KB and the guides 85 to 99 KB; with the one
+stylesheet and the icons' attributes they weighed 172 KB, 152 KB and 99 to 113 KB.
 
 Pages link the sheets in a fixed order, `site.css` first ([TEMPLATE.md](TEMPLATE.md#1-the-head)); each sheet
 keeps its rules in the order they had when `site.css` was the only stylesheet, so the cascade gives the same
