@@ -116,10 +116,17 @@ only has no URL to open. If the preview command fails because of that, set it to
 **www.kcoap.dev** redirects to kcoap.dev with a zone rule; the Worker never sees it. In the dashboard
 (kcoap.dev → Rules → Overview → Create rule → Redirect Rule): match the wildcard pattern
 `https://www.kcoap.dev/*`, target URL `https://kcoap.dev/${1}`, status code 301, preserve the query string.
-The rule needs a proxied DNS record for `www`; Cloudflare offers to create one when the rule is saved, or
-add it under DNS → Records as type `AAAA`, name `www`, IPv6 address `100::`, proxied (a placeholder: no
-request ever reaches it). The pattern matches HTTPS only, which is all a browser sends to a `.dev` name,
-since the whole `.dev` domain is on the HSTS preload list.
+The rule needs a proxied DNS record for `www`, which has no server behind it: under DNS → Records, type `A`,
+name `www`, IPv4 address `192.0.2.1`, proxied, as in Cloudflare's guide to redirecting www. That address is
+reserved for documentation (RFC 5737) and is never reached: because the record is proxied, visitors only
+ever talk to Cloudflare, which answers with the redirect.
+
+The pattern matches HTTPS only. A browser sends nothing else to a `.dev` name, since the whole `.dev`
+domain is on the HSTS preload list, but other clients do: without more, `http://www.kcoap.dev/` would go to
+the placeholder and end in a 522 after about 20 seconds, and `http://kcoap.dev/` would serve the site
+unencrypted. **Always Use HTTPS** is therefore on for the zone (SSL/TLS → Edge Certificates): every `http://`
+request gets a 301 to `https://` first, so `http://www.kcoap.dev/x?y` reaches `https://kcoap.dev/x?y` in two
+redirects. All of this was set and checked on 6 November 2026.
 
 **DNS.** The custom domain needs no DNS record of your own, TXT or otherwise: on a zone that Cloudflare
 hosts, attaching a Custom Domain creates the DNS record and the certificate. The only TXT record the
@@ -158,6 +165,9 @@ curl -sI https://kcoap.dev/no/such/page/     # 404, with the Content-Security-Po
 curl -sI https://kcoap.dev/assets/site.css   # Cache-Control: public, max-age=0, must-revalidate
 curl -sI https://kcoap.dev/assets/og-image.png   # Cache-Control: public, max-age=86400
 curl -s https://kcoap.dev/sponsors/ | grep -c cdn-cgi   # 0: nothing injected
+curl -sI http://kcoap.dev/start/             # 301 to https://kcoap.dev/start/ (Always Use HTTPS)
+curl -sI 'https://www.kcoap.dev/start/?x=1'  # 301 to https://kcoap.dev/start/?x=1
+curl -sL -o /dev/null -w '%{url_effective} %{http_code}\n' http://www.kcoap.dev/   # https://kcoap.dev/ 200
 ```
 
 Then open `/` and `/releases/` in Chrome and Safari with the developer tools' console open: no
@@ -179,7 +189,8 @@ Read on 6 November 2026:
   for assets-only Workers, `workers_dev` and its default, `preview_urls`, routes managed in the dashboard):
   https://developers.cloudflare.com/workers/wrangler/configuration/
 - The build image and its Python version: https://developers.cloudflare.com/workers/ci-cd/builds/build-image/
-- The www redirect (wildcard pattern, `${1}`, 301, query string kept; HTTPS only):
+- The www redirect (wildcard pattern, `${1}`, 301, query string kept; HTTPS only) and its placeholder
+  record (`A` `www` `192.0.2.1`, proxied): https://developers.cloudflare.com/pages/how-to/www-redirect/,
   https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/ and
   https://developers.cloudflare.com/rules/url-forwarding/single-redirects/create-dashboard/
 - Workers Builds, and the Worker name that must match: https://developers.cloudflare.com/workers/ci-cd/builds/
