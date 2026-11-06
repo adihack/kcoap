@@ -289,7 +289,7 @@ The [documentation hub](docs/README.md) lists every guide, design record and ref
 | [Platforms](docs/platforms.md) | minimum versions, algorithms and EDHOC suites per target, TLS per runtime, mobile lifecycle |
 | [Architecture](docs/architecture.md) | layers, transports, security layering, extension points |
 | [RFC compliance](docs/rfc-compliance.md) and [interop](interop/README.md) | what is implemented, section by section, and how it is cross-tested |
-| [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka), published by each release; `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
+| [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka), published by each release; not online yet, until its deploy is fixed; `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
 
 ## Build and test
 
@@ -315,8 +315,9 @@ Test vectors are generated from the RFC texts and NIST files by `tools/regen-vec
 
 ## Project status
 
-kcoap 0.1.0, its first release, came out on 2026-11-06; the website at [kcoap.dev](https://kcoap.dev) goes
-live later.
+kcoap 0.1.0, its first release, came out on 2026-11-06 and is on Maven Central. `main` holds it and what merges
+after it; the next version is 0.2.0. The website is [kcoap.dev](https://kcoap.dev); the API reference is not
+online yet and goes online once its deploy is fixed.
 
 - [Roadmap](docs/roadmap.md): the milestones, built bottom-up, each verified before the next depends on it.
 - [Checklist](docs/checklist.md): every requirement with its status, evidence and next step, ending with

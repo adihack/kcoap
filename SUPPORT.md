@@ -9,7 +9,7 @@
 | [Client and server guide](docs/guide-client-server.md) | how to write a CoAP client and server with kcoap, with security |
 | Module READMEs, such as [kcoap-oscore](kcoap-oscore/README.md) | each module's purpose, API and verification |
 | [RFC compliance](docs/rfc-compliance.md) | what is implemented, section by section, and what is not yet |
-| [API reference](https://adihack.github.io/kcoap/) | the KDoc of every public declaration; published by each release |
+| [API reference](https://adihack.github.io/kcoap/) | the KDoc of every public declaration; published by each release, but not online yet: it goes online once its deploy is fixed |
 
 ## Ask in an issue
 

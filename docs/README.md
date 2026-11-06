@@ -4,7 +4,8 @@
 [Changelog](../CHANGELOG.md)
 
 Every page about kcoap, grouped by what you want to do. Each release publishes the API reference to GitHub
-Pages; `./gradlew dokkaGenerate` builds it into `build/dokka/html`.
+Pages. It is not online yet: its deploy for 0.1.0 failed, and it goes online once that is fixed. Until then
+`./gradlew dokkaGenerate` builds it into `build/dokka/html`.
 
 ## Start here
 
@@ -68,7 +69,7 @@ Pages; `./gradlew dokkaGenerate` builds it into `build/dokka/html`.
 
 | Page | What you find there |
 |---|---|
-| [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published by each release |
+| [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published by each release, not online yet |
 | [kcoap-bom](../kcoap-bom/README.md) | The bill of materials: one version for every published module, for Gradle and Maven builds, and how its constraints are generated |
 | [kcoap-common](../kcoap-common/README.md) | Logging API and sinks, hex, constant-time helpers, the opt-in markers, `KcoapException`, the root of every protocol's exception |
 | [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |

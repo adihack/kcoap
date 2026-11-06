@@ -14,7 +14,7 @@ fixes, so upgrade to the latest one.
 | latest 0.x release | yes |
 | older 0.x releases | no |
 
-No version has been released yet, so today this means `main`.
+The latest release is 0.1.0.
 
 ## How to report
 

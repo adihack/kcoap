@@ -338,5 +338,5 @@ or (on the JVM) the Java engine, for `coaps+ws`; not CIO, whose name check falls
 - [Platforms](platforms.md): minimum versions, the capability matrix, TLS per runtime, mobile lifecycle.
 - [Logging](logging.md): levels per tag, sinks, a ring buffer for diagnostics.
 - The module READMEs, from the [documentation hub](README.md#reference), and the
-  [API reference](https://adihack.github.io/kcoap/), which each release publishes (`./gradlew dokkaGenerate` builds
-  it into `build/dokka/html`).
+  [API reference](https://adihack.github.io/kcoap/), which each release publishes; it is not online yet and goes online
+  once its deploy is fixed (`./gradlew dokkaGenerate` builds it into `build/dokka/html`).
