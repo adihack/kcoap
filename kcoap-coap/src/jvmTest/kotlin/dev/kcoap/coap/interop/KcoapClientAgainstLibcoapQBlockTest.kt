@@ -738,28 +738,44 @@ class KcoapClientAgainstLibcoapQBlockTest {
      * 3000 bytes and a GET of what libcoap then holds, with 10 % loss on both sides (`-l 10%` on libcoap's,
      * [LossyTransport] on kcoap's). Every run ends with the right body, a clean [CoapException], or libcoap's
      * plain 4.08 for an upload with three gaps or more (its limit, pinned in
-     * [upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4]); libcoap holds the new body or
-     * the one before, never a mix; no exchange is left after a run, and no message mixes Block and Q-Block. In
-     * the nightly soak a quarter of the uploads and half the downloads complete at least.
+     * [upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4]); libcoap holds one of the bodies it
+     * may have stored, whole, never a mix; no exchange is left after a run, and no message mixes Block and
+     * Q-Block. In the nightly soak a quarter of the uploads and half the downloads complete at least.
+     *
+     * Which bodies libcoap may hold follows from what the client saw: an upload answered 2.04 or 2.01 is the one
+     * it holds, and a body the client downloaded is the one it holds. Any other upload may have been stored all the
+     * same: its 2.04 can be lost, and then the blocks the client still sends start a new upload in libcoap, which
+     * it answers with its plain 4.08 for three gaps (seen once under load: the PUT ended with that 4.08, and the GET
+     * after it got the whole upload). A download that failed tells nothing, so a later run may still get an upload
+     * from before it.
      */
     @Test
     fun kSoakBodiesBothWaysAt10PercentLoss() = withServer("-L", "7", "-v", "7", "-l", "10%") { server ->
         val random = java.util.Random(11)
         fun lose(): Boolean = synchronized(random) { random.nextDouble() < 0.1 }
-        var held = exampleData
+        val uploaded = mutableListOf<ByteArray>()
+        // The bodies libcoap may hold, as "the original" or "run n".
+        var mayHold = mapOf("the original" to exampleData)
+        fun nameOf(payload: ByteArray): String =
+            (mapOf("the original" to exampleData) + uploaded.mapIndexed { run, body -> "run $run" to body }).entries
+                .firstOrNull { it.value.contentEquals(payload) }?.key ?: "none of the bodies sent (${payload.size} bytes)"
         var uploads = 0
         var downloads = 0
         val outcomes = mutableListOf<String>()
         repeat(Soak.runs) { run ->
             withClient(dropOut = { lose() }, dropIn = { lose() }, timeout = 10.minutes) { client ->
                 val upload = body(3000, 100 + run)
+                uploaded += upload
                 val put = runCatching { client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() } }
                 put.exceptionOrNull()?.let { assertCleanFailure(it, "run $run PUT") }
                 val code = put.getOrNull()?.code
                 outcomes += "PUT ${code ?: put.exceptionOrNull()?.let { (it as CoapException).reason }}"
                 when (code) {
-                    CoapCode.CHANGED, CoapCode.CREATED -> uploads++
-                    null, CoapCode.REQUEST_ENTITY_INCOMPLETE -> Unit
+                    CoapCode.CHANGED, CoapCode.CREATED -> {
+                        uploads++
+                        mayHold = mapOf("run $run" to upload)
+                    }
+                    null, CoapCode.REQUEST_ENTITY_INCOMPLETE -> mayHold = mayHold + ("run $run" to upload)
                     else -> throw AssertionError("run $run: PUT answered $code")
                 }
 
@@ -769,10 +785,10 @@ class KcoapClientAgainstLibcoapQBlockTest {
                 outcomes += "GET ${got?.code ?: get.exceptionOrNull()?.let { (it as CoapException).reason }}"
                 if (got != null) {
                     assertEquals(CoapCode.CONTENT, got.code, "run $run")
-                    val isNew = got.payload.contentEquals(upload)
-                    assertTrue(isNew || got.payload.contentEquals(held), "run $run: libcoap holds the new body or the one before")
-                    if (isNew) held = upload
-                    if (code == CoapCode.CHANGED || code == CoapCode.CREATED) assertTrue(isNew, "run $run: the stored body is the upload")
+                    val held = nameOf(got.payload)
+                    if (code == CoapCode.CHANGED || code == CoapCode.CREATED) assertEquals("run $run", held, "run $run: the stored body is the upload")
+                    assertTrue(held in mayHold, "run $run: libcoap holds one of ${mayHold.keys}, but the body is $held; $outcomes")
+                    mayHold = mapOf(held to got.payload)
                     downloads++
                 }
                 assertNoMessageMixesBlockAndQBlock()
