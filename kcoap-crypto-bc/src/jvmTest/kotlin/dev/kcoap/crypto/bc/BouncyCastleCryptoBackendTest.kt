@@ -12,8 +12,6 @@ import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
-import dev.kcoap.crypto.bc.vectors.ML_DSA_KEYGEN_VECTORS
-import dev.kcoap.crypto.bc.vectors.ML_KEM_KEYGEN_VECTORS
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -36,7 +34,7 @@ class BouncyCastleCryptoBackendTest {
             val encapsulation = backend.encapsulate(algorithm, pair.publicKey)
 
             assertEquals(algorithm.keyType.publicKeyLength, pair.publicKey.size, algorithm.name)
-            assertEquals(MlKem.SEED_LENGTH, pair.privateKey.encoded.size, algorithm.name)
+            assertEquals(algorithm.keyType.seedLength, pair.privateKey.encoded.size, algorithm.name)
             assertEquals(algorithm.ciphertextLength, encapsulation.ciphertext.size, algorithm.name)
             assertEquals(algorithm.sharedSecretLength, encapsulation.sharedSecret().size, algorithm.name)
             assertContentEquals(
@@ -54,7 +52,7 @@ class BouncyCastleCryptoBackendTest {
     @Test
     fun tamperedCiphertextYieldsTheImplicitRejectionSecret() = runTest {
         for (algorithm in KemAlgorithm.entries) {
-            val seed = ByteArray(MlKem.SEED_LENGTH) { it.toByte() }
+            val seed = ByteArray(MlKem.ML_KEM_512.seedLength) { it.toByte() }
             val z = seed.copyOfRange(32, 64)
             val pair = BouncyCastleCryptoBackend(ScriptedRandomBackend(seed)).generateKeyPair(algorithm.keyType)
             val encapsulation = backend.encapsulate(algorithm, pair.publicKey)
@@ -80,7 +78,7 @@ class BouncyCastleCryptoBackendTest {
         assertFailsWith<IllegalArgumentException> { backend.encapsulate(KemAlgorithm.ML_KEM_768, pair.publicKey) }
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(pair.privateKey, ciphertext.copyOf(767)) }
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(pair.privateKey, ciphertext + byteArrayOf(0)) }
-        val wrongLength = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(MlKem.SEED_LENGTH + 1))
+        val wrongLength = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(MlKem.ML_KEM_512.seedLength + 1))
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(wrongLength, ciphertext) }
         val foreign = object : PrivateKey(KeyType.ML_KEM_512) {}
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(foreign, ciphertext) }
@@ -98,13 +96,38 @@ class BouncyCastleCryptoBackendTest {
         assertContentEquals(a.publicKey, imported.publicKey)
         assertContentEquals(a.privateKey.encoded, imported.privateKey.encoded)
         assertContentEquals(a.privateKey.encoded, seed, "the caller's array is left untouched")
+        val expanded = expandedKemKey(type, seed)
+        assertEquals(type.expandedPrivateKeyLength, expanded.size)
+        assertContentEquals(expanded, backend.importKeyPair(type, expanded, a.publicKey).privateKey.encoded)
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, a.privateKey.encoded, b.publicKey) }
+        assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, expanded, b.publicKey) }
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, ByteArray(63), a.publicKey) }
         val shortKey = a.publicKey.copyOf(1183)
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, a.privateKey.encoded, shortKey) }
-        val expanded = ML_KEM_KEYGEN_VECTORS.single { it.type == KeyType.ML_KEM_512 }.dk.hex()
-        val other512 = backend.generateKeyPair(KeyType.ML_KEM_512).publicKey
-        assertFailsWith<IllegalArgumentException> { backend.importKeyPair(KeyType.ML_KEM_512, expanded, other512) }
+    }
+
+    /**
+     * The input checks of FIPS 203 fail with the [IllegalArgumentException] the backend documents: the modulus check
+     * of an encapsulation key (§7.2) and the hash check of a decapsulation key (§7.3), on import and on use.
+     */
+    @Test
+    fun kemInputChecksFailWithIllegalArgumentException() = runTest {
+        val type = KeyType.ML_KEM_512
+        val pair = backend.generateKeyPair(type)
+        // ek = ByteEncode12(t) || ρ: a first coefficient of 0xFFF is q = 3329 or more.
+        val outOfRange = pair.publicKey.copyOf().also {
+            it[0] = 0xFF.toByte()
+            it[1] = (it[1].toInt() or 0x0F).toByte()
+        }
+        assertFailsWith<IllegalArgumentException> { backend.encapsulate(KemAlgorithm.ML_KEM_512, outOfRange) }
+        // dk = dk_PKE || ek || H(ek) || z, with dk_PKE of 384k bytes: change the first byte of H(ek).
+        val hashOffset = 384 * 2 + type.publicKeyLength
+        val badHash = expandedKemKey(type, pair.privateKey.encoded).flipped(hashOffset)
+        assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, badHash, pair.publicKey) }
+        val stored = SoftwarePrivateKey(type, badHash)
+        assertFailsWith<IllegalArgumentException> {
+            backend.decapsulate(stored, ByteArray(KemAlgorithm.ML_KEM_512.ciphertextLength))
+        }
     }
 
     @Test
@@ -116,7 +139,7 @@ class BouncyCastleCryptoBackendTest {
             val signature = backend.sign(algorithm, pair.privateKey, data)
 
             assertEquals(algorithm.keyType.publicKeyLength, pair.publicKey.size, algorithm.name)
-            assertEquals(MlDsa.SEED_LENGTH, pair.privateKey.encoded.size, algorithm.name)
+            assertEquals(algorithm.keyType.seedLength, pair.privateKey.encoded.size, algorithm.name)
             assertEquals(algorithm.signatureLength, signature.size, algorithm.name)
             assertTrue(backend.verify(algorithm, pair.publicKey, data, signature), algorithm.name)
             assertFalse(backend.verify(algorithm, pair.publicKey, data.flipped(0), signature), algorithm.name)
@@ -153,20 +176,21 @@ class BouncyCastleCryptoBackendTest {
     }
 
     /**
-     * Import checks that the private key derives the given `pk` and that its `tr` is `H(pk, 64)`. Flipping a byte
-     * of `tr` (offset 64 of `sk`) leaves the derived public key unchanged, so only the `tr` check catches it.
-     * The caller's arrays are left untouched.
+     * Import keeps the encoding it was given and checks that the private key derives the given `pk` and that its
+     * `tr` is `H(pk, 64)`, with the [IllegalArgumentException] the backend documents. Flipping a byte of `tr`
+     * (offset 64 of `sk`) leaves the derived public key unchanged, so only the `tr` check catches it; Bouncy Castle
+     * takes `tr` as stored. NIST's keys go through the same checks in [MlDsaKnownAnswerTest].
      */
     @Test
     fun dsaImportKeepsTheEncodingAndChecksThatTheKeysBelongTogether() = runTest {
-        val vector = ML_DSA_KEYGEN_VECTORS.single { it.algorithm == SignatureAlgorithm.ML_DSA_44 }
         val type = KeyType.ML_DSA_44
-        val (seed, pk, sk) = Triple(vector.seed.hex(), vector.pk.hex(), vector.sk.hex())
+        val pair = backend.generateKeyPair(type)
+        val (seed, pk) = pair.privateKey.encoded to pair.publicKey
+        val sk = expandedDsaKey(type, seed)
+        assertEquals(type.expandedPrivateKeyLength, sk.size)
 
-        assertHexEquals(vector.seed, backend.importKeyPair(type, seed, pk).privateKey.encoded, "seed")
-        assertHexEquals(vector.sk, backend.importKeyPair(type, sk, pk).privateKey.encoded, "expanded")
-        assertHexEquals(vector.seed, seed, "caller's seed")
-        assertHexEquals(vector.sk, sk, "caller's expanded key")
+        assertContentEquals(seed, backend.importKeyPair(type, seed, pk).privateKey.encoded, "seed")
+        assertContentEquals(sk, backend.importKeyPair(type, sk, pk).privateKey.encoded, "expanded")
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, ByteArray(31), pk) }
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, sk.copyOf(2559), pk) }
         assertFailsWith<IllegalArgumentException> { backend.importKeyPair(type, seed, pk.copyOf(1311)) }
@@ -186,7 +210,7 @@ class BouncyCastleCryptoBackendTest {
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, dsa65.privateKey, data) }
         val foreign = object : PrivateKey(KeyType.ML_DSA_44) {}
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, foreign, data) }
-        val wrongLength = SoftwarePrivateKey(KeyType.ML_DSA_44, ByteArray(MlDsa.SEED_LENGTH + 1))
+        val wrongLength = SoftwarePrivateKey(KeyType.ML_DSA_44, ByteArray(MlDsa.ML_DSA_44.seedLength + 1))
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, wrongLength, data) }
         assertFailsWith<IllegalArgumentException> { backend.verify(algorithm, dsa65.publicKey, data, ByteArray(2420)) }
         assertFailsWith<IllegalArgumentException> { backend.verify(algorithm, ByteArray(0), data, ByteArray(2420)) }

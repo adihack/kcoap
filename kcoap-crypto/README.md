@@ -32,7 +32,13 @@ same way with every backend on every platform:
   `Shake256.digest(data, 64)`. KMAC256 is common code on Keccak and never reaches the backend, as HKDF is
   common code on the backend's HMAC.
 - **A missing algorithm is `UnsupportedAlgorithmException`** and nothing else, and `supports(x)` is false
-  exactly where an operation on `x` would throw it.
+  exactly where an operation on `x` would throw it. A backend's tests check this by extending the conformance
+  suite of [kcoap-crypto-testsuite](../kcoap-crypto-testsuite/README.md), on every target the backend runs on.
+- **ML-KEM and ML-DSA private keys are the seed or the expanded key**, told apart by length:
+  `KeyType.seedLength` and `KeyType.expandedPrivateKeyLength` (FIPS 203 Algorithms 16 and 19, FIPS 204
+  Algorithms 1 and 24), with ML-DSA's `tr` of `SignatureAlgorithm.trLength` bytes inside the expanded key. A
+  software backend generates the seed and imports either, so keys move between backends and key formats
+  unchanged.
 
 ## Keys in a key store
 
@@ -95,6 +101,7 @@ operating system's trust stores as optional adapters later (X.509 item of the [r
 | `EcdsaSignatureCodecTest` | minimal positive INTEGERs (X.690 §8.3.2), ES256 and ES384, strict DER only, and 4 000 mutated signatures that decode or give null |
 | `X509CertificateTest`, `SubjectPublicKeyInfoTest` | the Ed25519 certificates of RFC 9529 §2, every recognized key algorithm, compressed keys, malformed and unsupported input, and 4 000 mutated certificates and keys each that parse or throw `CertificateFormatException` |
 | `KeccakTest`, `BackendDefaultsTest`, `ProbeTest` | FIPS 202 and SP 800-185 known answers; a backend with only the symmetric primitives; the default `supports` probes; key handles and KEM results |
+| `PostQuantumKeyEncodingsTest` | the seed, expanded-key and `tr` lengths against FIPS 203 Tables 2 and 3 and FIPS 204 Tables 1 and 2, and none for the classical types |
 | `Sec1DifferentialTest` (JVM) | 128 random points and 400 random x-coordinates against Bouncy Castle |
 | `EcdsaSignatureCodecJcaTest` (JVM) | the JDK's DER and IEEE P1363 ECDSA signatures, each converted and verified as the other, on P-256 and P-384 |
 | `KeccakDifferentialTest` (JVM) | SHAKE256 and KMAC256 against Bouncy Castle |

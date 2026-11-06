@@ -13,6 +13,7 @@ RFC checklist is in `rfc-compliance.md`.
 ```
 kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default
               │                ├─ kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
+              │                ├─ kcoap-crypto-testsuite (backend conformance; tests only)
               │                └─ kcoap-cose ─┐
               ├─ kcoap-cbor ──────────────────┤
               ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP)
@@ -28,6 +29,9 @@ Protocol modules depend on SPIs, never on a backend or transport: applications c
 `kcoap-crypto-default` or a backend of their own, and `kcoap-transport-ktor` or their own transport.
 `kcoap-crypto-bc` does not depend on `kcoap-crypto-default` either: it adds ML-KEM and ML-DSA to whatever
 classical backend the application passes, `BouncyCastleCryptoBackend(DefaultCryptoBackend())` in most.
+`kcoap-crypto-testsuite` is a test library: every backend's tests extend its conformance suite, which checks
+the `supports` contract and NIST's ACVP vectors on each target the backend builds for, so no main code
+depends on it.
 
 `kcoap-coap-message` is CoAP's wire vocabulary: the message model, options, URIs, link format, the codecs and
 the message-security SPI, with no coroutines. `kcoap-coap` builds the endpoint stack on it and exports it
@@ -762,7 +766,9 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 5. **Capabilities, not platforms.** Code never branches on the target. A backend reports what its
    platform lacks with `UnsupportedAlgorithmException`, `supports(...)` asks that question in advance,
    and gaps get common-code fallbacks where they are small and safe (the AES block, SHAKE256, point
-   decompression in kcoap-crypto's `Sec1`). Tests skip by capability too.
+   decompression in kcoap-crypto's `Sec1`). Tests skip by capability too, and `kcoap-crypto-testsuite`
+   checks on every target that each backend's answers are true: what it says it runs works, and what it says
+   it lacks throws `UnsupportedAlgorithmException`.
 
 ## Modules
 
@@ -775,6 +781,7 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | `kcoap-edhoc` | RFC 9528 Initiator and Responder, DH and KEM suites | done |
 | `kcoap-edhoc-oscore` | RFC 9528 Appendix A, RFC 9668 | done |
 | `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |
+| `kcoap-crypto-testsuite` | Conformance suite for crypto backends, for tests: the `supports` contract, NIST's ACVP ML-KEM and ML-DSA vectors, the capability report per target | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders, not published; engine last |
 | `kcoap-transport-ktor` | UDP and TCP on ktor-network; JVM, Apple and Linux (no web targets: ktor-network) | UDP and TCP done; TLS for `coaps+tcp` planned |
 | `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine; every target, browsers included (UNIVERSAL tier) | done |

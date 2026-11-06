@@ -20,23 +20,28 @@ import java.security.SecureRandom
  * generation, `rnd` for hedged signing) and passes it in, which is what lets NIST's vectors replay through the
  * public backend.
  *
- * Private keys come in two encodings, told apart by their length:
+ * Private keys come in the two encodings of [KeyType], told apart by their length:
  *  - the 32-byte seed `ξ` of ML-DSA.KeyGen (FIPS 204 Algorithm 1); ML-DSA.KeyGen_internal (Algorithm 6)
  *    expands it on every use;
  *  - the expanded private key `sk = ρ || K || tr || s1 || s2 || t0` of skEncode (Algorithm 24).
  */
-internal enum class MlDsa(
-    val algorithm: SignatureAlgorithm,
-    private val parameters: MLDSAParameters,
-    /** Length of the expanded private key `sk` (FIPS 204 §4, Table 2). */
-    val expandedPrivateKeyLength: Int,
-) {
-    ML_DSA_44(SignatureAlgorithm.ML_DSA_44, MLDSAParameters.ml_dsa_44, expandedPrivateKeyLength = 2560),
-    ML_DSA_65(SignatureAlgorithm.ML_DSA_65, MLDSAParameters.ml_dsa_65, expandedPrivateKeyLength = 4032),
-    ML_DSA_87(SignatureAlgorithm.ML_DSA_87, MLDSAParameters.ml_dsa_87, expandedPrivateKeyLength = 4896),
+internal enum class MlDsa(val algorithm: SignatureAlgorithm, private val parameters: MLDSAParameters) {
+    ML_DSA_44(SignatureAlgorithm.ML_DSA_44, MLDSAParameters.ml_dsa_44),
+    ML_DSA_65(SignatureAlgorithm.ML_DSA_65, MLDSAParameters.ml_dsa_65),
+    ML_DSA_87(SignatureAlgorithm.ML_DSA_87, MLDSAParameters.ml_dsa_87),
     ;
 
     val keyType: KeyType get() = algorithm.keyType
+
+    /** `ξ` (FIPS 204 Algorithm 1, line 1): [KeyType.seedLength]. */
+    val seedLength: Int = checkNotNull(algorithm.keyType.seedLength) { "$algorithm has no seed length" }
+
+    /** The expanded private key `sk` (FIPS 204 §4, Table 2): [KeyType.expandedPrivateKeyLength]. */
+    val expandedPrivateKeyLength: Int =
+        checkNotNull(algorithm.keyType.expandedPrivateKeyLength) { "$algorithm has no expanded key length" }
+
+    /** `tr = H(pk, 64)` (FIPS 204 Algorithm 6, line 7): [SignatureAlgorithm.trLength]. */
+    private val trLength: Int = checkNotNull(algorithm.trLength) { "$algorithm has no tr length" }
 
     /** ML-DSA.KeyGen (FIPS 204 Algorithm 1) for an already drawn [seed] `ξ`, which becomes the private key. */
     fun generateKeyPair(seed: ByteArray): KeyPair {
@@ -59,7 +64,7 @@ internal enum class MlDsa(
         val key = privateKey(privateKey)
         try {
             val belongs = key.publicKey.contentEquals(publicKey) &&
-                key.tr.contentEquals(Shake256.digest(publicKey, TR_LENGTH))
+                key.tr.contentEquals(Shake256.digest(publicKey, trLength))
             require(belongs) { "$keyType private key does not belong to the public key" }
         } finally {
             key.destroy()
@@ -107,8 +112,8 @@ internal enum class MlDsa(
      * destroying the parameters would wipe the caller's array.
      */
     private fun privateKey(encoded: ByteArray): MLDSAPrivateKeyParameters {
-        require(encoded.size == SEED_LENGTH || encoded.size == expandedPrivateKeyLength) {
-            "$keyType private key must be $SEED_LENGTH (seed) or $expandedPrivateKeyLength (expanded) bytes, " +
+        require(encoded.size == seedLength || encoded.size == expandedPrivateKeyLength) {
+            "$keyType private key must be $seedLength (seed) or $expandedPrivateKeyLength (expanded) bytes, " +
                 "got ${encoded.size}"
         }
         return MLDSAPrivateKeyParameters(parameters, encoded.copyOf())
@@ -126,14 +131,8 @@ internal enum class MlDsa(
     }
 
     companion object {
-        /** `ξ` (FIPS 204 Algorithm 1, line 1). */
-        const val SEED_LENGTH: Int = 32
-
         /** `rnd` for hedged signing (FIPS 204 Algorithm 2). */
         const val RND_LENGTH: Int = 32
-
-        /** `tr = H(pk, 64)` (FIPS 204 Algorithm 6, line 7). */
-        private const val TR_LENGTH: Int = 64
 
         fun of(type: KeyType): MlDsa? = entries.firstOrNull { it.keyType == type }
 

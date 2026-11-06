@@ -184,7 +184,9 @@ public final class dev/kcoap/crypto/KeyType : java/lang/Enum {
 	public static final field X25519 Ldev/kcoap/crypto/KeyType;
 	public static final field X448 Ldev/kcoap/crypto/KeyType;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getExpandedPrivateKeyLength ()Ljava/lang/Integer;
 	public final fun getPublicKeyLength ()I
+	public final fun getSeedLength ()Ljava/lang/Integer;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/KeyType;
 	public static fun values ()[Ldev/kcoap/crypto/KeyType;
 }
@@ -225,6 +227,7 @@ public final class dev/kcoap/crypto/SignatureAlgorithm : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
 	public final fun getSignatureLength ()I
+	public final fun getTrLength ()Ljava/lang/Integer;
 	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/SignatureAlgorithm;
 	public static fun values ()[Ldev/kcoap/crypto/SignatureAlgorithm;
 }

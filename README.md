@@ -193,6 +193,7 @@ More in the [client and server guide](docs/guide-client-server.md).
 | [`kcoap-crypto`](kcoap-crypto/README.md) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER, X.509 parsing |
 | [`kcoap-crypto-default`](kcoap-crypto-default/README.md) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple, OpenSSL on Linux, WebCrypto in browsers and Node.js |
 | [`kcoap-crypto-bc`](kcoap-crypto-bc/README.md) | Post-quantum backend on Bouncy Castle: ML-KEM and ML-DSA (JVM, Android) |
+| [`kcoap-crypto-testsuite`](kcoap-crypto-testsuite/README.md) | Conformance suite for crypto backends, for test source sets: the `supports` contract, NIST's ACVP ML-KEM and ML-DSA vectors, a capability report per target |
 | [`kcoap-cbor`](kcoap-cbor/README.md) | Deterministic CBOR and CBOR sequences |
 | [`kcoap-cose`](kcoap-cose/README.md) | COSE structures, COSE_Key, CWT Claims Sets |
 | [`kcoap-transport`](kcoap-transport/README.md) | Transport interfaces, endpoints, peer identities, URI schemes |

@@ -1,6 +1,6 @@
 // Generated from NIST ACVP-Server (github.com/usnistgov/ACVP-Server, commit 975de31eb83d,
 // gen-val/json-files/*/internalProjection.json) by tools/gen_pq_vectors.py. Do not edit by hand.
-package dev.kcoap.crypto.bc.vectors
+package dev.kcoap.crypto.testsuite.vectors
 
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType

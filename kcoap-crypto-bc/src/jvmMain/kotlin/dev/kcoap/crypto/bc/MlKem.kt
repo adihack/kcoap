@@ -18,23 +18,25 @@ import org.bouncycastle.crypto.params.MLKEMPublicKeyParameters
  * generation, `m` for encapsulation) and passes it in, which is what lets NIST's vectors replay through the
  * public backend.
  *
- * Private keys come in two encodings, told apart by their length:
+ * Private keys come in the two encodings of [KeyType], told apart by their length:
  *  - the 64-byte seed `d || z` of ML-KEM.KeyGen (FIPS 203 Algorithm 19); ML-KEM.KeyGen_internal (Algorithm 16)
  *    expands it on every use;
  *  - the expanded decapsulation key `dk = dk_PKE || ek || H(ek) || z` of Algorithm 16, 768k + 96 bytes.
  */
-internal enum class MlKem(
-    val algorithm: KemAlgorithm,
-    private val parameters: MLKEMParameters,
-    /** Length of the expanded decapsulation key `dk` (FIPS 203 §8, Table 3). */
-    val decapsulationKeyLength: Int,
-) {
-    ML_KEM_512(KemAlgorithm.ML_KEM_512, MLKEMParameters.ml_kem_512, decapsulationKeyLength = 1632),
-    ML_KEM_768(KemAlgorithm.ML_KEM_768, MLKEMParameters.ml_kem_768, decapsulationKeyLength = 2400),
-    ML_KEM_1024(KemAlgorithm.ML_KEM_1024, MLKEMParameters.ml_kem_1024, decapsulationKeyLength = 3168),
+internal enum class MlKem(val algorithm: KemAlgorithm, private val parameters: MLKEMParameters) {
+    ML_KEM_512(KemAlgorithm.ML_KEM_512, MLKEMParameters.ml_kem_512),
+    ML_KEM_768(KemAlgorithm.ML_KEM_768, MLKEMParameters.ml_kem_768),
+    ML_KEM_1024(KemAlgorithm.ML_KEM_1024, MLKEMParameters.ml_kem_1024),
     ;
 
     val keyType: KeyType get() = algorithm.keyType
+
+    /** `d || z`, two 32-byte random values (FIPS 203 Algorithm 19, lines 1-2): [KeyType.seedLength]. */
+    val seedLength: Int = checkNotNull(algorithm.keyType.seedLength) { "$algorithm has no seed length" }
+
+    /** The expanded decapsulation key `dk` (FIPS 203 §8, Table 3): [KeyType.expandedPrivateKeyLength]. */
+    val decapsulationKeyLength: Int =
+        checkNotNull(algorithm.keyType.expandedPrivateKeyLength) { "$algorithm has no expanded key length" }
 
     /** ML-KEM.KeyGen (FIPS 203 Algorithm 19) for an already drawn [seed] `d || z`, which becomes the private key. */
     fun generateKeyPair(seed: ByteArray): KeyPair {
@@ -96,17 +98,14 @@ internal enum class MlKem(
      * the encoding, because `destroy()` clears the arrays the parameters hold.
      */
     private fun privateKey(encoded: ByteArray, publicKey: MLKEMPublicKeyParameters? = null): MLKEMPrivateKeyParameters {
-        require(encoded.size == SEED_LENGTH || encoded.size == decapsulationKeyLength) {
-            "$keyType private key must be $SEED_LENGTH (seed) or $decapsulationKeyLength (expanded) bytes, " +
+        require(encoded.size == seedLength || encoded.size == decapsulationKeyLength) {
+            "$keyType private key must be $seedLength (seed) or $decapsulationKeyLength (expanded) bytes, " +
                 "got ${encoded.size}"
         }
         return MLKEMPrivateKeyParameters(parameters, encoded.copyOf(), publicKey)
     }
 
     companion object {
-        /** `d || z`, two 32-byte random values (FIPS 203 Algorithm 19, lines 1-2). */
-        const val SEED_LENGTH: Int = 64
-
         /** `m`, the encapsulation randomness (FIPS 203 Algorithm 20, line 1). */
         const val MESSAGE_LENGTH: Int = 32
 

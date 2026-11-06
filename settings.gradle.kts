@@ -44,6 +44,9 @@ include(
     ":kcoap-crypto-default",
     // Adapter, JVM_LIBRARY. Post-quantum backend on Bouncy Castle: ML-KEM (FIPS 203) and ML-DSA (FIPS 204).
     ":kcoap-crypto-bc",
+    // Support, UNIVERSAL, common code only (kcoap.core). The conformance suites every CryptoBackend's tests
+    // extend: the supports invariant, NIST's ACVP ML-KEM and ML-DSA vectors, a capability report per target.
+    ":kcoap-crypto-testsuite",
     // Core. Deterministic CBOR (RFC 8949 §4.2) and CBOR sequences (RFC 8742).
     ":kcoap-cbor",
     // Core. COSE structures used by OSCORE and EDHOC (RFC 9052/9053, RFC 9360).

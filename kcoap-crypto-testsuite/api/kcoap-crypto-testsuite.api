@@ -1,0 +1,70 @@
+public final class dev/kcoap/crypto/testsuite/CapabilityInvariant {
+	public static final field INSTANCE Ldev/kcoap/crypto/testsuite/CapabilityInvariant;
+	public final fun check (Ldev/kcoap/crypto/CryptoBackend;Ljava/lang/Enum;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getQuestions ()Ljava/util/List;
+	public final fun violations (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/crypto/testsuite/CapabilityReport {
+	public static final field Companion Ldev/kcoap/crypto/testsuite/CapabilityReport$Companion;
+	public static final field LINE_PREFIX Ljava/lang/String;
+	public final fun getSupported ()Ljava/util/List;
+	public final fun getUnsupported ()Ljava/util/List;
+	public final fun lines (Ljava/lang/String;)Ljava/util/List;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/testsuite/CapabilityReport$Companion {
+	public final fun of (Ldev/kcoap/crypto/CryptoBackend;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/crypto/testsuite/CapabilityViolation {
+	public final fun getAnswer ()Z
+	public final fun getProblem ()Ljava/lang/String;
+	public final fun getQuestion ()Ljava/lang/Enum;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class dev/kcoap/crypto/testsuite/CryptoBackendConformanceTest {
+	public fun <init> ()V
+	protected fun backendName (Ldev/kcoap/crypto/CryptoBackend;)Ljava/lang/String;
+	protected abstract fun createBackend ()Ldev/kcoap/crypto/CryptoBackend;
+	public final fun everyAeadRunsExactlyWhenSupported ()V
+	public final fun everyHashRunsExactlyWhenSupported ()V
+	public final fun everyKemRunsExactlyWhenSupported ()V
+	public final fun everyKeyTypeRunsExactlyWhenSupported ()V
+	public final fun everySignatureAlgorithmRunsExactlyWhenSupported ()V
+	public final fun theCapabilityReportAnswersEveryQuestion ()V
+}
+
+public abstract class dev/kcoap/crypto/testsuite/MlDsaConformanceTest {
+	public fun <init> ()V
+	protected abstract fun createBackend ()Ldev/kcoap/crypto/CryptoBackend;
+	protected abstract fun createBackend (Ldev/kcoap/crypto/testsuite/ScriptedRandom;)Ldev/kcoap/crypto/CryptoBackend;
+	public final fun fips204KeyGenMatchesAcvpVectors ()V
+	public final fun fips204SeedAndExpandedPrivateKeyAgree ()V
+	public final fun fips204SigGenMatchesAcvpVectors ()V
+	public final fun fips204SigVerMatchesAcvpVectors ()V
+	public final fun fips204VerifyRejectsModifiedAndMalformedSignatures ()V
+	public final fun importChecksThatThePrivateKeyBelongsToThePublicKey ()V
+}
+
+public abstract class dev/kcoap/crypto/testsuite/MlKemConformanceTest {
+	public fun <init> ()V
+	protected abstract fun createBackend ()Ldev/kcoap/crypto/CryptoBackend;
+	protected abstract fun createBackend (Ldev/kcoap/crypto/testsuite/ScriptedRandom;)Ldev/kcoap/crypto/CryptoBackend;
+	public final fun fips203EncapsulationMatchesAcvpVectors ()V
+	public final fun fips203HashCheckRejectsAcvpDecapsulationKey ()V
+	public final fun fips203ImplicitRejectionMatchesAcvpVector ()V
+	public final fun fips203KeyGenMatchesAcvpVectors ()V
+	public final fun fips203ModulusCheckRejectsAcvpEncapsulationKey ()V
+	public final fun fips203SeedAndExpandedDecapsulationKeyAgree ()V
+	public final fun importRejectsADecapsulationKeyOfAnotherEncapsulationKey ()V
+}
+
+public final class dev/kcoap/crypto/testsuite/ScriptedRandom {
+	public fun <init> ([[B)V
+	public final fun getRemaining ()I
+	public final fun next (I)[B
+}
+

@@ -65,10 +65,20 @@ seed and expanded forms are told apart by length. Import checks that the private
 (for ML-DSA also that `tr = H(pk, 64)`, which Bouncy Castle does not check), and rejects an ML-KEM key pair that
 fails the FIPS 203 input checks.
 
+The lengths come from kcoap-crypto, where every backend and key format reads them: `KeyType.seedLength` and
+`KeyType.expandedPrivateKeyLength`, and `SignatureAlgorithm.trLength` for ML-DSA's `tr`.
+
 ## Verified by
 
-NIST ACVP known-answer vectors (github.com/usnistgov/ACVP-Server, `gen-val/json-files`, commit 975de31e), a few
-cases per parameter set, embedded as hex in `src/jvmTest/.../vectors` by `tools/regen-pq-vectors.sh`:
+The conformance suites of [kcoap-crypto-testsuite](../kcoap-crypto-testsuite/README.md), which the tests extend:
+
+- the capability contract (`BouncyCastleConformanceTest`): every `supports` answer holds, the ML-KEM and
+  ML-DSA ones and those passed to the classical backend. Without the `supports` overrides the backend fails
+  it for exactly the algorithms it adds (`SupportsOverridesTest`, with a test-only wrapper that forwards the
+  questions to the classical backend);
+- NIST ACVP known-answer vectors (`MlKemKnownAnswerTest`, `MlDsaKnownAnswerTest`; github.com/usnistgov/ACVP-Server,
+  `gen-val/json-files`, commit 975de31e), a few cases per parameter set, which the suite holds and replays
+  through the public backend with scripted randomness:
 
 | File | tcIds | What is checked |
 |---|---|---|
@@ -80,9 +90,11 @@ cases per parameter set, embedded as hex in `src/jvmTest/.../vectors` by `tools/
 | `ML-DSA-sigGen-FIPS204` | 5, 44, 70 (deterministic), 189 (hedged) | signatures byte for byte, and they verify |
 | `ML-DSA-sigVer-FIPS204` | 10 | NIST's rejection of a modified message |
 
-ML-DSA cases are all external-interface, pure, empty-context ones, the only variant the backend exposes. Besides
-the vectors, the tests cover round trips for every parameter set, implicit rejection against kcoap's own SHAKE256,
-tampered, truncated and malformed signatures, every input check, delegation of the classical algorithms (to
+ML-DSA cases are all external-interface, pure, empty-context ones, the only variant the backend exposes. The
+suite signs NIST's deterministic vectors with the default hedged signer and `rnd = {0}^32`. Besides the vectors,
+the tests cover round trips for every parameter set, implicit rejection against kcoap's own SHAKE256,
+tampered, truncated and malformed signatures, every input check (with the `IllegalArgumentException` this
+backend documents, on keys expanded by Bouncy Castle itself), delegation of the classical algorithms (to
 `DefaultCryptoBackend`, a test-only dependency here, and to a minimal backend with only the required
 primitives), and the wiping of drawn randomness.
 
