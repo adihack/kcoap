@@ -46,10 +46,17 @@ Before tagging 0.1.0:
   its classpath has a version the BOM does not set, and the same program from the POMs alone, as Maven reads them
   (`pom-only`), and the `js-consumer` job builds
   [samples/js-consumer](../samples/js-consumer/README.md) within its bundle-size budget and runs it in headless
-  Chrome. `verifyBomConstraints` (the unit job) keeps the BOM equal to the published modules. Still to look at
-  before the tag: that the modules' own POMs (`<module>/build/publications/<target>/pom-default.xml`) name the
-  license, the developer and the SCM, as `PublishingPluginTest` checks the convention plugin does in a fixture
-  build;
+  Chrome. `verifyBomConstraints` (the unit job) keeps the BOM equal to the published modules. The modules' own
+  POMs name the license, the developer and the SCM, as `PublishingPluginTest` checks the convention plugin does in
+  a fixture build: **done (WP-P1)** for all 127 POMs of a `publishToMavenLocal` at its commit, and checked again on
+  the release commit, where this prints nothing:
+
+  ```bash
+  for p in ~/.m2/repository/dev/kcoap/*/<version>/*.pom; do
+      grep -q '<license>' "$p" && grep -q '<developer>' "$p" && grep -q '<scm>' "$p" || echo "$p"
+  done
+  ```
+
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
   release matches the CHANGELOG entry ([versioning](versioning.md)).
 
