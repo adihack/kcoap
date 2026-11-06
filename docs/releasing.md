@@ -34,8 +34,8 @@ Before tagging 0.1.0:
   out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig` and
   `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
-- the `dev.kcoap` namespace shows as verified in the Central Portal, and the Maven Central and signing
-  secrets are set ([below](#before-the-first-maven-central-release)); the license is already set;
+- the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)); the
+  license is already set, and the `dev.kcoap` namespace is verified;
 - `./gradlew publishToMavenLocal` works, a sample consumer builds against it, and the POMs
   (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM;
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
@@ -99,9 +99,10 @@ workflow's own token cannot turn it on.
   the maintainer, GitHub Issues and the SCM URLs (`build-logic/src/main/kotlin/KcoapProject.kt`). A
   module without the two properties fails to configure instead of publishing a POM that Maven Central
   rejects.
-- **Namespace: to do, by the owner.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`),
-  backed by the `kcoap.dev` domain, whose DNS is on Cloudflare. The Central Portal verifies it through a
-  DNS `TXT` record, in the steps below.
+- **Namespace: done.** The group is `dev.kcoap` (`kcoap.group` in `gradle.properties`), backed by the
+  `kcoap.dev` domain, whose DNS is on Cloudflare. The Central Portal verified it on 2026-11-06 through a
+  DNS `TXT` record on `kcoap.dev`. The steps below stay as the record of how, and for a namespace that
+  ever needs verifying again.
 - **User token.** Generate one in the [Central Portal](https://central.sonatype.com) under *Account* →
   *Generate User Token*. Its username and password become the `MAVEN_CENTRAL_USERNAME` and
   `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), with the signing key.

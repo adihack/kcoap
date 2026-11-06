@@ -57,7 +57,7 @@ CI must pass first, and no tag is made before the release freeze list has merged
 | The trademarks kcoap and kcoap.dev ([TRADEMARKS.md](TRADEMARKS.md)) | Adrian Sołtys |
 | The domain kcoap.dev and the website https://kcoap.dev | Adrian Sołtys |
 | The GitHub repository [adihack/kcoap](https://github.com/adihack/kcoap) | Adrian Sołtys |
-| The Maven namespace `dev.kcoap` (once verified) and the release signing keys (once created) | Adrian Sołtys |
+| The Maven namespace `dev.kcoap` (verified in the Central Portal) and the release signing keys (once created) | Adrian Sołtys |
 | Sponsorship accounts, once they exist | Adrian Sołtys, for the project |
 
 If the project moves to a foundation or another legal home, this table changes in the same pull
