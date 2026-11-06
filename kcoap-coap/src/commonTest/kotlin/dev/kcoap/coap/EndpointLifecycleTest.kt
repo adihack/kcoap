@@ -270,7 +270,7 @@ class EndpointLifecycleTest {
                 }
             }
         }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 60.seconds))
+        val client = fixture.client(CoapClientConfig { requestTimeout = 60.seconds })
         val pending = async { client.get(fixture.uri("/slow")) }
         started.await()
 
@@ -293,7 +293,7 @@ class EndpointLifecycleTest {
         }
         val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig(interceptors = listOf(spy)), listeners = listOf(fixture.listen()))
         val server = CoapServer(endpoint) { resource("r") { get { CoapResponse.content("ok") } } }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 60.seconds))
+        val client = fixture.client(CoapClientConfig { requestTimeout = 60.seconds })
         val pending = async { client.get(fixture.uri("/r")) }
 
         // The handler coroutine is launched in the same step that delivers the request, and dispatched only

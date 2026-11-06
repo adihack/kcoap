@@ -63,7 +63,7 @@ class UnverifiedResponseTest {
 
     private class Setup(val fixture: StackFixture, val peer: RawPeer, val client: CoapClient)
 
-    private suspend fun TestScope.setup(config: CoapClientConfig = CoapClientConfig(security = Toy)): Setup {
+    private suspend fun TestScope.setup(config: CoapClientConfig = CoapClientConfig { security = Toy }): Setup {
         val fixture = StackFixture(this)
         return Setup(fixture, RawPeer(fixture.transport()), fixture.client(config))
     }
@@ -158,7 +158,7 @@ class UnverifiedResponseTest {
 
     @Test
     fun adr0008AnUnverified413DoesNotRestartABlock1Upload() = runTest {
-        val s = setup(CoapClientConfig(security = Toy, preferredBlockSize = 64))
+        val s = setup(CoapClientConfig { security = Toy; preferredBlockSize = 64 })
         val pending = async { runCatching { s.client.put(s.peer.uri("/store"), ByteArray(300)) } }
         val first = s.peer.receive()
         assertEquals(0L, first.options.block1?.number)
@@ -247,7 +247,7 @@ class UnverifiedResponseTest {
     fun adr0008AForgedUnprotected401WithEchoToAQBlockRequestIsNotRepeated() = runTest {
         for (type in listOf(CoapMessageType.NON, CoapMessageType.CON)) {
             val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-            val s = setup(CoapClientConfig(security = Toy, qBlock = qBlock))
+            val s = setup(CoapClientConfig { security = Toy; this.qBlock = qBlock })
             val pending = async {
                 runCatching { s.client.get(s.peer.uri("/big")) { if (type == CoapMessageType.NON) nonConfirmable() } }
             }
@@ -264,7 +264,7 @@ class UnverifiedResponseTest {
     @Test
     fun adr0008AnUnverified402ToAQBlockRequestFallsBackToNothing() = runTest {
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-        val s = setup(CoapClientConfig(security = Toy, qBlock = qBlock))
+        val s = setup(CoapClientConfig { security = Toy; this.qBlock = qBlock })
         val pending = async { runCatching { s.client.get(s.peer.uri("/big")) { nonConfirmable() } } }
         val request = s.peer.receive()
 
@@ -280,7 +280,7 @@ class UnverifiedResponseTest {
     @Test
     fun adr0008AQBlockProbeAnsweredOnlyUnverifiedLeavesTheCapabilityUnknown() = runTest {
         val qBlock = QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true)
-        val s = setup(CoapClientConfig(security = Toy, qBlock = qBlock))
+        val s = setup(CoapClientConfig { security = Toy; this.qBlock = qBlock })
         val pending = async { runCatching { s.client.get(s.peer.uri("/big")) } }
         val probe = s.peer.receive()
         assertEquals(listOf(".well-known", "core"), probe.options.uriPath)
@@ -302,7 +302,7 @@ class UnverifiedResponseTest {
     fun adr0008AForgedUnprotected401WithEchoToAQBlockObserveRegistrationIsNotRepeated() = runTest {
         for (type in listOf(CoapMessageType.NON, CoapMessageType.CON)) {
             val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-            val s = setup(CoapClientConfig(security = Toy, qBlock = qBlock))
+            val s = setup(CoapClientConfig { security = Toy; this.qBlock = qBlock })
             val uri = s.peer.uri("/counter")
             val observation = s.client.observe(uri) { if (type == CoapMessageType.NON) nonConfirmable() }
             val pending = async { runCatching { observation.toList() } }
@@ -320,7 +320,7 @@ class UnverifiedResponseTest {
     @Test
     fun adr0008UnverifiedErrorsNeitherEndNorReachAnEstablishedQBlockObservation() = runTest {
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, withMessageSecurity = true)
-        val s = setup(CoapClientConfig(security = Toy, preferredBlockSize = 16, qBlock = qBlock))
+        val s = setup(CoapClientConfig { security = Toy; preferredBlockSize = 16; this.qBlock = qBlock })
         val pending = async { s.client.observe(s.peer.uri("/counter")) { nonConfirmable() }.take(2).toList() }
         val registration = s.peer.receive()
         s.peer.send(s.peer.response(registration, CoapMessageType.NON, "first") {
@@ -406,7 +406,7 @@ class UnverifiedResponseTest {
             }
         }
         val endpointConfig = fixture.endpointConfig(interceptors = listOf(onPath))
-        val client = fixture.client(CoapClientConfig(security = Toy), endpointConfig)
+        val client = fixture.client(CoapClientConfig { security = Toy }, endpointConfig)
 
         val failure = runCatching { client.observe(fixture.uri("/counter")).toList() }.exceptionOrNull()
 

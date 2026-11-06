@@ -74,7 +74,7 @@ class ConcurrencyStressTest {
 
     /** Logs only what went wrong; the endpoints here start and stop hundreds of times. */
     private val quietLogs = LoggerFactory(LogConfig.build { level = LogLevel.WARN })
-    private val quiet = CoapEndpointConfig(loggerFactory = quietLogs)
+    private val quiet = CoapEndpointConfig { loggerFactory = quietLogs }
 
     private fun uriOf(server: CoapServer, path: String): String =
         "coap://127.0.0.1:${(server.endpoint.transport as InMemoryTransport).localEndpoint.port}$path"
@@ -163,7 +163,11 @@ class ConcurrencyStressTest {
                 CoapServer(listOf(connections.listen(port)), background, endpointConfig = quiet) { resource("r") { get { CoapResponse.content("$port") } } }
             }
             val events = EventLog()
-            val config = CoapEndpointConfig(eventListener = events, loggerFactory = quietLogs, reliable = ReliableTransportConfig(idleTimeout = null))
+            val config = CoapEndpointConfig {
+                eventListener = events
+                loggerFactory = quietLogs
+                reliable = ReliableTransportConfig(idleTimeout = null)
+            }
             val client = CoapClient(listOf(connections.connector), background, endpointConfig = config)
 
             val answers = List(24) { i -> async { ports[i % 3] to client.get("coap+tcp://127.0.0.1:${ports[i % 3]}/r").payloadAsText() } }.awaitAll()
@@ -179,7 +183,10 @@ class ConcurrencyStressTest {
         Stress.run(iterations = 20) {
             val connections = InMemoryConnections(chunkSize = 7)
             CoapServer(listOf(connections.listen(5683)), background, endpointConfig = quiet) { resource("r") { get { CoapResponse.content("ok") } } }
-            val config = CoapEndpointConfig(loggerFactory = quietLogs, reliable = ReliableTransportConfig(idleTimeout = 2.milliseconds, releaseTimeout = 50.milliseconds))
+            val config = CoapEndpointConfig {
+                loggerFactory = quietLogs
+                reliable = ReliableTransportConfig(idleTimeout = 2.milliseconds, releaseTimeout = 50.milliseconds)
+            }
             val client = CoapClient(listOf(connections.connector), background, endpointConfig = config)
 
             repeat(4) {

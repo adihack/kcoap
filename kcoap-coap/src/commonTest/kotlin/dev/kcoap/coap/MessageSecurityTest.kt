@@ -145,7 +145,7 @@ class MessageSecurityTest {
             }
         }
         val clientSecurity = ClientSide()
-        val client = fixture.client(CoapClientConfig(security = clientSecurity))
+        val client = fixture.client(CoapClientConfig { security = clientSecurity })
 
         val response = client.get(fixture.uri(server, "/secret"))
 
@@ -191,7 +191,7 @@ class MessageSecurityTest {
         val server = fixture.server(CoapServerConfig(security = ServerSide())) {
             resource("secret") { get { CoapResponse.content("classified") } }
         }
-        val client = fixture.client(CoapClientConfig(security = ClientSide(kid = 9), requestTimeout = 20.seconds))
+        val client = fixture.client(CoapClientConfig { security = ClientSide(kid = 9); requestTimeout = 20.seconds })
 
         // The unprotected error is unverified: the request ends with it as a distinct failure, not a timeout,
         // and nothing in it is acted on (ADR 0008).
@@ -275,7 +275,7 @@ class MessageSecurityTest {
                 }
             }
         }
-        val client = fixture.client(CoapClientConfig(security = ClientSide()))
+        val client = fixture.client(CoapClientConfig { security = ClientSide() })
 
         val response = client.put(fixture.uri(server, "/lock"), "0".encodeToByteArray())
 
@@ -309,7 +309,7 @@ class MessageSecurityTest {
         assertEquals(CoapCode.CHANGED, client.post(fixture.uri(server, "/fresh")).code)
         assertEquals(listOf(null, "ok"), echoes)
         assertEquals(CoapCode.UNAUTHORIZED, client.post(fixture.uri(server, "/stubborn")).code, "only one retry")
-        val noRetry = fixture.client(CoapClientConfig(echoRetry = false))
+        val noRetry = fixture.client(CoapClientConfig { echoRetry = false })
         assertEquals(CoapCode.UNAUTHORIZED, noRetry.post(fixture.uri(server, "/fresh")).code)
     }
 
@@ -328,7 +328,7 @@ class MessageSecurityTest {
             }
         }
         val clientSecurity = ClientSide()
-        val client = fixture.client(CoapClientConfig(security = clientSecurity))
+        val client = fixture.client(CoapClientConfig { security = clientSecurity })
 
         val response = client.post(fixture.uri(server, "/echo"), body)
 
@@ -351,7 +351,7 @@ class MessageSecurityTest {
         }
         val server = fixture.server(CoapServerConfig(security = serverSecurity)) { add(counter) }
         val clientSecurity = ClientSide()
-        val client = fixture.client(CoapClientConfig(security = clientSecurity))
+        val client = fixture.client(CoapClientConfig { security = clientSecurity })
 
         val received = async { client.observe(fixture.uri(server, "/counter")).take(3).toList() }
         delay(1.seconds)

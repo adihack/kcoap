@@ -38,7 +38,7 @@ class TimeSourceContractTest {
     fun aTimeSourceThatIgnoresTheDispatcherClockIsReportedOnce() = runTest {
         val fixture = StackFixture(this)
         // The real clock under runTest: virtual delays end at once while it hardly moves.
-        val config = CoapEndpointConfig(timeSource = TimeSource.Monotonic, loggerFactory = loggers)
+        val config = CoapEndpointConfig { timeSource = TimeSource.Monotonic; loggerFactory = loggers }
         val client = CoapClient(CoapEndpoint(fixture.transport(), backgroundScope, config))
         val request = launch { runCatching { client.get("coap://127.0.0.1:9/x") } }
         delay(60.seconds)
@@ -51,7 +51,7 @@ class TimeSourceContractTest {
     @Test
     fun aTimeSourceThatFollowsTheDispatcherClockIsNotReported() = runTest {
         val fixture = StackFixture(this)
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource, loggerFactory = loggers)
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource; loggerFactory = loggers }
         val client = CoapClient(CoapEndpoint(fixture.transport(), backgroundScope, config))
         val request = launch { runCatching { client.get("coap://127.0.0.1:9/x") } }
         delay(60.seconds)

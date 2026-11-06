@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.TokenGenerator
 import dev.kcoap.log.LogConfig
@@ -58,20 +59,20 @@ class StackFixture(val test: TestScope, private val seed: Int = 1) {
     )
 
     fun endpointConfig(
-        separateResponseDelay: Duration? = CoapEndpointConfig().separateResponseDelay,
+        separateResponseDelay: Duration? = CoapEndpointConfig.Default.separateResponseDelay,
         interceptors: List<MessageInterceptor> = emptyList(),
         tokenGenerator: TokenGenerator = TokenGenerator.sessionSequence(random = Random(seed + 7)),
         parameters: dev.kcoap.coap.stack.TransmissionParameters = dev.kcoap.coap.stack.TransmissionParameters.Default,
-    ) = CoapEndpointConfig(
-        parameters = parameters,
-        separateResponseDelay = separateResponseDelay,
-        tokenGenerator = tokenGenerator,
-        timeSource = test.testScheduler.timeSource,
-        random = Random(seed + 3),
-        interceptors = interceptors,
-        eventListener = { events += it },
-        loggerFactory = loggerFactory,
-    )
+    ) = CoapEndpointConfig {
+        this.parameters = parameters
+        this.separateResponseDelay = separateResponseDelay
+        this.tokenGenerator = tokenGenerator
+        timeSource = test.testScheduler.timeSource
+        random = Random(seed + 3)
+        this.interceptors = interceptors
+        eventListener = EndpointEventListener { events += it }
+        loggerFactory = this@StackFixture.loggerFactory
+    }
 
     suspend fun transport(maxDatagramSize: Int = InMemoryNetwork.DEFAULT_MAX_DATAGRAM_SIZE): InMemoryTransport =
         network.attach(maxDatagramSize = maxDatagramSize)
@@ -89,7 +90,7 @@ class StackFixture(val test: TestScope, private val seed: Int = 1) {
     ): CoapServer = CoapServer(endpoint(endpointConfig, maxDatagramSize), config, routes)
 
     suspend fun client(
-        config: CoapClientConfig = CoapClientConfig(),
+        config: CoapClientConfig = CoapClientConfig.Default,
         endpointConfig: CoapEndpointConfig = endpointConfig(),
         maxDatagramSize: Int = InMemoryNetwork.DEFAULT_MAX_DATAGRAM_SIZE,
     ): CoapClient = CoapClient(endpoint(endpointConfig, maxDatagramSize), config)

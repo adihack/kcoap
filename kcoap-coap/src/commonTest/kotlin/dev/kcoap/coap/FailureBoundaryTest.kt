@@ -16,6 +16,7 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.RequestHandler
@@ -244,7 +245,7 @@ class FailureBoundaryTest {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
                 throw MessageSecurityException("No context for $peer")
         }
-        val client = fixture.client(CoapClientConfig(security = failing))
+        val client = fixture.client(CoapClientConfig { security = failing })
 
         val error = assertFailsWith<CoapException> { client.get(fixture.uri("/r")) }
         assertEquals(CoapException.Reason.SECURITY, error.reason)
@@ -272,9 +273,12 @@ class FailureBoundaryTest {
             }
         }
         val reliable = ReliableTransportConfig(idleTimeout = 1.seconds, releaseTimeout = 1.seconds)
-        val config = CoapEndpointConfig(
-            timeSource = testScheduler.timeSource, eventListener = { fixture.events += it }, loggerFactory = loggers, reliable = reliable,
-        )
+        val config = CoapEndpointConfig {
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+            loggerFactory = loggers
+            this.reliable = reliable
+        }
         val endpoint = CoapEndpoint(backgroundScope, config, connectors = listOf(fixture.connections.connector))
         endpoint.requestHandler = object : RequestHandler {
             override val context: CoroutineContext = EmptyCoroutineContext
@@ -313,7 +317,10 @@ class FailureBoundaryTest {
                 sink = LogSink { records += it }
             },
         )
-        val endpoint = CoapEndpoint(fixture.transport(), backgroundScope, CoapEndpointConfig(loggerFactory = loggers, timeSource = testScheduler.timeSource))
+        val endpoint = CoapEndpoint(fixture.transport(), backgroundScope, CoapEndpointConfig {
+            loggerFactory = loggers
+            timeSource = testScheduler.timeSource
+        })
 
         endpoint.launchGuarded("do the work", onFailure = { error("cleanup failed as well") }) { error("work failed") }.join()
         assertEquals(listOf("work failed", "cleanup failed as well"), records.map { it.error?.message })
@@ -343,7 +350,10 @@ class FailureBoundaryTest {
             },
         )
         val bare = CoroutineScope(StandardTestDispatcher(testScheduler) + Job())
-        val endpoint = CoapEndpoint(fixture.transport(), bare, CoapEndpointConfig(loggerFactory = loggers, timeSource = testScheduler.timeSource))
+        val endpoint = CoapEndpoint(fixture.transport(), bare, CoapEndpointConfig {
+            loggerFactory = loggers
+            timeSource = testScheduler.timeSource
+        })
 
         endpoint.scope.launch { error("a bug in an endpoint coroutine") }
         runCurrent()

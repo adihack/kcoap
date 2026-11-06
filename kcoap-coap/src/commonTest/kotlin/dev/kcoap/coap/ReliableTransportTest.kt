@@ -224,7 +224,7 @@ class ReliableTransportTest {
         fixture.server(endpointConfig = fixture.endpointConfig(ReliableTransportConfig(maxMessageSize = 2048))) {
             resource("store") { put { CoapResponse.changed() } }
         }
-        val client = fixture.client(CoapClientConfig(preferredBlockSize = 512))
+        val client = fixture.client(CoapClientConfig { preferredBlockSize = 512 })
         assertEquals(CoapCode.CHANGED, client.put(fixture.uri("/store"), body(3000)).code)
         assertTrue(fixture.sent(CoapCode.PUT).all { it.options.block1!!.size == 512 && !it.options.block1!!.isBert })
     }
@@ -259,7 +259,7 @@ class ReliableTransportTest {
         val counter = Counter()
         fixture.server { add(counter) }
         // FORGET does not apply on reliable transports: there is no Reset to cancel with.
-        val client = fixture.client(CoapClientConfig(observeCancellation = ObserveCancellation.FORGET))
+        val client = fixture.client(CoapClientConfig { observeCancellation = ObserveCancellation.FORGET })
 
         val collected = async { client.observe(fixture.uri("/counter")).take(3).toList() }
         runCurrent()
@@ -457,7 +457,7 @@ class ReliableTransportTest {
     fun rfc8323Section5_4_1NoResponseRequestsAreProcessedForCustody() = runTest {
         val fixture = ReliableFixture(this)
         fixture.server { resource("quiet") { post { CoapResponse.changed() } } }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 5.seconds))
+        val client = fixture.client(CoapClientConfig { requestTimeout = 5.seconds })
         assertFailsWith<CoapException> { client.post(fixture.uri("/quiet"), body(4)) { options { noResponse(0x02) } } }
         assertTrue(client.endpoint.ping(Endpoint.Tcp("127.0.0.1", 5683), custody = true))
         assertTrue(fixture.sent(CoapCode.CHANGED).isEmpty())

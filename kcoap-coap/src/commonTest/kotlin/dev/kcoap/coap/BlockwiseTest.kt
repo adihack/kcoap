@@ -62,7 +62,7 @@ class BlockwiseTest {
     fun rfc7959Section2_4EarlyNegotiationUsesTheClientBlockSize() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("large") { get { CoapResponse.content(large) } } }
-        val client = fixture.client(CoapClientConfig(preferredBlockSize = 64))
+        val client = fixture.client(CoapClientConfig { preferredBlockSize = 64 })
 
         assertContentEquals(large, client.get(fixture.uri(server, "/large")).payload)
         assertEquals(BlockOption(0, false, 2), fixture.requests().first().options.block2)
@@ -157,7 +157,7 @@ class BlockwiseTest {
     fun rfc7959Section2_7Block1AndBlock2Combine() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("echo") { post { CoapResponse(CoapCode.CHANGED, payload = payload) } } }
-        val client = fixture.client(CoapClientConfig(preferredBlockSize = 512))
+        val client = fixture.client(CoapClientConfig { preferredBlockSize = 512 })
 
         val response = client.post(fixture.uri(server, "/echo"), large)
 
@@ -394,7 +394,7 @@ class BlockwiseTest {
     fun theClientRefusesTooLargeBodies() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("large") { get { CoapResponse.content(large) } } }
-        val client = fixture.client(CoapClientConfig(maxResponseBodySize = 2000))
+        val client = fixture.client(CoapClientConfig { maxResponseBodySize = 2000 })
 
         val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/large")) }
         assertEquals(CoapException.Reason.BLOCKWISE_FAILED, error.reason)
@@ -413,7 +413,7 @@ class BlockwiseTest {
             }
         }
         val client = fixture.client(
-            CoapClientConfig(preferredBlockSize = 256),
+            CoapClientConfig { preferredBlockSize = 256 },
             endpointConfig = fixture.endpointConfig(parameters = dev.kcoap.coap.stack.TransmissionParameters(nstart = 4)),
         )
         val first = ByteArray(1000) { 1 }

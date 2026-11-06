@@ -52,7 +52,7 @@ class FullStackTest {
     fun edhocThenOscoreThroughClientAndServer() = runTest {
         val network = InMemoryNetwork(backgroundScope, Random(7))
         network.conditions = LinkConditions(lossRate = 0.1, duplicationRate = 0.1)
-        val endpointConfig = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val endpointConfig = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         val peers = Peers.create(crypto)
 
         // Server: EDHOC resource, OSCORE (with the combined request) for everything else.
@@ -60,13 +60,13 @@ class FullStackTest {
         val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts)
         val serverTransport = network.attach()
         val wire = mutableListOf<CoapMessage>()
-        val clientEndpointConfig = CoapEndpointConfig(
-            timeSource = testScheduler.timeSource,
+        val clientEndpointConfig = CoapEndpointConfig {
+            timeSource = testScheduler.timeSource
             interceptors = listOf(object : MessageInterceptor {
                 override fun onSend(to: Endpoint, message: CoapMessage) = message.also { wire += it }
                 override fun onReceive(from: Endpoint, message: CoapMessage) = message
-            }),
-        )
+            })
+        }
         val bigBody = ByteArray(3000) { (it % 251).toByte() }
         val lightsSeenBy = mutableListOf<SecurityIdentity?>()
         var uploaded = ByteArray(0)
@@ -94,7 +94,7 @@ class FullStackTest {
 
         // Client: EDHOC first, then the combined request carries message_3.
         val security = PeerSecurity()
-        val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig(security = security), clientEndpointConfig)
+        val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig { this.security = security }, clientEndpointConfig)
         val address = serverTransport.localEndpoint
         val base = "coap://${address.host}:${address.port}"
         val serverUri = CoapUri.parse(base)
@@ -165,7 +165,10 @@ class FullStackTest {
             if (uri.host == "edhoc.example") address else EndpointResolver.Default.resolve(uri)
         }
         val security = PeerSecurity()
-        val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig(security = security, resolver = resolver))
+        val client = CoapClient(network.attach(), backgroundScope, CoapClientConfig {
+            this.security = security
+            this.resolver = resolver
+        })
         val protectedFor = mutableListOf<Endpoint>()
         val protection = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? {
@@ -194,7 +197,7 @@ class FullStackTest {
     @Test
     fun edhocRunsOnAClientThatProbesForQBlockUnderMessageSecurity() = runTest {
         val network = InMemoryNetwork(backgroundScope, Random(11))
-        val endpointConfig = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val endpointConfig = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         val peers = Peers.create(crypto)
         val contexts = InMemoryContextRepository()
         val edhoc = EdhocServer(peers.responderConfig(), crypto, contexts)
@@ -225,7 +228,7 @@ class FullStackTest {
             }
         }
         val qBlock = QBlockClientConfig(QBlockMode.PROBE, withMessageSecurity = true)
-        val clientConfig = CoapClientConfig(security = recording, qBlock = qBlock)
+        val clientConfig = CoapClientConfig { this.security = recording; this.qBlock = qBlock }
         val client = CoapClient(network.attach(), backgroundScope, clientConfig, endpointConfig)
         val address = serverTransport.localEndpoint
         val base = "coap://${address.host}:${address.port}"

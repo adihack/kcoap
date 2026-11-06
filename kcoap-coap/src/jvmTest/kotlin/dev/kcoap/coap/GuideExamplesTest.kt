@@ -14,6 +14,7 @@ import dev.kcoap.coap.server.ResourceAttributes
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.TransmissionParameters
@@ -119,15 +120,15 @@ class GuideExamplesTest {
         return CoapClient(endpoint) to server
     }
 
-    val config = CoapEndpointConfig(
-        parameters = TransmissionParameters(ackTimeout = 3.seconds, maxRetransmit = 6),
-        separateResponseDelay = 500.milliseconds,
+    val config = CoapEndpointConfig {
+        parameters = TransmissionParameters(ackTimeout = 3.seconds, maxRetransmit = 6)
+        separateResponseDelay = 500.milliseconds
         interceptors = listOf(object : MessageInterceptor {
             override fun onSend(to: Endpoint, message: CoapMessage) = message.also { println("-> $to $it") }
             override fun onReceive(from: Endpoint, message: CoapMessage) = message.also { println("<- $from $it") }
-        }),
-        eventListener = { event -> if (event is EndpointEvent.Retransmitted) println(event) },
-    )
+        })
+        eventListener = EndpointEventListener { event -> if (event is EndpointEvent.Retransmitted) println(event) }
+    }
 
     suspend fun reliableServer(scope: CoroutineScope, tcpPort: Int, webSocketPort: Int): CoapServer {
         val listeners = listOf(
@@ -147,13 +148,13 @@ class GuideExamplesTest {
         client.close()
     }
 
-    val reliableConfig = CoapEndpointConfig(
+    val reliableConfig = CoapEndpointConfig {
         reliable = ReliableTransportConfig(
             maxMessageSize = 64 * 1024 + 512, // announced in the CSM; BERT blocks of up to 64 KiB
             idleTimeout = 2.minutes, // release connections this side opened after 2 idle minutes
             keepAliveInterval = 30.seconds, // Ping a quiet connection; abort it if nothing answers
-        ),
-    )
+        )
+    }
 
     suspend fun qBlockServer(scope: CoroutineScope, port: Int): CoapServer {
         val big = ByteArray(20_000) { (it % 251).toByte() }
@@ -172,8 +173,8 @@ class GuideExamplesTest {
     }
 
     suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
-        val qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) // OFF by default
-        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(qBlock = qBlock))
+        val config = CoapClientConfig { qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) } // OFF by default
+        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, config)
         val server = "coap://127.0.0.1:$port"
         // Non-confirmable requests get Non-confirmable bursts; Confirmable ones go block by block.
         val body = client.get("$server/big") { nonConfirmable() }.payload
@@ -185,7 +186,7 @@ class GuideExamplesTest {
     @Test
     fun overConnections() = runTest {
         val connections = InMemoryConnections()
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         CoapServer(listOf(connections.listen(5683)), backgroundScope, endpointConfig = config) {
             resource("hello") { get { CoapResponse.content("Hello") } }
         }
@@ -197,7 +198,7 @@ class GuideExamplesTest {
     fun greets() = runTest {
         val network = InMemoryNetwork(backgroundScope, Random(1))
         network.conditions = LinkConditions(lossRate = 0.3, duplicationRate = 0.1)
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         val serverTransport = network.attach()
         CoapServer(serverTransport, backgroundScope, endpointConfig = config) {
             resource("hello") { get { CoapResponse.content("Hello") } }

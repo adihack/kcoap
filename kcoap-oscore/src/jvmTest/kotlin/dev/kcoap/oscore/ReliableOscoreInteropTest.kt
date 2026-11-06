@@ -94,7 +94,7 @@ class ReliableOscoreInteropTest {
                 crypto,
             )
             val recording = RecordingClientSecurity(OscoreClient(context))
-            val client = CoapClient(listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope, CoapClientConfig(security = recording))
+            val client = CoapClient(listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope, CoapClientConfig { security = recording })
             withTimeout(60.seconds) {
                 waitUntilUp { client.ping(base) }
                 val time = client.get("$base/time")

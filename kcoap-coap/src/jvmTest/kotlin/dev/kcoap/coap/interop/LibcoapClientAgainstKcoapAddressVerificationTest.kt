@@ -10,6 +10,7 @@ import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorUdpTransport
@@ -65,7 +66,10 @@ class LibcoapClientAgainstKcoapAddressVerificationTest {
             server = CoapServer(
                 KtorUdpTransport.bind("127.0.0.1"), scope,
                 config = CoapServerConfig(amplification = AmplificationPolicy.ALL_RESPONSES),
-                endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it }),
+                endpointConfig = CoapEndpointConfig {
+                    interceptors = listOf(recorder)
+                    eventListener = EndpointEventListener { events += it }
+                },
             ) {
                 resource("large") { get { CoapResponse.content(large) } }
             }
