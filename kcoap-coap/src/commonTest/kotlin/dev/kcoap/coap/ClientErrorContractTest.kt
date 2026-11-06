@@ -3,10 +3,15 @@ package dev.kcoap.coap
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.EndpointResolver
+import dev.kcoap.coap.codec.ReliableMessageCodec
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapException
+import dev.kcoap.coap.stack.Signal
+import dev.kcoap.testkit.InMemoryByteStream
+import dev.kcoap.transport.Connection
+import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
@@ -97,6 +102,51 @@ class ClientErrorContractTest {
         ).map { it.reason }
         assertEquals(List(4) { CoapException.Reason.CLOSED }, reasons)
         assertEquals(0, lookups, "a closed endpoint looks nothing up")
+    }
+
+    /** RFC 8323 §5.4: a Ping whose connection is still being opened when the endpoint closes fails like it. */
+    @Test
+    fun aReliablePingWaitingForItsConnectionWhenTheEndpointClosesFailsWithClosed() = runTest {
+        val fixture = ReliableFixture(this)
+        val connecting = CompletableDeferred<Unit>()
+        val connector = object : Connector by fixture.connections.connector {
+            override suspend fun connect(peer: Endpoint): Connection {
+                connecting.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        val endpoint = CoapEndpoint(backgroundScope, fixture.endpointConfig(), connectors = listOf(connector))
+        val client = CoapClient(endpoint)
+        val ping = async { runCatching { client.ping(fixture.uri()) } }
+        connecting.await()
+
+        val started = fixture.now
+        endpoint.close()
+        val error = assertIs<CoapException>(ping.await().exceptionOrNull())
+        assertEquals(CoapException.Reason.CLOSED, error.reason)
+        assertEquals(started, fixture.now, "at once, not after the connect timeout")
+    }
+
+    /** RFC 8323 §5.4: a Ping waiting for its Pong when the endpoint closes fails like it, as a datagram ping does. */
+    @Test
+    fun aReliablePingWaitingForItsPongWhenTheEndpointClosesFailsWithClosed() = runTest {
+        val fixture = ReliableFixture(this)
+        val listener = fixture.listen()
+        launch {
+            // A peer that sends its CSM and never answers a Ping.
+            val connection = listener.accept() as InMemoryByteStream
+            connection.write(ReliableMessageCodec.Tcp.encode(Signal.Csm(null, false).toMessage()))
+        }
+        val endpoint = fixture.endpoint()
+        val ping = async { runCatching { endpoint.ping(Endpoint.Tcp("127.0.0.1", 5683)) } }
+        runCurrent()
+        assertEquals(1, fixture.sent(CoapCode.PING, byServer = false).size, "the Ping is out")
+
+        val started = fixture.now
+        endpoint.close()
+        val error = assertIs<CoapException>(ping.await().exceptionOrNull())
+        assertEquals(CoapException.Reason.CLOSED, error.reason)
+        assertEquals(started, fixture.now, "at once, not after the ping timeout")
     }
 
     /** RFC 7252 §6.2: `coaps` datagrams MUST be secured with DTLS, which kcoap does not have yet. */

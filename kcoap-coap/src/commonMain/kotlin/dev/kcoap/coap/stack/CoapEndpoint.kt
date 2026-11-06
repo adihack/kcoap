@@ -399,7 +399,8 @@ public class CoapEndpoint private constructor(
      * within [ReliableTransportConfig.pingTimeout], false if not or if the connection failed.
      *
      * @throws CoapException with [CoapException.Reason.TRANSPORT_UNAVAILABLE] when the endpoint has no
-     *   transport for [peer], or like [closeCause] once the endpoint is closed.
+     *   transport for [peer], or like [closeCause] once the endpoint is closed, also when it closes while the
+     *   ping waits for its connection or its answer, whatever the transport.
      */
     public suspend fun ping(peer: Endpoint): Boolean = ping(peer, custody = false)
 
@@ -414,11 +415,17 @@ public class CoapEndpoint private constructor(
             linkFor(peer)
         } catch (e: CoapException) {
             if (e.reason == CoapException.Reason.TRANSPORT_UNAVAILABLE) throw e
+            // The terminal transition sets closeCause before it ends the connections and their attempts, so a
+            // connection the closing endpoint ended is reported as the endpoint closed, as over datagrams.
+            closeCause?.let { throw closedError(it) }
             // A connection that cannot be opened is a peer that does not answer.
             log.debug { "Ping of $peer failed: ${e.message}" }
             return false
         }
-        return link.ping(custody)
+        val answered = link.ping(custody)
+        // A connection fails its pending Pings when it closes; closed by this endpoint, that is no answer from the peer.
+        if (!answered) closeCause?.let { throw closedError(it) }
+        return answered
     }
 
     /** Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation. */
