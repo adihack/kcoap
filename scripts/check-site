@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""Checks the kcoap.dev website (web/public) before it is deployed.
+
+    scripts/check-site [directory]
+
+The directory defaults to web/public next to this script. Every HTML page in it is checked for:
+
+- internal links and #anchors that resolve to a file and an id (directories need their trailing slash);
+- a <title>, a meta description, a canonical URL that is the page's own address, the Open Graph and
+  Twitter card tags, <html lang="en"> and exactly one <h1> (404.html has no canonical URL or og:url, and
+  must say noindex instead);
+- alt text on every image, and ids that are unique and that every aria-labelledby, aria-describedby,
+  aria-controls and label/for points at;
+- no inline code that the Content-Security-Policy forbids: no <script> without src, no <style>, no style
+  attribute, no on* handler attribute, no javascript: URL;
+- no resource loaded from anywhere but the site itself: scripts, stylesheets, icons, images, media, frames;
+  in CSS no url() or @import that leaves the site; in JavaScript no host but github.com, and network calls
+  only from assets/releases.js, to https://api.github.com;
+- repository links (github.com/adihack/kcoap/blob|tree/<branch>/) that all name the same branch;
+- at most 150 KB per page, counting the HTML and the images it loads;
+- sitemap.xml listing every page except 404.html, and nothing that is not a page.
+
+Exit status: 0 when the site passes, 1 when anything fails, 2 for a missing directory. Needs only the
+Python 3 standard library.
+"""
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import unquote, urljoin, urlsplit
+
+SITE = "https://kcoap.dev"
+MAX_PAGE_BYTES = 150 * 1024
+NOT_FOUND_PAGE = "404.html"
+REPO_LINK = re.compile(r"^https://github\.com/adihack/kcoap/(?:blob|tree)/([^/]+)/")
+# <link rel> values that load something; any other rel (canonical, alternate, ...) only names a URL.
+RESOURCE_RELS = {"stylesheet", "icon", "shortcut", "apple-touch-icon", "mask-icon", "manifest", "preload",
+                 "modulepreload", "prefetch", "prerender", "preconnect", "dns-prefetch"}
+REQUIRED_META = ["description", "og:type", "og:title", "og:description", "og:image", "og:url",
+                 "twitter:card", "twitter:title", "twitter:description", "twitter:image"]
+NETWORK_CALLS = re.compile(r"\bfetch\s*\(|XMLHttpRequest|new\s+WebSocket|EventSource|sendBeacon|importScripts")
+RELEASES_SCRIPT = "assets/releases.js"
+
+
+class Page(HTMLParser):
+    """Collects what the checks need from one HTML file."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.lang = None
+        self.title = None
+        self._in_title = False
+        self.meta = {}
+        self.canonical = []
+        self.ids = []
+        self.h1 = 0
+        self.links = []          # (tag, attribute, url) for hyperlinks
+        self.resources = []      # (tag, attribute, url) for things the browser loads
+        self.references = []     # (attribute, id) from aria-* and label/for
+        self.problems = []
+        self._script_has_src = None
+        self._script_text = ""
+
+    def handle_starttag(self, tag, attrs):
+        a = {k.lower(): (v if v is not None else "") for k, v in attrs}
+        line = self.getpos()[0]
+        for name, value in a.items():
+            if name.startswith("on"):
+                self.problems.append(f"line {line}: <{tag}> has an inline event handler {name}=")
+            if name == "style":
+                self.problems.append(f"line {line}: <{tag}> has a style attribute")
+            if name in ("href", "src", "action", "formaction", "xlink:href") and \
+                    value.strip().lower().startswith("javascript:"):
+                self.problems.append(f"line {line}: <{tag}> has a javascript: URL")
+        if "id" in a:
+            self.ids.append((a["id"], line))
+        if tag == "a" and "name" in a:
+            self.ids.append((a["name"], line))
+        for attr in ("aria-labelledby", "aria-describedby", "aria-controls"):
+            for ref in a.get(attr, "").split():
+                self.references.append((attr, ref, line))
+        if tag == "label" and a.get("for"):
+            self.references.append(("for", a["for"], line))
+
+        if tag == "html":
+            self.lang = a.get("lang")
+        elif tag == "title":
+            self._in_title = True
+            self.title = ""
+        elif tag == "meta":
+            key = a.get("name") or a.get("property")
+            if key:
+                self.meta.setdefault(key.lower(), a.get("content", ""))
+        elif tag == "link":
+            rels = set(a.get("rel", "").lower().split())
+            if "canonical" in rels:
+                self.canonical.append(a.get("href", ""))
+            if rels & RESOURCE_RELS:
+                self.resources.append(("link", "href", a.get("href", ""), line))
+        elif tag == "h1":
+            self.h1 += 1
+        elif tag == "style":
+            self.problems.append(f"line {line}: inline <style> element")
+        elif tag == "script":
+            self._script_has_src = bool(a.get("src"))
+            self._script_text = ""
+            if a.get("src"):
+                self.resources.append(("script", "src", a["src"], line))
+        elif tag == "img":
+            if "alt" not in a:
+                self.problems.append(f"line {line}: <img src=\"{a.get('src', '')}\"> has no alt attribute")
+            self.resources.append(("img", "src", a.get("src", ""), line))
+        elif tag in ("iframe", "frame", "embed"):
+            self.problems.append(f"line {line}: <{tag}> is not allowed")
+            if a.get("src"):
+                self.resources.append((tag, "src", a["src"], line))
+        elif tag == "object":
+            self.problems.append(f"line {line}: <object> is not allowed")
+        elif tag in ("audio", "video", "source", "track", "input"):
+            for attr in ("src", "poster"):
+                if a.get(attr):
+                    self.resources.append((tag, attr, a[attr], line))
+        elif tag in ("image", "use", "feimage"):
+            ref = a.get("href") or a.get("xlink:href") or ""
+            if ref and not ref.startswith("#"):
+                self.resources.append((tag, "href", ref, line))
+        for attr in ("srcset", "imagesrcset"):
+            for candidate in a.get(attr, "").split(","):
+                url = candidate.strip().split(" ")[0]
+                if url:
+                    self.resources.append((tag, attr, url, line))
+        if tag in ("a", "area") and "href" in a:
+            self.links.append((tag, "href", a["href"], line))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag == "script":
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+        elif tag == "script" and self._script_has_src is not None:
+            if not self._script_has_src:
+                self.problems.append(f"line {self.getpos()[0]}: inline <script>")
+            elif self._script_text.strip():
+                self.problems.append(f"line {self.getpos()[0]}: <script src> with inline content")
+            self._script_has_src = None
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+        if self._script_has_src is not None:
+            self._script_text += data
+
+
+def page_url_path(root, file):
+    """The URL path a file is served at: start/index.html is /start/, 404.html is /404.html."""
+    rel = file.relative_to(root).as_posix()
+    if rel == "index.html":
+        return "/"
+    if rel.endswith("/index.html"):
+        return "/" + rel[: -len("index.html")]
+    return "/" + rel
+
+
+def resolve(root, url_path):
+    """The file a URL path is served from, or (None, reason)."""
+    path = unquote(url_path)
+    if ".." in path.split("/"):
+        return None, "leaves the site"
+    target = root / path.lstrip("/")
+    if path.endswith("/"):
+        index = target / "index.html"
+        return (index, None) if index.is_file() else (None, "no index.html there")
+    if target.is_file():
+        return target, None
+    if target.is_dir() and (target / "index.html").is_file():
+        return None, f"a directory: link to {path}/ with the trailing slash"
+    return None, "no such file"
+
+
+def is_external(url):
+    parts = urlsplit(url)
+    return bool(parts.scheme) or url.startswith("//")
+
+
+def check(root):
+    errors = []
+    pages = sorted(p for p in root.rglob("*.html") if p.is_file())
+    if not pages:
+        return [f"{root}: no HTML pages"], 0
+    parsed = {}
+    for file in pages:
+        page = Page()
+        page.feed(file.read_text(encoding="utf-8"))
+        page.close()
+        parsed[file] = page
+
+    ids_of = {f: {i for i, _ in p.ids} for f, p in parsed.items()}
+    branches = {}
+
+    for file, page in parsed.items():
+        rel = file.relative_to(root).as_posix()
+        url_path = page_url_path(root, file)
+        own_url = SITE + url_path
+        err = errors.append
+
+        for problem in page.problems:
+            err(f"{rel}: {problem}")
+
+        # Head and document structure.
+        if page.lang != "en":
+            err(f"{rel}: <html lang> is {page.lang!r}, not 'en'")
+        if not (page.title or "").strip():
+            err(f"{rel}: no <title>")
+        is_not_found = rel == NOT_FOUND_PAGE
+        for key in REQUIRED_META:
+            if is_not_found and key == "og:url":
+                continue
+            if not page.meta.get(key, "").strip():
+                err(f"{rel}: no <meta {'property' if key.startswith('og:') else 'name'}=\"{key}\"> content")
+        if is_not_found:
+            if page.canonical:
+                err(f"{rel}: the 404 page is served at every missing path and must not name a canonical URL")
+            if "noindex" not in page.meta.get("robots", ""):
+                err(f"{rel}: the 404 page needs <meta name=\"robots\" content=\"noindex\">")
+        else:
+            if len(page.canonical) != 1:
+                err(f"{rel}: needs exactly one <link rel=\"canonical\">, has {len(page.canonical)}")
+            elif page.canonical[0] != own_url:
+                err(f"{rel}: canonical URL {page.canonical[0]} is not the page's own address {own_url}")
+            if page.meta.get("og:url") and page.meta["og:url"] != own_url:
+                err(f"{rel}: og:url {page.meta['og:url']} is not the page's own address {own_url}")
+        if page.h1 != 1:
+            err(f"{rel}: needs exactly one <h1>, has {page.h1}")
+
+        # Ids and the references to them.
+        seen = {}
+        for ident, line in page.ids:
+            if ident in seen:
+                err(f"{rel}: line {line}: duplicate id {ident!r} (first on line {seen[ident]})")
+            seen.setdefault(ident, line)
+        for attr, ref, line in page.references:
+            if ref not in seen:
+                err(f"{rel}: line {line}: {attr} points at a missing id {ref!r}")
+
+        # Hyperlinks: internal ones must resolve, anchors included.
+        for tag, attr, url, line in page.links:
+            if not url.strip():
+                err(f"{rel}: line {line}: empty {attr}")
+                continue
+            parts = urlsplit(url)
+            if parts.scheme in ("mailto", "tel"):
+                continue
+            if parts.scheme == "http":
+                err(f"{rel}: line {line}: plain http link {url}; use https")
+                continue
+            match = REPO_LINK.match(url)
+            if match:
+                branches.setdefault(match.group(1), []).append(f"{rel}:{line}")
+            if is_external(url):
+                if url.startswith(SITE + "/") or url == SITE:
+                    err(f"{rel}: line {line}: link to its own site by absolute URL {url}; use a path")
+                continue
+            if url.startswith("#") and len(url) == 1:
+                err(f"{rel}: line {line}: link to an empty anchor '#'")
+                continue
+            target_url = urljoin(url_path, url)
+            target_parts = urlsplit(target_url)
+            target, reason = resolve(root, target_parts.path)
+            if target is None:
+                err(f"{rel}: line {line}: broken link {url} ({reason})")
+                continue
+            if target_parts.fragment:
+                if target.suffix != ".html":
+                    err(f"{rel}: line {line}: anchor on a file that is not a page: {url}")
+                elif unquote(target_parts.fragment) not in ids_of.get(target, set()):
+                    err(f"{rel}: line {line}: broken anchor {url} (no id {target_parts.fragment!r} "
+                        f"in {target.relative_to(root).as_posix()})")
+
+        # Resources: only from the site itself; their files must exist.
+        size = file.stat().st_size
+        counted = set()
+        for tag, attr, url, line in page.resources:
+            if not url.strip():
+                err(f"{rel}: line {line}: <{tag}> with an empty {attr}")
+                continue
+            if url.startswith("data:"):
+                err(f"{rel}: line {line}: <{tag} {attr}> is a data: URL, which the CSP does not allow")
+                continue
+            if is_external(url):
+                err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> loads from outside the site")
+                continue
+            target, reason = resolve(root, urlsplit(urljoin(url_path, url)).path)
+            if target is None:
+                err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> is missing ({reason})")
+                continue
+            is_image = tag in ("img", "image", "source", "video") or target.suffix.lower() in (
+                ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico")
+            if is_image and target not in counted:
+                counted.add(target)
+                size += target.stat().st_size
+        if size > MAX_PAGE_BYTES:
+            err(f"{rel}: {size / 1024:.1f} KB with its images, over the {MAX_PAGE_BYTES // 1024} KB limit")
+
+    if len(branches) > 1:
+        summary = "; ".join(f"{b} ({len(v)} links, first {v[0]})" for b, v in sorted(branches.items()))
+        errors.append(f"repository links name more than one branch: {summary}")
+
+    # Stylesheets and scripts.
+    for css in sorted(root.rglob("*.css")):
+        rel = css.relative_to(root).as_posix()
+        text = css.read_text(encoding="utf-8")
+        for m in re.finditer(r"url\(\s*['\"]?([^'\")]+)|@import\s+(?:url\()?\s*['\"]?([^'\";)]+)", text):
+            url = (m.group(1) or m.group(2)).strip()
+            line = text.count("\n", 0, m.start()) + 1
+            if is_external(url):
+                errors.append(f"{rel}: line {line}: loads {url} from outside the site")
+            elif url.startswith("data:"):
+                errors.append(f"{rel}: line {line}: a data: URL, which the CSP does not allow")
+    for js in sorted(root.rglob("*.js")):
+        rel = js.relative_to(root).as_posix()
+        text = js.read_text(encoding="utf-8")
+        for m in re.finditer(r"https?://([A-Za-z0-9.-]+)", text):
+            host = m.group(1).lower()
+            line = text.count("\n", 0, m.start()) + 1
+            if m.group(0).startswith("http://"):
+                errors.append(f"{rel}: line {line}: plain http URL {m.group(0)}")
+            elif host == "api.github.com" and rel != RELEASES_SCRIPT:
+                errors.append(f"{rel}: line {line}: only {RELEASES_SCRIPT} may ask api.github.com")
+            elif host not in ("github.com", "api.github.com"):
+                errors.append(f"{rel}: line {line}: URL on a host other than github.com: {m.group(0)}")
+        for m in NETWORK_CALLS.finditer(text):
+            if rel != RELEASES_SCRIPT:
+                line = text.count("\n", 0, m.start()) + 1
+                errors.append(f"{rel}: line {line}: network call {m.group(0).strip()!r}; "
+                              f"only {RELEASES_SCRIPT} may make one")
+
+    # The sitemap against the pages.
+    sitemap = root / "sitemap.xml"
+    page_urls = {SITE + page_url_path(root, f) for f in pages if f.relative_to(root).as_posix() != NOT_FOUND_PAGE}
+    if not sitemap.is_file():
+        errors.append("sitemap.xml is missing")
+    else:
+        try:
+            tree = ET.parse(sitemap)
+            locs = [(e.text or "").strip() for e in tree.iter("{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+        except ET.ParseError as e:
+            errors.append(f"sitemap.xml: not well-formed XML: {e}")
+            locs = []
+        for loc in locs:
+            if loc not in page_urls:
+                errors.append(f"sitemap.xml: {loc} is not a page of the site")
+        for url in sorted(page_urls - set(locs)):
+            errors.append(f"sitemap.xml: page {url} is missing")
+        if len(locs) != len(set(locs)):
+            errors.append("sitemap.xml: lists a URL twice")
+    robots = root / "robots.txt"
+    if robots.is_file() and f"Sitemap: {SITE}/sitemap.xml" not in robots.read_text(encoding="utf-8"):
+        errors.append("robots.txt: does not name the sitemap")
+
+    return errors, len(pages)
+
+
+def main(argv):
+    if len(argv) > 2 or (len(argv) == 2 and argv[1] in ("-h", "--help")):
+        print(__doc__.strip())
+        return 0 if len(argv) == 2 else 2
+    default = Path(__file__).resolve().parent.parent / "web" / "public"
+    root = Path(argv[1]).resolve() if len(argv) == 2 else default
+    if not root.is_dir():
+        print(f"check-site: no such directory: {root}", file=sys.stderr)
+        return 2
+    errors, count = check(root)
+    for e in errors:
+        print(e)
+    if errors:
+        print(f"check-site: {len(errors)} problem(s) in {root}", file=sys.stderr)
+        return 1
+    print(f"check-site: {count} pages in {os.path.relpath(root)} pass")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
