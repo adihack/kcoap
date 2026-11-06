@@ -3,6 +3,10 @@ package dev.kcoap.coap
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.coap.security.ServerMessageSecurity
+import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
@@ -11,10 +15,14 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
+import dev.kcoap.testkit.InMemoryTransport
+import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -28,6 +36,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * RFC 7252 §11.3, §11.4: a UDP source address proves nothing, so a flood of Confirmable requests from any number
@@ -36,6 +45,27 @@ import kotlinx.coroutines.withTimeout
  * (§4.5), Message IDs (§4.4), exchanges in progress, and observers (RFC 7641 §4.1, §4.5).
  */
 class SpoofedFloodTest {
+    private companion object {
+        /** Kids of [ToyOscore]: one with a security context, one without, one whose repository fails. */
+        const val KID: Byte = 1
+        const val NO_CONTEXT: Byte = 2
+        const val REPOSITORY_FAILS: Byte = 3
+
+        /** [inner] in an outer message of [outerCode] with the OSCORE option [oscore], and Outer Observe (§4.1.3.5). */
+        fun seal(inner: CoapMessage, outerCode: CoapCode, oscore: ByteArray): CoapMessage = CoapMessage.build {
+            val plaintext = CoapMessage(CoapMessageType.CON, inner.code, 0, ByteArray(0), inner.options, inner.payload)
+            type = inner.type
+            messageId = inner.messageId
+            token = inner.token
+            code = outerCode
+            options {
+                oscore(oscore)
+                inner.options.observe?.let { observe(it) }
+            }
+            payload = UdpMessageCodec.encode(plaintext)
+        }
+    }
+
     /** The [index]th forged source: no transport is attached there, so nothing sent to it is ever answered. */
     private fun spoofed(index: Int) = Endpoint.Udp("10.${(index shr 16) and 0xFF}.${(index shr 8) and 0xFF}.${index and 0xFF}", 40_000)
 
@@ -78,6 +108,70 @@ class SpoofedFloodTest {
     /** Observes [uri] with [client] and sends the payload of every notification here. */
     private suspend fun Channel<String>.collect(client: CoapClient, uri: String) {
         client.observe(uri).collect { send(it.payloadAsText()) }
+    }
+
+    /** Sends [message] from [peer] to [to] and returns the answer, or null when none comes within a second. */
+    private suspend fun answerTo(peer: InMemoryTransport, to: Endpoint, message: CoapMessage): CoapMessage? {
+        peer.send(to, UdpMessageCodec.encode(message))
+        val event = withTimeoutOrNull(1.seconds) { peer.receive() } ?: return null
+        return UdpMessageCodec.decode((event as DatagramEvent.Received).datagram)
+    }
+
+    /** The identity of the one security context [ToyOscore] has. */
+    private object Kid1 : SecurityIdentity {
+        override val description: String get() = "kid 1"
+    }
+
+    /**
+     * A toy OSCORE (RFC 8613): the inner message is encoded into the payload of the outer one, whose OSCORE option
+     * holds a kid and a Partial IV. Only [KID] has a security context: [NO_CONTEXT] fails verification (4.01), and
+     * [REPOSITORY_FAILS] makes the context repository behind it throw (5.00). Verifying records the option in a
+     * replay window (§7.4), so a request verified twice is refused as a replay.
+     */
+    private class ToyOscore : ServerMessageSecurity {
+        private val window = HashSet<List<Byte>>()
+        var replays = 0
+
+        override suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest? {
+            val value = request.options.oscore ?: return null
+            when (value.first()) {
+                KID -> Unit
+                REPOSITORY_FAILS -> error("The context repository failed")
+                else -> throw MessageSecurityException("No context", CoapCode.UNAUTHORIZED, "No security context")
+            }
+            if (!window.add(value.toList())) {
+                replays++
+                throw MessageSecurityException("Replay", CoapCode.UNAUTHORIZED, "Replay detected")
+            }
+            val inner = UdpMessageCodec.decode(request.payload)
+            return object : UnprotectedRequest {
+                override val message = CoapMessage(
+                    request.type, inner.code, request.messageId, request.token, inner.options, inner.payload,
+                )
+                override val identity: SecurityIdentity = Kid1
+
+                override suspend fun protectResponse(response: CoapMessage): CoapMessage {
+                    val outerCode = if (response.options.observe != null) CoapCode.CONTENT else CoapCode.CHANGED
+                    return seal(response, outerCode, ByteArray(0))
+                }
+            }
+        }
+    }
+
+    /** The inner message of an answer [ToyOscore] protected. */
+    private fun open(outer: CoapMessage): CoapMessage = UdpMessageCodec.decode(outer.payload)
+
+    /** A Confirmable request under [kid] with Partial IV [messageId]: an outer POST, or with Observe a FETCH. */
+    private fun protectedRequest(
+        code: CoapCode,
+        messageId: Int,
+        path: String,
+        kid: Byte = KID,
+        observe: Long? = null,
+    ): CoapMessage {
+        val inner = request(code, CoapMessageType.CON, messageId, path, observe)
+        val outerCode = if (observe != null) CoapCode.FETCH else CoapCode.POST
+        return seal(inner, outerCode, byteArrayOf(kid, (messageId shr 8).toByte(), messageId.toByte()))
     }
 
     @Test
@@ -141,6 +235,47 @@ class SpoofedFloodTest {
         assertTrue(server.endpoint.messagingSizes()!!.deduplicationEntries <= 400)
         assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
         assertEquals(CoapCode.CHANGED, fixture.client().post(fixture.uri(server, "/store"), "x".encodeToByteArray()).code)
+    }
+
+    /**
+     * RFC 7252 §4.5 relaxes deduplication only for requests processed again with the same result, which an OSCORE
+     * request is not (RFC 8613 §7.4): its retransmission after a lost ACK must get the answer it got, under any
+     * pressure on the cache, and never reach the replay window again, for an Observe registration (an outer FETCH)
+     * and for a request refused inside the protection (a 4.04) alike.
+     */
+    @Test
+    fun rfc8613Section7_4AnOscoreRequestIsNeverForgottenForRoom() = runTest {
+        val fixture = StackFixture(this)
+        val security = ToyOscore()
+        val gauge = Gauge("g")
+        val bounded = fixture.bounded { maxDeduplicationEntries = 40 }
+        val server = fixture.server(CoapServerConfig(security = security), bounded) {
+            add(gauge)
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        val address = fixture.address(server.endpoint)
+        val peer = fixture.transport()
+        val registration = protectedRequest(CoapCode.GET, 1, "g", observe = 0)
+        val missing = protectedRequest(CoapCode.POST, 2, "missing")
+        // The client never sees these answers, as if the ACKs were lost.
+        val registered = assertNotNull(answerTo(peer, address, registration))
+        val refused = assertNotNull(answerTo(peer, address, missing))
+        assertEquals(CoapCode.CONTENT, open(registered).code)
+        assertEquals(CoapCode.NOT_FOUND, open(refused).code)
+
+        // GETs from forged sources, each refused unprotected (4.01) and so repeatable, churn through the cache; in
+        // bursts smaller than the cache, so it always holds answered ones to make room with.
+        fixture.flood(server, 400, burst = 10) { request(CoapCode.GET, CoapMessageType.CON, it, "r") }
+        delay(1.seconds)
+        assertEquals(0, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
+
+        // Their retransmissions get the same ACKs from the deduplication cache.
+        for ((request, answer) in listOf(registration to registered, missing to refused)) {
+            val again = assertNotNull(answerTo(peer, address, request))
+            assertContentEquals(UdpMessageCodec.encode(answer), UdpMessageCodec.encode(again))
+        }
+        assertEquals(0, security.replays)
+        assertEquals(1, gauge.observerCount)
     }
 
     @Test

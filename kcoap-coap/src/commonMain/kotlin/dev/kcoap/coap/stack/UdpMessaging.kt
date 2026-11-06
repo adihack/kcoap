@@ -3,6 +3,7 @@ package dev.kcoap.coap.stack
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
+import dev.kcoap.coap.CoapOptions
 import dev.kcoap.coap.codec.CoapFormatException
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.log.LogLevel
@@ -855,10 +856,15 @@ internal class UdpMessaging(
 /**
  * Whether this is a request with an idempotent method: GET, PUT and DELETE (RFC 7252 §5.1), FETCH and iPATCH
  * (RFC 8132 §2, §3). Processing such a request twice ends as processing it once, so RFC 7252 §4.5 lets its
- * deduplication be relaxed.
+ * deduplication be relaxed. Not one protected with OSCORE, whatever its outer code (such as the outer FETCH of
+ * an Observe registration): verifying it records its Partial IV in the replay window (RFC 8613 §7.4), so
+ * processing it again ends in a replay error instead of the same answer.
  */
 private val CoapMessage.isIdempotentRequest: Boolean
-    get() = code == CoapCode.GET || code == CoapCode.PUT || code == CoapCode.DELETE || code == CoapCode.FETCH || code == CoapCode.IPATCH
+    get() = when (code) {
+        CoapCode.GET, CoapCode.PUT, CoapCode.DELETE, CoapCode.FETCH, CoapCode.IPATCH -> CoapOptions.OSCORE.number !in options
+        else -> false
+    }
 
 /** A copy of this message with the messaging-layer header fields set. */
 internal fun CoapMessage.withHeader(type: CoapMessageType, messageId: Int): CoapMessage =

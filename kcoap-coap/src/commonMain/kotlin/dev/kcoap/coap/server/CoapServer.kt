@@ -275,9 +275,11 @@ public class CoapServer private constructor(
         val peer = inbound.peer
         val target = lookUp(options.uriPath)
         val resource = target.resource
+
+        fun refused(response: CoapResponse): Reply.Single = inbound.refusedWith(response, unprotected)
         // ADR 0008: the policy decides before any work for the request, so a refused one buffers no Block1 or
         // Q-Block1 body, touches no observation, gets no held-back response and no burst, and runs no handler.
-        refusal(inbound, request, unprotected, target)?.let { return inbound.refusedWith(it) }
+        refusal(inbound, request, unprotected, target)?.let { return refused(it) }
         // RFC 9177 §4.1: Q-Block1 and Q-Block2 count as recognized only where the Q-Block layer takes them.
         val qBlockAccepted = qBlock.accepts(inbound, unprotected)
         val recognized = OptionCheck.SERVER_RECOGNIZED + (if (qBlockAccepted) OptionCheck.Q_BLOCK_RECOGNIZED else emptySet()) +
@@ -290,18 +292,18 @@ public class CoapServer private constructor(
                 inbound.reject("unrecognized critical options $numbers")
                 return null
             }
-            return inbound.refusedWith(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
+            return refused(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
         }
         if (options.proxyUri != null || options.proxyScheme != null) {
-            return inbound.refusedWith(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
+            return refused(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
         }
-        if (resource == null) return inbound.refusedWith(CoapResponse(CoapCode.NOT_FOUND))
+        if (resource == null) return refused(CoapResponse(CoapCode.NOT_FOUND))
         val block1 = options.block1
         val block2 = options.block2
         val limits = inbound.link.limits
         if (!limits.isReliable && (block1?.isBert == true || block2?.isBert == true)) {
             // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00; it is BERT on RFC 8323 transports only.
-            return inbound.refusedWith(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
+            return refused(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
         }
         val now = endpoint.now()
         val checksAddress = checksAddress(inbound, unprotected)
@@ -311,7 +313,7 @@ public class CoapServer private constructor(
         if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxRequestBodySize) {
             // RFC 7959 §2.9.3: a body of one message beyond the bound, Q-Block2 or not; Size1 says what fits.
             val limit = config.maxRequestBodySize.toLong()
-            return inbound.refusedWith(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
+            return refused(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
         }
         if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
             // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.
@@ -326,7 +328,7 @@ public class CoapServer private constructor(
             // Observe 0 on every block, and each is challenged until one comes back with the Echo value.
             val registers = options.observe == OBSERVE_REGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH) &&
                 (resource as? ObservableResource)?.isObservable == true
-            if (registers && checksAddress && !addressVerification.verify(peer, echo, now)) return challenge(peer, now).also { inbound.isRepeatable = true }
+            if (registers && checksAddress && !addressVerification.verify(peer, echo, now)) return challenge(peer, now)
             return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
         }
 
@@ -363,8 +365,9 @@ public class CoapServer private constructor(
         if (registering && checksAddress && config.amplification == AmplificationPolicy.ALL_RESPONSES &&
             !addressVerification.verify(peer, echo, now)
         ) {
-            // RFC 7641 §7: one registration has notifications sent to its address for as long as it lasts.
-            return challenge(peer, now).also { inbound.isRepeatable = true }
+            // RFC 7641 §7: one registration has notifications sent to its address for as long as it lasts. The
+            // GET or FETCH is idempotent, so once answered its duplicate may be processed again anyway (§4.5).
+            return challenge(peer, now)
         }
 
         val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
@@ -448,10 +451,12 @@ public class CoapServer private constructor(
 
     /**
      * [response], for a request answered before anything acted on it: a duplicate may be processed again, so its
-     * deduplication entry may be forgotten for room (RFC 7252 §4.5).
+     * deduplication entry may be forgotten for room (RFC 7252 §4.5). Not when message security verified it
+     * ([unprotected]): verifying recorded it, as OSCORE records the Partial IV in its replay window (RFC 8613
+     * §7.4), so a duplicate processed again would end in a replay error instead of the same answer.
      */
-    private fun InboundRequest.refusedWith(response: CoapResponse): Reply.Single {
-        isRepeatable = true
+    private fun InboundRequest.refusedWith(response: CoapResponse, unprotected: UnprotectedRequest?): Reply.Single {
+        if (unprotected == null) isRepeatable = true
         return Reply.Single(response)
     }
 
