@@ -62,7 +62,9 @@ val frame = ReliableMessageCodec.WebSocket.encode(request)  // RFC 8323 §4.2: n
 - **Caller input and peer input.** `CoapUri.parse` and `LinkFormat.parse` take text the application
   supplies and throw `IllegalArgumentException` on a malformed one, a mistake of the caller.
   `CoapUri.parseOrNull` and `LinkFormat.parseOrNull` take text a peer sent, such as a `/.well-known/core`
-  document and the link targets in it, and return null instead of throwing.
+  document and the link targets in it, and return null instead of throwing. `CoapUri.fromOptions` rebuilds a
+  URI from options the application built; `CoapUri.fromOptionsOrNull` from the options of a received request,
+  returning null for one no URI has, such as an empty Uri-Port (the port 0).
 - **Value types**: `CoapRequest` and `CoapResponse` are equal by their parts (the body by content); `CoapUri`,
   `WebLink` and the messages copy the lists and byte arrays they are given. `CoapResponse.from(message)`
   takes the response out of a message; `CoapMessageType.fromValue` returns null for a value no type has.

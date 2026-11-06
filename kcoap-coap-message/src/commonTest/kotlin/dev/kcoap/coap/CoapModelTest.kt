@@ -243,6 +243,32 @@ class CoapModelTest {
         for (text in malformed) assertNull(CoapUri.parseOrNull(text), text)
     }
 
+    /** RFC 7252 §5.10.1, §6.5: an empty Uri-Port is a valid option, the port 0, which no URI has. */
+    @Test
+    fun rfc7252Section6_5FromOptionsOrNullTakesWhatFromOptionsTakesAndNothingElse() {
+        val options = OptionSet.build {
+            uriHost("sensor.example")
+            uriPort(6000)
+            uriPathSegments(listOf("a", "b"))
+            uriQuery("q=1")
+        }
+        val uri = CoapUri.parse("coap://sensor.example:6000/a/b?q=1")
+        assertEquals(uri, CoapUri.fromOptions(CoapScheme.COAP, "192.0.2.1", 5683, options))
+        assertEquals(uri, CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, options))
+        // Without Uri-Host and Uri-Port, the request's destination.
+        assertEquals(
+            CoapUri.parse("coap://192.0.2.1/"),
+            CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, OptionSet.build { }),
+        )
+
+        val portZero = OptionSet.build { uriPort(0) }
+        assertEquals(0, portZero.uriPort, "an empty Uri-Port")
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 5683, portZero))
+        assertFailsWith<IllegalArgumentException> { CoapUri.fromOptions(CoapScheme.COAP, "192.0.2.1", 5683, portZero) }
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "192.0.2.1", 0, OptionSet.build { }))
+        assertNull(CoapUri.fromOptionsOrNull(CoapScheme.COAP, "", 5683, OptionSet.build { }))
+    }
+
     @Test
     fun aUriKeepsCopiesOfItsSegments() {
         val path = mutableListOf("a")

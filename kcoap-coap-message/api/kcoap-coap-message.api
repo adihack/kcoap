@@ -290,6 +290,7 @@ public final class dev/kcoap/coap/CoapUri {
 
 public final class dev/kcoap/coap/CoapUri$Companion {
 	public final fun fromOptions (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILdev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapUri;
+	public final fun fromOptionsOrNull (Ldev/kcoap/transport/CoapScheme;Ljava/lang/String;ILdev/kcoap/coap/OptionSet;)Ldev/kcoap/coap/CoapUri;
 	public final fun parse (Ljava/lang/String;)Ldev/kcoap/coap/CoapUri;
 	public final fun parseOrNull (Ljava/lang/String;)Ldev/kcoap/coap/CoapUri;
 }

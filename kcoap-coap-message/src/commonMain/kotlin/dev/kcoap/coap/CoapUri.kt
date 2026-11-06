@@ -116,7 +116,14 @@ public class CoapUri(
             return CoapUri(scheme, host, port, path, query)
         }
 
-        /** Rebuilds a URI from received request options (RFC 7252 §6.5), as a server or proxy sees it. */
+        /**
+         * Rebuilds a URI from request options (RFC 7252 §6.5), as a server or proxy sees it: Uri-Host and Uri-Port
+         * where present, else [destinationHost] and [destinationPort]. For options the application built; the
+         * options of a received request are a peer's input and go through [fromOptionsOrNull].
+         *
+         * @throws IllegalArgumentException when the host is empty or the port is outside 1..65535, such as an
+         *   empty Uri-Port option, which is the value 0 (RFC 7252 §3.2).
+         */
         public fun fromOptions(scheme: CoapScheme, destinationHost: String, destinationPort: Int, options: OptionSet): CoapUri =
             CoapUri(
                 scheme = scheme,
@@ -125,6 +132,18 @@ public class CoapUri(
                 pathSegments = options.uriPath,
                 querySegments = options.uriQuery,
             )
+
+        /**
+         * Rebuilds a URI like [fromOptions], or returns null where [fromOptions] throws: for the options of a
+         * received request, whose Uri-Port of 0 (a valid option, RFC 7252 §5.10.1) or other bad value is the
+         * peer's, not the application's.
+         */
+        public fun fromOptionsOrNull(scheme: CoapScheme, destinationHost: String, destinationPort: Int, options: OptionSet): CoapUri? {
+            val host = options.uriHost ?: destinationHost
+            val port = options.uriPort ?: destinationPort
+            if (host.isEmpty() || port !in 1..65535) return null
+            return CoapUri(scheme, host, port, options.uriPath, options.uriQuery)
+        }
 
         private fun percentDecode(text: String): String {
             if ('%' !in text) return text

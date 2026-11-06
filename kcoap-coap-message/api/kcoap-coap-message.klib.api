@@ -369,6 +369,7 @@ final class dev.kcoap.coap/CoapUri { // dev.kcoap.coap/CoapUri|null[0]
 
     final object Companion { // dev.kcoap.coap/CoapUri.Companion|null[0]
         final fun fromOptions(dev.kcoap.transport/CoapScheme, kotlin/String, kotlin/Int, dev.kcoap.coap/OptionSet): dev.kcoap.coap/CoapUri // dev.kcoap.coap/CoapUri.Companion.fromOptions|fromOptions(dev.kcoap.transport.CoapScheme;kotlin.String;kotlin.Int;dev.kcoap.coap.OptionSet){}[0]
+        final fun fromOptionsOrNull(dev.kcoap.transport/CoapScheme, kotlin/String, kotlin/Int, dev.kcoap.coap/OptionSet): dev.kcoap.coap/CoapUri? // dev.kcoap.coap/CoapUri.Companion.fromOptionsOrNull|fromOptionsOrNull(dev.kcoap.transport.CoapScheme;kotlin.String;kotlin.Int;dev.kcoap.coap.OptionSet){}[0]
         final fun parse(kotlin/String): dev.kcoap.coap/CoapUri // dev.kcoap.coap/CoapUri.Companion.parse|parse(kotlin.String){}[0]
         final fun parseOrNull(kotlin/String): dev.kcoap.coap/CoapUri? // dev.kcoap.coap/CoapUri.Companion.parseOrNull|parseOrNull(kotlin.String){}[0]
     }
