@@ -15,7 +15,8 @@
  *   8. Tabs
  *   9. Diagrams (inline SVG)
  *  10. Home page sections
- *  11. Utilities, motion, print
+ *  11. Inner pages: page facts, table of contents, code notes, pager, jump links, releases, 404
+ *  12. Utilities, motion, print
  */
 
 /* 1. Tokens ---------------------------------------------------------------------------------------- */
@@ -1292,10 +1293,22 @@ caption {
 /* Definition list of facts: term on the left, value on the right. */
 .facts {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  gap: 0.6rem 1.25rem;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 0.75rem 1.5rem;
   margin: 0 0 1.5rem;
   font-size: var(--fs-sm);
+}
+
+/* On phones each value goes under its term. */
+@media (max-width: 599px) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .facts dd + dt {
+    margin-top: 0.75rem;
+  }
 }
 
 .facts dt {
@@ -2441,7 +2454,638 @@ pre {
   }
 }
 
-/* 11. Utilities, motion, print ---------------------------------------------------------------------- */
+/* 11. Inner pages ---------------------------------------------------------------------------------- */
+
+/* Key facts under a page head: a row of tiles. */
+.fact-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+  max-width: 980px;
+  margin: 2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-tiles li + li {
+  margin-top: 0;
+}
+
+.fact-tile {
+  padding: 0.85rem 1rem 0.9rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.fact-tile-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+}
+
+.fact-tile-value {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--c-text);
+}
+
+/* A guide page: the text, with an "On this page" list beside it on wide screens and above it on small ones. */
+.doc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+}
+
+.doc-layout > * {
+  min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .doc-layout {
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 4rem;
+    align-items: start;
+  }
+
+  .doc-layout > .toc {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: calc(var(--header-h) + 28px);
+    max-height: calc(100vh - var(--header-h) - 56px);
+    overflow-y: auto;
+  }
+
+  .doc-layout > .doc-body {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}
+
+.toc {
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg-soft);
+  font-size: var(--fs-sm);
+}
+
+@media (min-width: 1100px) {
+  .toc {
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    border: 0;
+    border-left: 1px solid var(--c-border);
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+.toc-title {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+
+.toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 560px) and (max-width: 1099px) {
+  .toc ol {
+    columns: 2;
+    column-gap: 2rem;
+  }
+}
+
+.toc li {
+  break-inside: avoid;
+}
+
+.toc li + li {
+  margin-top: 0;
+}
+
+.toc a {
+  display: block;
+  padding: 0.3rem 0;
+  color: var(--c-text-2);
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.toc a:hover {
+  color: var(--c-accent);
+  text-decoration: underline;
+}
+
+.doc-body.prose {
+  max-width: 840px;
+}
+
+.doc-body > h2 {
+  margin-top: 3.5rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--c-border);
+}
+
+.doc-body > h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.doc-body .steps {
+  margin-bottom: 1.5rem;
+}
+
+.doc-body .steps h3 {
+  margin-top: 0;
+}
+
+.doc-body .table-wrap td,
+.doc-body .table-wrap th {
+  padding: 0.65rem 0.9rem;
+}
+
+/* Questions and answers, such as troubleshooting: each answer under its question. */
+.qa-list {
+  margin: 0 0 1.5rem;
+  font-size: var(--fs-sm);
+}
+
+.qa-list dt {
+  position: relative;
+  padding-left: 1.4rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.qa-list dt::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: var(--c-amber);
+}
+
+.qa-list dt + dd {
+  margin: 0.3rem 0 0;
+  padding-left: 1.4rem;
+  color: var(--c-text-2);
+}
+
+.qa-list dd + dt {
+  margin-top: 1.25rem;
+}
+
+/* How a code sample was checked, under the block. */
+.code-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: -0.5rem 0 1.5rem;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--c-text-3);
+}
+
+.code-note svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.1rem;
+  color: var(--c-ok-ink);
+}
+
+.code-note-names svg {
+  color: var(--c-amber-ink);
+}
+
+.code-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.code-note code {
+  font-size: 0.95em;
+}
+
+/* Expected output of a sample. */
+.code-block-output pre {
+  color: var(--c-code-muted);
+}
+
+/* Previous and next guide. */
+.pager {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin-top: 3.5rem;
+}
+
+.pager a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--c-text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pager a:hover {
+  border-color: var(--c-accent-line);
+  box-shadow: var(--shadow-2);
+}
+
+.pager-label {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--c-text-3);
+}
+
+.pager-title {
+  font-weight: 750;
+  color: var(--c-accent);
+}
+
+.pager-prev .pager-label::before {
+  content: "\2190\00a0";
+}
+
+.pager-next {
+  text-align: right;
+}
+
+.pager-next .pager-label::after {
+  content: "\00a0\2192";
+}
+
+/* Chips that jump to sections of a long page. */
+.jump-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jump-links li + li {
+  margin-top: 0;
+}
+
+.jump-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.jump-links a:hover {
+  border-color: var(--c-accent-line);
+  color: var(--c-accent);
+}
+
+/* A table that compares platforms: first column sticks while the rest scrolls. */
+.matrix th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 9.5rem;
+  background: var(--c-surface);
+}
+
+.matrix thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.matrix td {
+  min-width: 8.5rem;
+}
+
+.matrix .badge {
+  margin-bottom: 0.2rem;
+}
+
+.matrix small {
+  display: block;
+  color: var(--c-text-3);
+  line-height: 1.4;
+}
+
+@media (max-width: 599px) {
+  .matrix th[scope="row"] {
+    min-width: 7rem;
+  }
+
+  .matrix td {
+    min-width: 7.5rem;
+  }
+}
+
+/* A table whose rows become stacked blocks on phones; each cell names its column in data-label. */
+@media (max-width: 599px) {
+  .table-stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .table-stack tr {
+    display: block;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+
+  .table-stack tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .table-stack th,
+  .table-stack td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .table-stack td {
+    margin-top: 0.3rem;
+  }
+
+  .table-stack td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 700;
+    color: var(--c-text-3);
+  }
+}
+
+/* Text right after a tab set or a code block gets some air. */
+.tabs + p,
+.tabs + .code-note,
+.tabs + .callout {
+  margin-top: 1.25rem;
+}
+
+/* Protocol rows: the state column stays narrow. */
+.state-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.row-ids {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* A feature section's heading row: icon, eyebrow and title. */
+.feature-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 1rem;
+  border-radius: 14px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.feature-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* A code sample under a feature's text and figure. */
+.feature-code {
+  max-width: 880px;
+  margin-top: clamp(2rem, 1.5rem + 2vw, 3rem);
+}
+
+.feature-code > :last-child {
+  margin-bottom: 0;
+}
+
+/* Lists and facts inside a card take the card's smaller text. */
+.card .checks,
+.card .facts {
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.card .facts {
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+}
+
+@media (max-width: 599px) {
+  .card .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.evidence {
+  margin: 1.25rem 0 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  font-size: var(--fs-xs);
+  color: var(--c-text-2);
+}
+
+.section-soft .evidence {
+  background: var(--c-bg);
+}
+
+.evidence > :last-child {
+  margin-bottom: 0;
+}
+
+.evidence-title {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+
+.evidence ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.evidence li + li {
+  margin-top: 0.2rem;
+}
+
+/* Releases fetched from GitHub by releases.js. */
+.release-feed {
+  min-height: 7rem;
+}
+
+.release-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.release-list li + li {
+  margin-top: 0;
+}
+
+.release-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.release-item h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.release-item h3 a {
+  color: var(--c-text);
+}
+
+.release-meta {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+.release-notes {
+  grid-column: 1 / -1;
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.release-notes li + li {
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 599px) {
+  .release-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .release-meta {
+    white-space: normal;
+  }
+}
+
+.release-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 4.5rem;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--c-text-2);
+  font-size: var(--fs-sm);
+}
+
+/* Three blocks, the middle one amber, that pulse while a request is in flight. */
+.block-loader {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.block-loader span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c-accent);
+}
+
+.block-loader span:nth-child(2) {
+  background: var(--c-amber);
+}
+
+/* The 404 page. */
+.notfound {
+  text-align: center;
+}
+
+.notfound .lede {
+  max-width: 36rem;
+  margin-inline: auto;
+}
+
+.notfound .btn-row {
+  justify-content: center;
+}
+
+.notfound-code {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.diagram-lost {
+  max-width: 420px;
+  margin: 0 auto 2rem;
+}
+
+.diagram .d-head-lost {
+  fill: var(--d-lost);
+}
+
+/* 12. Utilities, motion, print ---------------------------------------------------------------------- */
 
 .mt-0 {
   margin-top: 0;
@@ -2487,6 +3131,29 @@ pre {
 
   .diagram .d-fly {
     animation: fly 3.2s ease-in-out infinite;
+  }
+
+  .block-loader span {
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  .block-loader span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .block-loader span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.25;
   }
 }
 

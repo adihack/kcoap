@@ -65,6 +65,10 @@ Graph and Twitter tags. The title is "Page name · kcoap" on every page except t
 `site.js` is loaded in the head without `defer` on purpose: it applies a remembered theme before the first
 paint and adds the `js` class that the mobile menu and tabs rely on. Drop the `<!-- CHANGE -->` comments.
 
+A page with a script of its own loads it right after `site.js`, with `defer` (only `/releases/` has one:
+`<script src="/assets/releases.js" defer></script>`). `404.html` is served at every missing path, so it has
+no canonical link and no `og:url`, and adds `<meta name="robots" content="noindex">` instead.
+
 ## 2. The header
 
 Copy it as is. On the page the navigation item belongs to, add `aria-current="page"` to its link (every
@@ -345,6 +349,27 @@ stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="fal
 `index.html`. Do not use third-party icon sets or brand logos (no GitHub, Android, Apple or Kotlin marks):
 the GitHub link uses the repository glyph from the header.
 
+### Inner pages
+
+| Class | Use |
+|---|---|
+| `ul.fact-tiles` > `li.fact-tile` > `.fact-tile-label` + `.fact-tile-value` | four key facts under a page head’s lede |
+| `.container.doc-layout` > `nav.toc` + `div.doc-body.prose` | a guide: the text with an “On this page” list (`p.toc-title` and an `ol` of `#id` links to its `h2`s), beside it from 1100 px and above it below that |
+| `p.code-note` with the check-circle icon, or `p.code-note.code-note-names` with the info icon | under a code block: how the sample was checked (compiled in CI, or names checked only) |
+| `.code-block.code-block-output` with `data-no-copy` | expected output of a sample, labelled “Output” |
+| `nav.pager` > `a.pager-prev` / `a.pager-next` > `.pager-label` + `.pager-title` | previous and next guide at the end of a guide |
+| `ul.jump-links` | chips that jump to the sections of a long page |
+| `table.matrix` | a comparison table whose row headers stick while it scrolls |
+| `table.table-stack` with `data-label` on cells | a table whose rows become stacked blocks on phones; each cell’s label comes from `data-label` |
+| `.state-col`, `.row-ids` | a narrow column of state badges; the checklist row ids under a cell, as a link |
+| `dl.qa-list` | questions and answers, such as troubleshooting |
+| `.feature-icon`, `.feature-code`, `.evidence` (`.evidence-title`) | a feature section on `/features/`: its icon, a code sample under the split, the box of tests and open items |
+| `[data-release-feed]`, `.release-list`, `.release-item`, `.release-meta`, `.release-notes`, `.release-loading`, `.block-loader` | the GitHub releases on `/releases/`, rendered by `releases.js` |
+| `.notfound`, `.notfound-code`, `.diagram-lost` | the 404 page |
+
+Diagrams added for these pages: `fig-vectors`, `fig-failclosed`, `fig-sansio`, `fig-crypto` (on `/features/`)
+and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the “lost” red.
+
 ## 6. Anchors the home page links to
 
 `/features/` must have these ids, one per highlight card: `vectors`, `interop`, `post-quantum`, `q-block`,
@@ -355,3 +380,6 @@ the GitHub link uses the repository glyph from the header.
 The home page's release-freeze meter shows the work packages as of 6 November 2026 (8 merged, A5 in
 progress, B3, D1, D2 and C3 not started; `docs/releasing.md` "Release freeze"). Update the blocks, the
 legend and the date when a package merges, and `/releases/` with them.
+On `/releases/`, that means the meter, the table of work packages, the fact tile “8 of 13 merged”, the
+“Before 0.1.0 is tagged” list, the static “No release yet” note and the date in the error message of
+`assets/releases.js`. `web/README.md` lists the same places.
