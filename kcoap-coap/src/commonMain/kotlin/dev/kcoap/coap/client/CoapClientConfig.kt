@@ -82,41 +82,6 @@ public class CoapClientConfig private constructor(builder: Builder) {
         require(securityReserve >= 0) { "Security reserve must not be negative" }
     }
 
-    /**
-     * The configuration with these values. Deprecated: build it with `CoapClientConfig { ... }` or a [Builder],
-     * which take the same named values and, unlike this constructor, can gain options without breaking compiled
-     * code.
-     *
-     * @throws IllegalArgumentException when a value is out of range, as [Builder.build] does.
-     */
-    @Deprecated(
-        "Build the configuration with CoapClientConfig { ... } or CoapClientConfig.Builder; this constructor is " +
-            "removed before the first release.",
-    )
-    public constructor(
-        security: ClientMessageSecurity? = null,
-        requestTimeout: Duration? = null,
-        preferredBlockSize: Int? = null,
-        maxResponseBodySize: Int = DEFAULT_MAX_RESPONSE_BODY_SIZE,
-        resolver: EndpointResolver = EndpointResolver.Default,
-        observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
-        echoRetry: Boolean = true,
-        securityReserve: Int = DEFAULT_SECURITY_RESERVE,
-        qBlock: QBlockClientConfig = QBlockClientConfig(),
-    ) : this(
-        Builder().also {
-            it.security = security
-            it.requestTimeout = requestTimeout
-            it.preferredBlockSize = preferredBlockSize
-            it.maxResponseBodySize = maxResponseBodySize
-            it.resolver = resolver
-            it.observeCancellation = observeCancellation
-            it.echoRetry = echoRetry
-            it.securityReserve = securityReserve
-            it.qBlock = qBlock
-        },
-    )
-
     /** A [Builder] holding this configuration's values, to build a changed copy. */
     public fun toBuilder(): Builder = Builder(this)
 

@@ -138,8 +138,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Configuration**: `CoapEndpointConfig` and `CoapClientConfig` are built with a DSL
   (`CoapClientConfig { requestTimeout = 5.seconds }`) or a `Builder`, which Swift uses too, and have a `Default`
   and `toBuilder()`; new options go into the builder, so neither source nor compiled callers break when one is
-  added. Their constructors are deprecated and go before the first release. Values are checked when the
-  configuration is built (`CoapClientConfigTest`, `CoapEndpointConfigTest`).
+  added. They have no public constructor: WP-P1 removed the ones WP-D1 had deprecated. Values are checked
+  when the configuration is built (`CoapClientConfigTest`, `CoapEndpointConfigTest`).
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at

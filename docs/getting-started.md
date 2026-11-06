@@ -40,6 +40,11 @@ dependencies {
 }
 ```
 
+[samples/jvm-consumer](../samples/jvm-consumer/README.md) is this build as a project of its own, which CI builds
+against `publishToMavenLocal` and runs: the examples below, from a first client and server to EDHOC, over UDP on
+loopback. [samples/js-consumer](../samples/js-consumer/README.md) is the same for a browser page, and
+[samples/android-consumer](../samples/android-consumer/README.md) for an Android app.
+
 In a Kotlin Multiplatform project the BOM goes into `commonMain` with the modules every target uses, and an adapter
 that some targets lack goes into the source sets of the targets that have it:
 
@@ -104,11 +109,11 @@ which DTLS and TLS cover hop by hop ([architecture](architecture.md#layers)).
 
 | Platform | Modules | What to know |
 |---|---|---|
-| **JVM application server** | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor`; `kcoap-transport-ktor-websocket-server` with a ktor engine (`io.ktor:ktor-server-cio` or Netty); `kcoap-crypto-bc` for post-quantum | Java 17 or newer. `coap`, `coap+tcp` and `coap+ws` servers; TLS at a reverse proxy. Supply a bounded `MutableSecurityContextRepository` to an `EdhocServer` and durable sequence-number stores |
+| **JVM application server** | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor`; `kcoap-transport-ktor-websocket-server` with a ktor engine (`io.ktor:ktor-server-cio` or Netty); `kcoap-crypto-bc` for post-quantum | Java 17 or newer. `coap`, `coap+tcp` and `coap+ws` servers; TLS at a reverse proxy. Supply a bounded `MutableSecurityContextRepository` to an `EdhocServer` and durable sequence-number stores ([sample application](../samples/jvm-consumer/README.md)) |
 | **Android app** | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor` and/or `kcoap-transport-ktor-websocket`; `kcoap-crypto-bc` for post-quantum | The jvm artifacts, from API level 26; Kotlin 2.3 or newer and Java 17 bytecode in the app; no R8 rules of the app's own ([sample app](../samples/android-consumer/README.md)). Which algorithms exist depends on the device's providers, and EDHOC offers only what runs |
 | **iPhone or Mac app** (a Kotlin Multiplatform shared module) | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor` and/or `kcoap-transport-ktor-websocket` | CryptoKit and CommonCrypto underneath. The app's one framework `export()`s the kcoap types its Swift code uses; never combine it with a second Kotlin framework. Swift catches kcoap's failures as `NSError` (`@Throws`). The UDP and TCP sockets are BSD sockets; the WebSocket client runs on URLSession |
 | **Linux gateway** (linuxX64) | as the JVM server, without `kcoap-crypto-bc` | OpenSSL 3, linked into the binary. No TLS in the native socket stack: use a TLS-terminating proxy |
-| **Browser** (js, wasmJs) | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor-websocket` | WebCrypto underneath; `coap+ws` and `coaps+ws` (the browser does the TLS) to a proxy that reaches the devices, with OSCORE and EDHOC end to end. No UDP, TCP or DTLS. No ChaCha20-Poly1305, so EDHOC suites 4 and 5 are never offered there |
+| **Browser** (js, wasmJs) | `kcoap-edhoc-oscore`, `kcoap-crypto-default`, `kcoap-transport-ktor-websocket` | WebCrypto underneath; `coap+ws` and `coaps+ws` (the browser does the TLS) to a proxy that reaches the devices, with OSCORE and EDHOC end to end. No UDP, TCP or DTLS. No ChaCha20-Poly1305, so EDHOC suites 4 and 5 are never offered there. A minimal client with OSCORE bundles to about 1.1 MB minified, 310 KB with gzip ([sample page and its size budget](../samples/js-consumer/README.md); [platforms](platforms.md#bundle-size)) |
 | **Node.js** (js, wasmJs) | as the browser | The WebSocket client only: kcoap ships no Node socket transport |
 
 [Platforms](platforms.md) has the minimum versions, the algorithms and EDHOC suites each target runs, the TLS per

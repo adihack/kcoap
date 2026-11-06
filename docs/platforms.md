@@ -2,20 +2,28 @@
 
 What kcoap offers on each runtime, where the runtimes differ: the targets and the minimum versions the build sets,
 which modules build where, which algorithms and EDHOC suites each target runs, the TLS each runtime has, and what
-mobile apps must handle. The protocol code is the same everywhere: every core module is common Kotlin, and only
-the adapters around runtime-bound libraries build for fewer targets ([target-architecture.md](target-architecture.md)
-§3.10). Which modules a use case needs is in [getting started](getting-started.md#which-modules-to-add).
+mobile apps must handle, and what a browser bundle weighs. The protocol code is the same everywhere: every core
+module is common Kotlin, and only the adapters around runtime-bound libraries build for fewer targets
+([target-architecture.md](target-architecture.md) §3.10). Which modules a use case needs is in
+[getting started](getting-started.md#which-modules-to-add).
+
+Three sample consumers, each a Gradle build of its own that takes kcoap from Maven Local as an application would,
+are built in CI: [samples/jvm-consumer](../samples/jvm-consumer/README.md) (a JVM application through `kcoap-bom`,
+CoAP, OSCORE and EDHOC over UDP on loopback), [samples/android-consumer](../samples/android-consumer/README.md) (an
+Android app at minSdk 26 with R8) and [samples/js-consumer](../samples/js-consumer/README.md) (a browser page with
+OSCORE over CoAP over WebSockets, its production bundle under a [size budget](#bundle-size) and run in headless
+Chrome).
 
 ## Targets and minimum versions
 
 | Target | Runtime | Minimum | Where it is set and checked |
 |---|---|---|---|
-| `jvm` | JVM servers and desktops | Java 17 | The jvm classes are Java 17 bytecode (`jvmTarget`, `-Xjdk-release=17` in `KcoapBuild.kt`): they run on Java 17 or newer, and a consumer compiles to Java 17 or newer, since Kotlin inlines kcoap's inline functions only into bytecode of the same target or newer. CI runs the tests on Java 21 |
+| `jvm` | JVM servers and desktops | Java 17 | The jvm classes are Java 17 bytecode (`jvmTarget`, `-Xjdk-release=17` in `KcoapBuild.kt`): they run on Java 17 or newer, and a consumer compiles to Java 17 or newer, since Kotlin inlines kcoap's inline functions only into bytecode of the same target or newer. CI runs the tests on Java 21, and builds [samples/jvm-consumer](../samples/jvm-consumer/README.md) to Java 17 bytecode against the published artifacts |
 | `jvm` | Android | API level 26 (Android 8.0) | `android-minSdk` in [gradle/libs.versions.toml](../gradle/libs.versions.toml). `checkAndroidApi` checks every jvm jar against the API 26 signature and `checkAndroidApiDependencies` the libraries behind them; CI builds [samples/android-consumer](../samples/android-consumer/README.md) at minSdk 26 with R8 and lint. Not yet run on an emulator or a device (PL-2) |
 | `iosArm64`, `iosSimulatorArm64` | iPhone, and the simulator on Apple-silicon Macs | none set by kcoap | The build sets no deployment target, so Kotlin/Native's default for Kotlin 2.4.21 applies and the app's own deployment target governs; the minimum iOS version is an open decision. Arm64 only: no `iosX64` or `macosX64` |
 | `macosArm64` | Apple-silicon Macs | none set by kcoap | As for iOS. The Apple targets are compiled and tested only on macOS, in the CI `apple` job (`scripts/test apple`); Linux cross-compiles their klibs for the ABI dumps |
 | `linuxX64` | Linux gateways | none set by kcoap | OpenSSL 3 comes linked into the binary (cryptography-kotlin's prebuilt provider). `linuxArm64` is planned (roadmap E5) |
-| `js` | Browsers and Node.js | none set by kcoap | Needs WebCrypto, which browsers offer in secure contexts (HTTPS or `localhost`), and the runtime's WebSocket. The common tests run on Node.js 24.16.0, the version the Kotlin Gradle plugin 2.4.21 downloads; the WebSocket module's js tests also run in a headless browser (Firefox locally, Chrome in the CI `browser` job) |
+| `js` | Browsers and Node.js | none set by kcoap | Needs WebCrypto, which browsers offer in secure contexts (HTTPS or `localhost`), and the runtime's WebSocket. The common tests run on Node.js 24.16.0, the version the Kotlin Gradle plugin 2.4.21 downloads; the WebSocket module's js tests also run in a headless browser (Firefox locally, Chrome in the CI `browser` job), and so does the production bundle of [samples/js-consumer](../samples/js-consumer/README.md) (Chrome in the CI `js-consumer` job), whose size has a [budget](#bundle-size) |
 | `wasmJs` | Browsers and Node.js | none set by kcoap | As for `js`, plus what Kotlin/Wasm needs of the runtime (WebAssembly garbage collection). The common tests run on Node.js 26.2.0, the Kotlin Gradle plugin's version for Wasm |
 
 A consuming project needs Kotlin 2.3 or newer: kcoap is built with Kotlin 2.4.21, and a Kotlin compiler reads
@@ -199,6 +207,36 @@ kcoap has no TLS listener of its own, so a `coaps+tcp` or `coaps+ws` server term
 A JVM listener on JSSE's `SSLEngine`, with ALPN, TLS 1.3 and client certificates, is the planned alternative for JVM
 servers; it is not scheduled, and ADR 0010 names what would trigger it. DTLS (`coaps`) is kcoap's own engine,
 which comes last (roadmap E1); no runtime offers a `coaps` server or client in kcoap until then.
+
+## Bundle size
+
+A browser application downloads kcoap's js code with the page, so the build keeps a budget for it
+([target-architecture.md](target-architecture.md) §3.10): [samples/js-consumer](../samples/js-consumer/README.md)
+is a minimal browser client with OSCORE (kcoap-coap, kcoap-oscore, kcoap-crypto-default and
+kcoap-transport-ktor-websocket, through `kcoap-bom`), compiled by the Kotlin/JS IR compiler and bundled by webpack in
+production mode, and its `checkBundleSize`, part of its `check` and of the CI `js-consumer` job, fails when the bundle
+exceeds the budget in [bundle-budget.properties](../samples/js-consumer/bundle-budget.properties):
+
+| `js` bundle | Measured (WP-P1, 2026-11-06) | Budget |
+|---|---:|---:|
+| Minified, as served | 1 149 569 bytes (1.10 MiB) | 1 207 296 bytes (1 179 KiB) |
+| gzip, level 9 | 316 415 bytes (309 KiB) | 332 800 bytes (325 KiB) |
+
+- **Margin.** The budget is the measurement plus 5 %, rounded up to a whole KiB: room for the work packages still to
+  come in kcoap-coap and for dependency updates, while a new module or library in the bundle (EDHOC adds two) fails
+  the check. The measurement is every `.js` file webpack writes, without source maps; gzip is `java.util.zip` at
+  level 9, within a few bytes of `gzip -9`. Kotlin 2.4.21, ktor 3.6.1, webpack 5 as the sample's
+  `kotlin-js-store/yarn.lock` pins it.
+- **Where the bytes go**, from the source map, approximately: kcoap's modules about 17 %, ktor's client and HTTP code
+  12 %, kotlinx-coroutines 6.5 %, kotlinx-serialization and cryptography-kotlin 3 % each, the standard library and
+  kotlinx-io 3 %, and more than half compiler-generated code and code without a mapping, spread over all of them
+  ([the sample's README](../samples/js-consumer/README.md#bundle-size)).
+- **To re-measure**, `./gradlew publishToMavenLocal`, then `./gradlew -p samples/js-consumer checkBundleSize`, which
+  prints both sizes and writes them to `samples/js-consumer/build/reports/bundle-size.txt`. A change that is meant to
+  grow the bundle raises the budget, this table and the sample's README in the same commit.
+- **wasmJs** has no budget yet: a Kotlin/Wasm production bundle needs Binaryen, which the Kotlin Gradle plugin
+  downloads, and WP-P1 added nothing that needs a new download. It runs the same common code; its size is not
+  measured.
 
 ## Mobile lifecycle
 

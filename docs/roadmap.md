@@ -25,17 +25,17 @@ milestones are identifiers, so the ones still open (12, 13) keep theirs.
 | 15 | Fail-closed message security and server address verification | `kcoap-coap`, `kcoap-oscore`, `kcoap-edhoc-oscore` | `AccessPolicyTest`, `UnverifiedResponseTest`, `AmplificationTest`, libcoap | done ([ADR 0008](adr/0008-fail-closed-message-security.md), SRV-1) |
 | 16 | Universal by design: the refactoring plan's API-breaking work packages (A1–A5, B1–B3, C1–C3, D1, D2, W1) | every module | ABI dumps, `verifyCommonOnly`, the conformance suite, `ExchangeConformanceTest`, the Swift smoke test | done: the [release freeze](releasing.md#release-freeze) list is complete |
 | 17 | TLS clients: `coaps+tcp` on the JVM, `coaps+ws` on the WebSocket engine's TLS | `kcoap-transport-ktor`, `kcoap-transport-ktor-websocket` | libcoap 4.3.5b on OpenSSL, JSSE | done (WP-T1); servers terminate TLS at a proxy ([ADR 0010](adr/0010-server-side-tls.md)) |
-| 18 | Platform checks: Android API level 26, Swift from a framework, one version through a BOM | build, `samples/android-consumer`, `kcoap-swift-smoke`, `kcoap-bom` | `checkAndroidApi`, the CI `android` and `apple` jobs, `verifyBomConstraints` | done (PL-1, D2, C3); no emulator or device run yet |
+| 18 | Platform checks: Android API level 26, Swift from a framework, one version through a BOM, consumers from Maven Local, a browser bundle budget | build, `samples/android-consumer`, `samples/jvm-consumer`, `samples/js-consumer`, `kcoap-swift-smoke`, `kcoap-bom` | `checkAndroidApi`, the CI `android`, `jvm-consumer`, `js-consumer` and `apple` jobs, `verifyBomConstraints`, `verifyKcoapFromBom`, `checkBundleSize` | done (PL-1, D2, C3, P1); no emulator or device run yet |
 | 19 | Server hardening: bounds in total and per peer against spoofed floods, 4.29 Too Many Requests and a client retry-after helper, sequence tokens on TLS connections | `kcoap-coap`, `kcoap-coap-message`, `kcoap-testkit` | `SpoofedFloodTest` (up to 2 000 forged sources, a real client served), `TooManyRequestsTest`, `RetryAfterTest`, `SessionTokenTest`, libcoap's client receiving a 4.29 | done (SRV-2); rate limiting stays the application's (RFC 8516 §3) |
 
 ## Next
 
 In order, as far as the order is known:
 
-1. **The first release, 0.1.0.** The freeze list has merged, and the Maven Central and signing secrets are set;
-   what [releasing.md](releasing.md#release-freeze) still asks before the tag: the deprecated constructors of
-   `CoapEndpointConfig` and `CoapClientConfig` removed, a CHANGELOG entry for the version, and the consumer
-   samples of WP-P1 (a JVM consumer on the BOM, a js consumer with a bundle-size budget).
+1. **The first release, 0.1.0.** The freeze list has merged, the Maven Central and signing secrets are set, and
+   WP-P1 removed the deprecated constructors and added the consumer samples (a JVM consumer on the BOM, a js
+   consumer with a bundle-size budget); what [releasing.md](releasing.md#release-freeze) still asks before the tag:
+   CI green on `main` and a CHANGELOG entry for the version.
 2. **The rest of the CoAP work packages.** WP-B4 (the rest of the error and observability findings: a
    `ResponseRejected` event, reason enums for rejected and malformed messages, `stats()`, `CoapResponseException`).
 3. **Platforms.** Android emulator runs with a capability report per API level (PL-2); a JS facade and npm package

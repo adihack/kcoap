@@ -83,8 +83,12 @@ only those, and `all` (the default) runs both.
 ./gradlew checkAndroidApiDependencies  # the libraries behind them, against the triaged baseline
 ```
 
-The Android sample is a build of its own and needs the Android SDK:
-`./gradlew publishToMavenLocal`, then `./gradlew -p samples/android-consumer assembleRelease lint test`
+The sample consumers are builds of their own, against `./gradlew publishToMavenLocal`:
+`./gradlew -p samples/jvm-consumer build run` and, from the POMs alone, `./gradlew -p samples/jvm-consumer/pom-only
+build run` ([samples/jvm-consumer](../samples/jvm-consumer/README.md)),
+`./gradlew -p samples/js-consumer build` with `-Pkcoap.browser=<browser command>` for its browser run
+([samples/js-consumer](../samples/js-consumer/README.md)), and, with the Android SDK,
+`./gradlew -p samples/android-consumer assembleRelease lint test`
 ([samples/android-consumer](../samples/android-consumer/README.md)).
 
 ## Nightly soak
@@ -170,11 +174,14 @@ Both Android checks write everything they find to `<module>/build/reports/androi
 | Interop | Linux | `scripts/test interop` with freshly built images |
 | Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included, then `scripts/test swift`: Swift builds a `CoapClientConfig` and catches a request timeout and a malformed URI as `NSError` |
 | WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
+| Browser consumer | Linux, with the runner's Chrome | `publishToMavenLocal`, then [samples/js-consumer](../samples/js-consumer/README.md), a build of its own through `kcoap-bom`: `build -Pkcoap.browser=google-chrome`, which bundles the page with webpack in production mode, fails when the bundle exceeds its size budget (`checkBundleSize`), and runs the page's code on the JVM, the minified bundle on Node.js and the bundle in headless Chrome against the sample server, reading a resource with OSCORE over CoAP over WebSockets (WP-P1) |
 | API reference | Linux | `dokkaGenerate` |
 | Android consumer | Linux, with the runner's Android SDK | `publishToMavenLocal`, then [samples/android-consumer](../samples/android-consumer/README.md), a build of its own: `assembleRelease lint test` with AGP 9.4.1 at minSdk 26, R8 on the release variants of both flavors (classical, post-quantum) with no app rules, lint on the default variant, and the unit tests, which run the sample's tour on the JVM (PL-1) |
+| JVM consumer | Linux | `publishToMavenLocal`, then [samples/jvm-consumer](../samples/jvm-consumer/README.md), a build of its own through `kcoap-bom` alone: `build run`, where `verifyKcoapFromBom` fails when a kcoap module on the runtime classpath has a version the BOM does not set, and `run` executes getting started's tour (a CoAP GET, an OSCORE GET, EDHOC then OSCORE over UDP on loopback) compiled to Java 17 bytecode; then the same program from the POMs alone, as Maven reads them (`pom-only`), where a POM dependency that is missing, has the wrong scope or names a multiplatform root artifact fails it (WP-P1) |
 
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails; the Android job
-uploads its lint and test reports, APKs and R8 mappings. A release runs the same workflow first
+uploads its lint and test reports, APKs and R8 mappings, the browser consumer its reports, bundle and the browser's
+log, and the JVM consumer its reports when it fails. A release runs the same workflow first
 ([releasing](releasing.md)).
 
 PL-1 added the Android job, written where no Android SDK is installed. What was checked here: the sample
@@ -184,6 +191,13 @@ and R8 also shrinks it to DEX at min API 26 against a stand-in library of the AP
 reporting a missing class (details in the sample's README). What only the job checks: the compilation
 against `android.jar`, D8, AGP's R8 and packaging, lint, and the unit tests under AGP. Its merge gate is
 that job green on the pull request. Running the app on an emulator is PL-2.
+
+WP-P1 added the two consumer jobs. What was checked here, against a `publishToMavenLocal` of the same commit: both
+samples build; the JVM consumer runs its tour, and fails as its README shows when a module is left out of the BOM or a
+published module depends on an unpublished one (scratch copies of the local repository); the browser consumer's
+bundle builds, its size check passes and fails one byte below either measurement, and its JVM and Node.js tests pass,
+with `BrowserSmokeTest` driven by a stand-in browser command that runs the bundle on Node.js. What only the job
+checks: the bundle in Chrome. Its merge gate is both jobs green on the pull request.
 
 WP-W1 added the browser job and moved the WebSocket client to the Darwin engine on Apple; both were
 written on Linux, where the Apple test binaries only compile and the browser tests ran in Firefox. Its

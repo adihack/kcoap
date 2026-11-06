@@ -12,6 +12,23 @@ adds its entry and migration note below.
 
 ### Added
 
+- Sample consumers and a browser bundle budget (WP-P1), no API change. Each sample is a Gradle build of its own that
+  takes kcoap from Maven Local through `kcoap-bom` alone, as an application would, and has a CI job that runs
+  `publishToMavenLocal` from the commit first:
+  - [samples/jvm-consumer](samples/jvm-consumer/README.md) runs getting started's tour, a CoAP GET, an OSCORE GET and
+    EDHOC then OSCORE over UDP on loopback, compiled to Java 17 bytecode; its `verifyKcoapFromBom` fails when any
+    kcoap module on the runtime classpath, also one that arrives as a dependency, has a version the BOM does not set.
+    Its `pom-only` build runs the same program from the POMs alone, as a Maven build reads kcoap, and fails on a POM
+    dependency that is missing, has the wrong scope or names a multiplatform root artifact.
+  - [samples/js-consumer](samples/js-consumer/README.md) is a browser page (Kotlin/JS IR, a production webpack
+    bundle) that reads a resource with OSCORE over CoAP over WebSockets, with keys its server makes for each page
+    load and keeps for the newest 1,000 (in production that endpoint sits behind the application's user
+    authentication); its tests run the page's code on the JVM, the minified bundle on Node.js and, in CI, the bundle
+    in headless Chrome. `checkBundleSize` fails when the bundle exceeds the budget in `bundle-budget.properties`:
+    1 149 569 bytes minified and 316 415 bytes with gzip measured, plus 5 %
+    ([docs/platforms.md](docs/platforms.md#bundle-size)).
+  [samples/android-consumer](samples/android-consumer/README.md) takes its versions from `kcoap-bom` now too.
+  getting-started.md, platforms.md, testing.md and the README link the samples.
 - `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
   `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
   also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. Every published
@@ -364,6 +381,31 @@ adds its entry and migration note below.
 
 ### Changed (breaking)
 
+No deprecated API in the first release (WP-P1):
+
+- **The constructors of `CoapEndpointConfig` and `CoapClientConfig` are removed.** WP-D1 deprecated them for the
+  builders (below); [releasing.md](docs/releasing.md#release-freeze) asks that 0.1.0 ship nothing that is already
+  on its way out, so the two configurations are now made only by `CoapEndpointConfig { ... }` /
+  `CoapClientConfig { ... }`, their `Builder` and `toBuilder()`, and `Default`. They were the last `@Deprecated`
+  declarations of the published modules. The ABI dumps lose the two constructors (the klib dumps) and their
+  synthetic default-argument constructors (the JVM dumps), nothing else. *Migration:* code that still calls a
+  constructor no longer compiles; turn its named arguments into assignments in the block, as the WP-D1 entry
+  below shows, and use `Default` where it called `CoapEndpointConfig()` or `CoapClientConfig()` with no
+  arguments:
+
+  ```kotlin
+  // Before (deprecated since WP-D1, now an error)
+  val config = CoapClientConfig(security = OscoreClient(contexts), requestTimeout = 5.seconds)
+  val defaults = CoapEndpointConfig()
+
+  // After
+  val config = CoapClientConfig {
+      security = OscoreClient(contexts)
+      requestTimeout = 5.seconds
+  }
+  val defaults = CoapEndpointConfig.Default
+  ```
+
 One exception root, and `@Throws` for Swift (WP-D2):
 
 - **Every protocol exception extends `KcoapException`** (kcoap-common) instead of `Exception`: `CoapException`,
@@ -470,8 +512,8 @@ Two configuration builders and explicit `Endpoint` classes (WP-D1):
   The constructors are deprecated (a warning), not removed. [versioning.md](docs/versioning.md#deprecation-from-10)
   lets a release before 1.0 remove API at once with a migration note, and nothing is released yet, so a removal
   would have been allowed; deprecating them instead lets code written against the snapshots, and work still in
-  flight on other branches, keep compiling while it moves over. They are removed before 0.1.0
-  ([releasing.md](docs/releasing.md#release-freeze)), so no release ships them. Compiled callers: the deprecated
+  flight on other branches, keep compiling while it moves over. WP-P1 removed them before 0.1.0 (above;
+  [releasing.md](docs/releasing.md#release-freeze)), so no release ships them. Compiled callers: the deprecated
   constructors keep their signatures, but on the JVM the no-argument constructor `CoapEndpointConfig()` /
   `CoapClientConfig()` (`<init>()V`) is gone, since Kotlin generates it only for a primary constructor; JVM
   code compiled against it recompiles, or uses `Default`.

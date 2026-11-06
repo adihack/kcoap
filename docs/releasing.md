@@ -33,16 +33,30 @@ W1, B1–B3, C1, D1 and D2. What stands between the branch and a tag is the chec
 Before tagging 0.1.0:
 
 - the freeze list above has merged and CI is green on `main`;
-- nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is already on its way
-  out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig` and
-  `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone;
+- **done (WP-P1):** nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is
+  already on its way out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig`
+  and `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone, and no other `@Deprecated` declaration
+  is left in the published modules;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)): done on
   2026-11-06; the license is set, and the `dev.kcoap` namespace is verified;
-- `./gradlew publishToMavenLocal` works, a sample consumer builds against it through `kcoap-bom`
-  ([getting started](getting-started.md#add-kcoap-to-a-build); WP-P1's JVM and js consumers), the POMs
-  (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM, and
-  `verifyBomConstraints` is green, so the BOM constrains exactly the published modules;
+- **in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
+  `kcoap-bom` ([getting started](getting-started.md#add-kcoap-to-a-build)): the CI `jvm-consumer` job builds and runs
+  [samples/jvm-consumer](../samples/jvm-consumer/README.md), whose `verifyKcoapFromBom` fails when a kcoap module on
+  its classpath has a version the BOM does not set, and the same program from the POMs alone, as Maven reads them
+  (`pom-only`), and the `js-consumer` job builds
+  [samples/js-consumer](../samples/js-consumer/README.md) within its bundle-size budget and runs it in headless
+  Chrome. `verifyBomConstraints` (the unit job) keeps the BOM equal to the published modules. The modules' own
+  POMs name the license, the developer and the SCM, as `PublishingPluginTest` checks the convention plugin does in
+  a fixture build: **done (WP-P1)** for all 127 POMs of a `publishToMavenLocal` at its commit, and checked again on
+  the release commit, where this prints nothing:
+
+  ```bash
+  for p in ~/.m2/repository/dev/kcoap/*/<version>/*.pom; do
+      grep -q '<license>' "$p" && grep -q '<developer>' "$p" && grep -q '<scm>' "$p" || echo "$p"
+  done
+  ```
+
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
   release matches the CHANGELOG entry ([versioning](versioning.md)).
 

@@ -980,6 +980,33 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low.
 - **Accept:** all three samples build in CI; the bundle stays within a budget committed in the repository; minSdk is recorded in docs/platforms.md.
 
+> **Amendment (P1).** Done, with releasing.md's last API item for 0.1.0 folded in. The Android sample came first, as
+> PL-1 of [plan-qblock-and-platforms.md](plan-qblock-and-platforms.md), with minSdk 26 in platforms.md, before the BOM
+> existed; P1 moved it onto `kcoap-bom` (its classpaths resolved here, the rest needs the SDK and its CI job) and
+> added the other two, each a Gradle build of its own on Maven Local through `kcoap-bom` with a CI job that publishes
+> the commit first:
+> - **samples/jvm-consumer** runs getting started's tour (CoAP, OSCORE, EDHOC then OSCORE over UDP on loopback) as an
+>   application compiled to Java 17 bytecode. `verifyKcoapFromBom` fails when a kcoap module on its runtime classpath
+>   is not constrained by the BOM at the BOM's version, which resolution alone notices only for the modules a build
+>   names. Shown failing on scratch copies of the local repository: a transitive module left out of the BOM, a named
+>   one left out, and a published dependency on unpublished kcoap-dtls. Its `pom-only` build runs the same program
+>   from the POMs alone, as Maven reads them; shown failing on a POM that names a multiplatform root artifact and one
+>   that gives a needed dependency the runtime scope, both of which the module-metadata build passes. The samples
+>   take `dev.kcoap` from Maven Local only (`exclusiveContent`).
+> - **samples/js-consumer** is a page (Kotlin/JS IR, webpack production bundle) with the minimal browser set,
+>   kcoap-coap, kcoap-oscore, kcoap-crypto-default and kcoap-transport-ktor-websocket, which reads a resource with
+>   OSCORE over `coap+ws` from a JVM sample server that also serves the page. A browser cannot keep a pre-shared
+>   key's sequence numbers durable, so the server makes a Master Secret and a Sender ID for each page load, and keeps
+>   the newest 1,000 (`RecentSessions`); its README says that in production the session endpoint sits behind the
+>   application's user authentication. The budget is the measured size plus 5 % (§3.10, platforms.md "Bundle
+>   size"); `checkBundleSize` was shown failing one byte below either measurement. The headless smoke test is
+>   `BrowserSmokeTest`, in Chrome in the CI `js-consumer` job only; `NodePageTest` runs the same minified bundle on
+>   Node.js locally, and found that kotlinx-browser's `RequestInit(...)` factory sends nulls that fetch rejects. No
+>   wasmJs variant: its production bundle needs Binaryen, a download the work package avoided.
+> - **No deprecated API.** The constructors of `CoapEndpointConfig` and `CoapClientConfig`, deprecated by D1, are
+>   removed (releasing.md, "Before tagging 0.1.0"); no other `@Deprecated` declaration was left in the published
+>   modules.
+
 **WP-SEC1: EDHOC server session safety**
 
 - **Findings:** SEC-6 (1); CLR-6; SEC-9; SEC-7 (1, the EDHOC and software-key parts); SEC-10 (1, docs).
