@@ -10,9 +10,11 @@ import dev.kcoap.crypto.testsuite.vectors.ML_DSA_SIGVER_VECTORS
 
 /**
  * Published known answers that tell an algorithm from a look-alike: a backend that says it supports an
- * algorithm must reproduce them ([CapabilityInvariant]). One or two per algorithm, from the standard that
- * defines it; the complete vector sets of a primitive stay with its implementation (kcoap-crypto-default's
- * RFC 3610 and RFC 5869 tests, for instance).
+ * algorithm must reproduce them ([CapabilityInvariant]). There is one for every AEAD, Diffie-Hellman key type,
+ * signature algorithm, KEM and hash, from the standard that defines it, or for the COSE AES-CCM variants that
+ * RFC 3610 does not cover (other key and tag lengths, 7-byte nonces) from the COSE Working Group's examples
+ * (github.com/cose-wg/Examples, commit 53c9d634, `aes-ccm-examples`). The complete vector sets of a primitive
+ * stay with its implementation (kcoap-crypto-default's RFC 3610 and RFC 5869 tests, for instance).
  */
 internal object KnownAnswers {
     /** The message of the FIPS 180-4 examples. */
@@ -50,7 +52,10 @@ internal object KnownAnswers {
             "faea9ea9076ede7f4af152e8b2fa9cb6").hexToBytes(),
     )
 
-    /** An AEAD encryption whose output (ciphertext and tag) a standard publishes. */
+    /**
+     * An AEAD encryption whose output (ciphertext and tag) a standard publishes. The cose-wg examples encrypt
+     * [coseContent] with the `Enc_structure` of a COSE_Encrypt0 as associated data (RFC 9052 §5.3).
+     */
     class Sealing(
         val key: ByteArray,
         val nonce: ByteArray,
@@ -62,6 +67,9 @@ internal object KnownAnswers {
 
     private val zeroBlock = ByteArray(16)
 
+    /** The plaintext of the cose-wg examples. */
+    private val coseContent = "This is the content.".encodeToByteArray()
+
     val sealings: Map<AeadAlgorithm, Sealing> = mapOf(
         AeadAlgorithm.AES_CCM_16_64_128 to Sealing(
             key = "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf".hexToBytes(),
@@ -70,6 +78,66 @@ internal object KnownAnswers {
             plaintext = "08090a0b0c0d0e0f101112131415161718191a1b1c1d1e".hexToBytes(),
             sealed = "588c979a61c663d2f066d0c2c0f989806d5f6b61dac38417e8d12cfdf926e0".hexToBytes(),
             source = "RFC 3610 §8 packet vector #1",
+        ),
+        AeadAlgorithm.AES_CCM_16_128_128 to Sealing(
+            key = "849b57219dae48de646d07dbb533566e".hexToBytes(),
+            nonce = "89f52f65a1c580933b5261a72f".hexToBytes(),
+            associatedData = "8368456e63727970743044a101181e40".hexToBytes(),
+            plaintext = coseContent,
+            sealed = ("6899da0a132bd2d2b9b10915743ee1f7b92a4680903f2c00d37e14d4ebdc7ef2" +
+                "c03cf5a9").hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-02",
+        ),
+        AeadAlgorithm.AES_CCM_64_64_128 to Sealing(
+            key = "849b57219dae48de646d07dbb533566e".hexToBytes(),
+            nonce = "89f52f65a1c580".hexToBytes(),
+            associatedData = "8368456e63727970743043a1010c40".hexToBytes(),
+            plaintext = coseContent,
+            sealed = "191bd858dec79fc11da3428bdfa446ac240d591ffcf91eeb8035f87a".hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-03",
+        ),
+        AeadAlgorithm.AES_CCM_64_128_128 to Sealing(
+            key = "849b57219dae48de646d07dbb533566e".hexToBytes(),
+            nonce = "89f52f65a1c580".hexToBytes(),
+            associatedData = "8368456e63727970743044a101182040".hexToBytes(),
+            plaintext = coseContent,
+            sealed = ("191bd858dec79fc11da3428bdfa446ac240d591f3965fa7ca156fe666bc26280" +
+                "7df0ee99").hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-04",
+        ),
+        AeadAlgorithm.AES_CCM_16_64_256 to Sealing(
+            key = "0f1e2d3c4b5a69788796a5b4c3d2e1f01f2e3d4c5b6a798897a6b5c4d3e2f100".hexToBytes(),
+            nonce = "89f52f65a1c580933b5261a72f".hexToBytes(),
+            associatedData = "8368456e63727970743043a1010b40".hexToBytes(),
+            plaintext = coseContent,
+            sealed = "28b3bddff844a736c5f0ee0f8c691fd0b7adf9173140cb621df47c2f".hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-05",
+        ),
+        AeadAlgorithm.AES_CCM_16_128_256 to Sealing(
+            key = "0f1e2d3c4b5a69788796a5b4c3d2e1f01f2e3d4c5b6a798897a6b5c4d3e2f100".hexToBytes(),
+            nonce = "89f52f65a1c580933b5261a72f".hexToBytes(),
+            associatedData = "8368456e63727970743044a101181f40".hexToBytes(),
+            plaintext = coseContent,
+            sealed = ("28b3bddff844a736c5f0ee0f8c691fd0b7adf917b0cfa0d187c769a4ba100372" +
+                "a585bccc").hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-06",
+        ),
+        AeadAlgorithm.AES_CCM_64_64_256 to Sealing(
+            key = "0f1e2d3c4b5a69788796a5b4c3d2e1f01f2e3d4c5b6a798897a6b5c4d3e2f100".hexToBytes(),
+            nonce = "89f52f65a1c580".hexToBytes(),
+            associatedData = "8368456e63727970743043a1010d40".hexToBytes(),
+            plaintext = coseContent,
+            sealed = "721908d60812806f2660054238e931adb575771e9bc42ff530baeb00".hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-07",
+        ),
+        AeadAlgorithm.AES_CCM_64_128_256 to Sealing(
+            key = "0f1e2d3c4b5a69788796a5b4c3d2e1f01f2e3d4c5b6a798897a6b5c4d3e2f100".hexToBytes(),
+            nonce = "89f52f65a1c580".hexToBytes(),
+            associatedData = "8368456e63727970743044a101182140".hexToBytes(),
+            plaintext = coseContent,
+            sealed = ("721908d60812806f2660054238e931adb575771e723c6ffd415a07cdb9fa9cee" +
+                "cc6c81fc").hexToBytes(),
+            source = "the cose-wg Examples' aes-ccm-enc-08",
         ),
         AeadAlgorithm.A128GCM to Sealing(
             key = ByteArray(16),
@@ -110,7 +178,11 @@ internal object KnownAnswers {
         ),
     )
 
-    /** A Diffie-Hellman agreement from a standard: own private and public key, the peer's public key, the secret. */
+    /**
+     * A Diffie-Hellman agreement from a standard: own private and public key, the peer's public key, the secret.
+     * P-256 and P-384 keys are uncompressed points and the secret is the x-coordinate of the shared point, as
+     * `CryptoBackend.keyAgreement` returns it (RFC 5903 §7, SEC 1 v2 §3.3.1).
+     */
     class Agreement(
         val privateKey: ByteArray,
         val publicKey: ByteArray,
@@ -126,6 +198,45 @@ internal object KnownAnswers {
             peerPublicKey = "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f".hexToBytes(),
             sharedSecret = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742".hexToBytes(),
             source = "RFC 7748 §6.1",
+        ),
+        KeyType.X448 to Agreement(
+            privateKey = ("9a8f4925d1519f5775cf46b04b5800d4ee9ee8bae8bc5565d498c28dd9c9baf5" +
+                "74a9419744897391006382a6f127ab1d9ac2d8c0a598726b").hexToBytes(),
+            publicKey = ("9b08f7cc31b7e3e67d22d5aea121074a273bd2b83de09c63faa73d2c22c5d9bb" +
+                "c836647241d953d40c5b12da88120d53177f80e532c41fa0").hexToBytes(),
+            peerPublicKey = ("3eb7a829b0cd20f5bcfc0b599b6feccf6da4627107bdb0d4f345b43027d8b972" +
+                "fc3e34fb4232a13ca706dcb57aec3dae07bdc1c67bf33609").hexToBytes(),
+            sharedSecret = ("07fff4181ac6cc95ec1c16a94a0f74d12da232ce40a77552281d282bb60c0b56" +
+                "fd2464c335543936521c24403085d59a449a5037514a879d").hexToBytes(),
+            source = "RFC 7748 §6.2",
+        ),
+        KeyType.P256 to Agreement(
+            privateKey = "c88f01f510d9ac3f70a292daa2316de544e9aab8afe84049c62a9c57862d1433".hexToBytes(),
+            publicKey = ("04" +
+                "dad0b65394221cf9b051e1feca5787d098dfe637fc90b9ef945d0c3772581180" +
+                "5271a0461cdb8252d61f1c456fa3e59ab1f45b33accf5f58389e0577b8990bb3").hexToBytes(),
+            peerPublicKey = ("04" +
+                "d12dfb5289c8d4f81208b70270398c342296970a0bccb74c736fc7554494bf63" +
+                "56fbf3ca366cc23e8157854c13c58d6aac23f046ada30f8353e74f33039872ab").hexToBytes(),
+            sharedSecret = "d6840f6b42f6edafd13116e0e12565202fef8e9ece7dce03812464d04b9442de".hexToBytes(),
+            source = "RFC 5903 §8.1",
+        ),
+        KeyType.P384 to Agreement(
+            privateKey = ("099f3c7034d4a2c699884d73a375a67f7624ef7c6b3c0f160647b67414dce655" +
+                "e35b538041e649ee3faef896783ab194").hexToBytes(),
+            publicKey = ("04" +
+                "667842d7d180ac2cde6f74f37551f55755c7645c20ef73e31634fe72b4c55ee6" +
+                "de3ac808acb4bdb4c88732aee95f41aa" +
+                "9482ed1fc0eeb9cafc4984625ccfc23f65032149e0e144ada024181535a0f38e" +
+                "eb9fcff3c2c947dae69b4c634573a81c").hexToBytes(),
+            peerPublicKey = ("04" +
+                "e558dbef53eecde3d3fccfc1aea08a89a987475d12fd950d83cfa41732bc509d" +
+                "0d1ac43a0336def96fda41d0774a3571" +
+                "dcfbec7aacf3196472169e838430367f66eebe3c6e70c416dd5f0c68759dd1ff" +
+                "f83fa40142209dff5eaad96db9e6386c").hexToBytes(),
+            sharedSecret = ("11187331c279962d93d604243fd592cb9d0a926f422e47187521287e7156c5c4" +
+                "d603135569b9e9d09cf5d4a270f59746").hexToBytes(),
+            source = "RFC 5903 §8.2",
         ),
     )
 
@@ -150,6 +261,34 @@ internal object KnownAnswers {
                     "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b").hexToBytes(),
                 isValid = true,
                 source = "RFC 8032 §7.1 TEST 1",
+            ),
+        )
+        SignatureAlgorithm.ES256 -> listOf(
+            Signature(
+                publicKey = ("04" +
+                    "60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6" +
+                    "7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299").hexToBytes(),
+                message = "sample".encodeToByteArray(),
+                signature = ("efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716" +
+                    "f7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8").hexToBytes(),
+                isValid = true,
+                source = "RFC 6979 §A.2.5 (SHA-256, \"sample\")",
+            ),
+        )
+        SignatureAlgorithm.ES384 -> listOf(
+            Signature(
+                publicKey = ("04" +
+                    "ec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64" +
+                    "def8f0ea9055866064a254515480bc13" +
+                    "8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1" +
+                    "288b231c3ae0d4fe7344fd2533264720").hexToBytes(),
+                message = "sample".encodeToByteArray(),
+                signature = ("94edbb92a5ecb8aad4736e56c691916b3f88140666ce9fa73d64c4ea95ad133c" +
+                    "81a648152e44acf96e36dd1e80fabe46" +
+                    "99ef4aeb15f178cea1fe40db2603138f130e740a19624526203b6351d0a3a94f" +
+                    "a329c145786e679e7b82c71a38628ac8").hexToBytes(),
+                isValid = true,
+                source = "RFC 6979 §A.2.6 (SHA-384, \"sample\")",
             ),
         )
         else ->

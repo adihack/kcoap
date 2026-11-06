@@ -6,15 +6,18 @@ import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.AeadAuthenticationException
 import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.EcdhCurve
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KemEncapsulation
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
+import dev.kcoap.crypto.Shake256
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
+import dev.kcoap.crypto.testsuite.vectors.ML_KEM_ENCAPSULATION_VECTORS
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -22,11 +25,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The capability contract as [CapabilityInvariant] checks it (ADR 0001), on decorators of the default backend
  * that break it one way each: a yes for what throws, a no for what runs, a no with the wrong exception, a
- * changing answer, and wrong results that only a round trip or a published known answer shows.
+ * changing answer, and wrong results that only a round trip or a published known answer shows. Checks of an
+ * algorithm the platform lacks (X448 on Apple's CryptoKit, ChaCha20/Poly1305 on WebCrypto) are skipped, since
+ * the default backend answers no there.
  */
 class CapabilityInvariantTest {
     private val base = DefaultCryptoBackend()
@@ -224,6 +230,23 @@ class CapabilityInvariantTest {
         )
     }
 
+    /**
+     * Another key gives an AEAD that round trips and authenticates, like an AES-CCM whose CBC-MAC is formatted
+     * the same wrong way on both sides: only the published known answer of each algorithm tells it apart.
+     */
+    @Test
+    fun everyAeadMustReproduceItsKnownAnswer() = runTest {
+        val backend = object : CryptoBackend by base {
+            override suspend fun aead(algorithm: AeadAlgorithm, key: ByteArray): Aead =
+                base.aead(algorithm, key.flipped(0))
+        }
+
+        for (algorithm in AeadAlgorithm.entries.filter { base.supports(it) }) {
+            val source = KnownAnswers.sealings.getValue(algorithm).source
+            assertViolation(backend, algorithm, answer = true, "encrypt does not reproduce $source")
+        }
+    }
+
     @Test
     fun aKeyAgreementThatDisagreesOrDiffersFromTheStandardIsAViolation() = runTest {
         val backend = object : CryptoBackend by base {
@@ -241,6 +264,27 @@ class CapabilityInvariantTest {
         assertViolation(backend, KeyType.P256, answer = true, "keyAgreement gives the two sides different secrets")
         assertViolation(backend, KeyType.X25519, answer = true, "keyAgreement does not reproduce RFC 7748 §6.1")
         assertViolation(backend, KeyType.P384, answer = true, "keyAgreement returned 32 bytes, not 48")
+    }
+
+    /**
+     * A hash of the shared secret agrees on both sides and has the right length, like an ECDH that returns the
+     * y-coordinate or a KDF of x: only the published known answer of each curve tells it apart.
+     */
+    @Test
+    fun everyKeyAgreementMustReproduceItsKnownAnswer() = runTest {
+        val backend = object : CryptoBackend by base {
+            override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray {
+                val secret = base.keyAgreement(privateKey, peerPublicKey)
+                return Shake256.digest(secret, secret.size)
+            }
+        }
+
+        val types = EcdhCurve.entries.map { it.keyType }.filter { base.supports(it) }
+        assertTrue(KeyType.P256 in types && KeyType.P384 in types && KeyType.X25519 in types, "$types")
+        for (type in types) {
+            val source = KnownAnswers.agreements.getValue(type).source
+            assertViolation(backend, type, answer = true, "keyAgreement does not reproduce $source")
+        }
     }
 
     /** A key store may import no keys; the known answers that need one are skipped, but other failures are not. */
@@ -309,6 +353,48 @@ class CapabilityInvariantTest {
             rejectsItsOwn, SignatureAlgorithm.EDDSA, answer = true,
             "verify rejects a signature of the backend's own",
         )
+    }
+
+    /**
+     * Signing and verifying a hash of the message is consistent with itself, like an ES256 that hashes with
+     * SHA-384: only the published verdict of each algorithm tells it apart.
+     */
+    @Test
+    fun everySignatureAlgorithmMustReachThePublishedVerdict() = runTest {
+        val backend = object : CryptoBackend by base {
+            override suspend fun sign(
+                algorithm: SignatureAlgorithm,
+                privateKey: PrivateKey,
+                data: ByteArray,
+            ): ByteArray = base.sign(algorithm, privateKey, Shake256.digest(data, 32))
+
+            override suspend fun verify(
+                algorithm: SignatureAlgorithm,
+                publicKey: ByteArray,
+                data: ByteArray,
+                signature: ByteArray,
+            ): Boolean = base.verify(algorithm, publicKey, Shake256.digest(data, 32), signature)
+        }
+
+        val algorithms = SignatureAlgorithm.entries.filter { base.supports(it) }
+        assertEquals(listOf(SignatureAlgorithm.ES256, SignatureAlgorithm.ES384, SignatureAlgorithm.EDDSA), algorithms)
+        for (algorithm in algorithms) {
+            val source = KnownAnswers.signatures(algorithm).single().source
+            assertViolation(backend, algorithm, answer = true, "verify does not reach the verdict of $source")
+        }
+    }
+
+    /** What the suite's documentation promises: a published known answer for every algorithm a backend may support. */
+    @Test
+    fun everyAlgorithmHasAKnownAnswer() {
+        assertEquals(AeadAlgorithm.entries.toSet(), KnownAnswers.sealings.keys)
+        assertEquals(EcdhCurve.entries.map { it.keyType }.toSet(), KnownAnswers.agreements.keys)
+        for (algorithm in SignatureAlgorithm.entries) {
+            assertTrue(KnownAnswers.signatures(algorithm).any { it.isValid }, algorithm.name)
+        }
+        assertEquals(KemAlgorithm.entries.toSet(), ML_KEM_ENCAPSULATION_VECTORS.map { it.algorithm }.toSet())
+        assertEquals(HashAlgorithm.entries.toSet(), KnownAnswers.digests.keys)
+        assertEquals(HashAlgorithm.entries.filter { !it.isXof }.toSet(), KnownAnswers.hmacs.keys)
     }
 
     /**

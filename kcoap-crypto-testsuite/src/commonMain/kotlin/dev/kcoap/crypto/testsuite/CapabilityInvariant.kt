@@ -21,25 +21,28 @@ import kotlin.coroutines.cancellation.CancellationException
  * exception from them and nothing else, and the answer does not change.
  *
  * The operations of a question are those the default `supports` members probe, checked further where a wrong
- * result would go unnoticed otherwise:
+ * result would go unnoticed otherwise. Every algorithm reproduces a published known answer, so that a
+ * look-alike that is consistent with itself does not pass:
  * - an AEAD: `aead`, then `encrypt` and `decrypt`, which round trip, reject a changed ciphertext body, a
- *   changed tag or changed associated data with `AeadAuthenticationException`, and reproduce RFC 3610
- *   (AES-CCM-16-64-128), the GCM specification's test cases (AES-GCM) or RFC 8439 §2.8.2
- *   (ChaCha20/Poly1305);
+ *   changed tag or changed associated data with `AeadAuthenticationException`, and reproduce RFC 3610 packet 1
+ *   (AES-CCM-16-64-128), the cose-wg examples (the other AES-CCM variants of RFC 9053 §4.2), the GCM
+ *   specification's test cases (AES-GCM) or RFC 8439 §2.8.2 (ChaCha20/Poly1305);
  * - a key type: `generateKeyPair`, whose public key has `publicKeyLength` bytes (P-256 and P-384 keys
  *   uncompressed), and for the Diffie-Hellman types `keyAgreement`, which agrees both ways in `keyLength`
- *   bytes and, for X25519, reproduces RFC 7748 §6.1;
+ *   bytes and reproduces RFC 7748 §6.1 and §6.2 (X25519, X448) or RFC 5903 §8.1 and §8.2 (P-256, P-384, whose
+ *   secret is the x-coordinate of the shared point);
  * - a signature algorithm: key generation, `sign` and `verify`: signatures of `signatureLength` bytes that
  *   verify, false for a changed message, a changed signature or another key, and the published verdicts on
- *   RFC 8032 TEST 1 (Ed25519) and NIST's ACVP signatures (ML-DSA);
+ *   RFC 8032 TEST 1 (Ed25519), RFC 6979 §A.2.5 and §A.2.6 (ES256, ES384, as raw `r || s`) and NIST's ACVP
+ *   signatures (ML-DSA);
  * - a KEM: key generation, `encapsulate` and `decapsulate`: the lengths of FIPS 203, the same secret on both
  *   sides, a different secret for a changed ciphertext (implicit rejection, FIPS 203 Algorithm 18), and
  *   NIST's ACVP shared secrets;
  * - a hash: `digest`, and for SHA-2 `hmac`: the FIPS 180-4 and FIPS 202 examples and RFC 4231 test case 1.
  *
- * Known answers that need an imported private key (X25519, ML-KEM) are skipped when the backend refuses
- * `importKeyPair` with `UnsupportedAlgorithmException`, as a key store may. SHAKE256 must be supported by
- * every backend, since common code can always compute it (`CryptoBackend.digest`).
+ * Known answers that need an imported private key (X25519, X448, P-256, P-384, ML-KEM) are skipped when the
+ * backend refuses `importKeyPair` with `UnsupportedAlgorithmException`, as a key store may. SHAKE256 must be
+ * supported by every backend, since common code can always compute it (`CryptoBackend.digest`).
  *
  * The checks generate key pairs and destroy them again; on a backend that keeps keys in hardware they cost
  * what its probes would. A `PrivateKey.destroy` that throws breaks its contract and is a violation too, unless
