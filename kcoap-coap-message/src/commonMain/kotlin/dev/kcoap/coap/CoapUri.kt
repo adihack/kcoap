@@ -9,16 +9,20 @@ import dev.kcoap.transport.CoapScheme
  * so `CoapUri.parse(s).toString()` normalizes `s`.
  *
  * @property host the host without brackets; IPv6 literals are bracketed again by [toString].
- * @property pathSegments decoded Uri-Path values; an empty list is the root path.
- * @property querySegments decoded Uri-Query values.
  */
 public class CoapUri(
     public val scheme: CoapScheme,
     public val host: String,
     public val port: Int = scheme.defaultPort,
-    public val pathSegments: List<String> = emptyList(),
-    public val querySegments: List<String> = emptyList(),
+    pathSegments: List<String> = emptyList(),
+    querySegments: List<String> = emptyList(),
 ) {
+    /** Decoded Uri-Path values; an empty list is the root path. A copy of the list given. */
+    public val pathSegments: List<String> = pathSegments.toList()
+
+    /** Decoded Uri-Query values. A copy of the list given. */
+    public val querySegments: List<String> = querySegments.toList()
+
     init {
         require(host.isNotEmpty()) { "A CoAP URI needs a host" }
         require(port in 1..65535) { "Port out of range: $port" }

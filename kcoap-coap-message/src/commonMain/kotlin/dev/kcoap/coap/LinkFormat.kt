@@ -6,8 +6,11 @@ package dev.kcoap.coap
  */
 public class WebLink(
     public val target: String,
-    public val attributes: List<Pair<String, String?>> = emptyList(),
+    attributes: List<Pair<String, String?>> = emptyList(),
 ) {
+    /** The attributes in document order; a copy of the list given. */
+    public val attributes: List<Pair<String, String?>> = attributes.toList()
+
     /** The first value of [name], or null if absent or a flag. */
     public operator fun get(name: String): String? = attributes.firstOrNull { it.first == name }?.second
 

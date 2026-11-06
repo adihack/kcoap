@@ -7,6 +7,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -214,6 +215,39 @@ class CoapModelTest {
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%zz") }
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%2") }
         assertFailsWith<IllegalArgumentException> { CoapUri(CoapScheme.COAP, "h", port = 0) }
+    }
+
+    @Test
+    fun aUriKeepsCopiesOfItsSegments() {
+        val path = mutableListOf("a")
+        val query = mutableListOf("q=1")
+        val uri = CoapUri(CoapScheme.COAP, "h", pathSegments = path, querySegments = query)
+        path += "b"
+        query.clear()
+        assertEquals(listOf("a"), uri.pathSegments)
+        assertEquals(listOf("q=1"), uri.querySegments)
+        assertEquals("coap://h/a?q=1", uri.toString())
+    }
+
+    @Test
+    fun requestsAreEqualByTheirParts() {
+        val uri = CoapUri.parse("coap://[::1]/x")
+        fun request(block: CoapRequest.Builder.() -> Unit = {}) =
+            CoapRequest.Builder(CoapCode.POST, uri).payload("body").accept(50).apply(block).build()
+        val request = request()
+
+        assertEquals(request, request())
+        assertEquals(request.hashCode(), request().hashCode())
+        assertEquals(request, request.toBuilder().build())
+        val different = listOf(
+            CoapRequest.Builder(CoapCode.PUT, uri).payload("body").accept(50).build(),
+            CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/y")).payload("body").accept(50).build(),
+            request { accept(40) },
+            request { payload("other") },
+            request { nonConfirmable() },
+        )
+        different.forEach { assertNotEquals(request, it, "$it") }
+        assertFalse(request.equals("0.02 POST coap://[::1]/x"))
     }
 
     @Test

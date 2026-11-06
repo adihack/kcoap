@@ -34,7 +34,6 @@ import kotlin.time.TimeSource
  *   warning when it sees the two disagree.
  * @property random randomness for retransmission jitter and the first Message ID. Tokens come from
  *   [tokenGenerator], which uses a secure generator by default.
- * @property interceptors the message interceptor chain, in order.
  * @property eventListener receives [EndpointEvent]s.
  * @property loggerFactory where the endpoint's loggers come from.
  * @property reliable CSM settings and connection management for CoAP over reliable transports (RFC 8323).
@@ -64,7 +63,7 @@ public class CoapEndpointConfig(
     public val tokenGenerator: TokenGenerator? = null,
     public val timeSource: TimeSource = TimeSource.Monotonic,
     public val random: Random = Random.Default,
-    public val interceptors: List<MessageInterceptor> = emptyList(),
+    interceptors: List<MessageInterceptor> = emptyList(),
     public val eventListener: EndpointEventListener = EndpointEventListener.None,
     public val loggerFactory: LoggerFactory = LoggerFactory.Global,
     public val reliable: ReliableTransportConfig = ReliableTransportConfig(),
@@ -72,6 +71,9 @@ public class CoapEndpointConfig(
     public val maxConcurrentRequests: Int = DEFAULT_MAX_CONCURRENT_REQUESTS,
     public val maxExchangesPerPeer: Int = DEFAULT_MAX_EXCHANGES_PER_PEER,
 ) {
+    /** The message interceptor chain, in order; a copy of the list given. */
+    public val interceptors: List<MessageInterceptor> = interceptors.toList()
+
     init {
         require(separateResponseDelay == null || !separateResponseDelay.isNegative()) {
             "Separate response delay must not be negative: $separateResponseDelay"

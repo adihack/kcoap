@@ -17,6 +17,7 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.TokenGenerator
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
@@ -133,6 +134,14 @@ class EdgeCaseTest {
         assertEquals(0, sequence.next(session).size)
         assertEquals(8, sequence.next(Endpoint.Udp("127.0.0.1", 1)).size)
         TokenGenerator { ByteArray(0) }.forget(session)
+    }
+
+    @Test
+    fun theEndpointConfigurationKeepsACopyOfItsInterceptors() {
+        val interceptors = mutableListOf<MessageInterceptor>(object : MessageInterceptor {})
+        val config = CoapEndpointConfig(interceptors = interceptors)
+        interceptors.clear()
+        assertEquals(1, config.interceptors.size)
     }
 
     @Test
