@@ -123,7 +123,7 @@ Settings → Builds):
 | Setting | Value |
 |---|---|
 | Git repository | `adihack/kcoap` |
-| Git branch (production) | `feat/protocol-core` until pull request #1 merges, then `main` |
+| Git branch (production) | `main` |
 | Root directory | `web` |
 | Build command | `python3 ../scripts/check-site` (it builds nothing; a failed check stops the deploy) |
 | Deploy command | `npx wrangler deploy`; pinned: `npx wrangler@4.152.0 deploy` (below) |
@@ -145,8 +145,8 @@ the GitHub "Website" check. The build command therefore runs the same check firs
 `python3 ../scripts/check-site` (the build clones the whole repository, the root directory is `web`, and the
 build image has Python, 3.14 by default). It builds nothing, so the site keeps no build step, but a commit
 that fails the check is not deployed and the build shows the check's errors. Run the script before pushing a
-change to `web/` anyway. Once pull request #1 has merged, the "Website" check also becomes required on
-`main` (below), so a failing change cannot merge either.
+change to `web/` anyway. A ruleset on `main` also requires the "Website" check, beside the DCO check and
+the eight CI checks, so a change that fails it cannot merge either.
 
 The Worker's name in the dashboard must stay `kcoap`, the `name` in `wrangler.jsonc`, or the build fails.
 Current Cloudflare documentation calls the non-production setting **Preview command** and gives it the
@@ -255,51 +255,54 @@ Read on 6 November 2026:
 - Custom Domains, DNS records and certificates, and why `www` needs a redirect rule and a proxied placeholder
   record: https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
 
-## When pull request #1 merges
+## After pull request #1 merged
 
-1. In Cloudflare, set the production branch (Settings → Builds → Git branch) to `main`.
-2. Point the site's repository links at `main`. Every link to a file uses the prefix
-   `https://github.com/adihack/kcoap/blob/feat/protocol-core/` (or `tree/`), so one command changes them,
-   together with the clone commands that name the branch:
+Pull request #1 brought `feat/protocol-core` into `main` on 6 November 2026. Development continues on
+`feat/protocol-core` and reaches `main` through pull requests, so the site follows `main`:
 
-   ```bash
-   grep -rl 'feat/protocol-core' web/public | xargs sed -i -e 's#/blob/feat/protocol-core/#/blob/main/#g' -e 's#/tree/feat/protocol-core/#/tree/main/#g' -e 's#git clone --branch feat/protocol-core #git clone #g'
-   ```
+1. The production branch is `main` (Settings → Builds → Git branch). Switching it in Cloudflare is the
+   owner's step, taken once the commit that points the site's links at `main` has merged there.
+2. Done on 7 November 2026: every repository link names `main`
+   (`https://github.com/adihack/kcoap/blob/main/<path>`, or `tree/` for a folder). `scripts/check-site` fails
+   when two links name different branches.
+3. Done: no page explains the branch any more. The install steps that did went with the clone when the site
+   moved to Maven Central.
+4. Done: a ruleset requires the "Website" check on `main`, beside the DCO check and the eight CI checks.
 
-3. `grep -rn 'feat/protocol-core' web/public` then lists the sentences that explain the branch (the
-   install steps on `/start/` and the platform guides); rewrite or remove them, run `scripts/check-site`
-   and commit.
-4. On GitHub, make the "Website" check required on `main` (Settings → Rules → Rulesets, or the branch
-   protection rule), beside the DCO check, so a change that fails `scripts/check-site` cannot merge.
+## With each release
 
-## When 0.1.0 is on Maven Central
+The site deploys when `main` changes, not when a tag is pushed, so it names a new version only once the
+Central Portal deployment is published and the artifacts are on Maven Central
+([releasing](../docs/releasing.md#after-the-release)). Then, with the version from
+[getting started](../docs/getting-started.md#add-kcoap-to-a-build):
 
-The site still describes kcoap before its first release: a snapshot built from a clone and taken from Maven
-Local. The repository's own docs name 0.1.0 from Maven Central since the release commit, but the site deploys
-when its branch is pushed, not when a tag is, so it changes only once the Central Portal deployment is
-published ([releasing](../docs/releasing.md#after-the-release)). Then:
-
-- The install steps on `/` and `/start/` and in the six platform guides: drop the clone and
-  `publishToMavenLocal` step and the `mavenLocal` repository, keep `mavenCentral()`, and set the BOM and the
-  version catalog to `0.1.0`; rewrite the "Could not find …-SNAPSHOT" troubleshooting entries and the
-  "Not released" callouts.
+- The install steps on `/` and `/start/` and in the six platform guides: the BOM in the Kotlin DSL and the
+  version in the version catalogs, and the troubleshooting entries that name the version.
 - The footer's status line on every page, and its copy in TEMPLATE.md.
-- `/releases/`: the lede, the fact tiles ("Version now", "Published to"), the static "No release yet" note
-  (and what `assets/releases.js` says when GitHub lists no release), the "Before 0.1.0 is tagged" list, the
-  "not yet" badges of Maven Central and GitHub Packages, the API reference card, and the release steps, which
-  should say that the Central deployment is published by hand.
-- The meta descriptions of `/start/`, `/start/jvm/` and `/releases/`, and the `lastmod` dates in `sitemap.xml`.
+- `/releases/`: the lede, the fact tiles, the static note about the latest release, and the badges of the
+  Maven Central and GitHub Packages cards. A release with a checklist of its own gets a record like "What
+  0.1.0 needed".
+- On the home page, the hero's status line and the release card.
+- The meta descriptions of `/start/`, `/start/jvm/` and `/releases/`, and the `lastmod` dates in
+  `sitemap.xml`.
 
-`grep -rn -e SNAPSHOT -e mavenLocal -e 'released yet' -e 'first release' web/public web/TEMPLATE.md` lists
-the places. Run `scripts/check-site` and commit.
+`grep -rn -e '0\.1\.0' -e SNAPSHOT web/public web/TEMPLATE.md` lists the places. Run `scripts/check-site` and
+commit. This was done for 0.1.0 on 7 November 2026.
 
 ## Facts with a date
 
 Some pages state the project's state on a given day. Update them when it changes:
 
-- The release-freeze meter on the home page and on `/releases/`, with its legend, the table of work
-  packages on `/releases/` and the date beside them (TEMPLATE.md, section 7).
-- The "Before 0.1.0 is tagged" list and the static "No release yet" note on `/releases/`.
+- The release: 0.1.0, released on 6 November 2026, on Maven Central and GitHub Packages
+  ([with each release](#with-each-release)).
+- The API reference is not online yet: its deploy from the `v0.1.0` tag failed, because the `github-pages`
+  environment accepts deployments from `main` only. Once that is fixed and the job has run, change the API
+  reference card, the open item of "What 0.1.0 needed" and the "API reference" step on `/releases/`, the
+  "Not there yet" item on the home page, the JVM guide's next steps, and the rule in TEMPLATE.md.
+- The release-freeze meter on the home page and on `/releases/`, with its legend, the table of work packages
+  on `/releases/` and the date beside them: the record of what 0.1.0 waited for, all 13 merged by
+  6 November 2026 (TEMPLATE.md, section 7).
 - The state of the work packages that the pages describe: TLS, the browser topology through libcoap's proxy,
-  the Swift smoke test (passing in CI since its first run on 6 November 2026), post-quantum EDHOC on Android (not run on a device).
-- The `lastmod` dates in `sitemap.xml`.
+  the Swift smoke test (passing in CI since its first run on 6 November 2026), post-quantum EDHOC on Android
+  (not run on a device).
+- The `lastmod` dates in `sitemap.xml`: 7 November 2026 for every page.
