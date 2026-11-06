@@ -145,7 +145,7 @@ abstract class ExchangeConformanceTest {
         server: CoapServerConfig = CoapServerConfig(),
         maxMessageSize: Int? = null,
         identity: PeerIdentity = PeerIdentity.None,
-        client: (EndpointResolver) -> CoapClientConfig = { CoapClientConfig(resolver = it) },
+        client: (EndpointResolver) -> CoapClientConfig = { CoapClientConfig { resolver = it } },
         routes: ResourceBuilder.() -> Unit,
     ): Setup {
         val network = InMemoryNetwork(backgroundScope, Random(1))
@@ -162,13 +162,13 @@ abstract class ExchangeConformanceTest {
         val serverRecorder = object : MessageInterceptor {
             override fun onSend(to: Endpoint, message: CoapMessage): CoapMessage = message.also { serverSent += it }
         }
-        fun config(seed: Int, interceptors: List<MessageInterceptor>) = CoapEndpointConfig(
-            timeSource = testScheduler.timeSource,
-            random = Random(seed),
-            interceptors = interceptors,
-            loggerFactory = loggerFactory,
-            reliable = reliable,
-        )
+        fun config(seed: Int, interceptors: List<MessageInterceptor>) = CoapEndpointConfig {
+            timeSource = testScheduler.timeSource
+            random = Random(seed)
+            this.interceptors = interceptors
+            loggerFactory = this@ExchangeConformanceTest.loggerFactory
+            this.reliable = reliable
+        }
         val serverSide = link.server()
         val serverEndpoint = CoapEndpoint(backgroundScope, config(1, listOf(serverRecorder)), serverSide.transport, serverSide.connectors, serverSide.listeners)
         val clientSide = link.client()
@@ -295,11 +295,11 @@ abstract class ExchangeConformanceTest {
 
     private val qBlockServer = CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true), amplification = AmplificationPolicy.OFF)
 
-    private fun qBlockClient(resolver: EndpointResolver) = CoapClientConfig(
-        resolver = resolver,
-        preferredBlockSize = 64,
-        qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true),
-    )
+    private fun qBlockClient(resolver: EndpointResolver) = CoapClientConfig {
+        this.resolver = resolver
+        preferredBlockSize = 64
+        qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true)
+    }
 
     /** RFC 9177 §4.4, and Appendix B on connections: a response body in Q-Block2 blocks. */
     @Test
@@ -448,7 +448,10 @@ abstract class ExchangeConformanceTest {
     @Test
     fun rfc7641Section3_6AForgottenObservationEndsOnTheServerOnEveryLink() = runTest {
         val counter = Counter()
-        val forgetting = { resolver: EndpointResolver -> CoapClientConfig(resolver = resolver, observeCancellation = ObserveCancellation.FORGET) }
+        val forgetting = { resolver: EndpointResolver -> CoapClientConfig {
+            this.resolver = resolver
+            observeCancellation = ObserveCancellation.FORGET
+        } }
         val setup = setup(client = forgetting) { add(counter) }
         val two = async { setup.client.observe(setup.uri("/counter")).take(2).toList() }
         delay(1.seconds)
@@ -592,7 +595,10 @@ abstract class ExchangeConformanceTest {
     fun adr0008AnUnverifiedErrorFailsTheRequestAndActsOnNothing() = runTest {
         var ran = false
         val counter = Counter()
-        val setup = setup(server = CoapServerConfig(security = RefusingServer), client = { CoapClientConfig(security = MarkingClient, resolver = it) }) {
+        val setup = setup(server = CoapServerConfig(security = RefusingServer), client = { CoapClientConfig {
+            security = MarkingClient
+            resolver = it
+        } }) {
             add(counter)
             resource("lights") {
                 get {

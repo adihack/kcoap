@@ -12,6 +12,9 @@ adds its entry and migration note below.
 
 ### Added
 
+- Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
+  `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
+  they replace.
 - The CoAP client's error contract (WP-B3): every runtime failure of a `CoapClient`, `CoapEndpoint` or
   `CoapServer` call is a `CoapException`, with two new reasons, `SECURITY` (message security could not protect
   the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
@@ -289,6 +292,97 @@ adds its entry and migration note below.
   types and algorithms. kcoap-crypto-bc reads them instead of its own constants. Additions only.
 
 ### Changed (breaking)
+
+Two configuration builders and explicit `Endpoint` classes (WP-D1):
+
+- **`CoapEndpointConfig` and `CoapClientConfig` are built with a builder, and their constructors are
+  deprecated.** `CoapEndpointConfig { ... }` and `CoapClientConfig { ... }` set options on a `Builder` and keep
+  the default of every option they leave out; `Default` has every default, `toBuilder()` starts a changed copy,
+  and `CoapEndpointConfig.Builder()` / `CoapClientConfig.Builder()` build step by step, which is how Swift sets
+  options, since it does not see Kotlin's default arguments. Values are checked by `build()`, with the same
+  `IllegalArgumentException`s as before. New options will go into the builders, so adding one breaks neither
+  source nor compiled callers, which a constructor with default arguments cannot promise. *Migration:* turn
+  the named arguments into assignments in the block; a listener or resolver names its interface, since a lambda
+  becomes a `fun interface` only as a function argument; and a local variable named like an option hides the
+  option inside the block, so assign it as `this.security = security`:
+
+  ```kotlin
+  // Before
+  val endpointConfig = CoapEndpointConfig(
+      timeSource = testScheduler.timeSource,
+      eventListener = { event -> println(event) },
+  )
+  val clientConfig = CoapClientConfig(security = OscoreClient(contexts), requestTimeout = 5.seconds)
+  val client = CoapClient(transport, scope, CoapClientConfig(security = security))
+  val defaults = CoapClientConfig()
+
+  // After
+  val endpointConfig = CoapEndpointConfig {
+      timeSource = testScheduler.timeSource
+      eventListener = EndpointEventListener { event -> println(event) }
+  }
+  val clientConfig = CoapClientConfig {
+      security = OscoreClient(contexts)
+      requestTimeout = 5.seconds
+  }
+  val client = CoapClient(transport, scope, CoapClientConfig { this.security = security })
+  val defaults = CoapClientConfig.Default
+  ```
+
+  The constructors are deprecated (a warning), not removed. [versioning.md](docs/versioning.md#deprecation-from-10)
+  lets a release before 1.0 remove API at once with a migration note, and nothing is released yet, so a removal
+  would have been allowed; deprecating them instead lets code written against the snapshots, and work still in
+  flight on other branches, keep compiling while it moves over. They are removed before 0.1.0
+  ([releasing.md](docs/releasing.md#release-freeze)), so no release ships them. Compiled callers: the deprecated
+  constructors keep their signatures, but on the JVM the no-argument constructor `CoapEndpointConfig()` /
+  `CoapClientConfig()` (`<init>()V`) is gone, since Kotlin generates it only for a primary constructor; JVM
+  code compiled against it recompiles, or uses `Default`.
+- **`Endpoint.Udp`, `Endpoint.Tcp`, `Endpoint.WebSocket` and `Endpoint.Opaque` are final classes, not data
+  classes**, like `Endpoint.Secure`: their equality is the RFC matching rule, written out, and they have no
+  `copy` or `componentN`. What compares equal:
+  - `Udp` and `Tcp` keep `host` normalized, as RFC 7252 §6.6 compares URI hosts: an IP literal in `IpLiteral`
+    form (`Endpoint.Udp("2001:DB8::1", 5683).host` is `2001:db8::1`, `::ffff:192.0.2.1` is `192.0.2.1`, brackets
+    are dropped), any other host in lower case. Endpoints written differently for the same address are now
+    equal; `host` and `toString()` show the normalized form.
+  - `Tcp` still includes `usesTls` (RFC 8323 §8.2: `coaps+tcp` and `coap+tcp` are different peers on one host
+    and port).
+  - `WebSocket` keeps `uri` as given and compares it in normal form: scheme and host case-insensitively, IP
+    literals in RFC 5952 form, no port as 80 for `ws` and 443 for `wss` (RFC 6455 §3), an empty path as `/`,
+    percent-encodings normalized (RFC 3986 §6.2.2); `ws` and `wss` stay different peers (RFC 8323 §8.4). So
+    `Endpoint.WebSocket("ws://h/.well-known/coap")` equals `Endpoint.WebSocket.of("h", 80)`, and both reach one
+    connection. Text that is no `ws` or `wss` URI compares exactly, as before.
+  - `Opaque` compares link and address exactly, as before.
+
+  *Migration:* replace `copy` and destructuring with the constructor and the properties:
+
+  ```kotlin
+  // Before
+  val tls = plain.copy(usesTls = true)
+  val (host, port) = udp
+
+  // After
+  val tls = Endpoint.Tcp(plain.host, plain.port, usesTls = true)
+  val host = udp.host
+  val port = udp.port
+  ```
+
+  Construction stays as it was: `Endpoint.Udp("192.0.2.1", 5683)`,
+  `Endpoint.Tcp("example.com", 5684, usesTls = true)`, `Endpoint.WebSocket.of("example.com", 443, usesTls = true)`,
+  `Endpoint.WebSocket(uri)`, `Endpoint.Opaque("ble", address)`. The `host` of a `Udp` or `Tcp` built from an IP
+  literal that was not in canonical form is `IpLiteral.canonical(text)`, not the text: compare endpoints, or
+  that, instead of the text. `Endpoint.WebSocket.of` takes an IPv6 literal with or without brackets, as `Tcp`
+  does, and brackets it once in `uri` (it bracketed a bracketed one twice). `InMemoryConnections` (kcoap-testkit)
+  finds a listener by this equality: a client reaches it at every endpoint equal to its `localEndpoint`, such as
+  `Endpoint.Tcp("SERVER", 5683)` for a listener on `"Server"` or `Endpoint.WebSocket("ws://127.0.0.1/.well-known/coap")`
+  for one on port 80, and `listen` refuses an address equal to one in use.
+- **`IpLiteral.parse` and `IpLiteral.canonical` take only what RFC 3986 §3.2.2 calls an IP literal**: a decimal
+  octet without a leading zero and hex groups without a sign. `010.0.0.1`, which a resolver may read as octal
+  (RFC 3986 §7.4), and `::-1` used to be read as `10.0.0.1` and `::ffff`; now they are names, so an endpoint keeps
+  them in lower case, unequal to the address, and `EndpointResolver.Default` refuses them in a datagram URI as it
+  refuses other names. *Migration:* write IP literals without leading zeros in octets.
+- **`CoapException.Reason` and `OscoreError` may gain constants in any minor release, also after 1.0**, as their
+  KDoc and [versioning.md](docs/versioning.md#how-the-build-enforces-it) now say, so a new constant is an
+  addition. *Migration:* keep an `else` branch in every `when` over them.
 
 The kcoap-coap and kcoap-coap-message API cleanup (WP-B3):
 

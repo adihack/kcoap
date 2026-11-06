@@ -91,7 +91,7 @@ suspend fun useServer(scope: CoroutineScope) {
   `CoapException` with a `reason` ([Errors](#errors)). Cancelling the coroutine cancels the exchange.
 - `observe` returns a cold `Flow`: it registers when collected and deregisters (GET with Observe 1)
   when the collector stops. Collectors of the same resource share one registration.
-- `CoapClientConfig` sets the request timeout, a `preferredBlockSize`, which turns on early negotiation
+- `CoapClientConfig { ... }` sets the request timeout, a `preferredBlockSize`, which turns on early negotiation
   (RFC 7959 §2.4), a size limit for downloads (`maxResponseBodySize`) and the `EndpointResolver`:
   `EndpointResolver.Default` takes IP literals for every scheme and `localhost`, and leaves host names of
   `coap+tcp` and `coap+ws` to the connector; a `coap://` host name needs a resolver of your own. A resolver
@@ -125,7 +125,8 @@ host name given to `EndpointResolver.Default`.
 | `TRANSPORT_FAILED`, `CLOSED` | The endpoint's transport failed, or the endpoint was closed | Create a new endpoint |
 
 A call after `close()` fails with `CLOSED` at once, before its host is looked up, and so does one that
-races `close()`, a ping on any transport included.
+races `close()`, a ping on any transport included. `Reason` may gain constants in any minor release, DTLS
+for one, so a `when` over it keeps an `else` branch for the reasons it does not know.
 
 ## Client and server on one port
 
@@ -140,16 +141,26 @@ suspend fun peer(scope: CoroutineScope): Pair<CoapClient, CoapServer> {
 ## Tuning the endpoint
 
 ```kotlin
-val config = CoapEndpointConfig(
-    parameters = TransmissionParameters(ackTimeout = 3.seconds, maxRetransmit = 6),
-    separateResponseDelay = 500.milliseconds,
+val config = CoapEndpointConfig {
+    parameters = TransmissionParameters(ackTimeout = 3.seconds, maxRetransmit = 6)
+    separateResponseDelay = 500.milliseconds
     interceptors = listOf(object : MessageInterceptor {
         override fun onSend(to: Endpoint, message: CoapMessage) = message.also { println("-> $to $it") }
         override fun onReceive(from: Endpoint, message: CoapMessage) = message.also { println("<- $from $it") }
-    }),
-    eventListener = { event -> if (event is EndpointEvent.Retransmitted) println(event) },
-)
+    })
+    eventListener = EndpointEventListener { event -> if (event is EndpointEvent.Retransmitted) println(event) }
+}
 ```
+
+`CoapEndpointConfig` and `CoapClientConfig` are built this way: the block sets options on a `Builder`, and
+every option it leaves out keeps its default. `CoapEndpointConfig.Default` and `CoapClientConfig.Default` have
+every default, `toBuilder()` starts a changed copy of a configuration, and `CoapEndpointConfig.Builder()` builds
+one step by step, which is also how Swift sets the options it needs, since Swift does not see Kotlin's default
+arguments. Two Kotlin rules apply inside the block: a listener or resolver names its interface
+(`EndpointEventListener { ... }`, `EndpointResolver { ... }`), because a lambda becomes a `fun interface` only
+as a function argument; and a local variable named like an option hides the option, so write
+`CoapClientConfig { this.security = security }`. Values are checked when the configuration is built, which
+throws `IllegalArgumentException` for one out of range.
 
 `TransmissionParameters` holds RFC 7252 §4.8's ACK_TIMEOUT, ACK_RANDOM_FACTOR, MAX_RETRANSMIT, NSTART,
 PROBING_RATE and MAX_LATENCY and derives EXCHANGE_LIFETIME and the other §4.8.2 values. Interceptors see
@@ -208,13 +219,13 @@ suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: I
   built yet.
 
 ```kotlin
-val reliableConfig = CoapEndpointConfig(
+val reliableConfig = CoapEndpointConfig {
     reliable = ReliableTransportConfig(
         maxMessageSize = 64 * 1024 + 512, // announced in the CSM; BERT blocks of up to 64 KiB
         idleTimeout = 2.minutes, // release connections this side opened after 2 idle minutes
         keepAliveInterval = 30.seconds, // Ping a quiet connection; abort it if nothing answers
-    ),
-)
+    )
+}
 ```
 
 `EndpointEvent`s report connections opened and closed, CSMs, Releases and Aborts. On virtual time,
@@ -224,7 +235,7 @@ val reliableConfig = CoapEndpointConfig(
 @Test
 fun overConnections() = runTest {
     val connections = InMemoryConnections()
-    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
     CoapServer(listOf(connections.listen(5683)), backgroundScope, endpointConfig = config) {
         resource("hello") { get { CoapResponse.content("Hello") } }
     }
@@ -257,8 +268,8 @@ suspend fun qBlockServer(scope: CoroutineScope, port: Int): CoapServer {
 }
 
 suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
-    val qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) // OFF by default
-    val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(qBlock = qBlock))
+    val config = CoapClientConfig { qBlock = QBlockClientConfig(mode = QBlockMode.PROBE) } // OFF by default
+    val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, config)
     val server = "coap://127.0.0.1:$port"
     // Non-confirmable requests get Non-confirmable bursts; Confirmable ones go block by block.
     val body = client.get("$server/big") { nonConfirmable() }.payload
@@ -295,7 +306,7 @@ suspend fun qBlockClient(scope: CoroutineScope, port: Int) {
 
 ## Message security
 
-`CoapServerConfig(security = …)` and `CoapClientConfig(security = …)` take the SPI from
+`CoapServerConfig(security = …)` and `CoapClientConfig { security = … }` take the SPI from
 `dev.kcoap.coap.security` that `kcoap-oscore` implements. The stack calls it between the exchange layer
 and messaging, as RFC 8613 Figure 1 does: resources see decrypted requests, every block and every
 notification is protected on its own, and failures are answered unprotected with Max-Age 0.
@@ -341,7 +352,7 @@ Configuring it fails closed ([ADR 0008](adr/0008-fail-closed-message-security.md
 fun greets() = runTest {
     val network = InMemoryNetwork(backgroundScope, Random(1))
     network.conditions = LinkConditions(lossRate = 0.3, duplicationRate = 0.1)
-    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
     val serverTransport = network.attach()
     CoapServer(serverTransport, backgroundScope, endpointConfig = config) {
         resource("hello") { get { CoapResponse.content("Hello") } }

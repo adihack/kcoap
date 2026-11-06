@@ -15,8 +15,9 @@ applications built on it.
   a chosen datagram and from a second one after that, so the peer sees the source address change in the
   middle of a conversation; it receives on both, or only on the new one when the old binding expired.
 - `InMemoryConnections`: listeners and a `Connector` for `coap+tcp`, `coaps+tcp`, `coap+ws` and
-  `coaps+ws` (RFC 8323). Byte streams deliver writes in pieces of `chunkSize` bytes, so stream
-  reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw
+  `coaps+ws` (RFC 8323); a client reaches a listener at every endpoint equal to its address. Byte
+  streams deliver writes in pieces of `chunkSize` bytes, so stream reassembly is exercised; message
+  streams keep frames whole. `InMemoryConnection.inject` hands raw
   bytes to one side, `reset` breaks a connection, `tap` sees every write. TLS is not simulated; a
   listener reports the identities it is given.
 - `InMemorySessions`: a stand-in for a DTLS layer on an `InMemoryTransport`. Every peer appears as an
@@ -44,7 +45,7 @@ on virtual time.
 fun survivesALossyNetwork() = runTest {
     val network = InMemoryNetwork(backgroundScope, Random(42))
     network.conditions = LinkConditions(lossRate = 0.2, duplicationRate = 0.1, jitter = 50.milliseconds)
-    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
     val server = CoapServer(network.attach(), backgroundScope, endpointConfig = config) {
         resource("hello") { get { CoapResponse.content("Hello") } }
     }
@@ -82,14 +83,14 @@ abstract class MyConformanceTest {
     @Test
     fun getsTheResource() = runTest {
         val link = link(InMemoryNetwork(backgroundScope), InMemoryConnections())
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         val server = link.server()
         CoapServer(CoapEndpoint(backgroundScope, config, server.transport, server.connectors, server.listeners)) {
             resource("hello") { get { CoapResponse.content("Hello") } }
         }
         val client = link.client()
         val resolver = EndpointResolver { uri -> client.peer(EndpointResolver.Default.resolve(uri)) }
-        val coap = CoapClient(CoapEndpoint(backgroundScope, config, client.transport, client.connectors), CoapClientConfig(resolver = resolver))
+        val coap = CoapClient(CoapEndpoint(backgroundScope, config, client.transport, client.connectors), CoapClientConfig { this.resolver = resolver })
         assertEquals("Hello", coap.get("${link.uri}/hello").payloadAsText())
     }
 }

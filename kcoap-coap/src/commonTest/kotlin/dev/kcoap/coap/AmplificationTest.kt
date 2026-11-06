@@ -371,7 +371,7 @@ class AmplificationTest {
         val server = fixture.server(CoapServerConfig(security = ToySecurity, amplification = AmplificationPolicy.ALL_RESPONSES, defaultAccess = AccessPolicy.Public)) {
             resource("large") { get { CoapResponse.content(large) } }
         }
-        val protected = fixture.client(CoapClientConfig(security = ToySecurity))
+        val protected = fixture.client(CoapClientConfig { security = ToySecurity })
 
         assertEquals(large, protected.get(fixture.uri(server, "/large")).payloadAsText())
         assertTrue(fixture.sentBy(server.endpoint).none { it.code == CoapCode.UNAUTHORIZED })

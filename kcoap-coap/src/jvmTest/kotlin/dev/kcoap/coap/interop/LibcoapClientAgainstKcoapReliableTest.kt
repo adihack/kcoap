@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorTcpListener
@@ -77,7 +78,10 @@ class LibcoapClientAgainstKcoapReliableTest {
             val wsListener = KtorWebSocketListener.start(CIO, "127.0.0.1", 0)
             server = CoapServer(
                 listOf(tcpListener, wsListener), scope,
-                endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it }),
+                endpointConfig = CoapEndpointConfig {
+                    interceptors = listOf(recorder)
+                    eventListener = EndpointEventListener { events += it }
+                },
             ) {
                 resource("hello") { get { CoapResponse.content("Hello from kcoap over ${peer::class.simpleName}") } }
                 resource("store") {

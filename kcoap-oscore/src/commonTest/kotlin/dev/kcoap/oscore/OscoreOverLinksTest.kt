@@ -91,10 +91,14 @@ abstract class OscoreOverLinksTest {
 
                 override fun onReceive(from: Endpoint, message: CoapMessage): CoapMessage = message.also { wire += it }
             }
-            val config = CoapEndpointConfig(timeSource = endpointConfig.timeSource, random = Random(2), interceptors = listOf(recorder))
+            val config = CoapEndpointConfig {
+                timeSource = endpointConfig.timeSource
+                random = Random(2)
+                interceptors = listOf(recorder)
+            }
             val endpoint = CoapEndpoint(scope, config, clientSide.transport, clientSide.connectors, clientSide.listeners)
             val resolver = EndpointResolver { uri -> clientSide.peer(EndpointResolver.Default.resolve(uri)) }
-            return CoapClient(endpoint, CoapClientConfig(security = security, resolver = resolver))
+            return CoapClient(endpoint, CoapClientConfig { this.security = security; this.resolver = resolver })
         }
     }
 
@@ -102,7 +106,7 @@ abstract class OscoreOverLinksTest {
         val link = link(InMemoryNetwork(backgroundScope, Random(1)), InMemoryConnections(chunkSize = 7))
         val serverContext = if (restarted) restoredContext(serverParameters, crypto) else ephemeralContext(serverParameters, crypto)
         val repository = InMemoryContextRepository().apply { add(serverContext) }
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource, random = Random(1))
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource; random = Random(1) }
         val side = link.server()
         val counter = Counter()
         val seen = mutableListOf<SecurityIdentity?>()

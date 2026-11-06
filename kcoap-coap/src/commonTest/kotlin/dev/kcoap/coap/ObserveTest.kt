@@ -98,7 +98,7 @@ class ObserveTest {
         val fixture = StackFixture(this)
         val counter = Counter()
         val server = fixture.server { add(counter) }
-        val client = fixture.client(CoapClientConfig(observeCancellation = ObserveCancellation.FORGET))
+        val client = fixture.client(CoapClientConfig { observeCancellation = ObserveCancellation.FORGET })
 
         assertEquals("0", client.observe(fixture.uri(server, "/counter")).first().payloadAsText())
         delay(1.seconds)
@@ -266,7 +266,7 @@ class ObserveTest {
             val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = qBlock))) {
                 add(resource)
             }
-            val client = fixture.client(if (qBlock) CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)) else CoapClientConfig())
+            val client = fixture.client(if (qBlock) CoapClientConfig { this.qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED) } else CoapClientConfig.Default)
             val received = mutableListOf<String>()
             val observation = launch { client.observe(fixture.uri(server, "/gated")).collect { received += it.payloadAsText() } }
             delay(1.seconds)
@@ -323,7 +323,7 @@ class ObserveTest {
             val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = qBlock))) {
                 add(counter)
             }
-            val client = fixture.client(if (qBlock) CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)) else CoapClientConfig())
+            val client = fixture.client(if (qBlock) CoapClientConfig { this.qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED) } else CoapClientConfig.Default)
             val received = mutableListOf<String>()
             val observation = launch { client.observe(fixture.uri(server, "/counter")).collect { received += it.payloadAsText() } }
             delay(1.seconds)

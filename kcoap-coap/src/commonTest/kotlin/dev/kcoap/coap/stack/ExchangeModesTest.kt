@@ -690,7 +690,11 @@ class ExchangeModesTest {
         val fixture = StackFixture(this)
         val peer = RawPeer(fixture.transport())
         val events = mutableListOf<EndpointEvent>()
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource, maxExchangesPerPeer = 1, eventListener = { events += it })
+        val config = CoapEndpointConfig {
+            timeSource = testScheduler.timeSource
+            maxExchangesPerPeer = 1
+            eventListener = EndpointEventListener { events += it }
+        }
         val endpoint = CoapEndpoint(fixture.transport(), backgroundScope, config)
 
         endpoint.leaseBody(peer.address, 100)

@@ -140,7 +140,7 @@ val server = CoapServer(
 val client = CoapClient(
     KtorUdpTransport.bind(),
     scope,
-    CoapClientConfig(security = OscoreClient(clientContext)),
+    CoapClientConfig { security = OscoreClient(clientContext) },
 )
 println(client.get("coap://192.0.2.1/lights").payloadAsText())
 ```
@@ -150,7 +150,7 @@ request carries EDHOC message_3 (RFC 9668), two round trips in all:
 
 ```kotlin
 val security = PeerSecurity()
-val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig(security = security))
+val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig { this.security = security })
 val server = CoapUri.parse("coap://192.0.2.1")
 val (session, protection) =
     EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()

@@ -51,13 +51,20 @@ Declarations that are `internal` or `private` in Kotlin are not API either.
 - **What counts as a break.** A removed or changed line in a dump; new lines are additions. That
   includes changes that still compile from source but break compiled callers, such as a new constructor
   parameter with a default value: the CHANGELOG entry then says that compiled callers recompile.
+- **Enums that say they may grow.** A new constant of an enum whose KDoc says it may gain constants
+  (`CoapException.Reason`, `OscoreError`) is an addition, in any minor release: code that switches over
+  such an enum keeps an `else` branch. For a new constant of any other enum, the CHANGELOG entry says that
+  an exhaustive `when` over it needs the new branch.
 - **Before a release.** The release checklist compares the dump diff since the last release with the
   CHANGELOG entry ([releasing](releasing.md)). A patch release removes or changes no line in the dumps.
 
 ## Deprecation, from 1.0
 
-Before 1.0, API is changed or removed in a minor release, with its migration note. From 1.0, the plan
-is:
+Before 1.0, API is changed or removed in a minor release, with its migration note, and deprecating it
+first is optional. It is deprecated rather than removed at once only to let code still in flight move over
+with a warning instead of an error, such as other branches of the refactoring plan, and then it is removed
+before the next release, so that no release ships API that is already on its way out
+([releasing](releasing.md#release-freeze)). From 1.0, the plan is:
 
 1. A declaration that is to go is marked `@Deprecated` in a minor release, with a message that names its
    replacement and a `ReplaceWith` where the replacement is mechanical.

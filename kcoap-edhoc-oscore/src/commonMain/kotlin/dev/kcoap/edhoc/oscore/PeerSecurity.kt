@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.withLock
  *
  * ```
  * val security = PeerSecurity()
- * val client = CoapClient(transport, scope, CoapClientConfig(security = security))
+ * val client = CoapClient(transport, scope, CoapClientConfig { this.security = security })
  * val server = CoapUri.parse("coap://192.0.2.1")
  * val (_, protection) = EdhocClientHandshake.over(client, server, config, crypto).runCombined()
  * security.install(client, server, protection)

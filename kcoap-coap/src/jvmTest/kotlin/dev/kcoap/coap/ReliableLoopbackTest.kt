@@ -6,6 +6,7 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.transport.ktor.KtorTcpConnector
 import dev.kcoap.transport.ktor.KtorTcpListener
@@ -65,7 +66,10 @@ class ReliableLoopbackTest {
         }
         val client = CoapClient(
             listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope,
-            endpointConfig = CoapEndpointConfig(eventListener = { events += it }, reliable = ReliableTransportConfig(maxMessageSize = 4096)),
+            endpointConfig = CoapEndpointConfig {
+                eventListener = EndpointEventListener { events += it }
+                reliable = ReliableTransportConfig(maxMessageSize = 4096)
+            },
         )
         try {
             withTimeout(30.seconds) {

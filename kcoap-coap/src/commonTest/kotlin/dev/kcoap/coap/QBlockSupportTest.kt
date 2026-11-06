@@ -51,7 +51,11 @@ class QBlockSupportTest {
     ): QBlockClientTest.Setup {
         val fixture = StackFixture(this)
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
-        val client = fixture.client(CoapClientConfig(security = security, preferredBlockSize = 64, qBlock = qBlock))
+        val client = fixture.client(CoapClientConfig {
+            this.security = security
+            preferredBlockSize = 64
+            this.qBlock = qBlock
+        })
         return QBlockClientTest.Setup(fixture, server, client)
     }
 
@@ -76,7 +80,7 @@ class QBlockSupportTest {
                 }
             }
         }
-        val client = fixture.client(CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.PROBE)))
+        val client = fixture.client(CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.PROBE) })
 
         val got = client.get(fixture.uri(server, "/big"))
         val put = client.put(fixture.uri(server, "/big"), body(2000))
@@ -100,7 +104,7 @@ class QBlockSupportTest {
     fun rfc9177Section4_1InAssumeSupportedModeA402IsAnsweredWithRfc7959AndRemembered() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("big") { get { CoapResponse.content(body(3000)) } } }
-        val client = fixture.client(CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
+        val client = fixture.client(CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED) })
 
         val first = client.get(fixture.uri(server, "/big"))
         val second = client.get(fixture.uri(server, "/big"))
@@ -118,7 +122,7 @@ class QBlockSupportTest {
     fun rfc7252Section5_4_1AResetToANonConfirmableQBlockRequestFallsBackToRfc7959() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("big") { get { CoapResponse.content(body(3000)) } } }
-        val client = fixture.client(CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)))
+        val client = fixture.client(CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED) })
 
         val response = client.get(fixture.uri(server, "/big")) { nonConfirmable() }
 
@@ -392,7 +396,7 @@ class QBlockSupportTest {
         val server = QBlockTestServer(fixture.transport(), backgroundScope, { fixture.now })
         server.resources["/small"] = body(40)
         val endpoint = fixture.endpoint()
-        val config = CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE))
+        val config = CoapClientConfig { preferredBlockSize = 64; qBlock = QBlockClientConfig(QBlockMode.PROBE) }
 
         // Short-lived clients on a long-lived endpoint, never closed.
         repeat(100) { assertContentEquals(body(40), CoapClient(endpoint, config).get(server.uri("/small")).payload) }
@@ -450,7 +454,7 @@ class QBlockSupportTest {
     fun rfc8323Section3_4AClosedConnectionForgetsWhatTheProbeFound() = runTest {
         val fixture = ReliableFixture(this)
         val server = fixture.server { resource("small") { get { CoapResponse.content("small") } } }
-        val client = fixture.client(CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true)))
+        val client = fixture.client(CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true) })
         val peer = Endpoint.Tcp("127.0.0.1", 5683, false)
 
         assertEquals("small", client.get(fixture.uri("/small")).payloadAsText())
@@ -545,13 +549,13 @@ class QBlockSupportTest {
     fun reliableTransportsUseRfc7959UnlessAllowed() = runTest {
         val fixture = ReliableFixture(this)
         fixture.server { resource("big") { get { CoapResponse.content(body(3000)) } } }
-        val client = fixture.client(CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.PROBE)))
+        val client = fixture.client(CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.PROBE) })
 
         assertContentEquals(body(3000), client.get(fixture.uri("/big")).payload)
         assertTrue(fixture.sent(byServer = false).none { it.hasQBlock() })
 
         val allowed = fixture.client(
-            CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true)),
+            CoapClientConfig { qBlock = QBlockClientConfig(QBlockMode.PROBE, onReliableTransports = true) },
         )
         assertContentEquals(body(3000), allowed.get(fixture.uri("/big")).payload)
         val probe = fixture.sent(byServer = false).single { it.hasQBlock() }
@@ -568,7 +572,7 @@ class QBlockSupportTest {
         assertTrue(config.isEnabled)
         assertTrue(!QBlockClientConfig().isEnabled)
         assertTrue(config.toString().contains("mode=PROBE"))
-        assertTrue(CoapClientConfig(qBlock = config).toString().contains("qBlock=PROBE"))
+        assertTrue(CoapClientConfig { qBlock = config }.toString().contains("qBlock=PROBE"))
         assertEquals(TransmissionParameters().maxPayloads, 10)
     }
 }

@@ -94,7 +94,7 @@ public class CoapServer private constructor(
         transport: DatagramTransport,
         scope: CoroutineScope,
         config: CoapServerConfig = CoapServerConfig(),
-        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig.Default,
         routes: ResourceBuilder.() -> Unit = {},
     ) : this(CoapEndpoint(transport, scope, endpointConfig), config, true, routes)
 
@@ -106,7 +106,7 @@ public class CoapServer private constructor(
         listeners: List<ConnectionListener>,
         scope: CoroutineScope,
         config: CoapServerConfig = CoapServerConfig(),
-        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig.Default,
         routes: ResourceBuilder.() -> Unit = {},
     ) : this(CoapEndpoint(scope, endpointConfig, listeners = listeners), config, true, routes)
 

@@ -32,12 +32,15 @@ internal suspend fun loopbackGets(scope: CoroutineScope, contexts: OscoreContext
         }
     }
     val uri = "coap://127.0.0.1:${serverTransport.localEndpoint.port}/hello"
-    val config = CoapClientConfig(requestTimeout = TIMEOUT)
+    val config = CoapClientConfig { requestTimeout = TIMEOUT }
     val plain = CoapClient(KtorUdpTransport.bind("127.0.0.1", 0), scope, config)
     val protected = CoapClient(
         KtorUdpTransport.bind("127.0.0.1", 0),
         scope,
-        CoapClientConfig(security = OscoreClient(contexts.client), requestTimeout = TIMEOUT),
+        CoapClientConfig {
+            security = OscoreClient(contexts.client)
+            requestTimeout = TIMEOUT
+        },
     )
     return try {
         val answer = plain.get(uri)

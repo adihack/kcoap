@@ -1466,7 +1466,10 @@ class QBlockServerTest {
         )
         suspend fun start(config: CoapServerConfig): List<String> {
             records.clear()
-            stack.server(config, CoapEndpointConfig(timeSource = testScheduler.timeSource, loggerFactory = loggerFactory)) {}
+            stack.server(config, CoapEndpointConfig {
+                timeSource = testScheduler.timeSource
+                this.loggerFactory = loggerFactory
+            }) {}
             return records.filter { it.level == LogLevel.WARN }.map { it.message }
         }
 

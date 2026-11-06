@@ -60,7 +60,7 @@ class KcoapClientAgainstLibcoapTest {
         runBlocking {
             val probe = CoapEndpoint(
                 KtorUdpTransport.bind("127.0.0.1"), scope,
-                CoapEndpointConfig(parameters = TransmissionParameters(ackTimeout = 500.milliseconds, maxRetransmit = 0)),
+                CoapEndpointConfig { parameters = TransmissionParameters(ackTimeout = 500.milliseconds, maxRetransmit = 0) },
             )
             val ready = (1..40).any { probe.ping(Endpoint.Udp("127.0.0.1", server.port)) }
             probe.close()
@@ -74,11 +74,11 @@ class KcoapClientAgainstLibcoapTest {
         scope.cancel()
     }
 
-    private fun withClient(config: CoapClientConfig = CoapClientConfig(), block: suspend (CoapClient) -> Unit) = runBlocking {
+    private fun withClient(config: CoapClientConfig = CoapClientConfig.Default, block: suspend (CoapClient) -> Unit) = runBlocking {
         wire.clear()
         val client = CoapClient(
             KtorUdpTransport.bind("127.0.0.1"), scope, config,
-            CoapEndpointConfig(interceptors = listOf(recorder)),
+            CoapEndpointConfig { interceptors = listOf(recorder) },
         )
         try {
             withTimeout(60.seconds) { block(client) }
@@ -143,7 +143,7 @@ class KcoapClientAgainstLibcoapTest {
     }
 
     @Test
-    fun negotiatesASmallBlockSizeEarly() = withClient(CoapClientConfig(preferredBlockSize = 64)) { client ->
+    fun negotiatesASmallBlockSizeEarly() = withClient(CoapClientConfig { preferredBlockSize = 64 }) { client ->
         val random = Random(3)
         val body = ByteArray(700) { ('a' + random.nextInt(26)).code.toByte() }
         assertTrue(client.put("${server.uri}/example_data", body).isSuccess)

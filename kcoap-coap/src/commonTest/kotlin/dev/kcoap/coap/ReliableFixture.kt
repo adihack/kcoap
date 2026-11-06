@@ -9,6 +9,7 @@ import dev.kcoap.coap.server.ResourceBuilder
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.log.LogConfig
@@ -60,13 +61,13 @@ class ReliableFixture(val test: TestScope, chunkSize: Int = 7) {
     fun endpointConfig(
         reliable: ReliableTransportConfig = ReliableTransportConfig(),
         interceptors: List<MessageInterceptor> = emptyList(),
-    ) = CoapEndpointConfig(
-        timeSource = test.testScheduler.timeSource,
-        interceptors = interceptors,
-        eventListener = { events += it },
-        loggerFactory = loggerFactory,
-        reliable = reliable,
-    )
+    ) = CoapEndpointConfig {
+        timeSource = test.testScheduler.timeSource
+        this.interceptors = interceptors
+        eventListener = EndpointEventListener { events += it }
+        loggerFactory = this@ReliableFixture.loggerFactory
+        this.reliable = reliable
+    }
 
     suspend fun listen(
         port: Int = 5683,
@@ -86,7 +87,7 @@ class ReliableFixture(val test: TestScope, chunkSize: Int = 7) {
     fun endpoint(endpointConfig: CoapEndpointConfig = endpointConfig()): CoapEndpoint =
         CoapEndpoint(test.backgroundScope, endpointConfig, connectors = listOf(connections.connector))
 
-    fun client(config: CoapClientConfig = CoapClientConfig(), endpointConfig: CoapEndpointConfig = endpointConfig()): CoapClient =
+    fun client(config: CoapClientConfig = CoapClientConfig.Default, endpointConfig: CoapEndpointConfig = endpointConfig()): CoapClient =
         CoapClient(endpoint(endpointConfig), config)
 
     fun uri(path: String = "", port: Int = 5683, scheme: CoapScheme = CoapScheme.COAP_TCP): String =

@@ -6,6 +6,7 @@ import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorTcpConnector
@@ -90,7 +91,10 @@ class KcoapClientAgainstLibcoapReliableTest {
         events.clear()
         val client = CoapClient(
             listOf(KtorTcpConnector(), KtorWebSocketConnector()), scope,
-            endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it }),
+            endpointConfig = CoapEndpointConfig {
+                interceptors = listOf(recorder)
+                eventListener = EndpointEventListener { events += it }
+            },
         )
         try {
             withTimeout(60.seconds) { block(client) }

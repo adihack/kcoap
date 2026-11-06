@@ -104,14 +104,14 @@ public class CoapClient private constructor(
     private val ownsEndpoint: Boolean,
 ) {
     /** A client on an existing [endpoint], which a [dev.kcoap.coap.server.CoapServer] may share. */
-    public constructor(endpoint: CoapEndpoint, config: CoapClientConfig = CoapClientConfig()) : this(endpoint, config, false)
+    public constructor(endpoint: CoapEndpoint, config: CoapClientConfig = CoapClientConfig.Default) : this(endpoint, config, false)
 
     /** A client on a new endpoint over [transport]; [close] closes both. */
     public constructor(
         transport: DatagramTransport,
         scope: CoroutineScope,
-        config: CoapClientConfig = CoapClientConfig(),
-        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+        config: CoapClientConfig = CoapClientConfig.Default,
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig.Default,
     ) : this(CoapEndpoint(transport, scope, endpointConfig), config, true)
 
     /**
@@ -123,8 +123,8 @@ public class CoapClient private constructor(
     public constructor(
         connectors: List<Connector>,
         scope: CoroutineScope,
-        config: CoapClientConfig = CoapClientConfig(),
-        endpointConfig: CoapEndpointConfig = CoapEndpointConfig(),
+        config: CoapClientConfig = CoapClientConfig.Default,
+        endpointConfig: CoapEndpointConfig = CoapEndpointConfig.Default,
     ) : this(CoapEndpoint(scope, endpointConfig, connectors = connectors), config, true)
 
     private val log = endpoint.config.loggerFactory.logger(LogTags.COAP_CLIENT)

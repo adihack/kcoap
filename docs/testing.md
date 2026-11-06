@@ -222,7 +222,7 @@ error path, so the floor only ever goes up.
   test dispatcher's virtual time.
 - A CoAP endpoint reads "now" from `CoapEndpointConfig.timeSource` and waits with the delays of its
   scope's dispatcher, so the two must be one clock. Under `runTest`, run the endpoint in
-  `backgroundScope` and pass `CoapEndpointConfig(timeSource = testScheduler.timeSource)` (the test
+  `backgroundScope` and pass `CoapEndpointConfig { timeSource = testScheduler.timeSource }` (the test
   fixtures `StackFixture` and `ReliableFixture` do). With the default `TimeSource.Monotonic` there,
   retransmissions, lifetimes and request timeouts disagree, and the endpoint logs one warning: "The
   endpoint's timeSource does not advance with its dispatcher's clock".

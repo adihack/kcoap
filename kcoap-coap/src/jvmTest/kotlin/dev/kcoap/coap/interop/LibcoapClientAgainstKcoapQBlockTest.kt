@@ -16,6 +16,7 @@ import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.transport.DatagramEvent
 import dev.kcoap.transport.Endpoint
@@ -96,7 +97,10 @@ class LibcoapClientAgainstKcoapQBlockTest {
             message.also { received += Sent(TimeSource.Monotonic.markNow(), from, it) }
     }
 
-    private fun endpointConfig() = CoapEndpointConfig(interceptors = listOf(recorder), eventListener = { events += it })
+    private fun endpointConfig() = CoapEndpointConfig {
+        interceptors = listOf(recorder)
+        eventListener = EndpointEventListener { events += it }
+    }
 
     /** `/obs`: 1500 bytes for its [version], which [change] turns and notifies (L6). */
     private class Changing : ObservableResource("obs") {

@@ -17,6 +17,7 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.PlatformCsprng
 import dev.kcoap.coap.stack.TokenGenerator
@@ -161,7 +162,7 @@ class EdgeCaseTest {
     @Test
     fun theEndpointConfigurationKeepsACopyOfItsInterceptors() {
         val interceptors = mutableListOf<MessageInterceptor>(object : MessageInterceptor {})
-        val config = CoapEndpointConfig(interceptors = interceptors)
+        val config = CoapEndpointConfig { this.interceptors = interceptors }
         interceptors.clear()
         assertEquals(1, config.interceptors.size)
     }
@@ -169,7 +170,7 @@ class EdgeCaseTest {
     @Test
     fun rfc9175Section4_2EveryEndpointOfOneConfigurationHasItsOwnTokenSequence() = runTest {
         val fixture = StackFixture(this)
-        val shared = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val shared = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         assertNull(shared.tokenGenerator)
         val first = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
         val second = CoapEndpoint(FaultyTransport(fixture.transport()), backgroundScope, shared)
@@ -196,7 +197,7 @@ class EdgeCaseTest {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
                 throw MessageSecurityException("No context for $peer")
         }
-        val client = fixture.client(CoapClientConfig(security = security))
+        val client = fixture.client(CoapClientConfig { this.security = security })
         val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
         assertEquals(CoapException.Reason.SECURITY, error.reason)
         assertIs<MessageSecurityException>(error.cause)
@@ -211,7 +212,7 @@ class EdgeCaseTest {
         val security = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest? = null
         }
-        val client = fixture.client(CoapClientConfig(security = security))
+        val client = fixture.client(CoapClientConfig { this.security = security })
         assertEquals("plain", client.get(fixture.uri(server, "/r")).payloadAsText())
     }
 
@@ -300,7 +301,7 @@ class EdgeCaseTest {
     fun rfc7967NoResponseSuppressesErrorsToo() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server(endpointConfig = fixture.endpointConfig(separateResponseDelay = null)) { }
-        val client = fixture.client(CoapClientConfig(requestTimeout = 5.seconds))
+        val client = fixture.client(CoapClientConfig { requestTimeout = 5.seconds })
         val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/missing")) { options { noResponse(8) } } }
         assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
         assertEquals(CoapCode.NOT_FOUND, client.get(fixture.uri(server, "/missing")) { options { noResponse(16) } }.code)
@@ -341,11 +342,11 @@ class EdgeCaseTest {
     fun brokenListenersDoNotBreakTheEndpoint() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server { resource("r") { get { CoapResponse.content("ok") } } }
-        val config = CoapEndpointConfig(
-            timeSource = testScheduler.timeSource,
-            eventListener = { error("listener bug") },
-            loggerFactory = fixture.loggerFactory,
-        )
+        val config = CoapEndpointConfig {
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { error("listener bug") }
+            loggerFactory = fixture.loggerFactory
+        }
         val client = CoapClient(fixture.transport(), backgroundScope, endpointConfig = config)
         val coin = Random(4)
         fixture.network.filter = { datagram -> datagram.from != fixture.address(server.endpoint) || coin.nextBoolean() }
@@ -371,21 +372,21 @@ class EdgeCaseTest {
 
     @Test
     fun configurationsAreValidated() {
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 100) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(preferredBlockSize = 2048) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(requestTimeout = 0.seconds) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(maxResponseBodySize = 0) }
-        assertFailsWith<IllegalArgumentException> { CoapClientConfig(securityReserve = -1) }
-        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(separateResponseDelay = (-1).milliseconds) }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig { preferredBlockSize = 100 } }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig { preferredBlockSize = 2048 } }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig { requestTimeout = 0.seconds } }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig { maxResponseBodySize = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapClientConfig { securityReserve = -1 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { separateResponseDelay = (-1).milliseconds } }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxBlockSize = 100) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxRequestBodySize = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxConcurrentTransfers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(confirmableNotificationInterval = 0.seconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(nonConfirmableNotificationInterval = (-1).seconds) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(securityReserve = -1) }
-        assertTrue(CoapClientConfig().toString().startsWith("CoapClientConfig("))
+        assertTrue(CoapClientConfig.Default.toString().startsWith("CoapClientConfig("))
         assertTrue(CoapServerConfig().toString().startsWith("CoapServerConfig("))
-        assertTrue(CoapEndpointConfig().toString().startsWith("CoapEndpointConfig("))
+        assertTrue(CoapEndpointConfig.Default.toString().startsWith("CoapEndpointConfig("))
     }
 
     @Test
@@ -394,6 +395,8 @@ class EdgeCaseTest {
         assertEquals(Endpoint.Udp("::1", 5683), resolver.resolve(CoapUri.parse("coap://[0:0:0:0:0:0:0:1]")))
         assertEquals(Endpoint.Udp("127.0.0.1", 1234), resolver.resolve(CoapUri.parse("coap://localhost:1234")))
         assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://example.com")) }
+        // RFC 3986 §3.2.2 and §7.4: a leading zero makes a name, which a resolver may read as octal.
+        assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://010.0.0.1")) }
     }
 
     /** RFC 8323 §8: responses come on the connection, so names stay names for the connector to resolve. */

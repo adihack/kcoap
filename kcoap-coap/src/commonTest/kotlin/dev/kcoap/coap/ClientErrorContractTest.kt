@@ -62,7 +62,7 @@ class ClientErrorContractTest {
             resolved.await()
             EndpointResolver.Default.resolve(uri)
         }
-        val client = CoapClient(endpoint, CoapClientConfig(resolver = resolver))
+        val client = CoapClient(endpoint, CoapClientConfig { this.resolver = resolver })
         // The request starts while the endpoint is open, and opens its exchange only once close() is under way.
         val pending = async { runCatching { client.get("coap://127.0.0.1:9/x") } }
         resolving.await()
@@ -91,7 +91,7 @@ class ClientErrorContractTest {
             lookups++
             EndpointResolver.Default.resolve(uri)
         }
-        val client = fixture.client(CoapClientConfig(resolver = resolver))
+        val client = fixture.client(CoapClientConfig { this.resolver = resolver })
         client.endpoint.close()
 
         val reasons = listOf(
@@ -158,7 +158,7 @@ class ClientErrorContractTest {
             lookups++
             EndpointResolver.Default.resolve(uri)
         }
-        val client = fixture.client(CoapClientConfig(resolver = resolver))
+        val client = fixture.client(CoapClientConfig { this.resolver = resolver })
 
         val errors = listOf(
             assertFailsWith<CoapException> { client.get("coaps://127.0.0.1/x") },
@@ -178,7 +178,7 @@ class ClientErrorContractTest {
     fun aResolverThatFailsAtRuntimeGivesUnresolvedHostWithItsFailureAsCause() = runTest {
         val fixture = StackFixture(this)
         val outage = IllegalStateException("No network")
-        val client = fixture.client(CoapClientConfig(resolver = EndpointResolver { throw outage }))
+        val client = fixture.client(CoapClientConfig { resolver = EndpointResolver { throw outage } })
 
         val error = assertFailsWith<CoapException> { client.get("coap://sensor.example/x") }
         assertEquals(CoapException.Reason.UNRESOLVED_HOST, error.reason)
@@ -192,7 +192,7 @@ class ClientErrorContractTest {
     fun aResolverFollowingTheContractIsPassedOnUnchanged() = runTest {
         val fixture = StackFixture(this)
         val unresolved = CoapException("No address for sensor.example", CoapException.Reason.UNRESOLVED_HOST)
-        val client = fixture.client(CoapClientConfig(resolver = EndpointResolver { throw unresolved }))
+        val client = fixture.client(CoapClientConfig { resolver = EndpointResolver { throw unresolved } })
         assertSame(unresolved, assertFailsWith<CoapException> { client.get("coap://sensor.example/x") })
 
         // A host name given to the default resolver, which knows no DNS, is a mistake of configuration.
@@ -204,7 +204,7 @@ class ClientErrorContractTest {
     @Test
     fun aCancelledLookupIsNotAResolverFailure() = runTest {
         val fixture = StackFixture(this)
-        val client = fixture.client(CoapClientConfig(resolver = EndpointResolver { awaitCancellation() }))
+        val client = fixture.client(CoapClientConfig { resolver = EndpointResolver { awaitCancellation() } })
         assertNull(withTimeoutOrNull(1.seconds) { client.get("coap://sensor.example/x") })
     }
 
@@ -215,7 +215,7 @@ class ClientErrorContractTest {
     @Test
     fun aLookupThatTimesOutOnItsOwnIsUnresolvedHost() = runTest {
         val fixture = StackFixture(this)
-        val client = fixture.client(CoapClientConfig(resolver = EndpointResolver { withTimeout(1.seconds) { awaitCancellation() } }))
+        val client = fixture.client(CoapClientConfig { resolver = EndpointResolver { withTimeout(1.seconds) { awaitCancellation() } } })
 
         val error = assertFailsWith<CoapException> { client.get("coap://sensor.example/x") }
         assertEquals(CoapException.Reason.UNRESOLVED_HOST, error.reason)
@@ -233,7 +233,7 @@ class ClientErrorContractTest {
         val security = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = throw storeFailure
         }
-        val client = fixture.client(CoapClientConfig(security = security))
+        val client = fixture.client(CoapClientConfig { this.security = security })
 
         val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
         assertEquals(CoapException.Reason.SECURITY, error.reason)
@@ -252,7 +252,7 @@ class ClientErrorContractTest {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
                 withTimeout(1.seconds) { awaitCancellation() }
         }
-        val client = fixture.client(CoapClientConfig(security = security))
+        val client = fixture.client(CoapClientConfig { this.security = security })
 
         val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
         assertEquals(CoapException.Reason.SECURITY, error.reason)
@@ -267,7 +267,7 @@ class ClientErrorContractTest {
         val security = object : ClientMessageSecurity {
             override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = awaitCancellation()
         }
-        val client = fixture.client(CoapClientConfig(security = security))
+        val client = fixture.client(CoapClientConfig { this.security = security })
         assertNull(withTimeoutOrNull(1.seconds) { client.get("coap://127.0.0.1:9/x") })
         assertEquals(0, client.endpoint.exchangeCount())
     }

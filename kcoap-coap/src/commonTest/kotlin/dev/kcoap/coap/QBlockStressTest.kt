@@ -13,6 +13,7 @@ import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -51,9 +52,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 @OptIn(ExperimentalAtomicApi::class)
 class QBlockStressTest {
-    private val quiet = CoapEndpointConfig(loggerFactory = LoggerFactory(LogConfig.build { level = LogLevel.WARN }))
+    private val quiet = CoapEndpointConfig { loggerFactory = LoggerFactory(LogConfig.build { level = LogLevel.WARN }) }
     private val qBlockServer = CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = true))
-    private val qBlockClient = CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED))
+    private val qBlockClient = CoapClientConfig {
+        preferredBlockSize = 64
+        qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)
+    }
 
     private fun body(size: Int, seed: Int): ByteArray = ByteArray(size) { (it * 31 + seed).toByte() }
 
@@ -198,18 +202,18 @@ class QBlockStressTest {
             val serverEvents = Record()
             val clientEvents = Record()
             val deliveredVersions = Record()
-            val serverEndpoint = CoapEndpointConfig(
-                loggerFactory = quiet.loggerFactory,
-                interceptors = listOf(recorder),
-                eventListener = { if (it is EndpointEvent.ObserverRemoved) serverEvents.add("$it") },
-            )
+            val serverEndpoint = CoapEndpointConfig {
+                loggerFactory = quiet.loggerFactory
+                interceptors = listOf(recorder)
+                eventListener = EndpointEventListener { if (it is EndpointEvent.ObserverRemoved) serverEvents.add("$it") }
+            }
             val server = CoapServer(network.attach(), background, qBlockServer, serverEndpoint) { add(resource) }
-            val clientEndpoint = CoapEndpointConfig(
-                loggerFactory = quiet.loggerFactory,
-                eventListener = {
+            val clientEndpoint = CoapEndpointConfig {
+                loggerFactory = quiet.loggerFactory
+                eventListener = EndpointEventListener {
                     if (it is EndpointEvent.QBlockRecovery || it is EndpointEvent.PartialBodyDropped) clientEvents.add("$it")
-                },
-            )
+                }
+            }
             val client = CoapClient(network.attach(), background, qBlockClient, clientEndpoint)
             suspend fun diagnosis(): String =
                 "delivered versions $deliveredVersions; client events $clientEvents; server events $serverEvents; " +

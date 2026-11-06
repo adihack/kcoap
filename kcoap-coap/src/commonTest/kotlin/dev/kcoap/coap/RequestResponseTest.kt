@@ -1,5 +1,6 @@
 package dev.kcoap.coap
 
+import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.server.CoapResource
 import dev.kcoap.coap.server.RequestContext
@@ -455,7 +456,7 @@ class RequestResponseTest {
                 }
             }
         }
-        val client = fixture.client(dev.kcoap.coap.client.CoapClientConfig(requestTimeout = 30.seconds))
+        val client = fixture.client(CoapClientConfig { requestTimeout = 30.seconds })
 
         val error = assertFailsWith<CoapException> { client.get(fixture.uri(server, "/never")) }
         assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)

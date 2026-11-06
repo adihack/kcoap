@@ -19,7 +19,7 @@ class ReliableEndpointTest {
         assertFalse(plain.usesTls)
         assertEquals(CoapScheme.COAP_TCP, plain.scheme)
         assertEquals(CoapScheme.COAPS_TCP, secured.scheme)
-        assertEquals(Endpoint.Tcp("192.0.2.1", 5684), plain.copy())
+        assertEquals(Endpoint.Tcp("192.0.2.1", 5684, usesTls = false), plain)
     }
 
     /** RFC 8323 §8.3 and §8.4: the WebSocket endpoint is the authority plus /.well-known/coap. */

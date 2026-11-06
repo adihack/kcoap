@@ -81,7 +81,7 @@ class StackOscoreInteropTest {
             SecurityContextParameters(secret.hexToBytes(), senderId = "01".hexToBytes(), recipientId = "02".hexToBytes(), masterSalt = salt.hexToBytes()),
             crypto,
         )
-        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(security = OscoreClient(context)))
+        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig { security = OscoreClient(context) })
         val server = "coap://127.0.0.1:$port"
         withTimeout(60.seconds) {
             waitUntilUp { client.ping(server) }
@@ -190,7 +190,11 @@ class StackOscoreInteropTest {
         context: SecurityContext? = null,
     ): Pair<CoapClient, RecordingClientSecurity> {
         val recording = RecordingClientSecurity(OscoreClient(context ?: qBlockClientContext()))
-        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig(security = recording, preferredBlockSize = 64, qBlock = qBlock))
+        val client = CoapClient(KtorUdpTransport.bind("127.0.0.1"), scope, CoapClientConfig {
+            security = recording
+            preferredBlockSize = 64
+            this.qBlock = qBlock
+        })
         return client to recording
     }
 

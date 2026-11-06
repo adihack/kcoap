@@ -54,7 +54,7 @@ public final class dev/kcoap/coap/client/CoapClient {
 }
 
 public final class dev/kcoap/coap/client/CoapClientConfig {
-	public fun <init> ()V
+	public static final field Companion Ldev/kcoap/coap/client/CoapClientConfig$Companion;
 	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ldev/kcoap/coap/security/ClientMessageSecurity;Lkotlin/time/Duration;Ljava/lang/Integer;ILdev/kcoap/coap/client/EndpointResolver;Ldev/kcoap/coap/client/ObserveCancellation;ZILdev/kcoap/coap/client/QBlockClientConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getEchoRetry ()Z
@@ -66,7 +66,39 @@ public final class dev/kcoap/coap/client/CoapClientConfig {
 	public final fun getResolver ()Ldev/kcoap/coap/client/EndpointResolver;
 	public final fun getSecurity ()Ldev/kcoap/coap/security/ClientMessageSecurity;
 	public final fun getSecurityReserve ()I
+	public final fun toBuilder ()Ldev/kcoap/coap/client/CoapClientConfig$Builder;
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfig$Builder {
+	public fun <init> ()V
+	public final fun build ()Ldev/kcoap/coap/client/CoapClientConfig;
+	public final fun getEchoRetry ()Z
+	public final fun getMaxResponseBodySize ()I
+	public final fun getObserveCancellation ()Ldev/kcoap/coap/client/ObserveCancellation;
+	public final fun getPreferredBlockSize ()Ljava/lang/Integer;
+	public final fun getQBlock ()Ldev/kcoap/coap/client/QBlockClientConfig;
+	public final fun getRequestTimeout-FghU774 ()Lkotlin/time/Duration;
+	public final fun getResolver ()Ldev/kcoap/coap/client/EndpointResolver;
+	public final fun getSecurity ()Ldev/kcoap/coap/security/ClientMessageSecurity;
+	public final fun getSecurityReserve ()I
+	public final fun setEchoRetry (Z)V
+	public final fun setMaxResponseBodySize (I)V
+	public final fun setObserveCancellation (Ldev/kcoap/coap/client/ObserveCancellation;)V
+	public final fun setPreferredBlockSize (Ljava/lang/Integer;)V
+	public final fun setQBlock (Ldev/kcoap/coap/client/QBlockClientConfig;)V
+	public final fun setRequestTimeout-BwNAW2A (Lkotlin/time/Duration;)V
+	public final fun setResolver (Ldev/kcoap/coap/client/EndpointResolver;)V
+	public final fun setSecurity (Ldev/kcoap/coap/security/ClientMessageSecurity;)V
+	public final fun setSecurityReserve (I)V
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfig$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/client/CoapClientConfig;
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfigKt {
+	public static final fun CoapClientConfig (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/client/CoapClientConfig;
 }
 
 public abstract interface class dev/kcoap/coap/client/EndpointResolver {
@@ -345,7 +377,6 @@ public final class dev/kcoap/coap/stack/CoapEndpointConfig {
 	public static final field DEFAULT_MAX_CONCURRENT_REQUESTS I
 	public static final field DEFAULT_MAX_DEDUPLICATION_ENTRIES I
 	public static final field DEFAULT_MAX_EXCHANGES_PER_PEER I
-	public fun <init> ()V
 	public synthetic fun <init> (Ldev/kcoap/coap/stack/TransmissionParameters;Lkotlin/time/Duration;Ldev/kcoap/coap/stack/TokenGenerator;Lkotlin/time/TimeSource;Lkotlin/random/Random;Ljava/util/List;Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/coap/stack/ReliableTransportConfig;IIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ldev/kcoap/coap/stack/TransmissionParameters;Lkotlin/time/Duration;Ldev/kcoap/coap/stack/TokenGenerator;Lkotlin/time/TimeSource;Lkotlin/random/Random;Ljava/util/List;Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/log/LoggerFactory;Ldev/kcoap/coap/stack/ReliableTransportConfig;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getEventListener ()Ldev/kcoap/coap/stack/EndpointEventListener;
@@ -360,10 +391,45 @@ public final class dev/kcoap/coap/stack/CoapEndpointConfig {
 	public final fun getSeparateResponseDelay-FghU774 ()Lkotlin/time/Duration;
 	public final fun getTimeSource ()Lkotlin/time/TimeSource;
 	public final fun getTokenGenerator ()Ldev/kcoap/coap/stack/TokenGenerator;
+	public final fun toBuilder ()Ldev/kcoap/coap/stack/CoapEndpointConfig$Builder;
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class dev/kcoap/coap/stack/CoapEndpointConfig$Builder {
+	public fun <init> ()V
+	public final fun build ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
+	public final fun getEventListener ()Ldev/kcoap/coap/stack/EndpointEventListener;
+	public final fun getInterceptors ()Ljava/util/List;
+	public final fun getLoggerFactory ()Ldev/kcoap/log/LoggerFactory;
+	public final fun getMaxConcurrentRequests ()I
+	public final fun getMaxDeduplicationEntries ()I
+	public final fun getMaxExchangesPerPeer ()I
+	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
+	public final fun getRandom ()Lkotlin/random/Random;
+	public final fun getReliable ()Ldev/kcoap/coap/stack/ReliableTransportConfig;
+	public final fun getSeparateResponseDelay-FghU774 ()Lkotlin/time/Duration;
+	public final fun getTimeSource ()Lkotlin/time/TimeSource;
+	public final fun getTokenGenerator ()Ldev/kcoap/coap/stack/TokenGenerator;
+	public final fun setEventListener (Ldev/kcoap/coap/stack/EndpointEventListener;)V
+	public final fun setInterceptors (Ljava/util/List;)V
+	public final fun setLoggerFactory (Ldev/kcoap/log/LoggerFactory;)V
+	public final fun setMaxConcurrentRequests (I)V
+	public final fun setMaxDeduplicationEntries (I)V
+	public final fun setMaxExchangesPerPeer (I)V
+	public final fun setParameters (Ldev/kcoap/coap/stack/TransmissionParameters;)V
+	public final fun setRandom (Lkotlin/random/Random;)V
+	public final fun setReliable (Ldev/kcoap/coap/stack/ReliableTransportConfig;)V
+	public final fun setSeparateResponseDelay-BwNAW2A (Lkotlin/time/Duration;)V
+	public final fun setTimeSource (Lkotlin/time/TimeSource;)V
+	public final fun setTokenGenerator (Ldev/kcoap/coap/stack/TokenGenerator;)V
+}
+
 public final class dev/kcoap/coap/stack/CoapEndpointConfig$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpointConfigKt {
+	public static final fun CoapEndpointConfig (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/stack/CoapEndpointConfig;
 }
 
 public final class dev/kcoap/coap/stack/CoapException : java/lang/Exception {

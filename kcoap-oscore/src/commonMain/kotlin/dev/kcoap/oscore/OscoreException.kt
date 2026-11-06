@@ -6,6 +6,11 @@ import dev.kcoap.coap.security.MessageSecurityException
 /**
  * Why an OSCORE message was rejected, with the error response RFC 8613 §8.2 and §7.4 suggest for a
  * server. The diagnostic strings are the ones the RFC proposes.
+ *
+ * **This set may gain constants** in any minor release, also after 1.0, as kcoap covers more of OSCORE and the
+ * documents that extend it: a `when` over an error keeps an `else` branch, which can fall back on the constant's
+ * own [responseCode] and [diagnostic]. A new constant is an addition, not a breaking change (the project's
+ * versioning policy, docs/versioning.md).
  */
 public enum class OscoreError(public val responseCode: CoapCode, public val diagnostic: String) {
     /** §8.2 step 2: the OSCORE option or COSE object is malformed. */

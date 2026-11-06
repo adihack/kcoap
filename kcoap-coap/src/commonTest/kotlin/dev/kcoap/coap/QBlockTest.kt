@@ -63,7 +63,7 @@ class QBlockTest {
             }
         }
         val client = fixture.client(
-            CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)),
+            CoapClientConfig { preferredBlockSize = 64; qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED) },
             fixture.endpointConfig(parameters = parameters),
         )
         return Run(fixture, server, client, stored)

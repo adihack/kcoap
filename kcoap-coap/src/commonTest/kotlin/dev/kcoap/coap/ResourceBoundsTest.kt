@@ -8,6 +8,7 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.testkit.InMemoryByteStream
 import dev.kcoap.testkit.InMemoryTransport
@@ -59,7 +60,11 @@ class ResourceBoundsTest {
     @Test
     fun rfc7252Section11_3AServerWithAFullDeduplicationCacheDropsNewRequestsSilently() = runTest {
         val fixture = StackFixture(this)
-        val config = CoapEndpointConfig(maxDeduplicationEntries = 1, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it })
+        val config = CoapEndpointConfig {
+            maxDeduplicationEntries = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
         val server = fixture.server(endpointConfig = config) { resource("r") { get { CoapResponse.content("ok") } } }
         val address = fixture.address(server.endpoint)
         val peer = fixture.transport()
@@ -74,7 +79,11 @@ class ResourceBoundsTest {
     fun rfc7252Section5_9_3_4RequestsBeyondTheHandlerBoundGet5_03WithMaxAge() = runTest {
         val fixture = StackFixture(this)
         val gate = CompletableDeferred<Unit>()
-        val config = CoapEndpointConfig(maxConcurrentRequests = 1, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it })
+        val config = CoapEndpointConfig {
+            maxConcurrentRequests = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
         val server = fixture.server(endpointConfig = config) {
             resource("slow") {
                 get {
@@ -109,7 +118,11 @@ class ResourceBoundsTest {
     fun rfc8323RequestsOnAConnectionBeyondTheHandlerBoundGet5_03() = runTest {
         val fixture = ReliableFixture(this)
         val gate = CompletableDeferred<Unit>()
-        val server = fixture.server(endpointConfig = CoapEndpointConfig(maxConcurrentRequests = 1, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it })) {
+        val server = fixture.server(endpointConfig = CoapEndpointConfig {
+            maxConcurrentRequests = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }) {
             resource("slow") {
                 get {
                     gate.await()
@@ -131,7 +144,11 @@ class ResourceBoundsTest {
     @Test
     fun exchangesInProgressWithOnePeerAreBounded() = runTest {
         val fixture = StackFixture(this)
-        val client = fixture.client(endpointConfig = CoapEndpointConfig(maxExchangesPerPeer = 2, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it }))
+        val client = fixture.client(endpointConfig = CoapEndpointConfig {
+            maxExchangesPerPeer = 2
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        })
         val pending = List(2) { launch { runCatching { client.get("coap://127.0.0.1:9/x") } } }
         delay(100)
 
@@ -163,7 +180,11 @@ class ResourceBoundsTest {
                 }
             }
         }
-        val config = CoapEndpointConfig(maxExchangesPerPeer = 1, timeSource = testScheduler.timeSource, eventListener = { fixture.events += it })
+        val config = CoapEndpointConfig {
+            maxExchangesPerPeer = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
         val client = fixture.client(endpointConfig = config)
         val first = async { client.get(fixture.uri("/slow")) }
         delay(100)
@@ -307,15 +328,15 @@ class ResourceBoundsTest {
 
     @Test
     fun boundsMustAllowAtLeastOne() {
-        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxDeduplicationEntries = 0) }
-        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxConcurrentRequests = 0) }
-        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig(maxExchangesPerPeer = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntries = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxConcurrentRequests = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchangesPerPeer = 0 } }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObservers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerResource = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerPeer = 0) }
         assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxPendingConnections = 0) }
         assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxConnections = 0) }
-        val defaults = CoapEndpointConfig()
+        val defaults = CoapEndpointConfig.Default
         assertEquals(50_000, defaults.maxDeduplicationEntries)
         assertEquals(256, defaults.maxConcurrentRequests)
         assertEquals(256, defaults.maxExchangesPerPeer)

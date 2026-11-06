@@ -83,7 +83,7 @@ class LibcoapClientAgainstKcoapTest {
         runBlocking {
             server = CoapServer(
                 KtorUdpTransport.bind("127.0.0.1"), scope,
-                endpointConfig = CoapEndpointConfig(interceptors = listOf(recorder, arrivals)),
+                endpointConfig = CoapEndpointConfig { interceptors = listOf(recorder, arrivals) },
             ) {
                 resource("hello") { get { CoapResponse.content("Hello from kcoap") } }
                 resource("store") {

@@ -22,6 +22,7 @@ import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.TransmissionParameters
 import dev.kcoap.common.hexToBytes
 import dev.kcoap.crypto.backend.DefaultCryptoBackend
@@ -130,12 +131,12 @@ class OscoreQBlockEndToEndTest {
         val wire = Collections.synchronizedList(mutableListOf<Wire>())
         network.tap = { datagram, fate -> wire += Wire(datagram.from, runCatching { UdpMessageCodec.decode(datagram.bytes) }.getOrNull(), fate) }
         val events = Collections.synchronizedList(mutableListOf<EndpointEvent>())
-        fun endpointConfig(offset: Int) = CoapEndpointConfig(
-            parameters = parameters,
-            timeSource = testScheduler.timeSource,
-            random = Random(seed * 10 + offset),
-            eventListener = { events += it },
-        )
+        fun endpointConfig(offset: Int) = CoapEndpointConfig {
+            parameters = this@OscoreQBlockEndToEndTest.parameters
+            timeSource = testScheduler.timeSource
+            random = Random(seed * 10 + offset)
+            eventListener = EndpointEventListener { events += it }
+        }
         val clientContext = ephemeralContext(SecurityContextParameters(secret, byteArrayOf(0x0a), byteArrayOf(0x0b)), crypto)
         val serverParameters = SecurityContextParameters(secret, byteArrayOf(0x0b), byteArrayOf(0x0a))
         val serverContext = if (restartedServer) restoredContext(serverParameters, crypto) else ephemeralContext(serverParameters, crypto)
@@ -166,7 +167,7 @@ class OscoreQBlockEndToEndTest {
         val clientTransport = network.attach()
         val coapClient = CoapClient(
             CoapEndpoint(clientTransport, backgroundScope, endpointConfig(2)),
-            CoapClientConfig(security = recording, preferredBlockSize = 64, qBlock = client),
+            CoapClientConfig { security = recording; preferredBlockSize = 64; qBlock = client },
         )
         return Setup(
             network, coapServer, serverTransport, coapClient, clientTransport, stored, observed,
@@ -295,7 +296,10 @@ class OscoreQBlockEndToEndTest {
         // setup's OSCORE client and a plain one, which share the endpoint's capability cache. The server serves
         // both, so its resources are Public (ADR 0008: by default it would refuse the plain client).
         val setup = setup(server = QBlockServerConfig(isEnabled = true), defaultAccess = AccessPolicy.Public)
-        val plain = CoapClient(setup.client.endpoint, CoapClientConfig(preferredBlockSize = 64, qBlock = QBlockClientConfig(QBlockMode.PROBE)))
+        val plain = CoapClient(setup.client.endpoint, CoapClientConfig {
+            preferredBlockSize = 64
+            qBlock = QBlockClientConfig(QBlockMode.PROBE)
+        })
         val big = body(3000, 1)
 
         assertContentEquals(big, plain.get(setup.uri("/big")) { nonConfirmable() }.payload)

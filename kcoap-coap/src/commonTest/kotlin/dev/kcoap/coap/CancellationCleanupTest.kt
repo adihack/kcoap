@@ -101,7 +101,7 @@ class CancellationCleanupTest {
                 awaitCancellation()
             }
         }
-        val client = fixture.client(CoapClientConfig(security = gated))
+        val client = fixture.client(CoapClientConfig { security = gated })
         val request = launch { runCatching { client.get("coap://127.0.0.1:9/x") } }
         protecting.await()
         assertEquals(1, client.endpoint.exchangeCount())
@@ -137,7 +137,7 @@ class CancellationCleanupTest {
     @Test
     fun aCancelledUploadFreesItsRequestTagWhenTheTagLockIsBusy() = runTest {
         val fixture = StackFixture(this)
-        val client = fixture.client(CoapClientConfig(preferredBlockSize = 16))
+        val client = fixture.client(CoapClientConfig { preferredBlockSize = 16 })
         val upload = launch { runCatching { client.put("coap://127.0.0.1:9/x", ByteArray(100)) } }
         delay(1.seconds)
         assertEquals(1, client.blockwise.tagsInUseCount())
