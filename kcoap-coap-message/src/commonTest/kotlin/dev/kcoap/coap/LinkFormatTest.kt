@@ -57,6 +57,7 @@ class LinkFormatTest {
         attributes += "obs" to null
         assertEquals(listOf<Pair<String, String?>>("rt" to "temperature-c"), link.attributes)
         assertFalse(link.isObservable)
+        assertEquals(emptyList(), WebLink("/plain").attributes)
     }
 
     @Test

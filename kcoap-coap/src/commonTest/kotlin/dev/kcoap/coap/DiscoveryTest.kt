@@ -75,6 +75,22 @@ class DiscoveryTest {
     }
 
     @Test
+    fun rfc6690Section2AMalformedDocumentFromTheServerIsABadResponse() = runTest {
+        val fixture = StackFixture(this)
+        // The server's own document, as a peer that does not speak link format might send.
+        val server = fixture.server(CoapServerConfig(wellKnownCore = false)) {
+            resource(".well-known") {
+                resource("core") { get { CoapResponse.content("</a>;rt=\"open", ContentFormat.LINK_FORMAT) } }
+            }
+        }
+        val client = fixture.client()
+
+        val error = assertFailsWith<CoapException> { client.discover(fixture.uri(server)) }
+        assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
+        assertNull(error.cause, "never the parser's IllegalArgumentException")
+    }
+
+    @Test
     fun aLargeDiscoveryDocumentGoesBlockwise() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server {
