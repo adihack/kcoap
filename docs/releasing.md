@@ -202,8 +202,9 @@ reference job fails ([after the release](#after-the-release)).
   *Generate User Token*; its username and password are the `MAVEN_CENTRAL_USERNAME` and
   `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), set on 2026-11-06.
 - **Signing key: done.** The `SIGNING_KEY`, `SIGNING_KEY_ID` and `SIGNING_PASSWORD` secrets hold the release
-  key below, set on 2026-11-06. The passphrase is checked only when a release first signs; a wrong one fails
-  the publish step, and nothing is published.
+  key below, set on 2026-11-06. 0.1.0 was signed with it (its `.asc` files on Maven Central name the key ID
+  `4A7E491069FAEAB3`), so the three secrets work. If they change, a wrong passphrase fails the publish step,
+  and nothing is published.
 
 ### The release signing key
 
