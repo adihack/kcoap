@@ -113,12 +113,13 @@ public sealed interface Endpoint {
         public companion object {
             /**
              * The WebSocket endpoint of a `coap+ws` or `coaps+ws` URI's authority: `ws://host:port` or
-             * `wss://host:port` with the path `/.well-known/coap` (RFC 8323 §8.3, §8.4). IPv6 literals are
-             * bracketed.
+             * `wss://host:port` with the path `/.well-known/coap` (RFC 8323 §8.3, §8.4). An IPv6 literal is
+             * bracketed once (RFC 3986 §3.2.2), whether [host] is given with brackets or without, as [Tcp] takes it.
              */
             public fun of(host: String, port: Int, usesTls: Boolean = false): WebSocket {
                 require(port in 0..65535) { "Port out of range: $port" }
-                val authority = if (':' in host) "[$host]" else host
+                val bare = host.removeSurrounding("[", "]")
+                val authority = if (':' in bare) "[$bare]" else bare
                 return WebSocket("${if (usesTls) "wss" else "ws"}://$authority:$port${CoapScheme.WEBSOCKET_PATH}")
             }
         }

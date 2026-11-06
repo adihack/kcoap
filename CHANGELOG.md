@@ -370,7 +370,8 @@ Two configuration builders and explicit `Endpoint` classes (WP-D1):
   `Endpoint.Tcp("example.com", 5684, usesTls = true)`, `Endpoint.WebSocket.of("example.com", 443, usesTls = true)`,
   `Endpoint.WebSocket(uri)`, `Endpoint.Opaque("ble", address)`. The `host` of a `Udp` or `Tcp` built from an IP
   literal that was not in canonical form is `IpLiteral.canonical(text)`, not the text: compare endpoints, or
-  that, instead of the text.
+  that, instead of the text. `Endpoint.WebSocket.of` takes an IPv6 literal with or without brackets, as `Tcp`
+  does, and brackets it once in `uri` (it bracketed a bracketed one twice).
 - **`IpLiteral.parse` and `IpLiteral.canonical` take only what RFC 3986 §3.2.2 calls an IP literal**: a decimal
   octet without a leading zero and hex groups without a sign. `010.0.0.1`, which a resolver may read as octal
   (RFC 3986 §7.4), and `::-1` used to be read as `10.0.0.1` and `::ffff`; now they are names, so an endpoint keeps

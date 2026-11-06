@@ -130,6 +130,16 @@ class EndpointMatchingTest {
         assertTrue(secure.usesTls)
     }
 
+    /** RFC 3986 §3.2.2: an IPv6 literal in a URI is bracketed once, whether the host is given bracketed or not. */
+    @Test
+    fun aWebSocketOfABracketedLiteralIsBracketedOnce() {
+        val bracketed = Endpoint.WebSocket.of("[2001:db8::1]", 443, usesTls = true)
+        assertEquals("wss://[2001:db8::1]:443/.well-known/coap", bracketed.uri)
+        assertSamePeer(bracketed, Endpoint.WebSocket.of("2001:db8::1", 443, usesTls = true))
+        assertSamePeer(Endpoint.WebSocket.of("[2001:DB8::1]", 443, usesTls = true), bracketed)
+        assertEquals("ws://example.com:80/.well-known/coap", Endpoint.WebSocket.of("example.com", 80).uri)
+    }
+
     /**
      * RFC 7252 §6.6: the scheme and the host compare case-insensitively, IP literals in RFC 5952 form, the path
      * case-sensitively, with unreserved characters not percent-encoded and other percent-encodings in upper case.
