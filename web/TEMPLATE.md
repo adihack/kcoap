@@ -394,9 +394,9 @@ and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the 
 
 ## 7. Dated facts to update
 
-The home page's release-freeze meter shows the work packages as of 6 November 2026 (12 merged; C3 not
-started; `docs/releasing.md` "Release freeze"). Update the blocks, their hidden state text, the legend and
-the date when C3 starts or merges, and `/releases/` with them.
-On `/releases/`, that means the meter, the table of work packages, the fact tile “12 of 13 merged”, the
+The home page's release-freeze meter shows the work packages as of 6 November 2026 (all 13 merged, C3
+last; `docs/releasing.md` "Release freeze"). Update the blocks, their hidden state text, the legend and
+the date if the freeze list changes, and `/releases/` with them.
+On `/releases/`, that means the meter, the table of work packages, the fact tile “13 of 13 merged”, the
 “Before 0.1.0 is tagged” list and the static “No release yet” note. `web/README.md` lists the same places
 and the other states the pages describe.

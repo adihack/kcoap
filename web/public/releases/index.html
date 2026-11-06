@@ -69,7 +69,7 @@
       <ul class="fact-tiles" aria-label="Release status">
         <li class="fact-tile"><span class="fact-tile-label">Version now</span><span class="fact-tile-value"><code>0.1.0-SNAPSHOT</code></span></li>
         <li class="fact-tile"><span class="fact-tile-label">First release</span><span class="fact-tile-value">0.1.0</span></li>
-        <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">12 of 13 merged</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">13 of 13 merged</span></li>
         <li class="fact-tile"><span class="fact-tile-label">Published to</span><span class="fact-tile-value">Nowhere yet</span></li>
       </ul>
     </div>
@@ -98,7 +98,7 @@
       <div class="section-head">
         <p class="eyebrow">Release freeze</p>
         <h2 id="freeze">What has to merge first</h2>
-        <p class="lede">No <code>v*</code> tag until thirteen work packages have merged: the ones that change the public API. Their state on 6 November 2026:</p>
+        <p class="lede">No <code>v*</code> tag until thirteen work packages have merged: the ones that change the public API. All thirteen had merged on 6 November 2026:</p>
       </div>
       <div class="card status-card">
         <ol class="meter" aria-label="Work packages in the release freeze">
@@ -114,11 +114,10 @@
           <li class="meter-block is-done">C1<span class="visually-hidden">, merged</span></li>
           <li class="meter-block is-done">D1<span class="visually-hidden">, merged</span></li>
           <li class="meter-block is-done">D2<span class="visually-hidden">, merged</span></li>
-          <li class="meter-block">C3<span class="visually-hidden">, not started</span></li>
+          <li class="meter-block is-done">C3<span class="visually-hidden">, merged</span></li>
         </ol>
         <ul class="meter-legend">
-          <li class="is-done">12 merged</li>
-          <li>1 not started</li>
+          <li class="is-done">13 merged</li>
         </ul>
       </div>
       <div class="table-wrap mt-2" role="region" tabindex="0" aria-labelledby="freeze">
@@ -137,7 +136,7 @@
             <tr><th scope="row">C1</th><td>Build governance: ABI dumps, common-only cores, opt-in markers</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">D1</th><td>Two configuration builders and explicit endpoint classes</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">D2</th><td>A <code>KcoapException</code> root, <code>@Throws</code> and a Swift smoke test</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
-            <tr><th scope="row">C3</th><td>Assembly and documentation: a BOM, a getting-started guide, a platforms guide</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">C3</th><td>Assembly and documentation: a BOM, a getting-started guide, a platforms guide</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -175,13 +174,14 @@
       </div>
       <div class="card">
         <ul class="checks mb-0">
-          <li class="is-open"><span class="visually-hidden">Open: </span>The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The release freeze has merged and CI is green on <code>main</code>. The freeze is complete on <code>feat/protocol-core</code>; pull request #1, which brings it to <code>main</code>, is still a draft.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>CHANGELOG.md has an entry for the version, with migration notes.</li>
           <li><span class="visually-hidden">Done: </span>The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev, since 6 November 2026.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>The Maven Central and signing secrets are set.</li>
           <li><span class="visually-hidden">Done: </span>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
-          <li><span class="visually-hidden">Done: </span>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
+          <li><span class="visually-hidden">Done: </span>Snapshots publish to Maven Local, <code>kcoap-bom</code> with them, which <code>verifyBomConstraints</code> checks against the published modules; CI builds an Android consumer app against them.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>A JVM consumer and a js consumer build against the snapshot through <code>kcoap-bom</code> (work package P1).</li>
           <li class="is-open"><span class="visually-hidden">Open: </span>The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
           <li class="is-open"><span class="visually-hidden">Open: </span><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
         </ul>

@@ -103,6 +103,7 @@
           </li>
           <li>
             <h3>Create the build file</h3>
+            <p>The bill of materials, <code>kcoap-bom</code>, sets one version for every kcoap module, so the modules name none.</p>
             <div class="tabs" data-tabs data-tab-group="gradle" data-tabs-label="Build file format">
               <div class="tab-panel" data-tab-label="Kotlin DSL">
                 <p class="tab-panel-title">Kotlin DSL</p>
@@ -121,12 +122,13 @@
     }
     <span class="tok-f">sourceSets</span> {
         commonMain.<span class="tok-f">dependencies</span> {
-            <span class="tok-k">val</span> kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap:$kcoap"</span>)
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor:$kcoap"</span>)
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default:$kcoap"</span>)
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-oscore:$kcoap"</span>)
-            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore:$kcoap"</span>)
+            <span class="tok-k">val</span> bom = <span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>
+            <span class="tok-f">implementation</span>(project.dependencies.<span class="tok-f">platform</span>(bom))
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-oscore"</span>)
+            <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>)
         }
     }
 }</code></pre></div>
@@ -138,11 +140,12 @@ kotlin = <span class="tok-s">"2.4.21"</span>
 kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
 
 <span class="tok-k">[libraries]</span>
-kcoap-coap = { module = <span class="tok-s">"dev.kcoap:kcoap-coap"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
-kcoap-transport-ktor = { module = <span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
-kcoap-crypto-default = { module = <span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
-kcoap-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
-kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
+kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
+kcoap-coap = { module = <span class="tok-s">"dev.kcoap:kcoap-coap"</span> }
+kcoap-transport-ktor = { module = <span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span> }
+kcoap-crypto-default = { module = <span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span> }
+kcoap-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-oscore"</span> }
+kcoap-edhoc-oscore = { module = <span class="tok-s">"dev.kcoap:kcoap-edhoc-oscore"</span> }
 
 <span class="tok-k">[bundles]</span>
 kcoap = [
@@ -170,6 +173,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
     }
     <span class="tok-f">sourceSets</span> {
         commonMain.<span class="tok-f">dependencies</span> {
+            <span class="tok-f">implementation</span>(project.dependencies.<span class="tok-f">platform</span>(libs.kcoap.bom))
             <span class="tok-f">implementation</span>(libs.bundles.kcoap)
         }
     }
