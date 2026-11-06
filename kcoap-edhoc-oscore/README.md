@@ -115,7 +115,8 @@ session's PRK_out and PRK_exporter after message_3.
 
 `PeerSecurity` holds one protection per server, keyed by the transport endpoint the client's requests go
 to; `install(client, uri, protection)` finds that endpoint with the client's own resolver. A request to a
-server without a protection fails with `MessageSecurityException` instead of going out in plaintext, except
+server without a protection fails with `CoapException.Reason.SECURITY` (its cause the `MessageSecurityException`
+of `PeerSecurity`) instead of going out in plaintext, except
 for `unprotectedPaths` (the EDHOC resource); `PeerSecurity(allowUnprotected = true)` sends it in plain CoAP
 on purpose. Discovery before the
 handshake (`client.discover(server)` for `rt=core.edhoc`) asks `/.well-known/core`, so it takes a plain client or

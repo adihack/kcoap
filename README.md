@@ -172,7 +172,8 @@ Message security fails closed ([ADR 0008](docs/adr/0008-fail-closed-message-secu
 - **Client.** It acts only on responses it verified. An unprotected error, which anyone on the path can
   send, is never repeated with its Echo or continued: the request fails with
   `CoapException(UNVERIFIED_RESPONSE)`, which carries it. A request without a context or installed
-  protection fails instead of going out in plaintext, unless `allowUnprotected` says otherwise.
+  protection fails with `CoapException(SECURITY)` instead of going out in plaintext, unless
+  `allowUnprotected` says otherwise.
 
 The EDHOC server mounts `EdhocResource` (public of its own) under `/.well-known` and uses
 `CombinedRequestServer` around its `OscoreServer`; the `EdhocServer` behind both adds a context per

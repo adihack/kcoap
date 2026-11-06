@@ -67,7 +67,8 @@ Through kcoap-coap's client and server, both fail closed
 ([ADR 0008](../docs/adr/0008-fail-closed-message-security.md)):
 
 - `OscoreClient` fails a request its `ClientContextResolver` finds no context for with
-  `MessageSecurityException`; `OscoreClient(resolver, allowUnprotected = true)` sends such requests in
+  `MessageSecurityException`, which kcoap-coap's client reports as `CoapException.Reason.SECURITY` with it as
+  cause, before anything is sent; `OscoreClient(resolver, allowUnprotected = true)` sends such requests in
   plain CoAP instead. Unprotected 4.xx and 5.xx responses (RFC 8613 §8.2) are handed to the stack as
   `ResponseVerification.Unverified`, which acts on nothing in them: the request fails with
   `CoapException.Reason.UNVERIFIED_RESPONSE`. Any other unprotected response is dropped.
