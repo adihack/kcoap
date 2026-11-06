@@ -113,8 +113,6 @@ public class KtorWebSocketConnector private constructor(
     }
 
     override fun toString(): String = "KtorWebSocketConnector"
-
-    private companion object {
-        val BOTH_SCHEMES = setOf(CoapScheme.COAP_WS, CoapScheme.COAPS_WS)
-    }
 }
+
+private val BOTH_SCHEMES = setOf(CoapScheme.COAP_WS, CoapScheme.COAPS_WS)
