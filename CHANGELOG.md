@@ -403,7 +403,8 @@ Bounded reasons, and new events (WP-B4):
 
 - **`EndpointEvent.MessageRejected.reason` and `EndpointEvent.MalformedMessage.reason` are enums**,
   `MessageRejected.Reason` (`PING`, `EMPTY_NON_CONFIRMABLE`, `RESERVED_CODE`, `UNKNOWN_SIGNAL`, `NO_SERVER`,
-  `UNKNOWN_TOKEN`, `UNRECOGNIZED_CRITICAL_OPTION`, `INVALID_ACKNOWLEDGEMENT`, `FOREIGN_TOKEN`, `INVALID_RESET`) and
+  `UNKNOWN_TOKEN`, `UNRECOGNIZED_CRITICAL_OPTION`, `INVALID_ACKNOWLEDGEMENT`, `FOREIGN_TOKEN`, `INVALID_RESET`,
+  `INVALID_SOURCE`) and
   `MalformedMessage.Reason` (`UNKNOWN_VERSION`, `FORMAT_ERROR`), instead of free text that carried sizes and tokens and
   so could not label a metric. The text is the new nullable `detail`, for a log. *Migration:* compare `reason` with
   the constants instead of strings, and log `detail`; code that built these events passes a constant. Keep an `else`
@@ -1009,6 +1010,11 @@ Build governance (WP-C1):
 
 ### Fixed
 
+- A datagram from UDP source port 0 is dropped before it is parsed (WP-B4): that port names none to answer to
+  (RFC 768), so every answer failed to send, and each such datagram, a 4-byte CoAP ping included, wrote a WARN line
+  with a stack trace. It is a `MessageRejected` with the new reason `INVALID_SOURCE`, logged at DEBUG. A datagram
+  that fails to send for any other reason is still a WARN line, now with the error's message and no stack trace,
+  since retransmission covers it.
 - A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at all.
   The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind the
   receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block again

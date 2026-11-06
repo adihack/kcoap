@@ -39,7 +39,7 @@ Levels are inherited along dot-separated tags: a level for `coap` covers `coap.e
 | Level | Used for |
 |---|---|
 | TRACE | wire bytes and state transitions |
-| DEBUG | protocol events a developer follows, and input from a peer that was rejected or ignored: malformed messages, invalid ACKs and Resets, responses and requests that failed verification, replays, requests an access policy refused, Aborts sent |
+| DEBUG | protocol events a developer follows, and input from a peer that was rejected or ignored: malformed messages, datagrams from UDP source port 0, which no answer reaches, invalid ACKs and Resets, responses and requests that failed verification, replays, requests an access policy refused, Aborts sent |
 | INFO | lifecycle: endpoints started and closed, servers started and stopped, sessions established, connections released or aborted by the peer |
 | WARN | local conditions an operator should act on: a send the network refused, a configuration an RFC advises against |
 | ERROR | failures the library could not handle: a handler, listener, interceptor or application callback that threw, a transport that failed |

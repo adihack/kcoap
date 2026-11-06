@@ -261,6 +261,7 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
             enum entry FOREIGN_TOKEN // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.FOREIGN_TOKEN|null[0]
             enum entry INVALID_ACKNOWLEDGEMENT // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_ACKNOWLEDGEMENT|null[0]
             enum entry INVALID_RESET // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_RESET|null[0]
+            enum entry INVALID_SOURCE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_SOURCE|null[0]
             enum entry NO_SERVER // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.NO_SERVER|null[0]
             enum entry PING // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.PING|null[0]
             enum entry RESERVED_CODE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.RESERVED_CODE|null[0]

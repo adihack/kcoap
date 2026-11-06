@@ -65,7 +65,8 @@ public sealed interface EndpointEvent {
 
     /**
      * A well-formed message from [peer] was rejected with a Reset, dropped or ignored, because it broke a rule of
-     * the messaging layer or this endpoint lacked the context to process it. On reliable transports, which have no
+     * the messaging layer or this endpoint lacked the context to process it; or a datagram was dropped unparsed
+     * because no answer could reach its source ([Reason.INVALID_SOURCE]). On reliable transports, which have no
      * Message IDs, [messageId] is 0. [reason] is a bounded set fit for counting; [detail], when there is one, adds
      * what a log needs, such as the numbers of unrecognized options.
      */
@@ -126,6 +127,13 @@ public sealed interface EndpointEvent {
 
             /** A Reset that is not Empty, silently ignored (RFC 7252 §4.2). */
             INVALID_RESET,
+
+            /**
+             * A datagram from UDP source port 0, which names no port to answer to (RFC 768), dropped before it was
+             * parsed: a Reset to a ping or to a format error (RFC 7252 §4.2, §4.3), an ACK or a response would all
+             * fail to send. [messageId] is the one in its header, or 0 for a datagram shorter than a header.
+             */
+            INVALID_SOURCE,
         }
 
         override fun toString(): String =

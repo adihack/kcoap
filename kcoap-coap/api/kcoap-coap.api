@@ -621,6 +621,7 @@ public final class dev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason : j
 	public static final field FOREIGN_TOKEN Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public static final field INVALID_ACKNOWLEDGEMENT Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public static final field INVALID_RESET Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_SOURCE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public static final field NO_SERVER Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public static final field PING Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public static final field RESERVED_CODE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;

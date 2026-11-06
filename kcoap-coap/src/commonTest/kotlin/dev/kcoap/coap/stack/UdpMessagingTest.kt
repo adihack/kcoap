@@ -5,6 +5,11 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.common.hexToBytes
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.test.Test
@@ -261,6 +266,34 @@ class UdpMessagingTest {
         // §4.5: a duplicate gets the same Reset.
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 0x1234))
         assertEquals(listOf(reset), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun rfc768ADatagramFromSourcePort0IsDroppedUnansweredAndLoggedOnceAtDebug() {
+        val records = mutableListOf<LogRecord>()
+        val logs = LoggerFactory(LogConfig.build { level = LogLevel.DEBUG; sink = LogSink { records += it } })
+        val messaging = UdpMessaging(params, 1152, 1.seconds, FixedRandom(0.0), loggerFactory = logs)
+        val portZero = Endpoint.Udp("192.0.2.9", 0)
+
+        // A ping, a request and a malformed Confirmable message would each be answered (RFC 7252 §4.2, §4.3).
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.CON, 0x1234), from = portZero)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 0x2345), from = portZero)
+        messaging.onDatagram(Duration.ZERO, portZero, "49013456".hexToBytes()) // TKL 9 is reserved (RFC 7252 §3)
+        messaging.onDatagram(Duration.ZERO, portZero, byteArrayOf(0x40))
+        val effects = messaging.takeEffects()
+
+        assertEquals(emptyList(), effects.filterNot { it is MessagingEffect.Event }, "nothing sent, nothing delivered")
+        val rejected = effects.filterIsInstance<MessagingEffect.Event>().map { it.event as EndpointEvent.MessageRejected }
+        assertTrue(rejected.all { it.reason == EndpointEvent.MessageRejected.Reason.INVALID_SOURCE && it.peer == portZero })
+        assertEquals(listOf(0x1234, 0x2345, 0x3456, 0), rejected.map { it.messageId }, "from the header, 0 without one")
+        assertNull(rejected.first().detail)
+        assertEquals(4, records.size, "one line per datagram")
+        assertTrue(records.all { it.level == LogLevel.DEBUG && it.error == null }, "$records")
+        assertEquals(0, messaging.sizes.deduplicationEntries, "and no state kept")
+
+        // Any other port is answered as before.
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 0x1234), from = Endpoint.Udp("192.0.2.9", 1))
+        assertEquals(CoapMessageType.RST, messaging.takeEffects().transmitted().single().type)
     }
 
     @Test

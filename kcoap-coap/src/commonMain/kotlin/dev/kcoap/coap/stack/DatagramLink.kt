@@ -343,8 +343,9 @@ internal class DatagramLink(
             val cause = CoapException("The transport cannot send to $to: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
             withMessaging { now -> abandon(now, transmission, cause) }
         } catch (e: Exception) {
-            // UDP gives no delivery guarantee anyway; retransmission covers a failed send.
-            log.warn(e) { "Sending ${effect.bytes.size} bytes to $to failed" }
+            // UDP gives no delivery guarantee anyway; retransmission covers a failed send. A network error's
+            // stack trace says nothing its message does not, so the line carries the message only.
+            log.warn { "Sending ${effect.bytes.size} bytes to $to failed: ${e.message}" }
         }
     }
 

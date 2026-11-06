@@ -26,7 +26,8 @@ import kotlin.time.Duration.Companion.seconds
  *   retransmission is delivered ([forgetUnanswered], §4.2),
  * - Empty ACKs for slow requests, switching to a separate response (§5.2.2),
  * - Resets for Empty Confirmable messages (CoAP ping), reserved code classes and format errors
- *   (§4.2, §4.3), and silently ignored invalid ACKs and RSTs, each reported as an [EndpointEvent.MessageRejected]
+ *   (§4.2, §4.3), silently ignored invalid ACKs and RSTs, and dropped datagrams from UDP source port 0, which
+ *   no answer reaches (RFC 768), each reported as an [EndpointEvent.MessageRejected]
  *   or [EndpointEvent.MalformedMessage] and logged once at DEBUG, without an exception: a source address proves
  *   nothing (§11.4), so a peer must not be able to fill the log at network rate,
  * - NSTART outstanding interactions per peer (§4.7, RFC 7641 §4.5.1), with Non-confirmable messages
@@ -430,8 +431,16 @@ internal class UdpMessaging(
 
     // ---------------------------------------------------------------- receiving
 
-    /** Processes one datagram from [from]. */
+    /**
+     * Processes one datagram from [from]. One from UDP source port 0 is dropped before it is parsed: that port
+     * means the sender named none to answer to (RFC 768), and every answer to it, a Reset to a ping or a format
+     * error included (RFC 7252 §4.2, §4.3), would fail to send.
+     */
     fun onDatagram(now: Duration, from: Endpoint, datagram: ByteArray) {
+        if (from is Endpoint.Udp && from.port == 0) {
+            onUnanswerableSource(from, datagram)
+            return
+        }
         val decoded = try {
             UdpMessageCodec.decode(datagram)
         } catch (e: CoapFormatException) {
@@ -446,6 +455,14 @@ internal class UdpMessaging(
             CoapMessageType.CON -> onConfirmable(now, from, message)
             CoapMessageType.NON -> onNonConfirmable(now, from, message)
         }
+    }
+
+    private fun onUnanswerableSource(from: Endpoint, datagram: ByteArray) {
+        // The Message ID of the header (§3), for the event; the datagram is not parsed any further.
+        val messageId = if (datagram.size >= 4) ((datagram[2].toInt() and 0xFF) shl 8) or (datagram[3].toInt() and 0xFF) else 0
+        val reason = EndpointEvent.MessageRejected.Reason.INVALID_SOURCE
+        debug(from, messageId) { "Dropped a datagram of ${datagram.size} bytes ($reason): no answer can reach source port 0" }
+        effects += MessagingEffect.Event(EndpointEvent.MessageRejected(from, messageId, reason))
     }
 
     private fun onFormatError(from: Endpoint, error: CoapFormatException) {
