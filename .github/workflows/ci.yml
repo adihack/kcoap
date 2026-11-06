@@ -163,15 +163,3 @@ jobs:
             samples/android-consumer/app/build/reports/
             samples/android-consumer/app/build/outputs/apk/
             samples/android-consumer/app/build/outputs/mapping/
-
-  website:
-    name: Website
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      # kcoap.dev from web/public: internal links and anchors, the head of every page, no inline code the
-      # Content-Security-Policy would block, no resource from another site, page sizes, and the sitemap.
-      # Python 3 and its standard library only, as the runner has them.
-      - run: scripts/check-site

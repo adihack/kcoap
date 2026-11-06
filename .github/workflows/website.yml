@@ -1,0 +1,36 @@
+# Checks kcoap.dev (web/public) with scripts/check-site: internal links and anchors, the head of every
+# page, no inline code the Content-Security-Policy would block, no resource from another site, the
+# _headers file, page sizes, robots.txt and the sitemap. Python 3 and its standard library only, as the
+# runner has them.
+#
+# A workflow of its own, not a job of ci.yml: release.yml reuses ci.yml as its test step, and a broken
+# link on the website should not hold back a release of the library. It runs only when the site, the
+# check or this file changes.
+#
+# Cloudflare deploys the site from the production branch without waiting for this check
+# (web/README.md, "Deploying"); run scripts/check-site before pushing a change to web/.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'scripts/check-site', '.github/workflows/website.yml']
+  pull_request:
+    paths: ['web/**', 'scripts/check-site', '.github/workflows/website.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Website
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: scripts/check-site
