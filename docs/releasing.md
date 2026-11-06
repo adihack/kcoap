@@ -10,9 +10,15 @@ A release is a tag. Pushing `v0.1.0` (or `v0.2.0-rc1`) runs `.github/workflows/r
 3. **Publish** on a macOS runner, because only macOS can build the iOS and macOS artifacts; the same
    host builds the JVM, Linux, JS and Wasm ones. The version is the tag without its `v`.
    - to **GitHub Packages** always, with the workflow's own token;
-   - to **Maven Central** when its secrets are configured.
+   - to **Maven Central** when its secrets are configured. `publishToMavenCentral` uploads a deployment and
+     stops: `KcoapPublishing.kt` leaves automatic release off. Publish it by hand as soon as the `publish`
+     job ends: in the [Central Portal](https://central.sonatype.com), open *Deployments*, check that the
+     `dev.kcoap` deployment is validated and lists every module and `kcoap-bom`, then press *Publish*. That
+     cannot be undone. The artifacts reach Maven Central about 30 minutes later.
 4. **GitHub Release** whose body is that summary, followed by the notes GitHub generates from the merged
-   pull requests. A version with a `-` (`0.2.0-rc1`) is marked as a pre-release.
+   pull requests. A version with a `-` (`0.2.0-rc1`) is marked as a pre-release. The release is created when
+   the upload ends, before the Central deployment is published, so the Maven Central coordinates its body
+   gives resolve only after that step.
 5. **API reference** (Dokka) deployed to GitHub Pages.
 
 A release can also be started by hand (Actions → Release → Run workflow) with a version number, without
@@ -31,20 +37,26 @@ tagged, written before the tag is pushed: the `notes` job reads CHANGELOG.md at 
 summary:
 
 - The version is the tag without its `v`: `v0.1.0` gives `0.1.0`. A manual run turns its version input into
-  the tag `v<version>` first, so both ways find the same entry.
+  the tag `v<version>` first, so both ways find the same entry. An input with a leading `v` (`v0.1.0`) fails
+  the job before anything else, since it would become the tag `vv0.1.0`.
 - The entry's heading is `## <version>`, alone or followed by a space, as in `## 0.1.0 - 2026-11-06`. The match
   is exact, so `0.1.0` never finds `## 0.1.0-rc1 - …`, and `## Unreleased` is never used: rename it to the
-  version and its date, and start a new `## Unreleased` above it.
+  version and its date, and start a new `## Unreleased` above it. A pre-release needs a heading of its own:
+  `v0.2.0-rc1` reads `## 0.2.0-rc1 - <date>`, never `## 0.2.0` or `## Unreleased`, and the final release then
+  needs its own `## 0.2.0 - <date>` entry.
 - The summary is every line after that heading up to the entry's first `### ` heading (`### Added` and the
   others), or up to the next `## ` heading when the entry has no subsections, without the blank lines around
-  it. Links relative to the repository root, such as `docs/checklist.md`, are pointed at the tag, since the
-  release page would resolve them against itself. A last line links to the whole entry, CHANGELOG.md at the tag.
+  it. Each paragraph and list item is joined into one line, since GitHub shows a newline inside a release
+  body's paragraph as a line break; code blocks stay as they are. Links relative to the repository root, such
+  as `docs/checklist.md`, are pointed at the tag, since the release page would resolve them against itself. A
+  last line links to the whole entry, CHANGELOG.md at the tag.
 - The job passes the result to the GitHub Release step as a file (`body_path`, through the `release-notes`
   artifact), and `generate_release_notes` stays on, so GitHub's list of merged pull requests follows it. The run's
   summary page shows the body as soon as the `notes` job ends, before anything is published.
 - No section for the version: the job fails with an error that names the version, so the artifacts are not
   published and no GitHub Release is created (nor, in a manual run, the tag). Delete a tag pushed without the
-  entry (`git push --delete origin v<version>`), add the entry, and tag the commit that has it. An entry with no
+  entry (`git push --delete origin v<version>`), add the entry, and tag the commit that has it. If a ruleset
+  protects `v*` tags, delete the tag as a bypass actor of that ruleset, or in Settings → Rules. An entry with no
   summary above its first `### ` heading only warns: its body is the link alone.
 
 ## Release freeze
@@ -88,7 +100,22 @@ Before tagging 0.1.0:
   ```
 
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
-  release matches the CHANGELOG entry ([versioning](versioning.md)).
+  release matches the CHANGELOG entry ([versioning](versioning.md));
+- the install instructions (README, getting-started.md, versioning.md, the module READMEs) name 0.1.0 from
+  Maven Central, not a snapshot from Maven Local: **done** on 2026-11-06. The website follows once the
+  artifacts are on Maven Central ([after the release](#after-the-release));
+- GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages); otherwise the API reference
+  job fails after the release is out.
+
+## After the release
+
+- Publish the deployment in the Central Portal (step 3 above), and check that
+  `dev.kcoap:kcoap-bom:<version>` resolves from Maven Central.
+- Set `kcoap.version` in `gradle.properties` to the next version with `-SNAPSHOT` (0.2.0-SNAPSHOT after
+  0.1.0), as [versioning](versioning.md#version-numbers) asks between releases.
+- After 0.1.0, bring the website to the release once the artifacts are on Maven Central:
+  [web/README.md](../web/README.md#when-010-is-on-maven-central) lists the pages that still describe a
+  snapshot from Maven Local.
 
 ## What is published
 

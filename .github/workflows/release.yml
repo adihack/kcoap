@@ -28,6 +28,9 @@ jobs:
   notes:
     name: Release notes from CHANGELOG.md
     runs-on: ubuntu-latest
+    # It only reads the repository and uploads an artifact.
+    permissions:
+      contents: read
     env:
       # The tag the release job creates or finds, so the link below points where the release does.
       TAG: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
@@ -36,6 +39,10 @@ jobs:
       - name: The version's summary
         run: |
           version="${TAG#v}"
+          if [ "${version#v}" != "$version" ]; then
+              echo "::error::Give the version without its leading v: run the workflow again with ${version#v}."
+              exit 1
+          fi
           # The entry's heading is "## <version>", alone or followed by " - <date>"; its summary runs to the
           # first "### " heading (or to the next "## " one), without the blank lines around it.
           if ! awk -v heading="## $version" '
@@ -54,6 +61,17 @@ jobs:
               echo "::error file=CHANGELOG.md::CHANGELOG.md has no section for $version, so nothing is published. Add one headed \"## $version - <date>\", with its summary above the first ### heading (docs/releasing.md), and release a commit that has it."
               exit 1
           fi
+          # GitHub shows a newline inside a release body's paragraph as a line break: join each paragraph and list
+          # item into one line, and leave code fences as they are.
+          awk '
+              function flush() { if (buf != "") print buf; buf = "" }
+              /^```/ { flush(); fence = !fence; print; next }
+              fence { print; next }
+              /^[ \t]*$/ { flush(); print; next }
+              /^(#|[ \t]*([-*+] |[0-9]+[.)] )|\||>)/ { flush(); buf = $0; next }
+              { line = $0; sub(/^[ \t]+/, "", line); buf = (buf == "" ? line : buf " " line) }
+              END { flush() }
+          ' release-notes.md > release-notes.tmp && mv release-notes.tmp release-notes.md
           repo="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           # Links relative to the repository root would resolve against the release page: point them at the tag.
           sed -E -i "s|\]\(([^)#:/][^):]*)\)|](${repo}/blob/${TAG}/\1)|g" release-notes.md
