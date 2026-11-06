@@ -112,7 +112,7 @@ entry, and the install instructions.
   artifacts were on Maven Central ([after the release](#after-the-release));
 - **done:** GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages), checked on
   2026-11-06. That was not enough: the `github-pages` environment allowed deployments from `main` only, so the
-  API reference job of the release failed ([after the release](#after-the-release)).
+  API reference job of the release failed until it also allowed `v*` tags ([after the release](#after-the-release)).
 
 ## After the release
 
@@ -124,14 +124,11 @@ entry, and the install instructions.
   [versioning](versioning.md#version-numbers) asks between releases. **Done for 0.1.0:** 0.2.0-SNAPSHOT.
 - Bring the website to the release once the artifacts are on Maven Central:
   [web/README.md](../web/README.md#with-each-release) lists the places. **Done for 0.1.0** on 2026-11-07.
-- **Open, for the owner: the API reference.** The `docs` job of run 42298365400 failed, so
-  https://adihack.github.io/kcoap/ is not online: the `github-pages` environment allows deployments from `main`
-  only, and a release runs on its `v*` tag. In Settings → Environments → `github-pages` → *Deployment branches
-  and tags*, add a rule for tags matching `v*` beside `main`, then re-run the failed job of run 42298365400
-  (*Re-run failed jobs*). Every later release then deploys its reference by itself. Until the job has run, the
-  README, the documentation hub, SUPPORT.md, getting started and the website say that the API reference is not
-  online yet; change them when it is ([web/README.md](../web/README.md#facts-with-a-date) lists the site's
-  places).
+- Check that the API reference is online at https://adihack.github.io/kcoap/. **Done for 0.1.0:** the `docs`
+  job of run 42298365400 failed at first, because the `github-pages` environment allowed deployments from `main`
+  only, and a release runs on its `v*` tag. The owner added a rule for tags matching `v*` beside `main`
+  (Settings → Environments → `github-pages` → *Deployment branches and tags*), and the job, run again, deployed
+  the reference from `v0.1.0`. Every later release deploys its reference by itself.
 
 ## What is published
 

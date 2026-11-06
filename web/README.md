@@ -295,10 +295,9 @@ Some pages state the project's state on a given day. Update them when it changes
 
 - The release: 0.1.0, released on 6 November 2026, on Maven Central and GitHub Packages
   ([with each release](#with-each-release)).
-- The API reference is not online yet: its deploy from the `v0.1.0` tag failed, because the `github-pages`
-  environment accepts deployments from `main` only. Once that is fixed and the job has run, change the API
-  reference card, the open item of "What 0.1.0 needed" and the "API reference" step on `/releases/`, the
-  "Not there yet" item on the home page, the JVM guide's next steps, and the rule in TEMPLATE.md.
+- The API reference is online (https://adihack.github.io/kcoap/) since the 0.1.0 release's `docs` job ran
+  again, once the `github-pages` environment allowed `v*` tags. The API reference card and the "API reference" step on
+  `/releases/`, the JVM guide's next steps and the rule in TEMPLATE.md link it.
 - The release-freeze meter on the home page and on `/releases/`, with its legend, the table of work packages
   on `/releases/` and the date beside them: the record of what 0.1.0 waited for, all 13 merged by
   6 November 2026 (TEMPLATE.md, section 7).

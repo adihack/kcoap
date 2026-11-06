@@ -156,7 +156,7 @@
           <li><h3>Test</h3><p>The whole CI workflow runs again: unit tests on every target, the coverage floor, interop with libcoap and libedhoc, the Apple targets and the API reference. Nothing is published if any of it fails.</p></li>
           <li><h3>Publish</h3><p>A macOS runner builds every module for every target, signs each artifact with the release key <code>5833 7699 D9CB 8E6F 5EB1 BDFB 4A7E 4910 69FA EAB3</code>, publishes them to GitHub Packages and uploads them to the Central Portal. The maintainer checks that deployment and publishes it to Maven Central by hand, a step that cannot be undone. The <a href="https://github.com/adihack/kcoap/blob/main/docs/releasing.md#the-release-signing-key">releasing guide</a> says how to check a signature.</p></li>
           <li><h3>Release notes</h3><p>A GitHub Release whose notes are the version’s summary from the changelog, followed by the merged pull requests. A version with a <code>-</code>, such as <code>0.2.0-rc1</code>, is marked as a pre-release.</p></li>
-          <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages. For 0.1.0 the deploy failed, so the reference is not online yet; it goes online once its deploy is fixed.</p></li>
+          <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages, at <a href="https://adihack.github.io/kcoap/">adihack.github.io/kcoap</a>.</p></li>
         </ol>
       </div>
       <figure class="figure">
@@ -187,7 +187,7 @@
           <li><span class="visually-hidden">Done: </span>The ABI dumps are current: CI checked them again for the tag.</li>
           <li><span class="visually-hidden">Done: </span>A ruleset protects <code>v*</code> tags, and GitHub Pages serves from GitHub Actions.</li>
           <li><span class="visually-hidden">Done: </span>The Central Portal deployment is published: <code>dev.kcoap:&lt;module&gt;:0.1.0</code> and <code>kcoap-bom</code> are on Maven Central.</li>
-          <li class="is-open"><span class="visually-hidden">Open: </span>The API reference is not online yet. Its deploy from the tag failed, because the <code>github-pages</code> environment accepts deployments from <code>main</code> only. It goes online once that rule also allows <code>v*</code> tags and the job runs again.</li>
+          <li><span class="visually-hidden">Done: </span>The API reference is online. Its first deploy from the tag failed, because the <code>github-pages</code> environment accepted deployments from <code>main</code> only; once it also allowed <code>v*</code> tags, the job ran again and deployed it.</li>
         </ul>
       </div>
     </div>
@@ -267,7 +267,7 @@
         <article class="card">
           <div class="card-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4.75A1.75 1.75 0 0 1 5.75 3H20v15H5.75A1.75 1.75 0 0 0 4 19.75z"/><path d="M4 19.75A1.75 1.75 0 0 0 5.75 21.5H20V18"/></svg></div>
           <h3>API reference</h3>
-          <p>Published to <code>adihack.github.io/kcoap</code> with every release. It is not online yet: the deploy for 0.1.0 failed, and the reference goes online once its deploy is fixed. Until then, <code>./gradlew dokkaGenerate</code> in a clone of kcoap builds it into <code>build/dokka/html</code>. <span class="badge badge-todo">not online yet</span></p>
+          <p>Every release, at <a href="https://adihack.github.io/kcoap/">adihack.github.io/kcoap</a>: every public declaration with its KDoc. <code>./gradlew dokkaGenerate</code> in a clone of kcoap builds it into <code>build/dokka/html</code>. <span class="badge badge-done">0.1.0</span></p>
         </article>
       </div>
     </div>

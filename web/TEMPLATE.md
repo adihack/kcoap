@@ -15,7 +15,7 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 - **Repository links** use exactly `https://github.com/adihack/kcoap/blob/main/<path>` (or
   `tree/` for folders), the default branch; `scripts/check-site` fails when two links name different
   branches.
-- **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
+- **The API reference** (https://adihack.github.io/kcoap/) is online; link it where a page names it.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
 - **Size:** a page with every stylesheet, script and image it loads, its tab icon included, stays within 150 KB
