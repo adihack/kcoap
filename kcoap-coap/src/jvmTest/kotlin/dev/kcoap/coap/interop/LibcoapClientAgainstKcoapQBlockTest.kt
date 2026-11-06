@@ -27,6 +27,7 @@ import io.ktor.server.cio.CIO
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -618,19 +619,27 @@ class LibcoapClientAgainstKcoapQBlockTest {
      */
     @Test
     fun upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3() {
+        // The token of this test's GET, which every set goes out on: the hooks act on this body alone, never on
+        // the later sets of an earlier test's body that the server may still be sending (sentHere()).
+        val bodyToken = AtomicReference<String?>(null)
+        fun isOfThisBody(message: CoapMessage) =
+            message.isResponse && message.options.size2 == 3000L && message.tokenHex == bodyToken.get()
         val lost = Collections.synchronizedSet(mutableSetOf<Long>())
         loss.drop = { message, _ ->
             val num = message.options.qBlock2?.number
-            message.isResponse && message.options.size2 == 3000L && num in setOf(3L, 11L, 14L) && lost.add(num!!)
+            isOfThisBody(message) && num in setOf(3L, 11L, 14L) && lost.add(num!!)
         }
         val setOneSent = CompletableDeferred<Unit>()
         loss.onSent = { message, _ ->
-            if (message.isResponse && message.options.size2 == 3000L && message.options.qBlock2?.number == 19L) setOneSent.complete(Unit)
+            if (isOfThisBody(message) && message.options.qBlock2?.number == 19L) setOneSent.complete(Unit)
         }
         val heldBack = Collections.synchronizedList(mutableListOf<Boolean>())
         loss.holdIncoming = { message ->
-            if (message.isRequest && message.options.qBlock2List == listOf(BlockOption(3, false, 2))) {
-                heldBack += withTimeoutOrNull(10.seconds) { setOneSent.await() } != null
+            if (message.isRequest && message.options.path == "/big") {
+                bodyToken.compareAndSet(null, message.tokenHex)
+                if (message.options.qBlock2List == listOf(BlockOption(3, false, 2))) {
+                    heldBack += withTimeoutOrNull(10.seconds) { setOneSent.await() } != null
+                }
             }
         }
         val result = client("-L", "7", "-N", "-b", "64", "-v", "7", "-B", "30", "-o", "/data/out.bin", "$uri/big")
