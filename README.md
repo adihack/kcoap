@@ -89,7 +89,7 @@ States follow the [checklist](docs/checklist.md), which names every open item an
 ## Installation
 
 Nothing is published yet. The coordinates are `dev.kcoap:<module>:<version>`; the first release goes
-to Maven Central once the `dev.kcoap` namespace is verified and the release freeze
+to Maven Central, under the verified `dev.kcoap` namespace, once the release freeze
 ([releasing](docs/releasing.md)) is over. Until then, publish a snapshot into your local Maven
 repository from a clone of the work branch:
 

@@ -76,7 +76,7 @@ install on an emulator, and R8's mapping in `app/build/outputs/mapping/`.
 
 ## API level findings
 
-`./gradlew checkAndroidApi` checks kcoap's 16 jvm jars against the API 26 signature
+`./gradlew checkAndroidApi` checks every kcoap jvm jar against the API 26 signature
 (`net.sf.androidscents.signature:android-api-level-26:8.0.0_r2`), and
 `./gradlew checkAndroidApiDependencies` the external libraries behind them. The libraries' uses below
 are listed in [`gradle/android-api-dependencies.baseline`](../../gradle/android-api-dependencies.baseline),
