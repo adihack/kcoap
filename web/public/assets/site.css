@@ -11,7 +11,7 @@
  *   4. Header, navigation, mobile menu, theme toggle
  *   5. Footer
  *   6. Components: buttons, badges, cards, callouts, tables, steps, meters
- *   7. Code: inline, blocks, copy button, syntax tokens, code window
+ *   7. Code: inline, blocks, copy button, syntax tokens
  *   8. Tabs
  *   9. Diagrams (inline SVG)
  *  10. Home page sections
@@ -408,11 +408,6 @@ abbr[title] {
   margin-bottom: clamp(2rem, 1.5rem + 2vw, 3rem);
 }
 
-.section-head-center {
-  margin-inline: auto;
-  text-align: center;
-}
-
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -466,10 +461,6 @@ abbr[title] {
 
 .grid-3 {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-}
-
-.grid-4 {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
 }
 
 /* Text beside a figure: text first on small screens, side by side from 960 px. */
@@ -935,16 +926,6 @@ abbr[title] {
   border-color: var(--c-border-strong);
 }
 
-.btn-ghost {
-  background: transparent;
-  color: var(--c-accent);
-  padding-inline: 0.5rem;
-}
-
-.btn-ghost:hover {
-  background: var(--c-accent-soft);
-}
-
 .btn-row {
   display: flex;
   flex-wrap: wrap;
@@ -1204,7 +1185,6 @@ caption {
   padding-left: 3.25rem;
 }
 
-
 .steps > li::before {
   content: counter(step);
   position: absolute;
@@ -1276,12 +1256,6 @@ caption {
   color: var(--c-accent-ink);
 }
 
-.meter-block.is-active {
-  border: 1.5px solid var(--c-amber-line);
-  background: var(--c-amber-soft);
-  color: var(--c-amber-ink);
-}
-
 .meter-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1311,11 +1285,6 @@ caption {
 .meter-legend .is-done::before {
   border: 0;
   background: var(--c-accent);
-}
-
-.meter-legend .is-active::before {
-  border: 1.5px solid var(--c-amber-line);
-  background: var(--c-amber-soft);
 }
 
 /* Definition list of facts: term on the left, value on the right. */
@@ -1422,11 +1391,6 @@ caption {
     border-color: CanvasText;
     background: CanvasText;
     color: Canvas;
-  }
-
-  .meter-block.is-active {
-    border-style: double;
-    border-width: 3px;
   }
 }
 
@@ -1576,11 +1540,6 @@ pre {
 
 .tok-n {
   color: var(--tok-number);
-}
-
-/* A code window: a .code-block with tabs in its title bar (see 8. Tabs, .tabs-window). */
-.code-window {
-  box-shadow: var(--shadow-3);
 }
 
 /* 8. Tabs -------------------------------------------------------------------------------------------- */
@@ -1832,7 +1791,6 @@ pre {
   .figure .diagram-text {
     padding-inline: 8px;
   }
-
 }
 
 .figure figcaption {
@@ -1900,10 +1858,6 @@ pre {
 
 .diagram .d-accent-text {
   fill: var(--c-accent);
-}
-
-.diagram .d-amber-text {
-  fill: var(--c-amber-ink);
 }
 
 .diagram .d-lost-text {
@@ -2014,23 +1968,11 @@ pre {
   fill: var(--c-amber);
 }
 
-.diagram .d-fill-lost {
-  fill: var(--d-lost);
-}
-
 .diagram .d-stroke-lost {
   fill: none;
   stroke: var(--d-lost);
   stroke-width: 2.5;
   stroke-linecap: round;
-}
-
-.diagram .d-icon {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .diagram .d-icon-accent {
@@ -2089,10 +2031,6 @@ pre {
   fill: var(--c-bg-soft);
 }
 
-.diagram .d-pin {
-  fill: var(--c-surface-2);
-}
-
 /* Text alternative under a figure. */
 .diagram-text {
   margin-top: 1rem;
@@ -2113,11 +2051,6 @@ pre {
 
 .diagram-text[open] summary {
   margin-bottom: 0.5rem;
-}
-
-.diagram-text ol,
-.diagram-text ul {
-  margin-bottom: 0;
 }
 
 .diagram-text table {
@@ -2466,23 +2399,6 @@ pre {
   color: var(--c-text-2);
 }
 
-/* Setup steps with code. */
-.setup-grid {
-  display: grid;
-  gap: clamp(1.5rem, 1rem + 2vw, 2.5rem);
-}
-
-@media (min-width: 960px) {
-  .setup-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-  }
-}
-
-.setup-grid > * {
-  min-width: 0;
-}
-
 /* Status and release teaser. */
 .status-card {
   padding: clamp(22px, 3vw, 36px);
@@ -2540,18 +2456,12 @@ pre {
 }
 
 .cta-band h2,
-.cta-band h3,
 .cta-band p {
   color: #ffffff;
 }
 
 .cta-band p {
   opacity: 0.92;
-}
-
-.cta-band a:not(.btn) {
-  color: #ffffff;
-  text-decoration-color: rgba(255, 255, 255, 0.6);
 }
 
 .cta-band .btn-primary {
@@ -2991,8 +2901,7 @@ pre {
 
 /* Text right after a tab set or a code block gets some air. */
 .tabs + p,
-.tabs + .code-note,
-.tabs + .callout {
+.tabs + .code-note {
   margin-top: 1.25rem;
 }
 
@@ -3062,10 +2971,6 @@ pre {
   background: var(--c-surface);
   font-size: var(--fs-xs);
   color: var(--c-text-2);
-}
-
-.section-soft .evidence {
-  background: var(--c-bg);
 }
 
 .evidence > :last-child {
@@ -3225,10 +3130,6 @@ pre {
 
 /* 12. Utilities, motion, print ---------------------------------------------------------------------- */
 
-.mt-0 {
-  margin-top: 0;
-}
-
 .mb-0 {
   margin-bottom: 0;
 }
@@ -3243,10 +3144,6 @@ pre {
 
 .text-center {
   text-align: center;
-}
-
-.nowrap {
-  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -3265,10 +3162,6 @@ pre {
 
   .status-pill::before {
     animation: pulse 2.4s ease-in-out infinite;
-  }
-
-  .diagram .d-fly {
-    animation: fly 3.2s ease-in-out infinite;
   }
 
   .block-loader span {
@@ -3303,17 +3196,6 @@ pre {
 
   50% {
     box-shadow: 0 0 0 6px color-mix(in srgb, var(--c-amber) 0%, transparent);
-  }
-}
-
-@keyframes fly {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  50% {
-    transform: translateX(6px);
   }
 }
 

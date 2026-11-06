@@ -203,17 +203,17 @@ All classes are defined in `site.css`, whose header lists its sections.
 |---|---|
 | `.container`, `.container-narrow` | page width with the side gutter (16 px on phones) |
 | `.section`, `.section-soft`, `.section-tight` | vertical rhythm; soft has the tinted background |
-| `.section-head`, `.section-head-center` | eyebrow + h2 + lede above a section's content |
+| `.section-head` | eyebrow + h2 + lede above a section's content |
 | `.eyebrow` | small uppercase label with the amber block |
 | `.lede`, `.muted` | larger intro text; secondary text |
-| `.grid .grid-2` / `.grid-3` / `.grid-4` | responsive card grids |
+| `.grid .grid-2` / `.grid-3` | responsive card grids |
 | `.split`, `.split-reverse` | text beside a figure from 960 px; the reverse puts the figure first |
 | `.prose` | long-form text with styled lists and headings |
 | `.page-head`, `.breadcrumb` | the top of every page but the home page |
 
 ### Buttons and links
 
-`<a class="btn btn-primary">`, `.btn-secondary`, `.btn-ghost`, size `.btn-lg`, in a `.btn-row`. An icon
+`<a class="btn btn-primary">`, `.btn-secondary`, size `.btn-lg`, in a `.btn-row`. An icon
 SVG inside a button sits before or after the text. `.link-arrow` adds a trailing arrow to a text link.
 
 ### Badges for states
@@ -314,9 +314,10 @@ choice follows them from page to page. The labels must match exactly across a gr
 - `<ul class="checks">`: a list with a teal check per item; `<li class="is-open">` gets an amber ring for an
   open item. The state is also text, for screen readers and forced colours: every item starts with
   `<span class="visually-hidden">Done: </span>` or, when open, `<span class="visually-hidden">Open: </span>`.
-- `<ol class="meter">` of `<li class="meter-block is-done|is-active">`: progress drawn as blocks, with a
-  `.meter-legend` list under it (the home page's release-freeze meter). Each block ends with its state in
-  text, `A1<span class="visually-hidden">, merged</span>` (or `, in progress`, `, not started`); no `title`.
+- `<ol class="meter">` of `<li class="meter-block is-done">` (merged) or `<li class="meter-block">` (not
+  started): progress drawn as blocks, with a `.meter-legend` list under it (the home page's release-freeze
+  meter). Each block ends with its state in text, `A1<span class="visually-hidden">, merged</span>` (or
+  `, not started`); no `title`.
 
 ### Platform links
 
@@ -350,8 +351,8 @@ the home page's strip; copy them from there.
   `d-line-soft`, `d-lifeline`, `d-arrow`, `d-arrow-accent`, `d-arrow-amber`, `d-arrow-lost`; arrow heads
   in `<marker>`s with `d-head`, `d-head-accent`, `d-head-amber`; text `d-title`, `d-big`, `d-sub`,
   `d-small`, `d-mono`, `d-mono-small`, `d-caps`, `d-block-num`, `d-on-accent`, `d-on-accent-2`, `d-on-amber`,
-  `d-accent-text`, `d-amber-text`, `d-lost-text`; fills `d-fill-accent`, `d-fill-amber`, `d-fill-on-accent`,
-  `d-fill-lost`, `d-row-alt`; icons `d-icon-accent`, `d-icon-on-accent`; marks `d-check`, `d-stroke-lost`.
+  `d-accent-text`, `d-lost-text`; fills `d-fill-accent`, `d-fill-amber`, `d-fill-on-accent`, `d-row-alt`;
+  icons `d-icon-accent`, `d-icon-on-accent`; marks `d-check`, `d-stroke-lost`.
 - Prefix every id inside an SVG with `fig-<name>-` (titles, descriptions, markers) so ids stay unique on the
   page. The five home-page diagrams (`fig-stack`, `fig-edhoc`, `fig-qblock`, `fig-platforms`,
   `fig-interop`) can be copied as they are to `/features/`; rename their ids if two copies share a page.
