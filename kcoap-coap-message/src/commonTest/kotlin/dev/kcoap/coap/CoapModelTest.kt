@@ -31,6 +31,13 @@ class CoapModelTest {
     }
 
     @Test
+    fun rfc7252Section3MessageTypesByValue() {
+        assertEquals(CoapMessageType.entries, (0..3).map { CoapMessageType.fromValue(it) })
+        assertNull(CoapMessageType.fromValue(4))
+        assertNull(CoapMessageType.fromValue(-1))
+    }
+
+    @Test
     fun optionsAreSortedAndTyped() {
         val options = OptionSet.build {
             uriQuery("a=1")
@@ -273,7 +280,7 @@ class CoapModelTest {
     fun requestsAndResponsesValidateAndRender() {
         val response = CoapResponse.content("hi")
         assertEquals("2.05 Content [Content-Format: 0] 2 bytes", response.toString())
-        assertEquals(response, CoapResponse.of(response.toMessage(byteArrayOf(1))))
+        assertEquals(response, CoapResponse.from(response.toMessage(byteArrayOf(1))))
         assertEquals(response.hashCode(), CoapResponse.content("hi").hashCode())
         assertFalse(response == CoapResponse.content("ho"))
         assertTrue(response.isSuccess)
@@ -283,6 +290,7 @@ class CoapModelTest {
         assertEquals("4.04 Not Found", CoapResponse.error(CoapCode.NOT_FOUND).toString())
         assertFailsWith<IllegalArgumentException> { CoapResponse(CoapCode.GET) }
         assertFailsWith<IllegalArgumentException> { CoapResponse.error(CoapCode.CONTENT) }
+        assertFailsWith<IllegalArgumentException> { CoapResponse.from(CoapMessage.request(CoapCode.GET)) }
 
         val request = CoapRequest.Builder(CoapCode.POST, CoapUri.parse("coap://[::1]/x")).payload("body").accept(50).nonConfirmable().build()
         assertEquals("0.02 POST coap://[::1]/x [Accept: 50] 4 bytes NON", request.toString())

@@ -126,6 +126,7 @@ public enum class CoapMessageType(public val value: Int) {
     ;
 
     public companion object {
-        public fun fromValue(value: Int): CoapMessageType = entries[value]
+        /** The type with the header value [value] (RFC 7252 §3), or null for a value that no type has. */
+        public fun fromValue(value: Int): CoapMessageType? = entries.firstOrNull { it.value == value }
     }
 }

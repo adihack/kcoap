@@ -112,7 +112,7 @@ internal class BlockwiseClient(private val client: CoapClient) {
                 }
                 if (!more) return complete(peer, base, response, confirmable)
                 val continues = response.code == CoapCode.CONTINUE || (response.code.isSuccess && control?.more == false)
-                if (!continues) return CoapResponse.of(response)
+                if (!continues) return CoapResponse.from(response)
                 // §2.3: use the server's preferred size from now on; the block number scales with it. A plain
                 // SZX in answer to BERT blocks asks for plain blocks (RFC 8323 §6).
                 if (control != null && !control.isBert && control.size < sizing.chunk) sizing = BlockSizing.of(control.size)
