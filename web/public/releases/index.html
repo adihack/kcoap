@@ -172,16 +172,18 @@
         <h2 id="before">Before 0.1.0 is tagged</h2>
         <p class="lede">The releasing guide lists what has to be true first. On 6 November 2026:</p>
       </div>
-      <ul class="checks card">
-        <li class="is-open">The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
-        <li class="is-open">CHANGELOG.md has an entry for the version, with migration notes.</li>
-        <li class="is-open">The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
-        <li class="is-open">The Maven Central and signing secrets are set.</li>
-        <li>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
-        <li>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
-        <li class="is-open">The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
-        <li class="is-open"><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
-      </ul>
+      <div class="card">
+        <ul class="checks mb-0">
+          <li class="is-open">The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
+          <li class="is-open">CHANGELOG.md has an entry for the version, with migration notes.</li>
+          <li class="is-open">The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
+          <li class="is-open">The Maven Central and signing secrets are set.</li>
+          <li>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
+          <li>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
+          <li class="is-open">The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
+          <li class="is-open"><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
+        </ul>
+      </div>
     </div>
   </section>
 
