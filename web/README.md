@@ -116,8 +116,9 @@ kcoap.dev, add a proxied `AAAA` record `www` → `100::` and a Redirect Rule fro
 
 **DNS.** The custom domain needs no DNS record of your own, TXT or otherwise: on a zone that Cloudflare
 hosts, attaching a Custom Domain creates the DNS record and the certificate. The only TXT record the
-project needs on kcoap.dev is the one that verifies the `dev.kcoap` namespace for Maven Central
-([releasing](../docs/releasing.md#verifying-the-devkcoap-namespace)); it is unrelated to the website.
+project needs on kcoap.dev is the one through which the Central Portal verified the `dev.kcoap` namespace
+on 6 November 2026 ([releasing](../docs/releasing.md#verifying-the-devkcoap-namespace)); keep it. It is
+unrelated to the website, and neither gets in the way of the other.
 
 ### Behaviour that follows from the settings
 
