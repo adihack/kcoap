@@ -47,7 +47,11 @@ client.get("coap+tcp://127.0.0.1/hello")
 Android. It authenticates the server by certificate: the chain must be valid under `TlsClientConfig.trust`, the
 platform trust store by default or `TlsTrust.Anchors` for a private CA or a device's self-signed certificate, and
 must name the host of the URI by its subjectAltName (RFC 9525 §6, IP literals by their octets, never the Common
-Name). A `CertificatePinner` then checks the validated path on top, for example against SPKI SHA-256 pins
+Name). The connector checks names itself: ktor-network-tls's own check accepts a certificate without DNS names for
+any host name (`CioWebSocketNameCheckTest`). On Android, `TlsTrust.Platform` is checked with the host through
+`android.net.http.X509TrustManagerExtensions`, so the app's network security configuration applies per domain,
+`<pin-set>` included; without the host, a configuration with a `<domain-config>` would refuse every chain. That
+path has not run on Android yet. A `CertificatePinner` then checks the validated path on top, for example against SPKI SHA-256 pins
 (`CertificatePinner.publicKeySha256`, RFC 7469 §2.4). The connection reports that path, end-entity first and
 trust anchor last, as its `PeerIdentity.Certificate`, which a server's handlers see as `peerIdentity`.
 
@@ -61,6 +65,11 @@ What ktor-network-tls 3.6.1 allows, and so what the connector does not do:
 
 - **TLS 1.2 only**, ktor's own implementation of it, with the ECDHE suites over AES-GCM (RFC 9325 §4.2); ktor's
   RSA key transport and CBC suites are not offered. No TLS 1.3, no session resumption, no RFC 7925 CCM_8 suite.
+- **No extended master secret (RFC 7627) and no renegotiation indication (RFC 5746)**, neither the extension nor
+  the signaling suite, which RFC 9325 §3.5 requires of TLS 1.2 implementations: ktor-network-tls sends neither.
+  The triple-handshake and renegotiation attacks they prevent need a renegotiation, a resumed session or a client
+  certificate, and the connector uses none of them, so the risk is low. The JSSE client that ADR 0010 plans
+  would close the gap.
 - **No ALPN.** RFC 8323 §8.2 has the client offer `coap` on every port but 5684, so a port other than 5684 is
   refused before connecting unless `TlsClientConfig(allowsAnyPortWithoutAlpn = true)` is set, for a server known
   to accept clients without ALPN (libcoap's does).
@@ -82,7 +91,11 @@ WebSockets are in `kcoap-transport-ktor-websocket`. Planned: multicast, which ne
 
 `KtorUdpTransportTest` and `KtorTcpTransportTest` use real sockets on IPv4 and IPv6 loopback.
 `KtorTlsConnectorTest` runs the TLS connector against a JSSE server with certificates the test writes in DER:
-the validated path and SNI, intermediates and anchors that are not roots, untrusted authorities, certificates
-for another host, the pinner, the ALPN port rule and a TLS 1.3-only server; `ServerIdentityTest` has RFC 9525's
-name rules. The libcoap interop tests in `kcoap-coap/src/jvmTest` cover UDP, TCP and, in
+the validated path, the negotiated suite and SNI, intermediates and anchors that are not roots, untrusted
+authorities, certificates for another host, the pinner, the ALPN port rule (on port 5684 itself when the test can
+listen there) and a TLS 1.3-only server. A recorder of the ClientHello shows the four ECDHE and AES-GCM suites
+offered where ktor's default list adds RSA key transport and CBC, and pins what ktor-network-tls leaves out: ALPN,
+the extended master secret and the renegotiation indication. `ServerIdentityTest` has RFC 9525's name rules,
+`HostAwareTrustTest` the host-aware check with a stand-in for Android's wrapper, and `CioWebSocketNameCheckTest`
+pins ktor's weaker name check through its CIO WebSocket client. The libcoap interop tests in `kcoap-coap/src/jvmTest` cover UDP, TCP and, in
 `KcoapClientAgainstLibcoapTlsTest`, `coaps+tcp` against libcoap 4.3.5b on OpenSSL with a throwaway CA.

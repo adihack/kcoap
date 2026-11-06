@@ -167,7 +167,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 ## Not yet
 
 DTLS (`coaps`, last on the roadmap; the endpoint already follows the rules in `docs/architecture.md`),
-a TLS listener and a `coaps+tcp` client off the JVM (docs/platforms.md; `coaps+ws` works on the ktor engine's TLS), multicast, proxying and caching, Hop-Limit, client
+a TLS listener and a `coaps+tcp` client off the JVM (docs/platforms.md; `coaps+ws` works on the ktor engine's TLS where it
+authenticates the server), multicast, proxying and caching, Hop-Limit, client
 re-registration when Max-Age expires (optional in RFC 7641 §3.3.1), server-side Echo freshness checks
 (RFC 9175 §2.3), rate limiting with 4.29 (RFC 8516); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
 (§8–9), which wait for multicast and proxying.

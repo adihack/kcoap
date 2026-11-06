@@ -219,7 +219,9 @@ suspend fun reliableClient(scope: CoroutineScope, tcpPort: Int, webSocketPort: I
   connectors only, fails at once with `CoapException.Reason.TRANSPORT_UNAVAILABLE`, naming the scheme.
 - `coaps+tcp` goes over `KtorTlsConnector` (kcoap-transport-ktor, on the JVM), which checks the server's
   certificate against the platform trust store or given anchors and takes a pinning hook; `coaps+ws` over `wss://`
-  on the engine's TLS. Which runtime has which TLS, and how servers terminate it, is in
+  on the engine's TLS, where it authenticates the server: `KtorWebSocketConnector()` serves it on Apple and the
+  web, not on the JVM and Android, whose CIO engine does not check host names fully, so there pass an `HttpClient`
+  of your own. Which runtime has which TLS, and how servers terminate it, is in
   [platforms.md](platforms.md#tls-support-per-runtime).
 
 ```kotlin

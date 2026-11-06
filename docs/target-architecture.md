@@ -842,7 +842,11 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > §6), and refuses ports other than 5684 unless the application allows it (RFC 8323 §8.2 wants ALPN there). B3's
 > refusal covered `coaps` only; T1 lets `coaps+tcp` and `coaps+ws` requests go out only where a connector or listener
 > serves the scheme, and only to a peer the resolver maps to TLS. The server side is
-> [ADR 0010](adr/0010-server-side-tls.md): proxy termination now, an SSLEngine listener later.
+> [ADR 0010](adr/0010-server-side-tls.md): proxy termination now, an SSLEngine listener later. Review found that
+> ktor-network-tls's name check, which the CIO WebSocket client relies on, accepts a certificate without DNS names
+> for any host (`CioWebSocketNameCheckTest`), so `KtorWebSocketConnector()` lists `coaps+ws` only where its engine
+> authenticates the server (Apple, `js`, `wasmJs`), and a `coaps+ws` listener closes sessions that did not arrive
+> over TLS. A name check for the JVM default client is a follow-up (checklist coap-core-x9).
 
 **WP-I1: Browser-topology interop**
 

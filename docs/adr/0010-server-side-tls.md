@@ -47,7 +47,9 @@ The options for a `coaps+tcp` server:
   which reach kcoap end to end, not a TLS client certificate, which ends at the proxy.
 - **`coaps+ws` servers:** `KtorWebSocketListener` mounted in an application whose ktor engine runs TLS (Netty or
   Jetty with an SSL connector) and created with the scheme `coaps+ws`, or the same listener with `coap+ws` behind a
-  proxy. Neither is tested in kcoap; the listener takes the engine as a parameter (`verifyNoServerEngine`).
+  proxy. Neither is tested over TLS in kcoap; the listener takes the engine as a parameter (`verifyNoServerEngine`).
+  A `coaps+ws` listener holds its word: it closes, with 1008, any session whose request did not arrive on a TLS
+  connector, as on an engine that also has a plain one (`request.local.scheme`, tested with CIO's plain server).
 - **Later: an SSLEngine listener in a JVM_LIBRARY module**, with ALPN `coap`, TLS 1.3 and client certificates, and a
   JSSE client beside it. It is not scheduled. Its triggers: a JVM server that must authorize by the TLS client
   certificate, or clients that require ALPN on a port other than 5684, which `KtorTlsConnector` cannot offer.
