@@ -4,21 +4,48 @@ A release is a tag. Pushing `v0.1.0` (or `v0.2.0-rc1`) runs `.github/workflows/r
 
 1. **Test**: the whole CI workflow (unit tests on every target, coverage floor, interop with libcoap and
    libedhoc, the Apple targets, the API reference). Nothing is published if any of it fails.
-2. **Publish** on a macOS runner, because only macOS can build the iOS and macOS artifacts; the same
+2. **Release notes**, in parallel with the tests: the `notes` job takes the version's summary from
+   [CHANGELOG.md](../CHANGELOG.md) ([below](#release-notes)). If CHANGELOG.md has no section for the version,
+   the job fails, and nothing is published.
+3. **Publish** on a macOS runner, because only macOS can build the iOS and macOS artifacts; the same
    host builds the JVM, Linux, JS and Wasm ones. The version is the tag without its `v`.
    - to **GitHub Packages** always, with the workflow's own token;
    - to **Maven Central** when its secrets are configured.
-3. **GitHub Release** with notes generated from the merged pull requests. A version with a `-`
-   (`0.2.0-rc1`) is marked as a pre-release.
-4. **API reference** (Dokka) deployed to GitHub Pages.
+4. **GitHub Release** whose body is that summary, followed by the notes GitHub generates from the merged
+   pull requests. A version with a `-` (`0.2.0-rc1`) is marked as a pre-release.
+5. **API reference** (Dokka) deployed to GitHub Pages.
 
-A release can also be started by hand (Actions → Release → Run workflow) with a version number; that
-creates the tag through the GitHub Release step.
+A release can also be started by hand (Actions → Release → Run workflow) with a version number, without
+the `v`; that creates the tag through the GitHub Release step, and the release notes come from CHANGELOG.md
+in the same way.
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+## Release notes
+
+The body of the GitHub Release comes from CHANGELOG.md, so the version's entry must be in the commit that is
+tagged, written before the tag is pushed: the `notes` job reads CHANGELOG.md at that commit. How it finds the
+summary:
+
+- The version is the tag without its `v`: `v0.1.0` gives `0.1.0`. A manual run turns its version input into
+  the tag `v<version>` first, so both ways find the same entry.
+- The entry's heading is `## <version>`, alone or followed by a space, as in `## 0.1.0 - 2026-11-06`. The match
+  is exact, so `0.1.0` never finds `## 0.1.0-rc1 - …`, and `## Unreleased` is never used: rename it to the
+  version and its date, and start a new `## Unreleased` above it.
+- The summary is every line after that heading up to the entry's first `### ` heading (`### Added` and the
+  others), or up to the next `## ` heading when the entry has no subsections, without the blank lines around
+  it. Links relative to the repository root, such as `docs/checklist.md`, are pointed at the tag, since the
+  release page would resolve them against itself. A last line links to the whole entry, CHANGELOG.md at the tag.
+- The job passes the result to the GitHub Release step as a file (`body_path`, through the `release-notes`
+  artifact), and `generate_release_notes` stays on, so GitHub's list of merged pull requests follows it. The run's
+  summary page shows the body as soon as the `notes` job ends, before anything is published.
+- No section for the version: the job fails with an error that names the version, so the artifacts are not
+  published and no GitHub Release is created (nor, in a manual run, the tag). Delete a tag pushed without the
+  entry (`git push --delete origin v<version>`), add the entry, and tag the commit that has it. An entry with no
+  summary above its first `### ` heading only warns: its body is the link alone.
 
 ## Release freeze
 
@@ -37,7 +64,10 @@ Before tagging 0.1.0:
   already on its way out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig`
   and `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone, and no other `@Deprecated` declaration
   is left in the published modules;
-- [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
+- [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes, headed
+  `## <version> - <date>` and opening with the summary that becomes the release body
+  ([release notes](#release-notes)): **done** for 0.1.0, dated 2026-11-06 (a tag pushed on another day changes
+  the date first);
 - the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)): done on
   2026-11-06; the license is set, and the `dev.kcoap` namespace is verified;
 - **in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
