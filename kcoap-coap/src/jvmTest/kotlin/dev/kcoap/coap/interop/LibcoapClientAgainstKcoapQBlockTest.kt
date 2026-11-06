@@ -35,6 +35,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -601,14 +602,19 @@ class LibcoapClientAgainstKcoapQBlockTest {
 
     /**
      * Pinned, found by L9: when the gaps of a body span two sets, libcoap 4.3.5's client loses the body although
-     * every block reaches it. kcoap loses the first copies of blocks 3, 11 and 14; libcoap asks for block 3 alone
-     * when block 10 arrives, usually sends Resets to blocks of set 1 on the original token, asks for the rest of
-     * set 1 with 11/M and for the later sets, gets every block 0 to 46, and then exits 0 having written one block
-     * of 64 bytes instead of the 3000-byte body. kcoap's side is checked too ([servedBodyViolations]): one body with one ETag
-     * and Size2 on every block, each request answered on its token from it, the Continues on the original one,
-     * as RFC 9177 §4.4 asks; so the pin holds only while the fault is libcoap's. The Resets are not asserted:
-     * whether libcoap sends them depends on how its request for block 3 interleaves with kcoap's set, and one
-     * run under load saw none (interop/README.md).
+     * every block reaches it. Its client keeps the blocks it received as at most three ranges (`COAP_RBLOCK_CNT` − 1);
+     * a block that would start a fourth fails the body, and coap-client is handed that block alone as the body.
+     * kcoap loses the first copies of blocks 3, 11 and 14; libcoap asks for block 3 alone when block 10 arrives,
+     * and block 15 then needs a fourth range (0–2, 4–10, 12–13, 15) unless block 3 came before it. kcoap sends set
+     * 1 back to back, so on an idle machine the request for block 3 arrives after the whole set; under load it can
+     * arrive, and be answered, before block 15 goes out, and libcoap then gets the body whole (a CI run of 1a35ced).
+     * So kcoap takes that request only once it sent set 1, as if the network had delayed it, which fixes the order:
+     * libcoap fails the body at block 15, usually sends Resets to the blocks after it on the original token, asks
+     * for the rest of set 1 with 11/M once block 3 came and for the later sets, gets every block 0 to 46, and then
+     * exits 0 having written one block of 64 bytes instead of the 3000-byte body. kcoap's side is checked too
+     * ([servedBodyViolations]): one body with one ETag and Size2 on every block, each request answered on its token
+     * from it, the Continues on the original one, as RFC 9177 §4.4 asks; so the pin holds only while the fault is
+     * libcoap's. The Resets are not asserted: they are how libcoap's client answers blocks of a body it gave up.
      */
     @Test
     fun upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3() {
@@ -617,8 +623,19 @@ class LibcoapClientAgainstKcoapQBlockTest {
             val num = message.options.qBlock2?.number
             message.isResponse && message.options.size2 == 3000L && num in setOf(3L, 11L, 14L) && lost.add(num!!)
         }
+        val setOneSent = CompletableDeferred<Unit>()
+        loss.onSent = { message, _ ->
+            if (message.isResponse && message.options.size2 == 3000L && message.options.qBlock2?.number == 19L) setOneSent.complete(Unit)
+        }
+        val heldBack = Collections.synchronizedList(mutableListOf<Boolean>())
+        loss.holdIncoming = { message ->
+            if (message.isRequest && message.options.qBlock2List == listOf(BlockOption(3, false, 2))) {
+                heldBack += withTimeoutOrNull(10.seconds) { setOneSent.await() } != null
+            }
+        }
         val result = client("-L", "7", "-N", "-b", "64", "-v", "7", "-B", "30", "-o", "/data/out.bin", "$uri/big")
 
+        assertTrue(heldBack.isNotEmpty() && heldBack.all { it }, "kcoap took the request for block 3 after it sent set 1: $heldBack")
         assertEquals(setOf(3L, 11L, 14L), lost.toSet())
         assertEquals((0L..46L).toSet(), blocksArrived(result), "every block reached libcoap: $result")
         val missing = receivedMessages().first { it.options.path == "/big" && it.options.qBlock2?.number == 3L }
