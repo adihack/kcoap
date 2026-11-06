@@ -17,6 +17,20 @@ adds its entry and migration note below.
   `KcoapSmoke` framework of kcoap-coap for the Apple targets, and its Swift script, which the macOS CI job compiles
   with `xcrun swiftc` and runs (`scripts/test swift`, `./gradlew :kcoap-swift-smoke:swiftSmoke`), builds a
   `CoapClientConfig` with explicit values and catches a request timeout and a malformed URI as `NSError`.
+- A `coaps+tcp` client on the JVM (WP-T1, RFC 8323 §8.2, §9.1), in kcoap-transport-ktor: `KtorTlsConnector` on
+  ktor-network-tls, configured by `TlsClientConfig` (`trust`, `pinner`, `allowsAnyPortWithoutAlpn`) with
+  `TlsTrust.Platform` (the platform trust store, the default) or `TlsTrust.Anchors`, and the certificate-pinning
+  hook `CertificatePinner` with RFC 7469 SPKI pins (`CertificatePinner.publicKeySha256`). It validates the server's
+  chain, checks that the certificate names the host (RFC 9525 §6) and reports the validated path as the
+  connection's `PeerIdentity.Certificate`; on Android `TlsTrust.Platform` checks the chain with the host through
+  `X509TrustManagerExtensions`, so a network security configuration's `<domain-config>` applies (not run on
+  Android yet). ktor-network-tls limits it to TLS 1.2 without ALPN, so ports other than 5684 need
+  `allowsAnyPortWithoutAlpn` (RFC 8323 §8.2), without the extended master secret (RFC 7627) or the renegotiation
+  indication (RFC 5746), which RFC 9325 §3.5 requires (low risk without renegotiation, resumption or client
+  certificates), and to the JVM: Linux native and Apple builds have no TLS there. Cross-tested with libcoap 4.3.5b
+  on OpenSSL, as is `coaps+ws` through the WebSocket connector on a CIO client that trusts the test authority
+  (`KcoapClientAgainstLibcoapTlsTest`). Servers terminate TLS at a reverse proxy for now
+  ([ADR 0010](docs/adr/0010-server-side-tls.md)); what each runtime has is in [docs/platforms.md](docs/platforms.md).
 - Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
   `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
   they replace.
@@ -953,6 +967,35 @@ Build governance (WP-C1):
 
 ### Security
 
+- CoAP client (WP-T1): a `coaps+tcp` or `coaps+ws` request went out on whatever peer the `EndpointResolver`
+  returned, so a resolver that mapped such a URI to a plain `Endpoint.Tcp` or `Endpoint.WebSocket` sent it in
+  plaintext (RFC 8323 §9). `CoapClient` now sends a `coaps+tcp` or `coaps+ws` request only when a connector or
+  listener of its endpoint serves the scheme, which a transport does only when it runs TLS (`KtorTlsConnector`;
+  `KtorWebSocketConnector` where its engine authenticates the server, see the next entry), and only to a peer
+  reached over TLS; otherwise the call fails with
+  `CoapException(TRANSPORT_UNAVAILABLE)`, before the host is resolved or before anything is sent. A call without
+  such a transport used to fail with the same reason after resolving, saying "needs a Connector"; it now fails
+  before, saying the scheme "needs TLS". `coaps` stays refused until DTLS. *Migration:* add `KtorTlsConnector` (on
+  the JVM) for `coaps+tcp`; a connector of your own lists `coaps+tcp` or `coaps+ws` only if it runs TLS for them.
+- WebSocket client (WP-T1): `KtorWebSocketConnector()` sent `coaps+ws` on the JVM and Android over its CIO engine,
+  whose TLS, ktor-network-tls 3.6.1, accepts a certificate without DNS names for any host name, and which checks
+  an IP literal by its reverse DNS name. An on-path attacker with a publicly trusted certificate for its own IP
+  address could read and answer the requests. On Linux native the same client has no TLS at all, and a `coaps+ws`
+  request failed only when connecting. The default connector now lists `coaps+ws` only where its engine
+  authenticates the server (RFC 8323 §9.2, RFC 9525 §6): Apple (URLSession), `js` and `wasmJs`. Elsewhere
+  `CoapClient` fails a `coaps+ws` URI with `CoapException(TRANSPORT_UNAVAILABLE)` before resolving it, and
+  `connect` refuses a `wss` endpoint with `IllegalArgumentException`; `coap+ws` is unchanged. Known limitation: a
+  connector on an `HttpClient` the application passes serves `coaps+ws` on every platform, as the application's
+  word that its engine authenticates servers, and a CIO client there has the same name check.
+  *Migration:* for `coaps+ws` on the JVM or Android, pass `KtorWebSocketConnector(httpClient)` with an engine whose
+  TLS checks host names, or with a CIO client whose trust manager trusts only an authority that issues DNS names
+  alone for your servers.
+- WebSocket server (WP-T1): `KtorWebSocketListener(CoapScheme.COAPS_WS)` accepted sessions that reached it on a
+  plain connector and named them `wss://`, so an application that mounted it on an engine with both a plain and a
+  TLS connector reported `coaps+ws` for plaintext connections, which opens the CoAP client's TLS check on that
+  endpoint. Such a listener now closes a session whose request did not arrive over TLS (`request.local.scheme`
+  neither `https` nor `wss`) with 1008, policy violation, and logs a warning. *Migration:* behind a
+  TLS-terminating proxy, create the listener with `coap+ws` ([ADR 0010](docs/adr/0010-server-side-tls.md)).
 - CoAP client (WP-B3): a request to a `coaps` URI went out in plaintext. kcoap has no DTLS yet, and the
   default resolver mapped `coaps` to a plain UDP endpoint, so the datagram transport sent it unencrypted,
   against RFC 7252 §6.2. Every call with a `coaps` URI now fails with `CoapException(TRANSPORT_UNAVAILABLE)`

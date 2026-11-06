@@ -26,6 +26,8 @@ kotlin {
             implementation(project(":kcoap-transport-ktor-websocket-server"))
             // The engine of the WebSocket listener, which the server module leaves to the application.
             implementation(libs.ktor.server.cio)
+            // A WebSocket client whose TLS trusts the coaps+ws interop server's throwaway certificate authority.
+            implementation(libs.ktor.client.cio)
         }
     }
 }

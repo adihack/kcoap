@@ -4,7 +4,8 @@ Status: **built for UDP, TCP and WebSockets, on every target**. The CoAP endpoin
 server APIs, OSCORE, EDHOC (including the post-quantum suite), the EDHOC→OSCORE glue, the crypto
 backends, the UDP transport and CoAP over TCP and WebSockets (RFC 8323) exist and are cross-tested;
 the protocol modules build for the JVM, Apple, Linux and the web (`js`, `wasmJs`) and pass the same
-common tests on each. DTLS and TLS for `coaps+tcp` are designed here and come later. This records how
+common tests on each. TLS for `coaps+tcp` exists as a client on the JVM (WP-T1); DTLS is designed here and
+comes later. This records how
 kcoap stays one protocol core while running in mobile apps, browsers and server applications. The
 RFC checklist is in `rfc-compliance.md`.
 
@@ -16,7 +17,7 @@ kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default
               │                ├─ kcoap-crypto-testsuite (backend conformance; tests only)
               │                └─ kcoap-cose ─┐
               ├─ kcoap-cbor ──────────────────┤
-              ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP)
+              ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP; TLS client on the JVM)
               │                   ├─ kcoap-transport-ktor-websocket ── kcoap-transport-ktor-websocket-server
               │                   ├─ kcoap-testkit
               │                   └─ kcoap-dtls
@@ -359,6 +360,8 @@ release, so a `when` over it keeps an `else` branch ([versioning](versioning.md#
 | `CoapFormatException` | A Reset or a silent drop, and `EndpointEvent.MalformedMessage` |
 | A lookup the `EndpointResolver` could not make at runtime | `UNRESOLVED_HOST` |
 | A `coaps` URI, which needs DTLS (RFC 7252 §6.2), before DTLS exists | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
+| A `coaps+tcp` or `coaps+ws` URI (RFC 8323 §9) that no connector or listener runs TLS for | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
+| A `coaps+tcp` or `coaps+ws` URI the resolver maps to a peer not reached over TLS | `TRANSPORT_UNAVAILABLE`, nothing sent |
 | The endpoint's own transport failing, or a call after `close()` | `TRANSPORT_FAILED`, `CLOSED` |
 
 A `CancellationException` passes unchanged only when the calling coroutine was cancelled: a resolver or
@@ -533,7 +536,11 @@ registry ([ADR 0004](adr/0004-no-scheme-registry.md)): the client's `EndpointRes
 leaves host names of RFC 8323 schemes to the connector), `CoapScheme` maps each scheme to a `TransportKind`
 and a channel security, and the endpoint picks the link by the kind of `Endpoint`: its datagram transport for
 `coap` (and `coaps` once DTLS exists), the `Connector` whose `schemes` include `coap+tcp`, `coaps+tcp`,
-`coap+ws` or `coaps+ws`. A scheme nothing serves fails with `CoapException(TRANSPORT_UNAVAILABLE)`.
+`coap+ws` or `coaps+ws`. A scheme nothing serves fails with `CoapException(TRANSPORT_UNAVAILABLE)`. A connector
+that lists `coaps+tcp` or `coaps+ws`, or a listener that reports one, says by that that it runs TLS for it: the
+client sends such a URI only then, and only to a peer the resolver maps to TLS, so nothing meant for TLS goes out
+in plaintext. Which runtime has which TLS is in [platforms.md](platforms.md#tls-support-per-runtime); servers
+terminate TLS at a reverse proxy for now ([ADR 0010](adr/0010-server-side-tls.md)).
 
 ## DTLS
 
@@ -702,7 +709,9 @@ and BERT for larger blocks. Schemes: `coap+tcp` (5683), `coaps+tcp` (5684, ALPN 
 Built so far: UDP and TCP on ktor-network (`kcoap-transport-ktor`) for the JVM, Apple and Linux; the
 WebSocket client on the ktor client (`kcoap-transport-ktor-websocket`), which takes any engine, so the
 browser needs no other adapter; and the WebSocket server on the ktor server
-(`kcoap-transport-ktor-websocket-server`). TLS for TCP is the open item.
+(`kcoap-transport-ktor-websocket-server`). TLS for TCP exists as a client on the JVM (`KtorTlsConnector`, on
+ktor-network-tls, which has no TLS on native targets); servers terminate TLS at a reverse proxy
+([ADR 0010](adr/0010-server-side-tls.md), [platforms.md](platforms.md#tls-support-per-runtime)).
 
 Multicast needs native APIs: NIO `join()` on the JVM, Network.framework plus Apple's multicast
 entitlement on iOS. iOS also needs the Local Network permission for LAN peers.

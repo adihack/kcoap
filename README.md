@@ -72,7 +72,7 @@ States follow the [checklist](docs/checklist.md), which names every open item an
 | No-Response | 7967 | partial: the server is done; the client still waits for its timeout | `RequestResponseTest`, `EdgeCaseTest` |
 | Echo, Request-Tag | 9175 | partial: address verification against amplification done; server freshness checks (§2.3) to do | `MessageSecurityTest`, `BlockwiseTest`, `AmplificationTest`; libcoap |
 | Hop-Limit | 8768 | partial: the option and 5.08 exist; the processing belongs to proxies, which kcoap does not have yet | `CoapModelTest` |
-| CoAP over TCP and WebSockets: CSM, Ping/Pong, Release, Abort, BERT, Observe | 8323 | partial: TLS for `coaps+tcp` to do; `coaps+ws` on the ktor engine's TLS, not cross-tested | RFC 8323 figures byte for byte; in-memory and loopback tests; libcoap both directions over TCP and WebSockets |
+| CoAP over TCP and WebSockets: CSM, Ping/Pong, Release, Abort, BERT, Observe | 8323 | partial: TLS as a client only, `coaps+tcp` on the JVM without ALPN and `coaps+ws` on the ktor engine's TLS where it authenticates the server (by default Apple and browsers; on the JVM with an application's `HttpClient`), both cross-tested; no TLS listener ([platforms](docs/platforms.md#tls-support-per-runtime)) | RFC 8323 figures byte for byte; in-memory and loopback tests; libcoap both directions over TCP and WebSockets |
 | OSCORE | 8613 | partial: Outer Block-wise, protected signaling over TCP, proxies, HTTP and Appendix B.2 to do; nonce reuse after sequence-number exhaustion (§7.2.1) open | every Appendix C vector byte for byte; libcoap both directions, raw and through the stack |
 | EDHOC: methods 0–3, suites 0–6 and 24 | 9528 | partial: suite 25, CWT and C509 credentials, and the Initiator's C_R = C_I check to do | both RFC 9529 traces byte for byte, all §4 invalid messages; libedhoc both roles |
 | Post-quantum EDHOC: KEM-based key exchange (private suite -24) | draft-ietf-lake-pqsuites §3 | done (JVM, Android) | round trips with real ML-KEM and ML-DSA; libedhoc (liboqs) both roles |
@@ -197,7 +197,7 @@ More in the [client and server guide](docs/guide-client-server.md).
 | [`kcoap-cbor`](kcoap-cbor/README.md) | Deterministic CBOR and CBOR sequences |
 | [`kcoap-cose`](kcoap-cose/README.md) | COSE structures, COSE_Key, CWT Claims Sets |
 | [`kcoap-transport`](kcoap-transport/README.md) | Transport interfaces, endpoints, peer identities, URI schemes |
-| [`kcoap-transport-ktor`](kcoap-transport-ktor/README.md) | UDP and TCP on ktor-network (JVM, Apple, Linux; not the web) |
+| [`kcoap-transport-ktor`](kcoap-transport-ktor/README.md) | UDP and TCP on ktor-network (JVM, Apple, Linux; not the web), and a `coaps+tcp` TLS client on the JVM |
 | [`kcoap-transport-ktor-websocket`](kcoap-transport-ktor-websocket/README.md) | WebSocket client on the ktor client, any engine, browsers included |
 | [`kcoap-transport-ktor-websocket-server`](kcoap-transport-ktor-websocket-server/README.md) | WebSocket server on the ktor server, standalone or mounted |
 | [`kcoap-testkit`](kcoap-testkit/README.md) | Simulated network with loss, duplication and reordering, and in-memory TCP/WebSocket connections, for tests |

@@ -90,7 +90,11 @@ import kotlinx.coroutines.withContext
  * demand. On connections, message sizes and block sizes follow the server's Max-Message-Size, with BERT
  * blocks when both sides support them (RFC 8323 §6). A `coaps` URI needs DTLS (RFC 7252 §6.2, §9.1), which
  * kcoap does not have yet, so every call with one fails with [CoapException.Reason.TRANSPORT_UNAVAILABLE] before
- * its host is resolved: nothing goes out in plaintext.
+ * its host is resolved: nothing goes out in plaintext. A `coaps+tcp` or `coaps+ws` URI needs TLS (RFC 8323 §9)
+ * and fails the same way unless a connector or listener of the endpoint serves its scheme, which a transport
+ * does only when it runs TLS for it, as kcoap-transport-ktor's `KtorTlsConnector` (`coaps+tcp`, on the JVM) and
+ * the WebSocket connector (`coaps+ws`, where its engine authenticates the server: Apple, browsers, Node.js, or
+ * an `HttpClient` the application passes) do.
  *
  * ```
  * val client = CoapClient(KtorUdpTransport.bind(), scope)
@@ -402,18 +406,45 @@ public class CoapClient private constructor(
      * `IllegalArgumentException` and the caller's cancellation pass unchanged.
      *
      * Nothing is looked up on a closed endpoint, where the call fails like [CoapEndpoint.closeCause] at once, nor
-     * for a `coaps` URI: without DTLS (RFC 7252 §9.1) its request would go out in plaintext, against RFC 7252
-     * §6.2, so it fails closed with [CoapException.Reason.TRANSPORT_UNAVAILABLE].
+     * for a URI whose scheme needs channel security the endpoint does not run, since its request would go out in
+     * plaintext; such a call fails closed with [CoapException.Reason.TRANSPORT_UNAVAILABLE]. That is every `coaps`
+     * URI: without DTLS (RFC 7252 §9.1) it would break RFC 7252 §6.2. A `coaps+tcp` or `coaps+ws` URI needs TLS
+     * (RFC 8323 §9), and goes ahead only when a connector or listener of the endpoint serves its scheme, which is
+     * the transport's word that it runs TLS; and the resolver must then map it to a TLS peer, or the call fails
+     * the same way before anything is sent.
      */
     private suspend fun resolve(uri: CoapUri): Endpoint {
         endpoint.closeCause?.let { throw endpoint.closedError(it) }
-        if (uri.scheme.security == ChannelSecurityKind.DTLS) {
-            throw CoapException(
+        when (uri.scheme.security) {
+            ChannelSecurityKind.DTLS -> throw CoapException(
                 "${uri.scheme.scheme} needs DTLS (RFC 7252 §9.1), which this endpoint does not have; nothing was sent to ${uri.host}",
                 CoapException.Reason.TRANSPORT_UNAVAILABLE,
             )
+            ChannelSecurityKind.TLS -> if (!endpoint.servesConnections(uri.scheme)) {
+                throw CoapException(
+                    "${uri.scheme.scheme} needs TLS (RFC 8323 §9), which no connector or listener of this endpoint runs; " +
+                        "nothing was sent to ${uri.host}",
+                    CoapException.Reason.TRANSPORT_UNAVAILABLE,
+                )
+            }
+            ChannelSecurityKind.NONE -> Unit
         }
-        return resolvePeer(uri)
+        val peer = resolvePeer(uri)
+        if (uri.scheme.security == ChannelSecurityKind.TLS && !peer.usesTls()) {
+            throw CoapException(
+                "The resolver mapped the ${uri.scheme.scheme} URI of ${uri.host} to $peer, which is not reached over TLS " +
+                    "(RFC 8323 §9); nothing was sent",
+                CoapException.Reason.TRANSPORT_UNAVAILABLE,
+            )
+        }
+        return peer
+    }
+
+    /** Whether [this] peer is reached over TLS: `coaps+tcp` or `coaps+ws`. */
+    private fun Endpoint.usesTls(): Boolean = when (this) {
+        is Endpoint.Tcp -> usesTls
+        is Endpoint.WebSocket -> usesTls
+        is Endpoint.Udp, is Endpoint.Secure, is Endpoint.Opaque -> false
     }
 
     /** The request message without token and Message ID: URI options (RFC 7252 §6.4), options, body. */

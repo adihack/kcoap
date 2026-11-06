@@ -14,6 +14,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [Installation](../README.md#installation) | The `dev.kcoap` coordinates and how to use a local snapshot until the first release |
 | [Quick start](../README.md#quick-start) | An OSCORE server and client, then EDHOC with the combined request, in a few lines each |
 | [Platforms](../README.md#platforms) | Which targets build which modules, and what each platform's cryptography offers |
+| [Platform details](platforms.md) | What differs per runtime; so far the TLS each one has for `coaps+tcp` and `coaps+ws`, client and server |
 
 ## Guides
 
@@ -43,6 +44,8 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [ADR 0006](adr/0006-q-block.md) | Q-Block as sans-IO state machines, off by default, with kcoap's token, retry and lifetime policies |
 | [ADR 0007](adr/0007-build-governance.md) | The build guards the architecture: common-only cores, ABI dumps, opt-in markers |
 | [ADR 0008](adr/0008-fail-closed-message-security.md) | Fail-closed message security: access policies on the server, only verified responses acted on by the client |
+| [ADR 0009](adr/0009-browser-topology-interop.md) | The browser topology is cross-tested through libcoap's own forward-proxy, with the device on the default port |
+| [ADR 0010](adr/0010-server-side-tls.md) | Server-side TLS: termination at a reverse proxy now, a JVM SSLEngine listener later |
 
 ## Protocol compliance and interop
 
@@ -65,7 +68,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [kcoap-cbor](../kcoap-cbor/README.md) | CBOR and CBOR sequences |
 | [kcoap-cose](../kcoap-cose/README.md) | The COSE structures and key formats OSCORE and EDHOC need |
 | [kcoap-transport](../kcoap-transport/README.md) | The seam between protocol code and the network: transports, endpoints, schemes |
-| [kcoap-transport-ktor](../kcoap-transport-ktor/README.md) | UDP and TCP transports on ktor-network |
+| [kcoap-transport-ktor](../kcoap-transport-ktor/README.md) | UDP and TCP transports on ktor-network, and the `coaps+tcp` TLS client on the JVM |
 | [kcoap-transport-ktor-websocket](../kcoap-transport-ktor-websocket/README.md) | The WebSocket client transport, browsers included |
 | [kcoap-transport-ktor-websocket-server](../kcoap-transport-ktor-websocket-server/README.md) | The WebSocket server transport, standalone or mounted in a ktor application |
 | [kcoap-testkit](../kcoap-testkit/README.md) | The in-memory network and connections for tests of kcoap and of applications |
