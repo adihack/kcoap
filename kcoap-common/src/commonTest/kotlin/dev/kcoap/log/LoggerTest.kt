@@ -30,13 +30,15 @@ class LoggerTest {
     fun resetGlobal() = KcoapLogging.reset()
 
     @Test
-    fun defaultThresholdIsInfo() {
+    fun defaultThresholdIsWarn() {
         val log = factory().logger("coap")
-        log.debug { "hidden" }
-        log.info { "shown" }
+        log.info { "hidden" }
+        log.warn { "shown" }
         assertEquals(listOf("shown"), records.map { it.message })
-        assertEquals(LogLevel.INFO, records.single().level)
+        assertEquals(LogLevel.WARN, records.single().level)
         assertEquals(epoch, records.single().timestamp)
+        assertEquals(LogLevel.WARN, LogConfig.Default.level)
+        assertTrue(LogConfig.Default.sink is ConsoleSink, "the default still prints, so failures are not lost")
     }
 
     @Test
@@ -86,7 +88,7 @@ class LoggerTest {
 
     @Test
     fun withAddsFieldsAndChildExtendsTheTag() {
-        val log = factory().logger("coap").with("peer" to "192.0.2.1:5683", "mid" to 7)
+        val log = factory { level = LogLevel.INFO }.logger("coap").with("peer" to "192.0.2.1:5683", "mid" to 7)
         log.child("exchange").info { "Response 2.05" }
         val record = records.single()
         assertEquals("coap.exchange", record.tag)

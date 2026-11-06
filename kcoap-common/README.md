@@ -25,7 +25,7 @@ Logcat or OSLog:
 
 ```kotlin
 KcoapLogging.configure {
-    level = LogLevel.INFO
+    level = LogLevel.INFO                    // lifecycle too; the default is WARN
     level(LogTags.OSCORE, LogLevel.DEBUG)
     sink = ConsoleSink()
 }

@@ -35,7 +35,7 @@ public class LogConfig private constructor(
     public fun toBuilder(): Builder = Builder(this)
 
     public class Builder internal constructor(base: LogConfig?) {
-        public var level: LogLevel = base?.level ?: LogLevel.INFO
+        public var level: LogLevel = base?.level ?: LogLevel.WARN
         public var sink: LogSink = base?.sink ?: ConsoleSink()
         public var payloadDumps: Boolean = base?.payloadDumps ?: false
         public var clock: Clock = base?.clock ?: Clock.System
@@ -53,7 +53,11 @@ public class LogConfig private constructor(
     }
 
     public companion object {
-        /** INFO and above, printed to the console. */
+        /**
+         * WARN and above, printed to the console: what an operator should act on and failures the library could not
+         * handle, but no lifecycle or protocol detail, so an app that never configures logging writes nothing to its
+         * standard output while all is well. Lower the [level] for more.
+         */
         public val Default: LogConfig = Builder().build()
 
         public fun build(block: Builder.() -> Unit): LogConfig = Builder().apply(block).build()
