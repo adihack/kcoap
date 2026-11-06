@@ -42,6 +42,18 @@ class CoapEndpointConfigTest {
         maxDeduplicationEntries = 10
         maxConcurrentRequests = 2
         maxExchangesPerPeer = 3
+        maxDeduplicationEntriesPerPeer = 4
+        maxExchanges = 5
+        maxReservedMessageIds = 6
+        maxReservedMessageIdsPerPeer = 7
+    }
+
+    /** The bounds the deprecated constructor does not take. */
+    private fun assertNewerBoundsSet(config: CoapEndpointConfig) {
+        assertEquals(4, config.maxDeduplicationEntriesPerPeer)
+        assertEquals(5, config.maxExchanges)
+        assertEquals(6, config.maxReservedMessageIds)
+        assertEquals(7, config.maxReservedMessageIdsPerPeer)
     }
 
     private fun assertEverythingSet(config: CoapEndpointConfig) {
@@ -61,7 +73,9 @@ class CoapEndpointConfigTest {
 
     @Test
     fun theDslSetsEveryOption() {
-        assertEverythingSet(CoapEndpointConfig { setEverything() })
+        val config = CoapEndpointConfig { setEverything() }
+        assertEverythingSet(config)
+        assertNewerBoundsSet(config)
     }
 
     @Test
@@ -69,6 +83,7 @@ class CoapEndpointConfigTest {
         val builder = CoapEndpointConfig.Builder()
         builder.setEverything()
         assertEverythingSet(builder.build())
+        assertNewerBoundsSet(builder.build())
     }
 
     @Test
@@ -85,12 +100,17 @@ class CoapEndpointConfigTest {
         assertEquals(CoapEndpointConfig.DEFAULT_MAX_DEDUPLICATION_ENTRIES, config.maxDeduplicationEntries)
         assertEquals(CoapEndpointConfig.DEFAULT_MAX_EXCHANGES_PER_PEER, config.maxExchangesPerPeer)
         assertEquals(CoapEndpointConfig.DEFAULT_MAX_CONCURRENT_REQUESTS, defaults.maxConcurrentRequests)
+        assertEquals(10_000, defaults.maxDeduplicationEntriesPerPeer)
+        assertEquals(16_384, defaults.maxExchanges)
+        assertEquals(262_144, defaults.maxReservedMessageIds)
+        assertEquals(65_536, defaults.maxReservedMessageIdsPerPeer, "the whole Message ID space")
     }
 
     @Test
     fun toBuilderStartsFromTheConfiguration() {
         val original = CoapEndpointConfig { setEverything() }
         assertEverythingSet(original.toBuilder().build())
+        assertNewerBoundsSet(original.toBuilder().build())
         val changed = original.toBuilder().apply { maxExchangesPerPeer = 99 }.build()
         assertEquals(99, changed.maxExchangesPerPeer)
         assertEquals(3, original.maxExchangesPerPeer, "the original stays as it was")
@@ -117,6 +137,11 @@ class CoapEndpointConfigTest {
         val error = assertFailsWith<IllegalArgumentException> { negativeDelay.build() }
         assertEquals("Separate response delay must not be negative: -1ms", error.message)
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntries = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntriesPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchanges = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIds = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIdsPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIdsPerPeer = 65_537 } }
         assertNull(CoapEndpointConfig { separateResponseDelay = null }.separateResponseDelay, "null turns it off")
     }
 

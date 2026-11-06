@@ -1,6 +1,7 @@
 package dev.kcoap.coap.stack
 
 import dev.kcoap.coap.CoapMessageType
+import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 
@@ -10,16 +11,40 @@ import kotlin.time.Duration
  * A duplicate Confirmable message is answered with the same ACK or RST as the original; a duplicate
  * Non-confirmable message is ignored. Entries live for EXCHANGE_LIFETIME (Confirmable) or NON_LIFETIME
  * (Non-confirmable) after arrival. Each kind has its own queue, ordered by arrival and so by expiry.
- * At most [maxEntries] are kept; [hasRoom] tells whether a new message may add one.
+ *
+ * **Bounds** (RFC 7252 §11.3). Any new message from any source address adds an entry, so at most [maxEntries]
+ * are kept in all and [maxEntriesPerPeer] for one peer. [admit] finds a new message its place within what §4.5
+ * allows:
+ * - It forgets the oldest *repeatable* entry, of the same peer for that peer's bound, of any peer for the
+ *   total: one whose message the endpoint may process again, because doing so ends the same way. That is a
+ *   request with an idempotent method (GET, PUT and DELETE, RFC 7252 §5.1; FETCH and iPATCH, RFC 8132 §2, §3)
+ *   once it no longer waits for a piggybacked answer, any message answered with a Reset, and a request the
+ *   server answered before anything acted on it ([markRepeatable]). §4.5 lets deduplication be relaxed for
+ *   such requests, so a later duplicate of a forgotten one is processed as a new message.
+ * - When nothing repeatable is left, it refuses the new message, which is then dropped without state or
+ *   answer: every remembered message must still be processed at most once.
+ * - A quarter of [maxEntries] is kept for repeatable entries: a message whose entry must be kept (a
+ *   non-idempotent request or a response) is refused once three quarters of [maxEntries] hold entries that
+ *   must be kept, so a flood of non-idempotent requests cannot crowd out idempotent ones.
+ *
+ * All operations take constant time, apart from [forget], which walks every entry once.
  */
 internal class DeduplicationCache(
     private val exchangeLifetime: Duration,
     private val nonLifetime: Duration,
     private val maxEntries: Int = Int.MAX_VALUE,
+    private val maxEntriesPerPeer: Int = Int.MAX_VALUE,
 ) {
     private val entries = HashMap<MessageKey, InboundEntry>()
-    private val confirmableExpiries = ArrayDeque<InboundEntry>()
-    private val nonConfirmableExpiries = ArrayDeque<InboundEntry>()
+    private val confirmableExpiries = LinkedChain<InboundEntry>()
+    private val nonConfirmableExpiries = LinkedChain<InboundEntry>()
+
+    /** The repeatable entries of every peer, in the order they became repeatable. */
+    private val repeatable = LinkedChain<InboundEntry>()
+    private val peers = HashMap<Endpoint, PeerEntries>()
+
+    /** The most entries that must be kept: [maxEntries] less the quarter kept for repeatable ones. */
+    private val maxKept = maxEntries - maxEntries / 4
 
     /**
      * Confirmable requests delivered upwards and not answered yet; they get an Empty ACK at
@@ -28,42 +53,69 @@ internal class DeduplicationCache(
      */
     val pending: MutableSet<InboundEntry> = LinkedHashSet()
 
-    operator fun get(key: MessageKey): InboundEntry? = entries[key]
-
-    fun add(key: MessageKey, type: CoapMessageType, now: Duration): InboundEntry {
-        val confirmable = type == CoapMessageType.CON
-        val entry = InboundEntry(key, type, now + if (confirmable) exchangeLifetime else nonLifetime)
-        entries[key] = entry
-        (if (confirmable) confirmableExpiries else nonConfirmableExpiries).addLast(entry)
-        return entry
+    /** One peer's share: how many entries it has, and which of them are repeatable, oldest first. */
+    private class PeerEntries {
+        var count = 0
+        val repeatable = LinkedChain<InboundEntry>()
     }
 
-    /** Whether a new entry fits, after dropping those expired by [now]. */
-    fun hasRoom(now: Duration): Boolean {
-        if (entries.size < maxEntries) return true
+    operator fun get(key: MessageKey): InboundEntry? = entries[key]
+
+    /**
+     * Makes room for a new message from [peer], after dropping the entries expired by [now], as the class
+     * describes; [mustBeKept] tells whether the message's entry will have to be kept, that is, whether it will
+     * not be repeatable. Returns null when the message may be [add]ed, or the bound that refuses it.
+     */
+    fun admit(peer: Endpoint, now: Duration, mustBeKept: Boolean): Limit? {
         prune(now)
-        return entries.size < maxEntries
+        if (mustBeKept && entries.size - repeatable.size >= maxKept) return Limit.DEDUPLICATION_ENTRIES
+        val own = peers[peer]
+        if (own != null && own.count >= maxEntriesPerPeer) {
+            remove(own.repeatable.first() ?: return Limit.DEDUPLICATION_ENTRIES_PER_PEER)
+        }
+        if (entries.size >= maxEntries) remove(repeatable.first() ?: return Limit.DEDUPLICATION_ENTRIES)
+        return null
     }
 
     /**
-     * Forgets the message with [key], as if it had never arrived, so the next one with its Message ID is new. Its
-     * expiry goes too, so the expiry queues hold no more than [maxEntries] however often messages are forgotten;
-     * a forgotten message is a recent one, near the end of its queue.
+     * Remembers the message with [key] that arrived at [now] as [type]. A Non-confirmable request with an
+     * [idempotent] method is repeatable at once; a Confirmable one once it is answered or acknowledged.
+     */
+    fun add(key: MessageKey, type: CoapMessageType, now: Duration, idempotent: Boolean = false): InboundEntry {
+        val confirmable = type == CoapMessageType.CON
+        val entry = InboundEntry(key, type, now + if (confirmable) exchangeLifetime else nonLifetime, idempotent)
+        entries.remove(key)?.let(::unlink)
+        entries[key] = entry
+        entry.expiryNode = (if (confirmable) confirmableExpiries else nonConfirmableExpiries).addLast(entry)
+        peers.getOrPut(key.peer) { PeerEntries() }.count++
+        if (!confirmable && idempotent) markRepeatable(entry)
+        return entry
+    }
+
+    /**
+     * [entry] may now be forgotten for room, since processing its message again ends the same way (RFC 7252
+     * §4.5): it was answered with a Reset, an idempotent request was answered or acknowledged, or the server
+     * answered the request before anything acted on it. Idempotent.
+     */
+    fun markRepeatable(entry: InboundEntry) {
+        if (entry.repeatableNode != null || entries[entry.key] !== entry) return
+        entry.repeatableNode = repeatable.addLast(entry)
+        entry.peerRepeatableNode = peers[entry.key.peer]?.repeatable?.addLast(entry)
+    }
+
+    /**
+     * Forgets the message with [key], as if it had never arrived, so the next one with its Message ID is new.
      */
     fun remove(key: MessageKey) {
-        val entry = entries.remove(key) ?: return
-        pending.remove(entry)
-        val queue = if (entry.type == CoapMessageType.CON) confirmableExpiries else nonConfirmableExpiries
-        val index = queue.lastIndexOf(entry)
-        if (index >= 0) queue.removeAt(index)
+        entries[key]?.let(::remove)
     }
 
+    /** Forgets every message of [peer], whose endpoint is never seen again (an ended DTLS session). */
     fun forget(peer: Endpoint) {
-        entries.values.removeAll { it.key.peer == peer }
-        pending.removeAll { it.key.peer == peer }
+        entries.values.filter { it.key.peer == peer }.forEach(::remove)
     }
 
-    fun nextExpiry(): Duration? = listOfNotNull(confirmableExpiries.firstOrNull(), nonConfirmableExpiries.firstOrNull())
+    fun nextExpiry(): Duration? = listOfNotNull(confirmableExpiries.first(), nonConfirmableExpiries.first())
         .minOfOrNull { it.expiresAt }
 
     fun prune(now: Duration) {
@@ -73,19 +125,50 @@ internal class DeduplicationCache(
 
     val size: Int get() = entries.size
 
-    private fun prune(queue: ArrayDeque<InboundEntry>, now: Duration) {
+    /** Entries of [peer], for tests. */
+    fun sizeOf(peer: Endpoint): Int = peers[peer]?.count ?: 0
+
+    /** Repeatable entries, for tests. */
+    val repeatableCount: Int get() = repeatable.size
+
+    /** Peers with entries, for tests: the per-peer bookkeeping goes with their last entry. */
+    val peerCount: Int get() = peers.size
+
+    private fun prune(queue: LinkedChain<InboundEntry>, now: Duration) {
         while (true) {
-            val entry = queue.firstOrNull() ?: return
+            val entry = queue.first() ?: return
             if (entry.expiresAt > now) return
-            queue.removeFirst()
-            if (entries[entry.key] === entry) entries.remove(entry.key)
-            pending.remove(entry)
+            remove(entry)
         }
+    }
+
+    private fun remove(entry: InboundEntry) {
+        if (entries[entry.key] === entry) entries.remove(entry.key)
+        unlink(entry)
+    }
+
+    /** Takes [entry] out of every queue and its peer's count. */
+    private fun unlink(entry: InboundEntry) {
+        entry.expiryNode?.let { (if (entry.type == CoapMessageType.CON) confirmableExpiries else nonConfirmableExpiries).remove(it) }
+        entry.expiryNode = null
+        entry.repeatableNode?.let(repeatable::remove)
+        entry.repeatableNode = null
+        val share = peers[entry.key.peer]
+        entry.peerRepeatableNode?.let { node -> share?.repeatable?.remove(node) }
+        entry.peerRepeatableNode = null
+        pending.remove(entry)
+        if (share != null && --share.count <= 0) peers.remove(entry.key.peer)
     }
 }
 
 /** A received Confirmable or Non-confirmable message, remembered for deduplication. */
-internal class InboundEntry(val key: MessageKey, val type: CoapMessageType, val expiresAt: Duration) {
+internal class InboundEntry(
+    val key: MessageKey,
+    val type: CoapMessageType,
+    val expiresAt: Duration,
+    /** Whether the message is a request with an idempotent method (RFC 7252 §5.1, RFC 8132 §2, §3). */
+    val isIdempotent: Boolean = false,
+) {
     var state: State = State.PENDING
 
     /** The ACK or RST sent for a Confirmable message, sent again for every duplicate. */
@@ -93,6 +176,16 @@ internal class InboundEntry(val key: MessageKey, val type: CoapMessageType, val 
 
     /** When a still unanswered Confirmable request gets an Empty ACK, switching to a separate response. */
     var ackDeadline: Duration? = null
+
+    /** Its place in its expiry queue; null once it left the cache. */
+    internal var expiryNode: LinkedChain.Node<InboundEntry>? = null
+
+    /** Its place among the repeatable entries of all peers, and of its peer; null while it must be kept. */
+    internal var repeatableNode: LinkedChain.Node<InboundEntry>? = null
+    internal var peerRepeatableNode: LinkedChain.Node<InboundEntry>? = null
+
+    /** Whether the cache may forget it for room ([DeduplicationCache.markRepeatable]). */
+    val isRepeatable: Boolean get() = repeatableNode != null
 
     enum class State {
         /** Delivered upwards; nothing sent yet. */

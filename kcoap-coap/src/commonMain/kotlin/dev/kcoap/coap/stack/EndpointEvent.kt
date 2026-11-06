@@ -113,10 +113,20 @@ public sealed interface EndpointEvent {
      * configuration property it names documents both.
      */
     public class LimitReached(override val peer: Endpoint, public val limit: Limit) : EndpointEvent {
-        /** The bounds an endpoint keeps. */
+        /** The bounds an endpoint keeps. New ones may be added before 1.0; use an `else` branch. */
         public enum class Limit {
-            /** [CoapEndpointConfig.maxDeduplicationEntries]: a new message was dropped. */
+            /**
+             * [CoapEndpointConfig.maxDeduplicationEntries]: a new message from [peer] was dropped, because every
+             * message remembered must still be processed at most once (RFC 7252 §4.5), or because it would have
+             * had to be remembered too while three quarters of the bound hold such messages.
+             */
             DEDUPLICATION_ENTRIES,
+
+            /**
+             * [CoapEndpointConfig.maxDeduplicationEntriesPerPeer]: a new message from [peer] was dropped, because
+             * every message remembered from [peer] must still be processed at most once (RFC 7252 §4.5).
+             */
+            DEDUPLICATION_ENTRIES_PER_PEER,
 
             /** [CoapEndpointConfig.maxConcurrentRequests]: a request was answered with 5.03, or dropped. */
             CONCURRENT_REQUESTS,
@@ -126,6 +136,25 @@ public sealed interface EndpointEvent {
              * notification was not sent.
              */
             EXCHANGES_PER_PEER,
+
+            /**
+             * [CoapEndpointConfig.maxExchanges]: a request to [peer] failed, or a separate response or
+             * notification to [peer] was not sent; or a Confirmable message to [peer] that a retransmission had
+             * not got acknowledged either was given up early, to make room for a new one.
+             */
+            EXCHANGES,
+
+            /**
+             * [CoapEndpointConfig.maxReservedMessageIds]: a message to [peer] that needed a new Message ID, a
+             * request, a separate response or a notification, was not sent (RFC 7252 §4.4).
+             */
+            MESSAGE_IDS,
+
+            /**
+             * [CoapEndpointConfig.maxReservedMessageIdsPerPeer]: a message to [peer] that needed a new Message
+             * ID was not sent (RFC 7252 §4.4).
+             */
+            MESSAGE_IDS_PER_PEER,
 
             /** `CoapServerConfig.maxObservers`: a registration was served without Observe. */
             OBSERVERS,

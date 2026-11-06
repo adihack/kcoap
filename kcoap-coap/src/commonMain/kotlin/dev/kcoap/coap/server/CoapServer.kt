@@ -13,6 +13,7 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
 import dev.kcoap.coap.stack.InboundRequest
@@ -201,11 +202,14 @@ public class CoapServer private constructor(
                 throw e
             } catch (e: MessageSecurityException) {
                 log.warn { "Rejected a protected request from ${inbound.peer}: ${e.message}" }
+                // Nothing acted on it, so a duplicate may be processed again (RFC 7252 §4.5).
+                inbound.isRepeatable = true
                 answerUnprotected(inbound, securityError(e))
                 return
             } catch (e: Exception) {
                 // An application callback behind the security layer failed, such as a context repository.
                 log.error(e) { "The security layer failed on a request from ${inbound.peer}" }
+                inbound.isRepeatable = true
                 answerUnprotected(inbound, internalError())
                 return
             }
@@ -272,7 +276,7 @@ public class CoapServer private constructor(
         val resource = target.resource
         // ADR 0008: the policy decides before any work for the request, so a refused one buffers no Block1 or
         // Q-Block1 body, touches no observation, gets no held-back response and no burst, and runs no handler.
-        refusal(inbound, request, unprotected, target)?.let { return Reply.Single(it) }
+        refusal(inbound, request, unprotected, target)?.let { return inbound.refusedWith(it) }
         // RFC 9177 §4.1: Q-Block1 and Q-Block2 count as recognized only where the Q-Block layer takes them.
         val qBlockAccepted = qBlock.accepts(inbound, unprotected)
         val recognized = OptionCheck.SERVER_RECOGNIZED + (if (qBlockAccepted) OptionCheck.Q_BLOCK_RECOGNIZED else emptySet()) +
@@ -285,18 +289,18 @@ public class CoapServer private constructor(
                 inbound.reject("unrecognized critical options $numbers")
                 return null
             }
-            return Reply.Single(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
+            return inbound.refusedWith(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
         }
         if (options.proxyUri != null || options.proxyScheme != null) {
-            return Reply.Single(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
+            return inbound.refusedWith(CoapResponse.error(CoapCode.PROXYING_NOT_SUPPORTED, "This server is not a forward-proxy"))
         }
-        if (resource == null) return Reply.Single(CoapResponse(CoapCode.NOT_FOUND))
+        if (resource == null) return inbound.refusedWith(CoapResponse(CoapCode.NOT_FOUND))
         val block1 = options.block1
         val block2 = options.block2
         val limits = inbound.link.limits
         if (!limits.isReliable && (block1?.isBert == true || block2?.isBert == true)) {
             // RFC 7959 §2.2: SZX 7 is reserved and MUST lead to 4.00; it is BERT on RFC 8323 transports only.
-            return Reply.Single(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
+            return inbound.refusedWith(CoapResponse.error(CoapCode.BAD_REQUEST, "Block size exponent 7 is reserved"))
         }
         val now = endpoint.now()
         val checksAddress = checksAddress(inbound, unprotected)
@@ -306,7 +310,7 @@ public class CoapServer private constructor(
         if (block1 == null && options.qBlock1 == null && request.payloadSize > config.maxRequestBodySize) {
             // RFC 7959 §2.9.3: a body of one message beyond the bound, Q-Block2 or not; Size1 says what fits.
             val limit = config.maxRequestBodySize.toLong()
-            return Reply.Single(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
+            return inbound.refusedWith(CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE).withOptions { size1(limit) })
         }
         if (checksAddress && echo != null && addressVerification.verify(peer, echo, now)) {
             // RFC 9175 §2.4 item 3: the repeat of a request whose response was held back, which must not run twice.
@@ -321,7 +325,7 @@ public class CoapServer private constructor(
             // Observe 0 on every block, and each is challenged until one comes back with the Echo value.
             val registers = options.observe == OBSERVE_REGISTER && (request.code == CoapCode.GET || request.code == CoapCode.FETCH) &&
                 (resource as? ObservableResource)?.isObservable == true
-            if (registers && checksAddress && !addressVerification.verify(peer, echo, now)) return challenge(peer, now)
+            if (registers && checksAddress && !addressVerification.verify(peer, echo, now)) return challenge(peer, now).also { inbound.isRepeatable = true }
             return qBlock.answer(QBlockRequest(inbound, request, unprotected), resource, key, limits)
         }
 
@@ -359,7 +363,7 @@ public class CoapServer private constructor(
             !addressVerification.verify(peer, echo, now)
         ) {
             // RFC 7641 §7: one registration has notifications sent to its address for as long as it lasts.
-            return challenge(peer, now)
+            return challenge(peer, now).also { inbound.isRepeatable = true }
         }
 
         val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
@@ -439,6 +443,15 @@ public class CoapServer private constructor(
         // RFC 7641 §4.1: only a registered observer gets a response with Observe.
         val plain = if (CoapOptions.OBSERVE.number in response.options) response.withOptions { remove(CoapOptions.OBSERVE.number) } else response
         return Reply.Single(plain)
+    }
+
+    /**
+     * [response], for a request answered before anything acted on it: a duplicate may be processed again, so its
+     * deduplication entry may be forgotten for room (RFC 7252 §4.5).
+     */
+    private fun InboundRequest.refusedWith(response: CoapResponse): Reply.Single {
+        isRepeatable = true
+        return Reply.Single(response)
     }
 
     // ---------------------------------------------------------------- access (ADR 0008)
@@ -578,10 +591,16 @@ public class CoapServer private constructor(
             throw e
         } catch (e: Exception) {
             // Protecting or sending failed, for example the protected response does not fit: no observer
-            // stays registered for a registration that was never answered, and a plain 5.00 is tried.
-            log.error(e) { "Could not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}" }
+            // stays registered for a registration that was never answered, and a plain 5.00 is tried, unless a
+            // bound of the endpoint refused the response, which the 5.00 would need as well (RFC 7252 §11.3).
+            val bounded = e is CoapException && e.reason == CoapException.Reason.IDENTIFIERS_EXHAUSTED
+            if (bounded) {
+                log.debug { "Did not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}: ${e.message}" }
+            } else {
+                log.error(e) { "Could not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}" }
+            }
             observation?.let { observations.remove(it, ObserverRemoved.Reason.FAILED, "registration: ${e.message}") }
-            answerUnprotected(inbound, internalError())
+            if (!bounded) answerUnprotected(inbound, internalError())
             return
         }
         // Piggybacked, or written on a connection, the registration response has no delivery of its own.

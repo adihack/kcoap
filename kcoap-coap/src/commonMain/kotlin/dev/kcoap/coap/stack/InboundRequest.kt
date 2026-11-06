@@ -33,6 +33,15 @@ internal class InboundRequest(
     var isAnswered: Boolean = false
         private set
 
+    /**
+     * Set when the request is answered before anything acted on it: message security rejected it, the server
+     * refused it (access policy, unknown path or method, unrecognized critical option, overload), so processing
+     * it again ends the same way and its deduplication entry may be forgotten for room (RFC 7252 §4.5). Read on
+     * a datagram link when the answer goes out.
+     */
+    @Volatile
+    var isRepeatable: Boolean = false
+
     /** What channel security authenticated: TLS on the connection, or the DTLS session of the endpoint. */
     val peerIdentity: PeerIdentity get() = link.peerIdentity
 

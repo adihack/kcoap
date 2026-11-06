@@ -1,5 +1,6 @@
 package dev.kcoap.coap.stack
 
+import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.codec.CoapFormatException
@@ -35,10 +36,16 @@ import kotlin.time.Duration.Companion.seconds
  *
  * @param separateResponseDelay how long a Confirmable request may stay unanswered before it gets an Empty
  *   ACK; null leaves that to the upper layer.
- * @param maxDeduplicationEntries the most received messages remembered; new ones beyond it are dropped
- *   without state or answer (RFC 7252 §11.3).
+ * @param maxDeduplicationEntries the most received messages remembered, and [maxDeduplicationEntriesPerPeer]
+ *   from one peer; beyond either a new message takes the place of the oldest one that may be processed again,
+ *   or is dropped without state or answer ([DeduplicationCache], RFC 7252 §4.5, §11.3).
  * @param maxPerPeer the most slot-holding messages and body leases outstanding or queued towards one peer;
  *   [send] and [lease] refuse more.
+ * @param maxTransmissions the most messages kept in [outbound] in all: beyond it [send] forgets the oldest
+ *   Non-confirmable message kept only to match a Reset, else gives up the oldest Confirmable one a retransmission
+ *   did not get acknowledged either, else refuses.
+ * @param maxReservedMessageIds the most Message IDs reserved in all, and [maxReservedMessageIdsPerPeer] towards
+ *   one peer; [allocateMessageId] refuses more ([MessageIdAllocator], RFC 7252 §4.4).
  */
 internal class UdpMessaging(
     private val parameters: TransmissionParameters,
@@ -49,12 +56,21 @@ internal class UdpMessaging(
     loggerFactory: LoggerFactory = LoggerFactory.Global,
     maxDeduplicationEntries: Int = Int.MAX_VALUE,
     private val maxPerPeer: Int = Int.MAX_VALUE,
+    maxDeduplicationEntriesPerPeer: Int = Int.MAX_VALUE,
+    private val maxTransmissions: Int = Int.MAX_VALUE,
+    maxReservedMessageIds: Int = Int.MAX_VALUE,
+    maxReservedMessageIdsPerPeer: Int = MessageIdAllocator.MESSAGE_ID_SPACE,
 ) {
     private val log: Logger = loggerFactory.logger(LogTags.COAP_MESSAGE)
     private val timing = QBlockTiming(parameters)
     private val effects = ArrayList<MessagingEffect>()
-    private val messageIds = MessageIdAllocator(random.nextInt(0x10000))
-    private val received = DeduplicationCache(parameters.exchangeLifetime, parameters.nonLifetime, maxDeduplicationEntries)
+    private val messageIds = MessageIdAllocator(random.nextInt(0x10000), maxReservedMessageIds, maxReservedMessageIdsPerPeer)
+    private val received = DeduplicationCache(
+        parameters.exchangeLifetime,
+        parameters.nonLifetime,
+        maxDeduplicationEntries,
+        maxDeduplicationEntriesPerPeer,
+    )
 
     /** Our Confirmable messages until they end, and Non-confirmable ones until NON_LIFETIME, by Message ID. */
     private val outbound = HashMap<MessageKey, Transmission>()
@@ -106,9 +122,20 @@ internal class UdpMessaging(
 
     // ---------------------------------------------------------------- sending
 
-    /** A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4). */
-    fun allocateMessageId(peer: Endpoint, now: Duration): Int =
-        messageIds.allocate(peer, now, now + parameters.exchangeLifetime).also { schedule(now + parameters.exchangeLifetime) }
+    /**
+     * A Message ID for a new message to [peer], reserved for EXCHANGE_LIFETIME (§4.4).
+     *
+     * @throws CoapException with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] beyond the bounds on reserved IDs,
+     *   reported as [EndpointEvent.LimitReached].
+     */
+    fun allocateMessageId(peer: Endpoint, now: Duration): Int {
+        messageIds.refusal(peer, now)?.let { limit ->
+            effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, limit))
+            debug(peer, -1) { "No new Message ID: $limit" }
+            throw CoapException("No Message ID free towards $peer ($limit)", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        }
+        return messageIds.allocate(peer, now, now + parameters.exchangeLifetime).also { schedule(now + parameters.exchangeLifetime) }
+    }
 
     /**
      * Sends a Confirmable or Non-confirmable [message] whose Message ID came from [allocateMessageId]. A
@@ -132,6 +159,7 @@ internal class UdpMessaging(
         val transmission = Transmission(peer, message, encodeForSending(peer, message), owner, slotHold)
         val existing = windows[peer]
         if (transmission.holdsSlot && existing.isFull()) throw beyondLimit(peer)
+        if (outbound.size >= maxTransmissions && !makeRoomForTransmission(now)) throw beyondLimit(peer, EndpointEvent.LimitReached.Limit.EXCHANGES)
         outbound[MessageKey(peer, message.messageId)] = transmission
         if (transmission.holdsSlot) {
             val window = existing ?: PeerWindow().also { windows[peer] = it }
@@ -251,13 +279,58 @@ internal class UdpMessaging(
     private fun PeerWindow?.isFull(): Boolean = this != null && outstanding + queue.size >= maxPerPeer
 
     /**
-     * RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue. Reports
-     * the limit and returns the refusal to throw.
+     * RFC 7252 §11.3: a peer that never acknowledges, such as a spoofed one, must not grow the queue, nor all
+     * peers together the messages kept. Reports the limit and returns the refusal to throw.
      */
-    private fun beyondLimit(peer: Endpoint): CoapException {
-        val limit = EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER
+    private fun beyondLimit(
+        peer: Endpoint,
+        limit: EndpointEvent.LimitReached.Limit = EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER,
+    ): CoapException {
         effects += MessagingEffect.Event(EndpointEvent.LimitReached(peer, limit))
-        return CoapException("$peer has $maxPerPeer messages in progress", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+        val count = if (limit == EndpointEvent.LimitReached.Limit.EXCHANGES) "$maxTransmissions messages in progress in all" else "$peer has $maxPerPeer messages in progress"
+        return CoapException("No room for a message to $peer: $count", CoapException.Reason.IDENTIFIERS_EXHAUSTED)
+    }
+
+    /**
+     * Makes room in [outbound] for one more message at [now], in what costs least: the oldest Non-confirmable
+     * message kept only so that a Reset can still match it is forgotten (a Reset for it is then ignored, which
+     * RFC 7252 §4.3 allows, since a sender need not act on one); else the oldest Confirmable message that is
+     * still unacknowledged after a retransmission is given up early, as if it had timed out, because a peer that
+     * answers acknowledges within ACK_TIMEOUT and one that does not, such as a spoofed source, only draws
+     * retransmissions (§11.3). Returns false when neither exists. Each looks at no more than [EVICTION_SCAN]
+     * candidates, so a full table costs bounded work per message.
+     */
+    private fun makeRoomForTransmission(now: Duration): Boolean {
+        pruneNonConfirmable(now)
+        if (outbound.size < maxTransmissions) return true
+        // Expiry entries of messages that left [outbound] are dropped on the way, so they never fill the window.
+        var index = 0
+        var scanned = 0
+        while (index < nonConfirmableExpiries.size && scanned++ < EVICTION_SCAN) {
+            val key = nonConfirmableExpiries[index].first
+            val transmission = outbound[key]
+            when {
+                transmission == null -> nonConfirmableExpiries.removeAt(index)
+                transmission.isConfirmable || transmission in timed || transmission.state != Transmission.State.IN_FLIGHT -> index++
+                else -> {
+                    debug(transmission.peer, key.messageId) { "Forgot a Non-confirmable message for room" }
+                    nonConfirmableExpiries.removeAt(index)
+                    retire(transmission)
+                    return true
+                }
+            }
+        }
+        scanned = 0
+        for (transmission in timed) {
+            if (++scanned > EVICTION_SCAN) break
+            if (!transmission.isConfirmable || transmission.retransmissions == 0) continue
+            debug(transmission.peer, transmission.message.messageId) { "Gave up an unacknowledged message for room" }
+            effects += MessagingEffect.Event(EndpointEvent.LimitReached(transmission.peer, EndpointEvent.LimitReached.Limit.EXCHANGES))
+            effects += MessagingEffect.Event(EndpointEvent.TransmissionTimedOut(transmission.peer, transmission.message.messageId))
+            finish(now, transmission, TransmissionOutcome.TimedOut)
+            return true
+        }
+        return false
     }
 
     private fun grant(now: Duration, lease: BodyLease) {
@@ -304,6 +377,8 @@ internal class UdpMessaging(
      * the ACK if the request is Confirmable and still unanswered (§5.2.1), otherwise as a separate
      * response (§5.2.2, §5.2.3) of [separateType] for a Confirmable request, or Non-confirmable for a
      * Non-confirmable one. Returns the transmission of a separate response, or null if piggybacked.
+     * [repeatable] says that nothing acted on the request, so the deduplication cache may forget it for room
+     * (§4.5); an idempotent request may be forgotten once answered anyway.
      */
     fun respond(
         now: Duration,
@@ -313,8 +388,10 @@ internal class UdpMessaging(
         response: CoapMessage,
         owner: TransmissionOwner? = null,
         separateType: CoapMessageType = CoapMessageType.CON,
+        repeatable: Boolean = false,
     ): Transmission? {
         val entry = received[MessageKey(from, requestMessageId)]
+        if (entry != null && repeatable) received.markRepeatable(entry)
         if (requestType == CoapMessageType.CON && entry != null && entry.state == InboundEntry.State.PENDING) {
             val ack = response.withHeader(CoapMessageType.ACK, requestMessageId)
             val bytes = encodeForSending(from, ack)
@@ -408,8 +485,12 @@ internal class UdpMessaging(
     private fun onConfirmable(now: Duration, from: Endpoint, message: CoapMessage) {
         val key = MessageKey(from, message.messageId)
         received[key]?.let { return onDuplicate(it) }
-        if (!received.hasRoom(now)) return dropForLimit(from, message)
-        val entry = received.add(key, CoapMessageType.CON, now)
+        // Pings and reserved codes are reset at once, and idempotent requests are answered, so their entries
+        // become repeatable; other requests and responses must be remembered for their whole lifetime.
+        val idempotent = message.isIdempotentRequest
+        val mustBeKept = !idempotent && (message.isRequest || message.isResponse)
+        received.admit(from, now, mustBeKept)?.let { return dropForLimit(from, message, it) }
+        val entry = received.add(key, CoapMessageType.CON, now, idempotent)
         schedule(entry.expiresAt)
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
@@ -436,8 +517,9 @@ internal class UdpMessaging(
             log.warn { "Dropped a Non-confirmable ${message.code} from $from" }
             return
         }
-        if (!received.hasRoom(now)) return dropForLimit(from, message)
-        schedule(received.add(key, CoapMessageType.NON, now).expiresAt)
+        val idempotent = message.isIdempotentRequest
+        received.admit(from, now, mustBeKept = !idempotent)?.let { return dropForLimit(from, message, it) }
+        schedule(received.add(key, CoapMessageType.NON, now, idempotent).expiresAt)
         effects += if (message.isRequest) {
             MessagingEffect.DeliverRequest(from, message)
         } else {
@@ -446,12 +528,13 @@ internal class UdpMessaging(
     }
 
     /**
-     * RFC 7252 §11.3: with the deduplication cache full, a new message is dropped without state and without
-     * an answer, which might go to a spoofed source; its sender retransmits a Confirmable one.
+     * RFC 7252 §11.3: with the deduplication cache full of messages that must still be processed at most once,
+     * a new message is dropped without state and without an answer, which might go to a spoofed source; its
+     * sender retransmits a Confirmable one.
      */
-    private fun dropForLimit(from: Endpoint, message: CoapMessage) {
-        debug(from, message.messageId) { "Dropped a new ${message.type}: the deduplication cache is full" }
-        effects += MessagingEffect.Event(EndpointEvent.LimitReached(from, EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES))
+    private fun dropForLimit(from: Endpoint, message: CoapMessage, limit: EndpointEvent.LimitReached.Limit) {
+        debug(from, message.messageId) { "Dropped a new ${message.type}: the deduplication cache is full ($limit)" }
+        effects += MessagingEffect.Event(EndpointEvent.LimitReached(from, limit))
     }
 
     private fun onDuplicate(entry: InboundEntry) {
@@ -526,10 +609,18 @@ internal class UdpMessaging(
         transmission.deadline = now + transmission.timeout
         schedule(transmission.deadline)
         val replacement = transmission.replacement
-        if (replacement != null) {
+        // RFC 7641 §4.5.2 step 4 needs a new Message ID; without one free, the outstanding message goes again and
+        // the replacement waits for the next timeout.
+        val messageId = replacement?.let {
+            try {
+                allocateMessageId(peer, now)
+            } catch (e: CoapException) {
+                null
+            }
+        }
+        if (replacement != null && messageId != null) {
             // RFC 7641 §4.5.2 step 4: new Message ID, counter and timeout retained.
             transmission.replacement = null
-            val messageId = allocateMessageId(peer, now)
             val message = replacement.withHeader(CoapMessageType.CON, messageId)
             transmission.replaceWith(message, encodeForSending(peer, message))
             outbound[MessageKey(peer, messageId)] = transmission
@@ -617,6 +708,19 @@ internal class UdpMessaging(
     /** Diagnostics for tests: deduplication entries, reserved Message IDs, and timed transmissions. */
     internal val stateSizes: Triple<Int, Int, Int> get() = Triple(received.size, messageIds.reservedCount, timed.size)
 
+    /** Diagnostics for tests: the messages kept in [outbound], and the peers the deduplication cache keeps shares for. */
+    internal val outboundCount: Int get() = outbound.size
+    internal val deduplicationPeers: Int get() = received.peerCount
+    internal val repeatableEntries: Int get() = received.repeatableCount
+
+    /** Diagnostics for tests: how much the layer keeps, for the bounds of [CoapEndpointConfig]. */
+    internal class Sizes(val deduplicationEntries: Int, val deduplicationPeers: Int, val reservedMessageIds: Int, val transmissions: Int) {
+        override fun toString(): String =
+            "Sizes(deduplication=$deduplicationEntries of $deduplicationPeers peers, messageIds=$reservedMessageIds, transmissions=$transmissions)"
+    }
+
+    internal val sizes: Sizes get() = Sizes(received.size, received.peerCount, messageIds.reservedCount, outbound.size)
+
     /** Diagnostics for tests: body leases that hold a slot or wait for one. */
     internal val leaseCount: Int
         get() = leases.size + windows.values.sumOf { window -> window.queue.count { it is BodyLease } }
@@ -688,6 +792,8 @@ internal class UdpMessaging(
         entry.state = InboundEntry.State.ACKNOWLEDGED
         entry.reply = bytes
         received.pending.remove(entry)
+        // §4.5: a duplicate of an idempotent request may be processed again.
+        if (entry.isIdempotent) received.markRepeatable(entry)
         if (bytes != null) transmit(entry.key.peer, ack, bytes)
     }
 
@@ -699,12 +805,15 @@ internal class UdpMessaging(
         val bytes = encodeForSending(peer, reset)
         entry.answer(if (entry.type == CoapMessageType.CON) bytes else null)
         received.pending.remove(entry)
+        // Processing a duplicate again ends in the same Reset.
+        received.markRepeatable(entry)
         if (bytes != null) transmit(peer, reset, bytes)
     }
 
     private fun InboundEntry.answer(bytes: ByteArray?) {
         state = InboundEntry.State.ANSWERED
         reply = bytes
+        if (isIdempotent) received.markRepeatable(this)
     }
 
     /** Runs the interceptors and encodes; null when an interceptor dropped the message. */
@@ -728,7 +837,20 @@ internal class UdpMessaging(
     private inline fun debug(peer: Endpoint, messageId: Int, message: () -> String) {
         if (log.isEnabled(LogLevel.DEBUG)) log.with("peer" to peer, "mid" to messageId).debug(message = message)
     }
+
+    private companion object {
+        /** The most candidates [makeRoomForTransmission] looks at for each kind it can make room with. */
+        const val EVICTION_SCAN = 64
+    }
 }
+
+/**
+ * Whether this is a request with an idempotent method: GET, PUT and DELETE (RFC 7252 §5.1), FETCH and iPATCH
+ * (RFC 8132 §2, §3). Processing such a request twice ends as processing it once, so RFC 7252 §4.5 lets its
+ * deduplication be relaxed.
+ */
+private val CoapMessage.isIdempotentRequest: Boolean
+    get() = code == CoapCode.GET || code == CoapCode.PUT || code == CoapCode.DELETE || code == CoapCode.FETCH || code == CoapCode.IPATCH
 
 /** A copy of this message with the messaging-layer header fields set. */
 internal fun CoapMessage.withHeader(type: CoapMessageType, messageId: Int): CoapMessage =

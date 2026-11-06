@@ -65,14 +65,22 @@ class ResourceBoundsTest {
             timeSource = testScheduler.timeSource
             eventListener = EndpointEventListener { fixture.events += it }
         }
-        val server = fixture.server(endpointConfig = config) { resource("r") { get { CoapResponse.content("ok") } } }
+        val server = fixture.server(endpointConfig = config) { resource("r") { post { CoapResponse.changed() } } }
         val address = fixture.address(server.endpoint)
         val peer = fixture.transport()
 
-        assertEquals(CoapCode.CONTENT, answerTo(peer, address, request(CoapMessageType.CON, 1, 1, "r"))?.code)
-        assertNull(answerTo(peer, address, request(CoapMessageType.CON, 2, 2, "r")), "no answer to a possibly spoofed source")
+        // A POST must be processed at most once (RFC 7252 §4.5), so its entry cannot make room for another.
+        assertEquals(CoapCode.CHANGED, answerTo(peer, address, post(1, 1))?.code)
+        assertNull(answerTo(peer, address, post(2, 2)), "no answer to a possibly spoofed source")
         assertEquals(1, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
-        assertEquals(CoapCode.CONTENT, answerTo(peer, address, request(CoapMessageType.CON, 1, 1, "r"))?.code, "duplicates are still answered")
+        assertEquals(CoapCode.CHANGED, answerTo(peer, address, post(1, 1))?.code, "duplicates are still answered")
+    }
+
+    private fun post(messageId: Int, token: Byte) = CoapMessage.request(CoapCode.POST) {
+        type = CoapMessageType.CON
+        this.messageId = messageId
+        this.token = byteArrayOf(token)
+        options { uriPath("r") }
     }
 
     @Test
@@ -331,6 +339,9 @@ class ResourceBoundsTest {
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntries = 0 } }
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxConcurrentRequests = 0 } }
         assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchangesPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchanges = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntriesPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIds = 0 } }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObservers = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerResource = 0) }
         assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerPeer = 0) }

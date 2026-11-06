@@ -39,10 +39,29 @@ class UdpMessagingTest {
         maxDatagramSize: Int = 1152,
         maxDeduplicationEntries: Int = Int.MAX_VALUE,
         maxPerPeer: Int = Int.MAX_VALUE,
+        maxDeduplicationEntriesPerPeer: Int = Int.MAX_VALUE,
+        maxTransmissions: Int = Int.MAX_VALUE,
+        maxReservedMessageIds: Int = Int.MAX_VALUE,
+        maxReservedMessageIdsPerPeer: Int = 0x10000,
     ) = UdpMessaging(
         parameters, maxDatagramSize, separateResponseDelay, random, interceptors,
         maxDeduplicationEntries = maxDeduplicationEntries, maxPerPeer = maxPerPeer,
+        maxDeduplicationEntriesPerPeer = maxDeduplicationEntriesPerPeer, maxTransmissions = maxTransmissions,
+        maxReservedMessageIds = maxReservedMessageIds, maxReservedMessageIdsPerPeer = maxReservedMessageIdsPerPeer,
     )
+
+    private fun post(type: CoapMessageType, messageId: Int, token: String = "c3d4") = CoapMessage.request(CoapCode.POST) {
+        this.type = type
+        this.messageId = messageId
+        this.token = token.hexToBytes()
+        options { uriPath("test") }
+    }
+
+    private fun List<MessagingEffect>.limits(): List<EndpointEvent.LimitReached.Limit> =
+        filterIsInstance<MessagingEffect.Event>().mapNotNull { (it.event as? EndpointEvent.LimitReached)?.limit }
+
+    private fun List<MessagingEffect>.delivered(): List<Int> =
+        filterIsInstance<MessagingEffect.DeliverRequest>().map { it.message.messageId }
 
     private fun request(type: CoapMessageType, messageId: Int, token: String = "a1b2") = CoapMessage.request(CoapCode.GET) {
         this.type = type
@@ -693,30 +712,217 @@ class UdpMessagingTest {
     @Test
     fun rfc7252Section11_3AFullDeduplicationCacheDropsNewMessagesWithoutAnAnswer() {
         val messaging = messaging(maxDeduplicationEntries = 2)
-        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 1))
-        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 2), from = otherPeer)
+        messaging.receive(Duration.ZERO, post(CoapMessageType.CON, 1))
+        messaging.receive(Duration.ZERO, post(CoapMessageType.NON, 2), from = otherPeer)
         assertEquals(2, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
 
-        // A new Confirmable message, an Empty one (a ping) and a Non-confirmable one: no state, no answer.
-        messaging.receive(1.seconds, request(CoapMessageType.CON, 3))
+        // Both POSTs must be processed at most once, so nothing may be forgotten: a new Confirmable message, an
+        // Empty one (a ping) and a Non-confirmable one get no state and no answer.
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 3))
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 4))
         messaging.receive(1.seconds, request(CoapMessageType.NON, 5))
         val dropped = messaging.takeEffects()
         assertTrue(dropped.transmitted().isEmpty())
         assertTrue(dropped.none { it is MessagingEffect.DeliverRequest })
-        val limits = dropped.filterIsInstance<MessagingEffect.Event>().map { it.event }
-        assertEquals(3, limits.count { it is EndpointEvent.LimitReached && it.limit == EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES })
+        assertEquals(List(3) { EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES }, dropped.limits())
         assertEquals(2, messaging.stateSizes.first)
 
         // A duplicate of a remembered message is still answered as before (§4.5).
         messaging.respond(1.seconds, peer, 1, CoapMessageType.CON, response(CoapMessageType.ACK, 1))
         messaging.takeEffects()
-        messaging.receive(2.seconds, request(CoapMessageType.CON, 1))
+        messaging.receive(2.seconds, post(CoapMessageType.CON, 1))
         assertEquals(CoapMessageType.ACK, messaging.takeEffects().transmitted().single().type)
 
         // Once NON_LIFETIME passed, the Non-confirmable entry makes room again.
-        messaging.receive(params.nonLifetime + 1.seconds, request(CoapMessageType.CON, 6))
+        messaging.receive(params.nonLifetime + 1.seconds, post(CoapMessageType.CON, 6))
         assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverRequest>().size)
+    }
+
+    @Test
+    fun rfc7252Section4_5AFullCacheForgetsTheOldestMessageThatMayBeProcessedAgain() {
+        val messaging = messaging(maxDeduplicationEntries = 2)
+        messaging.receive(Duration.ZERO, post(CoapMessageType.CON, 1))
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 2))
+        messaging.respond(Duration.ZERO, peer, 2, CoapMessageType.CON, response(CoapMessageType.ACK, 2))
+        messaging.takeEffects()
+
+        // The answered GET is idempotent, so its entry goes for the new request, which is processed.
+        messaging.receive(1.seconds, request(CoapMessageType.CON, 3))
+        val effects = messaging.takeEffects()
+        assertEquals(listOf(3), effects.delivered())
+        assertEquals(emptyList(), effects.limits(), "nothing was refused")
+        assertEquals(2, messaging.stateSizes.first)
+
+        // Answered too, GET 3 makes room for a late duplicate of GET 2, which is processed as new (§4.5 relaxed).
+        messaging.respond(1.seconds, peer, 3, CoapMessageType.CON, response(CoapMessageType.ACK, 3))
+        messaging.takeEffects()
+        messaging.receive(2.seconds, request(CoapMessageType.CON, 2))
+        assertEquals(listOf(2), messaging.takeEffects().delivered())
+
+        // The POST is never forgotten: its duplicate is still recognized.
+        messaging.receive(3.seconds, post(CoapMessageType.CON, 1))
+        val duplicate = messaging.takeEffects()
+        assertEquals(emptyList(), duplicate.delivered())
+        assertTrue(duplicate.any { (it as? MessagingEffect.Event)?.event is EndpointEvent.DuplicateReceived })
+    }
+
+    @Test
+    fun rfc7252Section4_5ResetsAndRequestsRefusedBeforeAnyEffectMayBeForgotten() {
+        val messaging = messaging(maxDeduplicationEntries = 2)
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.CON, 1))
+        messaging.receive(Duration.ZERO, post(CoapMessageType.CON, 2))
+        // A POST to a path that does not exist: the server says nothing acted on it.
+        messaging.respond(Duration.ZERO, peer, 2, CoapMessageType.CON, response(CoapMessageType.ACK, 2, code = CoapCode.NOT_FOUND), repeatable = true)
+        messaging.takeEffects()
+
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 3))
+        messaging.receive(1.seconds, post(CoapMessageType.NON, 4))
+        val effects = messaging.takeEffects()
+        assertEquals(listOf(3, 4), effects.delivered(), "the ping's Reset and the refused POST made room")
+        assertEquals(emptyList(), effects.limits())
+        // A separate answer marks a Non-confirmable request too.
+        messaging.respond(1.seconds, peer, 4, CoapMessageType.NON, response(CoapMessageType.NON, 0), repeatable = true)
+        messaging.takeEffects()
+        messaging.receive(2.seconds, post(CoapMessageType.CON, 5))
+        assertEquals(listOf(5), messaging.takeEffects().delivered())
+    }
+
+    @Test
+    fun rfc7252Section11_3AQuarterOfTheCacheIsKeptForMessagesThatMayBeProcessedAgain() {
+        val messaging = messaging(maxDeduplicationEntries = 4)
+        val peers = List(4) { Endpoint.Udp("192.0.2.${10 + it}", 5683) }
+        for (index in 0..2) messaging.receive(Duration.ZERO, post(CoapMessageType.CON, index), from = peers[index])
+        messaging.takeEffects()
+
+        // Three POSTs fill the three quarters that must be kept: a fourth is refused although one place is free.
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 3), from = peers[3])
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES), messaging.takeEffects().limits())
+        // A GET takes the free place; once answered, it gives it to the next GET.
+        messaging.receive(1.seconds, request(CoapMessageType.CON, 4), from = peers[3])
+        messaging.respond(1.seconds, peers[3], 4, CoapMessageType.CON, response(CoapMessageType.ACK, 4))
+        messaging.receive(2.seconds, request(CoapMessageType.NON, 5), from = peers[3])
+        assertEquals(listOf(4, 5), messaging.takeEffects().delivered())
+        assertEquals(4, messaging.stateSizes.first)
+    }
+
+    @Test
+    fun rfc7252Section11_3OnePeerCannotTakeTheWholeCache() {
+        val messaging = messaging(maxDeduplicationEntriesPerPeer = 2)
+        messaging.receive(Duration.ZERO, post(CoapMessageType.CON, 1))
+        messaging.receive(Duration.ZERO, request(CoapMessageType.NON, 2))
+        messaging.takeEffects()
+
+        // The peer's own Non-confirmable GET makes room for its next message; then nothing of its own is left.
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 3))
+        assertEquals(listOf(3), messaging.takeEffects().delivered())
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 4))
+        val refused = messaging.takeEffects()
+        assertEquals(emptyList(), refused.delivered())
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.DEDUPLICATION_ENTRIES_PER_PEER), refused.limits())
+        // Another peer is not affected.
+        messaging.receive(1.seconds, post(CoapMessageType.CON, 4), from = otherPeer)
+        assertEquals(listOf(4), messaging.takeEffects().delivered())
+        assertEquals(3, messaging.stateSizes.first)
+        // The bookkeeping of a peer goes with its last entry.
+        messaging.onTimer(params.exchangeLifetime + 1.seconds)
+        assertEquals(0, messaging.stateSizes.first)
+        assertEquals(0, messaging.deduplicationPeers)
+        assertEquals(0, messaging.repeatableEntries)
+    }
+
+    @Test
+    fun rfc7252Section4_4MessageIdsAreBoundedInTotalAndPerPeer() {
+        val messaging = messaging(maxReservedMessageIds = 3, maxReservedMessageIdsPerPeer = 2)
+        messaging.allocateMessageId(peer, Duration.ZERO)
+        messaging.allocateMessageId(peer, Duration.ZERO)
+        val perPeer = assertFailsWith<CoapException> { messaging.allocateMessageId(peer, Duration.ZERO) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, perPeer.reason)
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.MESSAGE_IDS_PER_PEER), messaging.takeEffects().limits())
+
+        messaging.allocateMessageId(otherPeer, Duration.ZERO)
+        val total = assertFailsWith<CoapException> { messaging.allocateMessageId(Endpoint.Udp("192.0.2.3", 5683), Duration.ZERO) }
+        assertTrue("MESSAGE_IDS" in total.message!!)
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.MESSAGE_IDS), messaging.takeEffects().limits())
+        assertEquals(3, messaging.stateSizes.second)
+
+        // §4.4 forbids reusing them until EXCHANGE_LIFETIME has passed; then they are free again.
+        messaging.allocateMessageId(peer, params.exchangeLifetime)
+        assertEquals(1, messaging.stateSizes.second)
+    }
+
+    @Test
+    fun rfc7641Section4_5_2ASupersedingNotificationWithoutAFreeMessageIdWaitsForTheNextTimeout() {
+        val messaging = messaging(FixedRandom(0.0), maxReservedMessageIds = 1)
+        val messageId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val notification = messaging.send(Duration.ZERO, peer, response(CoapMessageType.CON, messageId), null)
+        messaging.takeEffects()
+
+        assertTrue(messaging.supersede(notification, response(CoapMessageType.CON, 0).toBuilder().payload("newer").build()))
+        messaging.onTimer(2.seconds)
+        val effects = messaging.takeEffects()
+        assertEquals(listOf(messageId to "ok"), effects.transmitted().map { it.messageId to it.payloadAsText() }, "the old one again")
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.MESSAGE_IDS), effects.limits())
+        assertEquals("newer", notification.replacement?.payloadAsText(), "kept for the next timeout")
+        // Once the old reservation expired, the next timeout sends the newer notification with a new ID.
+        messaging.onTimer(params.exchangeLifetime)
+        val replaced = messaging.takeEffects().transmitted().single()
+        assertEquals("newer", replaced.payloadAsText())
+        assertTrue(replaced.messageId != messageId)
+    }
+
+    @Test
+    fun rfc7252Section4_3NonConfirmableMessagesKeptForAResetMakeRoomOldestFirst() {
+        val messaging = messaging(maxTransmissions = 3)
+        // A Non-confirmable request holding its NSTART slot, and one that a Reset already ended.
+        val holding = messaging.send(Duration.ZERO, peer, request(CoapMessageType.NON, messaging.allocateMessageId(peer, Duration.ZERO)), null, 100.seconds)
+        val resetId = messaging.allocateMessageId(otherPeer, Duration.ZERO)
+        messaging.send(Duration.ZERO, otherPeer, response(CoapMessageType.NON, resetId), owner = null)
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.RST, resetId), from = otherPeer)
+
+        val sent = List(200) {
+            val to = Endpoint.Udp("198.51.100.${it % 250 + 1}", 5683)
+            messaging.send(1.seconds, to, response(CoapMessageType.NON, messaging.allocateMessageId(to, 1.seconds)), owner = null)
+        }
+        assertEquals(emptyList(), messaging.takeEffects().limits(), "far more than the scan window, and nothing refused")
+        assertEquals(3, messaging.outboundCount)
+        assertEquals(Transmission.State.IN_FLIGHT, holding.state, "the one holding a slot stays")
+        assertEquals(listOf(Transmission.State.IN_FLIGHT, Transmission.State.IN_FLIGHT), sent.takeLast(2).map { it.state })
+        assertEquals(Transmission.State.DONE, sent.first().state)
+    }
+
+    @Test
+    fun rfc7252Section11_3MessagesKeptInAllAreBounded() {
+        val messaging = messaging(FixedRandom(0.0), maxTransmissions = 2)
+        val third = Endpoint.Udp("192.0.2.3", 5683)
+        val nonId = messaging.allocateMessageId(peer, Duration.ZERO)
+        val non = messaging.send(Duration.ZERO, peer, response(CoapMessageType.NON, nonId), owner = null)
+        val first = messaging.sendConfirmable(Duration.ZERO, to = otherPeer)
+        messaging.takeEffects()
+
+        // The Non-confirmable message, kept only to match a Reset, makes room.
+        val second = messaging.sendConfirmable(Duration.ZERO, to = third)
+        assertEquals(Transmission.State.DONE, non.state)
+        assertEquals(emptyList(), messaging.takeEffects().limits(), "forgetting it refuses nothing")
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.RST, nonId))
+        assertEquals(emptyList(), messaging.takeEffects().outcomes(), "a Reset for it matches nothing (§4.3)")
+
+        // Two Confirmable messages not yet retransmitted: the next one is refused.
+        val refused = assertFailsWith<CoapException> { messaging.sendConfirmable(1.seconds) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, refused.reason)
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.EXCHANGES), messaging.takeEffects().limits())
+
+        // After one retransmission without an ACK, the oldest is given up for the next message.
+        messaging.onTimer(2.seconds)
+        messaging.takeEffects()
+        assertEquals(listOf(1, 1), listOf(first.retransmissions, second.retransmissions))
+        messaging.sendConfirmable(3.seconds)
+        val effects = messaging.takeEffects()
+        assertEquals(listOf<TransmissionOutcome>(TransmissionOutcome.TimedOut), effects.outcomes())
+        assertEquals(Transmission.State.DONE, first.state)
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.EXCHANGES), effects.limits())
+        assertTrue(effects.any { (it as? MessagingEffect.Event)?.event is EndpointEvent.TransmissionTimedOut })
+        assertEquals(Transmission.State.IN_FLIGHT, second.state)
+        assertEquals(2, messaging.outboundCount)
     }
 
     @Test

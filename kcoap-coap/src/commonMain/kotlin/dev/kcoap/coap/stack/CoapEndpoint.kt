@@ -294,12 +294,14 @@ public class CoapEndpoint private constructor(
         val link = if (isOnConnection(peer)) connections.reservedLinkFor(peer) else datagramLinkTo(peer)
         val exchange = try {
             link.checkPacing(confirmable, pacing)
+            var refusal: EndpointEvent.LimitReached.Limit? = null
             lock.withLock {
                 // Checked under the lock that the terminal transition takes, so no exchange is added after they
                 // were all failed: it fails at once instead of waiting for a response that never comes.
                 ensureOpen()
-                register(link, token, mode, recognizedOptions)
-            } ?: throw tooManyExchanges(peer)
+                refusal = exchangeBound(peer, token)
+                if (refusal == null) register(link, token, mode, recognizedOptions) else null
+            } ?: throw tooManyExchanges(peer, checkNotNull(refusal))
         } catch (e: Throwable) {
             withContext(NonCancellable) { link.exchangeClosed(null) }
             throw e
@@ -351,18 +353,27 @@ public class CoapEndpoint private constructor(
     }
 
     /**
-     * Called under [lock]: a new exchange on [link] with [token] or a fresh one, replacing an exchange that had
-     * it; null when the peer has [CoapEndpointConfig.maxExchangesPerPeer] already.
+     * Called under [lock]: the bound a new exchange with [peer] would exceed, or null. One that takes over
+     * [token] from a registered exchange replaces it and needs no room.
+     */
+    private fun exchangeBound(peer: Endpoint, token: ByteArray?): EndpointEvent.LimitReached.Limit? = when {
+        token != null && ExchangeKey(peer, token.toHex()) in exchanges -> null
+        (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer -> EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER
+        exchanges.size >= config.maxExchanges -> EndpointEvent.LimitReached.Limit.EXCHANGES
+        else -> null
+    }
+
+    /**
+     * Called under [lock], after [exchangeBound]: a new exchange on [link] with [token] or a fresh one, replacing
+     * an exchange that had it.
      */
     private fun register(
         link: PeerLink,
         token: ByteArray?,
         mode: ResponseMode,
         recognizedOptions: Set<Int>,
-    ): ClientExchange? {
+    ): ClientExchange {
         val peer = link.peer
-        val replacing = token != null && ExchangeKey(peer, token.toHex()) in exchanges
-        if (!replacing && (exchangesPerPeer[peer] ?: 0) >= config.maxExchangesPerPeer) return null
         val chosen = token ?: allocateToken(peer)
         val logger = log.with("peer" to peer, "token" to chosen.toHex())
         val exchange = ClientExchange(this, link, chosen, mode, recognizedOptions, logger)
@@ -383,12 +394,14 @@ public class CoapEndpoint private constructor(
     }
 
     /** RFC 7252 §11.3: the request is refused rather than queued without bound. */
-    private fun tooManyExchanges(peer: Endpoint): CoapException {
-        emit(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.EXCHANGES_PER_PEER))
-        return CoapException(
-            "$peer has ${config.maxExchangesPerPeer} exchanges in progress (maxExchangesPerPeer)",
-            CoapException.Reason.IDENTIFIERS_EXHAUSTED,
-        )
+    private fun tooManyExchanges(peer: Endpoint, limit: EndpointEvent.LimitReached.Limit): CoapException {
+        emit(EndpointEvent.LimitReached(peer, limit))
+        val count = if (limit == EndpointEvent.LimitReached.Limit.EXCHANGES) {
+            "The endpoint has ${config.maxExchanges} exchanges in progress (maxExchanges)"
+        } else {
+            "$peer has ${config.maxExchangesPerPeer} exchanges in progress (maxExchangesPerPeer)"
+        }
+        return CoapException(count, CoapException.Reason.IDENTIFIERS_EXHAUSTED)
     }
 
     private fun allocateToken(peer: Endpoint): ByteArray {
@@ -504,6 +517,9 @@ public class CoapEndpoint private constructor(
 
     /** Exchanges in the registry, for tests. */
     internal suspend fun exchangeCount(): Int = lock.withLock { exchanges.size }
+
+    /** What the datagram messaging layer keeps, for tests; null without a datagram transport. */
+    internal suspend fun messagingSizes(): UdpMessaging.Sizes? = datagram?.sizes()
 
     private fun ClientExchange.markReplaced() {
         // The new exchange took over the token; the old one gets no more responses.
@@ -690,6 +706,8 @@ public class CoapEndpoint private constructor(
     private suspend fun refuseOverloaded(request: InboundRequest) {
         emit(EndpointEvent.LimitReached(request.peer, EndpointEvent.LimitReached.Limit.CONCURRENT_REQUESTS))
         log.debug { "Refused a request from ${request.peer}: ${config.maxConcurrentRequests} handlers are running" }
+        // No handler ran, so a duplicate may be processed again (RFC 7252 §4.5).
+        request.isRepeatable = true
         if (!request.isConfirmable) return
         try {
             request.respond(CoapMessage.response(request.message, CoapCode.SERVICE_UNAVAILABLE) { options { maxAge(OVERLOAD_MAX_AGE) } })

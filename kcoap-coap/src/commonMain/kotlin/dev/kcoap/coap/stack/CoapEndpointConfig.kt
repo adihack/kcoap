@@ -15,14 +15,22 @@ import kotlin.time.TimeSource
  * itself is immutable, and every value is checked when it is built. Options added later go into the
  * builder, so code that builds a configuration keeps compiling, and compiled code keeps linking.
  *
- * **Resource bounds.** Everything a peer can make the endpoint keep or do is bounded, with defaults sized
- * for a server. Over UDP the source address of a datagram proves nothing (RFC 7252 §11.4), so a flood of
- * spoofed messages must cost bounded memory and CPU, and RFC 7252 §11.3 warns that answering it can turn
- * the endpoint into an amplifier against the address it names. At a bound the endpoint therefore drops or
- * refuses only the extra work, answers with at most a few bytes more than it received (a refusal's
- * Max-Age), keeps serving what it already has, and reports [EndpointEvent.LimitReached] so the condition
- * can be counted. The server's observer bounds are in `CoapServerConfig`, the bounds on connections in
- * [ReliableTransportConfig].
+ * **Resource bounds.** Everything a peer can make the endpoint keep or do is bounded, in total and per peer,
+ * with defaults sized for a server. Over UDP the source address of a datagram proves nothing (RFC 7252
+ * §11.4), so a flood of spoofed messages must cost bounded memory and CPU, and RFC 7252 §11.3 warns that
+ * answering it can turn the endpoint into an amplifier against the address it names. At a bound the endpoint
+ * first forgets what the RFCs let it forget, then drops or refuses only the extra work, answers with at most a
+ * few bytes more than it received (a refusal's Max-Age), keeps serving what it already has, and reports what
+ * it refused as [EndpointEvent.LimitReached] so the condition can be counted:
+ *
+ * | Bound | Default | At the bound |
+ * |---|---|---|
+ * | [maxDeduplicationEntries], [maxDeduplicationEntriesPerPeer] | 50 000, 10 000 | forgets the oldest message that may be processed again (RFC 7252 §4.5), else drops the new one |
+ * | [maxReservedMessageIds], [maxReservedMessageIdsPerPeer] | 262 144, 65 536 | refuses the message that needs a new Message ID (§4.4 forbids reuse) |
+ * | [maxExchanges], [maxExchangesPerPeer] | 16 384, 256 | forgets the oldest Non-confirmable message kept for a Reset, else gives up the oldest Confirmable one unacknowledged after a retransmission, else refuses |
+ * | [maxConcurrentRequests] | 256 | 5.03 with Max-Age to a Confirmable request, drops a Non-confirmable one |
+ *
+ * The server's observer bounds are in `CoapServerConfig`, the bounds on connections in [ReliableTransportConfig].
  */
 public class CoapEndpointConfig private constructor(builder: Builder) {
 
@@ -73,12 +81,49 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
     /**
      * The most received messages remembered for deduplication (RFC 7252 §4.5), each for EXCHANGE_LIFETIME or
      * NON_LIFETIME together with the reply it got. Any new message from any source address adds one, so this
-     * bounds what a flood of spoofed datagrams makes the endpoint remember. When it is full, new Confirmable
-     * and Non-confirmable messages are dropped silently, without state and without an answer that would go to
-     * a possibly spoofed source (§11.3); duplicates of remembered messages are still answered. The default
-     * takes about 200 new messages a second.
+     * bounds what a flood of spoofed datagrams makes the endpoint remember. When it is full, a new message takes
+     * the place of the oldest *repeatable* one, a message §4.5 lets the endpoint process again because that
+     * ends the same way: a request with an idempotent method (GET, PUT, DELETE, FETCH, iPATCH) once answered or
+     * acknowledged, a message answered with a Reset, or a request answered before anything acted on it (a
+     * message-security failure, an access refusal, an unknown path or method, an unrecognized critical option,
+     * an overload refusal). A duplicate of a forgotten message is processed as a new one (§4.5 "relaxed"
+     * deduplication). When nothing repeatable is left, a new message is dropped silently, without state and
+     * without an answer that would go to a possibly spoofed source (§11.3), and reported as
+     * [EndpointEvent.LimitReached] with `DEDUPLICATION_ENTRIES`; its sender retransmits a Confirmable one, and
+     * duplicates of remembered messages are still answered. A quarter of the bound is kept for repeatable
+     * messages: a new message that must be remembered, a non-idempotent request or a response, is dropped once
+     * three quarters hold such messages, so a flood of POSTs never keeps a GET out.
      */
     public val maxDeduplicationEntries: Int = builder.maxDeduplicationEntries
+
+    /**
+     * The most received messages remembered from one peer, out of [maxDeduplicationEntries], so one source,
+     * such as one flooding address, cannot take the whole cache. When a peer has this many, its own oldest
+     * repeatable message is forgotten for a new one, else the new one is dropped and reported with
+     * `DEDUPLICATION_ENTRIES_PER_PEER`. A peer that sends more than about 40 non-idempotent requests a second for
+     * EXCHANGE_LIFETIME reaches it with the default.
+     */
+    public val maxDeduplicationEntriesPerPeer: Int = builder.maxDeduplicationEntriesPerPeer
+
+    /**
+     * The most Message IDs reserved at once, towards all peers together. Every message the endpoint sends with
+     * a new Message ID (a request, a separate response, a notification, every message of a Q-Block body)
+     * reserves it for EXCHANGE_LIFETIME, since RFC 7252 §4.4 forbids reusing it towards that peer before, and a
+     * flood of spoofed Non-confirmable requests makes the endpoint send one response, and so reserve one ID,
+     * each. Beyond the bound such a message is refused instead: a request fails with
+     * [CoapException.Reason.IDENTIFIERS_EXHAUSTED], a separate response or notification is not sent, and each is
+     * reported with `MESSAGE_IDS`. Piggybacked responses reuse the request's ID and are never refused. The default
+     * allows four peers at the most RFC 7252 §4.4 allows one (65 536 per EXCHANGE_LIFETIME), about 1 000
+     * messages a second in all, and takes about 26 MB when full.
+     */
+    public val maxReservedMessageIds: Int = builder.maxReservedMessageIds
+
+    /**
+     * The most Message IDs reserved at once towards one peer, 1..65 536: by default the whole ID space, so the
+     * bound is the one RFC 7252 §4.4 sets, about 265 messages a second to one peer. Beyond it a message to that
+     * peer that needs a new ID is refused as for [maxReservedMessageIds], reported with `MESSAGE_IDS_PER_PEER`.
+     */
+    public val maxReservedMessageIdsPerPeer: Int = builder.maxReservedMessageIdsPerPeer
 
     /**
      * The most request handlers running at once, over every transport. Beyond it a Confirmable request is
@@ -101,6 +146,19 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
      */
     public val maxExchangesPerPeer: Int = builder.maxExchangesPerPeer
 
+    /**
+     * The most exchanges in progress with all peers together, counted as for [maxExchangesPerPeer]: requests
+     * of this endpoint awaiting their response and its observations, and over datagrams every message the
+     * messaging layer keeps, also each Non-confirmable one kept for NON_LIFETIME so that a Reset can match it.
+     * At the bound a new datagram message first takes the place of the oldest Non-confirmable message kept only
+     * for a Reset (RFC 7252 §4.3 lets a sender ignore a Reset), then of the oldest Confirmable message that is
+     * still unacknowledged after a retransmission, which is given up early as if it had timed out and reported
+     * with `EXCHANGES`: a peer that answers acknowledges within ACK_TIMEOUT, while a spoofed source only draws
+     * retransmissions (§11.3). Otherwise a request fails with [CoapException.Reason.IDENTIFIERS_EXHAUSTED] and a
+     * separate response or notification is not sent, each reported with `EXCHANGES`.
+     */
+    public val maxExchanges: Int = builder.maxExchanges
+
     init {
         require(separateResponseDelay == null || !separateResponseDelay.isNegative()) {
             "Separate response delay must not be negative: $separateResponseDelay"
@@ -108,6 +166,14 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
         require(maxDeduplicationEntries > 0) { "At least one deduplication entry must be allowed: $maxDeduplicationEntries" }
         require(maxConcurrentRequests > 0) { "At least one request handler must be allowed: $maxConcurrentRequests" }
         require(maxExchangesPerPeer > 0) { "At least one exchange per peer must be allowed: $maxExchangesPerPeer" }
+        require(maxDeduplicationEntriesPerPeer > 0) {
+            "At least one deduplication entry per peer must be allowed: $maxDeduplicationEntriesPerPeer"
+        }
+        require(maxExchanges > 0) { "At least one exchange must be allowed: $maxExchanges" }
+        require(maxReservedMessageIds > 0) { "At least one Message ID must be allowed: $maxReservedMessageIds" }
+        require(maxReservedMessageIdsPerPeer in 1..MESSAGE_ID_SPACE) {
+            "Message IDs per peer must be in 1..$MESSAGE_ID_SPACE: $maxReservedMessageIdsPerPeer"
+        }
     }
 
     /**
@@ -195,6 +261,24 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
         /** See [CoapEndpointConfig.maxExchangesPerPeer]. Default: [DEFAULT_MAX_EXCHANGES_PER_PEER]. */
         public var maxExchangesPerPeer: Int = DEFAULT_MAX_EXCHANGES_PER_PEER
 
+        /**
+         * See [CoapEndpointConfig.maxDeduplicationEntriesPerPeer]. Default:
+         * [DEFAULT_MAX_DEDUPLICATION_ENTRIES_PER_PEER].
+         */
+        public var maxDeduplicationEntriesPerPeer: Int = DEFAULT_MAX_DEDUPLICATION_ENTRIES_PER_PEER
+
+        /** See [CoapEndpointConfig.maxExchanges]. Default: [DEFAULT_MAX_EXCHANGES]. */
+        public var maxExchanges: Int = DEFAULT_MAX_EXCHANGES
+
+        /** See [CoapEndpointConfig.maxReservedMessageIds]. Default: [DEFAULT_MAX_RESERVED_MESSAGE_IDS]. */
+        public var maxReservedMessageIds: Int = DEFAULT_MAX_RESERVED_MESSAGE_IDS
+
+        /**
+         * See [CoapEndpointConfig.maxReservedMessageIdsPerPeer]. Default:
+         * [DEFAULT_MAX_RESERVED_MESSAGE_IDS_PER_PEER].
+         */
+        public var maxReservedMessageIdsPerPeer: Int = DEFAULT_MAX_RESERVED_MESSAGE_IDS_PER_PEER
+
         internal constructor(config: CoapEndpointConfig) : this() {
             parameters = config.parameters
             separateResponseDelay = config.separateResponseDelay
@@ -208,6 +292,10 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
             maxDeduplicationEntries = config.maxDeduplicationEntries
             maxConcurrentRequests = config.maxConcurrentRequests
             maxExchangesPerPeer = config.maxExchangesPerPeer
+            maxDeduplicationEntriesPerPeer = config.maxDeduplicationEntriesPerPeer
+            maxExchanges = config.maxExchanges
+            maxReservedMessageIds = config.maxReservedMessageIds
+            maxReservedMessageIdsPerPeer = config.maxReservedMessageIdsPerPeer
         }
 
         /**
@@ -215,14 +303,32 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
          * does not change configurations already built.
          *
          * @throws IllegalArgumentException when a value is out of range: a negative [separateResponseDelay],
-         *   or a bound below 1.
+         *   a bound below 1, or [maxReservedMessageIdsPerPeer] above 65 536.
          */
         public fun build(): CoapEndpointConfig = CoapEndpointConfig(this)
     }
 
     public companion object {
-        /** About 200 new messages a second over EXCHANGE_LIFETIME; see [maxDeduplicationEntries]. */
+        /**
+         * About 200 new messages a second that must be remembered over EXCHANGE_LIFETIME; see
+         * [maxDeduplicationEntries].
+         */
         public const val DEFAULT_MAX_DEDUPLICATION_ENTRIES: Int = 50_000
+
+        /** A fifth of [DEFAULT_MAX_DEDUPLICATION_ENTRIES]; see [maxDeduplicationEntriesPerPeer]. */
+        public const val DEFAULT_MAX_DEDUPLICATION_ENTRIES_PER_PEER: Int = 10_000
+
+        /** Four times the Message ID space; see [maxReservedMessageIds]. */
+        public const val DEFAULT_MAX_RESERVED_MESSAGE_IDS: Int = 262_144
+
+        /** The whole Message ID space (RFC 7252 §3); see [maxReservedMessageIdsPerPeer]. */
+        public const val DEFAULT_MAX_RESERVED_MESSAGE_IDS_PER_PEER: Int = 65_536
+
+        /** See [maxExchanges]. */
+        public const val DEFAULT_MAX_EXCHANGES: Int = 16_384
+
+        /** RFC 7252 §3: a Message ID has 16 bits. */
+        private const val MESSAGE_ID_SPACE: Int = 0x10000
 
         /** See [maxConcurrentRequests]. */
         public const val DEFAULT_MAX_CONCURRENT_REQUESTS: Int = 256

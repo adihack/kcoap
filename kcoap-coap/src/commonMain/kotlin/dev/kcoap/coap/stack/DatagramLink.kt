@@ -56,6 +56,10 @@ internal class DatagramLink(
         config.loggerFactory,
         config.maxDeduplicationEntries,
         config.maxExchangesPerPeer,
+        config.maxDeduplicationEntriesPerPeer,
+        config.maxExchanges,
+        config.maxReservedMessageIds,
+        config.maxReservedMessageIdsPerPeer,
     )
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
 
@@ -185,12 +189,15 @@ internal class DatagramLink(
     /** Body leases that hold a slot or wait for one, for tests. */
     suspend fun leaseCount(): Int = lock.withLock { messaging.leaseCount }
 
+    /** What the messaging layer keeps, for tests. */
+    suspend fun sizes(): UdpMessaging.Sizes = lock.withLock { messaging.sizes }
+
     // ---------------------------------------------------------------- answering what arrived
 
     /**
      * Answers the request [requestMessageId] from [peer], which arrived as [requestType]: piggybacked if still
      * possible, else separately as [separateType] (Confirmable requests only); returns the transmission of a
-     * separate response.
+     * separate response. [repeatable] says that nothing acted on the request ([UdpMessaging.respond]).
      */
     suspend fun respond(
         peer: Endpoint,
@@ -199,7 +206,8 @@ internal class DatagramLink(
         response: CoapMessage,
         owner: TransmissionOwner?,
         separateType: CoapMessageType,
-    ): Transmission? = withMessaging { now -> respond(now, peer, requestMessageId, requestType, response, owner, separateType) }
+        repeatable: Boolean = false,
+    ): Transmission? = withMessaging { now -> respond(now, peer, requestMessageId, requestType, response, owner, separateType, repeatable) }
 
     /** Accepts a Confirmable message from [peer] with an Empty ACK (RFC 7252 §5.2.2); nothing for others. */
     suspend fun acknowledge(peer: Endpoint, messageId: Int) {
@@ -437,7 +445,9 @@ internal class DatagramLink(
 
         override suspend fun respond(request: InboundRequest, response: CoapMessage, owner: DeliveryOwner?, confirmable: Boolean): Delivery? {
             val separateType = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
-            return this@DatagramLink.respond(peer, request.message.messageId, request.message.type, response, owner?.forTransmissions(), separateType)
+            return this@DatagramLink.respond(
+                peer, request.message.messageId, request.message.type, response, owner?.forTransmissions(), separateType, request.isRepeatable,
+            )
         }
 
         override suspend fun acknowledge(request: InboundRequest) {
