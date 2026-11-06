@@ -1,7 +1,9 @@
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.api.tasks.testing.Test
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.the
 import org.gradle.kotlin.dsl.withType
@@ -131,6 +133,17 @@ fun Project.configureKcoapLibrary(targets: KcoapTargets) {
                 "all" -> Unit
                 else -> error("kcoap.tests must be unit, interop or all, not '$selection'")
             }
+        }
+    }
+
+    // A failed test shows its assertion message, its cause and its stack in the build log, on every target (the
+    // JVM's Test and the native, JS and Wasm test tasks), so a CI log says why it failed without the reports.
+    tasks.withType<AbstractTestTask>().configureEach {
+        testLogging {
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
         }
     }
 

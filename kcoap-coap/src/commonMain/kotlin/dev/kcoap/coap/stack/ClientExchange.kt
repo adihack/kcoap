@@ -107,7 +107,7 @@ internal class ClientExchange(
     sealed interface Inspection {
         /**
          * Verified, or the answer to a request sent without message security, with every critical option
-         * recognized: acknowledge it, then [accept] it.
+         * recognized: [accept] it, then acknowledge it if it was taken.
          */
         class Accepted(val response: CoapMessage) : Inspection
 
@@ -115,8 +115,8 @@ internal class ClientExchange(
         class Rejected(val cause: CoapException) : Inspection
 
         /**
-         * The security layer handed it on unverified ([ResponseVerification.Unverified]): acknowledge it, then
-         * [acceptUnverified] it, which acts on nothing in it.
+         * The security layer handed it on unverified ([ResponseVerification.Unverified]): [acceptUnverified] it,
+         * which acts on nothing in it, then acknowledge it if it was taken.
          */
         class Unverified(val response: CoapMessage, val reason: String) : Inspection
 
@@ -175,10 +175,16 @@ internal class ClientExchange(
      * Hands on an [Inspection.Accepted] response. A separate response also ends the request's
      * retransmission (RFC 7252 §5.2.2: it serves as an acknowledgement) and frees a Non-confirmable request's
      * NSTART slot; one that failed verification does neither.
+     *
+     * An inbox exchange queues it in the room [reservation] holds, which the endpoint took before verifying a
+     * Confirmable response ([ExchangeInbox.tryReserve]); the caller releases a reservation this did not use.
+     * Returns false only when the [ExchangeInbox] of an inbox exchange had no room for it, so it was not taken:
+     * the endpoint then leaves a Confirmable one unacknowledged, for its sender to send again (RFC 7252 §4.2).
+     * True otherwise, also when the exchange is closed and drops it.
      */
-    suspend fun accept(response: CoapMessage) {
+    suspend fun accept(response: CoapMessage, reservation: ExchangeInbox.Reservation? = null): Boolean {
         settleRequest()
-        if (!isOpen) return
+        if (!isOpen) return true
         log.debug { "Response ${response.code}" }
         hasVerifiedResponse = true
         when (mode) {
@@ -188,8 +194,9 @@ internal class ClientExchange(
                 responses?.close()
             }
             ResponseMode.Stream -> responses?.trySend(response)
-            is ResponseMode.Inbox -> report(mode.inbox, ExchangeEvent.Response(this, response))
+            is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Response(this, response), reservation)
         }
+        return true
     }
 
     /**
@@ -199,11 +206,14 @@ internal class ClientExchange(
      * reaches its collectors. An exchange still waiting for its response ends with
      * [CoapException.Reason.UNVERIFIED_RESPONSE], which carries it, and so stops retransmitting its request;
      * the caller then gets a distinct failure instead of waiting for its timeout. An inbox exchange reports it.
+     *
+     * An inbox exchange queues it in the room [reservation] holds, and returns false only when its [ExchangeInbox]
+     * had no room for it, as [accept] does.
      */
-    suspend fun acceptUnverified(response: CoapMessage, reason: String) {
-        if (!isOpen) return
+    suspend fun acceptUnverified(response: CoapMessage, reason: String, reservation: ExchangeInbox.Reservation? = null): Boolean {
+        if (!isOpen) return true
         when {
-            mode is ResponseMode.Inbox -> report(mode.inbox, ExchangeEvent.Unverified(this, response))
+            mode is ResponseMode.Inbox -> return report(mode.inbox, ExchangeEvent.Unverified(this, response), reservation)
             mode == ResponseMode.Stream && hasVerifiedResponse -> log.warn { "Dropped an unverified ${response.code} to an observation: $reason" }
             else -> {
                 log.warn { "Unverified ${response.code} to a protected request: $reason" }
@@ -211,6 +221,7 @@ internal class ClientExchange(
                 fail(unverified(response, reason))
             }
         }
+        return true
     }
 
     /** Ends the exchange after an [Inspection.Rejected] response. */
@@ -247,8 +258,11 @@ internal class ClientExchange(
         }
     }
 
-    private fun report(inbox: ExchangeInbox, event: ExchangeEvent) {
-        if (!inbox.offer(event)) log.debug { "The body's inbox is full; $event counts as lost" }
+    /** Queues [event] in [inbox], in the room [reservation] holds if any; false when it did not fit and was not taken. */
+    private fun report(inbox: ExchangeInbox, event: ExchangeEvent, reservation: ExchangeInbox.Reservation? = null): Boolean {
+        val queued = inbox.offer(event, reservation)
+        if (!queued) log.debug { "The body's inbox is full; $event was not taken" }
+        return queued
     }
 
     /** Stops the exchange: forgets the token and stops retransmitting the request. Reports nothing. */

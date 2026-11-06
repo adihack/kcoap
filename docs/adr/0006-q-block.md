@@ -121,12 +121,20 @@ in [../plan-qblock-and-platforms.md](../plan-qblock-and-platforms.md), section 1
   first block of a new ETag, and takes a body without Observe only in answer to its own request for the body
   in progress, since an older answer could be staler than the bodies since; a fresher notification of one
   message supersedes the body in progress too.
-  The client releases the tokens of a body's Continues and requests for missing blocks with the body. A
-  Q-Block1 FETCH registration keeps the token of the 2.05 and ends by forgetting it, because a
-  deregistration would send the body again under a new Request-Tag; when its 2.05 is lost and the client
-  sends the last block again on a new token, the server sends the 2.05 again on the token of the request
-  that completed the upload, where the notifications go (§4.3), and nothing on the copy. Its follow-ups
-  always carry the upload's Request-Tag and no payload (§4.7).
+  The client releases the tokens of a body's Continues and requests for missing blocks with the body, except
+  the token of a request for the whole body (`0/M=1`) whose answer starts a replacement body: the rest of that
+  body comes on it, so it goes with the new body (§4.4). A Confirmable body asks for its next missing blocks
+  as soon as every request for the last ones was answered, rather than after another MAX_TRANSMIT_SPAN (§4.4
+  lets a client ask after MAX_TRANSMIT_SPAN, and §7.1 leaves further requests to the implementation), so a
+  body that misses several sets takes one MAX_TRANSMIT_SPAN, not one per set. A Confirmable block that the
+  body's bounded inbox has no room for is left unacknowledged, since its sender never sends an acknowledged
+  message again (RFC 7252 §4.2), and its retransmission is delivered; whether it fits is decided before it is
+  verified, so that OSCORE does not refuse the retransmission's Partial IV as a replay (RFC 8613 §7.4). A
+  Q-Block1 FETCH registration keeps the token of the 2.05 and ends by forgetting it, because a deregistration
+  would send the body again under a new Request-Tag; when its 2.05 is lost and the client sends the last block
+  again on a new token, the server sends the 2.05 again on the token of the request that completed the upload,
+  where the notifications go (§4.3), and nothing on the copy. Its follow-ups always carry the upload's
+  Request-Tag and no payload (§4.7).
 - **Protected notification bodies** (QB-7). Under OSCORE every block of a notification body is a notification
   with a Partial IV of its own (RFC 8613 §4.1.3.5.2 asks for a new one in every notification but the first),
   so with reordering a block arrives below the Notification Number. QB-6 kept protected observations on Inner

@@ -103,6 +103,8 @@ class PeerLinkTest {
         assertEquals(Duration.ZERO, link.leaseBody(3000, null).nonTimeoutRandom)
         link.settle(Delivery.Written)
         assertFalse(link.supersede(Delivery.Written, get()))
+        // RFC 8323 §3.1: nothing answers a response, so there is nothing to leave unanswered either.
+        link.deferResponse(CoapMessage.response(get(), CoapCode.CONTENT))
         val policy = link.notificationPolicy(Duration.ZERO, isAuthenticated = false, 24.seconds)
         assertSame(NotificationPolicy.Untyped, policy)
         assertTrue(policy.nextIsConfirmable(requested = true, Duration.ZERO))

@@ -186,6 +186,41 @@ class ResponseAcknowledgementTest {
         assertEquals(listOf(broken.messageId, genuine.messageId, broken.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
     }
 
+    /**
+     * A failure while a response is handed on, after it was verified, leaves it answered as well: unanswered, its
+     * retransmissions would be taken for duplicates of a message still being processed and get no reply, until the
+     * peer gives up (and, for a notification, removes the observer, RFC 7641 §4.5).
+     */
+    @Test
+    fun aResponseWhoseHandlingFailsUnexpectedlyIsStillAcknowledged() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        // A bug in the message security: it hands on a request as the unverified response, which no
+        // CoapException can carry, so ending the exchange with it fails.
+        val security = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest = object : ProtectedRequest {
+                override val message: CoapMessage = request
+
+                override suspend fun unprotectResponse(response: CoapMessage) = ResponseVerification.Unverified(get(), "broken")
+            }
+        }
+
+        endpoint.openExchange(peer.address, get(), true, security)
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val response = peer.response(request, CoapMessageType.CON, "x")
+        peer.send(response)
+        delay(1.seconds)
+        assertEquals(listOf(response.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+
+        // §4.5: the peer's retransmission is a duplicate and gets the same ACK.
+        peer.send(response)
+        delay(1.seconds)
+        assertEquals(listOf(response.messageId, response.messageId), fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId })
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+    }
+
     @Test
     fun rfc8613Section8_4AConfirmableRequestKeepsRetransmittingAfterAForgedResponse() = runTest {
         val fixture = StackFixture(this)

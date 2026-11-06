@@ -380,6 +380,41 @@ class UdpMessagingTest {
         assertEquals(emptyList(), messaging.takeEffects())
     }
 
+    /**
+     * RFC 7252 §4.2, §4.5: a Confirmable response the upper layer could not take is left unanswered and forgotten,
+     * so its retransmission is delivered as new; an answered one, a Non-confirmable one and an unknown one stay.
+     */
+    @Test
+    fun rfc7252Section4_2AResponseNotTakenIsForgottenSoItsRetransmissionIsDelivered() {
+        val messaging = messaging(maxDeduplicationEntries = 2)
+        fun delivered() = messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverResponse>().map { it.message.messageId }
+        messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 11))
+        assertEquals(listOf(11), delivered())
+
+        messaging.forgetUnanswered(peer, 11)
+        assertEquals(emptyList(), messaging.takeEffects(), "nothing is sent")
+        assertEquals(0, messaging.stateSizes.first, "nor remembered")
+        messaging.receive(2.seconds, response(CoapMessageType.CON, 11))
+        assertEquals(listOf(11), delivered(), "the retransmission is new")
+        messaging.acknowledge(peer, 11)
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.ACK, 11)), messaging.takeEffects().transmitted())
+        assertEquals(2.seconds + params.exchangeLifetime, messaging.nextDeadline(), "the forgotten message's expiry went with it")
+        messaging.forgetUnanswered(peer, 11)
+        messaging.receive(5.seconds, response(CoapMessageType.CON, 11))
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.ACK, 11)), messaging.takeEffects().transmitted(), "an answered one stays")
+
+        messaging.receive(5.seconds, response(CoapMessageType.NON, 12))
+        assertEquals(listOf(12), delivered())
+        messaging.forgetUnanswered(peer, 12)
+        messaging.forgetUnanswered(otherPeer, 11)
+        messaging.receive(6.seconds, response(CoapMessageType.NON, 12))
+        assertEquals(emptyList(), delivered(), "a Non-confirmable one stays, and counts as lost")
+        assertEquals(2, messaging.stateSizes.first)
+        messaging.onTimer(params.exchangeLifetime + 5.seconds)
+        assertEquals(0, messaging.stateSizes.first)
+        assertNull(messaging.nextDeadline())
+    }
+
     @Test
     fun rfc7252Section4_2ReservedCodesAreRejected() {
         val messaging = messaging()

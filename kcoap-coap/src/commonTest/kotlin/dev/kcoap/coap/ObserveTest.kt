@@ -3,12 +3,16 @@ package dev.kcoap.coap
 import dev.kcoap.coap.client.CoapClientConfig
 import dev.kcoap.coap.client.NotificationOrder
 import dev.kcoap.coap.client.ObserveCancellation
+import dev.kcoap.coap.client.QBlockClientConfig
+import dev.kcoap.coap.client.QBlockMode
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.ServerMessageSecurity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.server.AmplificationPolicy
 import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
+import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
@@ -27,6 +31,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -217,6 +222,161 @@ class ObserveTest {
         assertTrue(fromServer.none { it.payloadAsText() == "2" })
         assertEquals(1, counter.observerCount)
         job.cancel()
+    }
+
+    /** An observable value whose handler reads the value, then waits for [gate] while one is set. */
+    private class Gated : ObservableResource("gated") {
+        var value = 0
+        var gate: CompletableDeferred<Unit>? = null
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse {
+            val read = value
+            gate?.await()
+            return CoapResponse.content("$read")
+        }
+
+        fun change(newValue: Int) {
+            value = newValue
+            notifyObservers()
+        }
+
+        fun open() {
+            gate?.complete(Unit)
+            gate = null
+        }
+    }
+
+    /**
+     * RFC 7641 §4.5: the client eventually gets the latest state. A change while the registration's handler runs
+     * comes after the state that handler read, but before the server lists the observer: once the registration
+     * response went out, the change is notified, with RFC 7959 and with a Q-Block2 registration (RFC 9177 §4.5).
+     */
+    @Test
+    fun rfc7641Section4_5AChangeWhileTheRegistrationIsAnsweredIsNotifiedOnceTheResponseWentOut() = runTest {
+        for (qBlock in listOf(false, true)) {
+            val fixture = StackFixture(this)
+            val resource = Gated().apply { gate = CompletableDeferred() }
+            val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = qBlock))) {
+                add(resource)
+            }
+            val client = fixture.client(if (qBlock) CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)) else CoapClientConfig())
+            val received = mutableListOf<String>()
+            val observation = launch { client.observe(fixture.uri(server, "/gated")).collect { received += it.payloadAsText() } }
+            delay(1.seconds)
+
+            resource.change(1)
+            resource.open()
+            delay(10.seconds)
+
+            assertEquals(listOf("0", "1"), received, "Q-Block $qBlock: the latest state arrives")
+            assertEquals(1, resource.observerCount)
+            val registration = fixture.sentBy(client.endpoint).first { it.isRequest }
+            assertEquals(qBlock, registration.options.qBlock2 != null, "Q-Block $qBlock: the registration")
+            observation.cancel()
+        }
+    }
+
+    /**
+     * RFC 7641 §4.5: a change while the handler produces a notification is never lost. The server cannot know
+     * whether the handler read the state before or after the change, so it notifies again once the notification
+     * is out; here the handler read the state before, and the second notification carries the change.
+     */
+    @Test
+    fun rfc7641Section4_5AChangeWhileANotificationIsProducedIsNotifiedAfterIt() = runTest {
+        val fixture = StackFixture(this)
+        val resource = Gated()
+        val server = fixture.server { add(resource) }
+        val client = fixture.client()
+        val received = mutableListOf<String>()
+        val observation = launch { client.observe(fixture.uri(server, "/gated")).collect { received += it.payloadAsText() } }
+        delay(1.seconds)
+
+        resource.gate = CompletableDeferred()
+        resource.change(1)
+        delay(1.seconds)
+        resource.change(2)
+        resource.open()
+        delay(10.seconds)
+
+        assertEquals(listOf("0", "1", "2"), received)
+        observation.cancel()
+    }
+
+    /**
+     * RFC 7641 §4.5: a change goes out once. Several coroutines that change a resource at once each schedule its
+     * observers, and a schedule may come after the notification that already carries its change; it then sends
+     * nothing, with RFC 7959 and with a Q-Block2 body (RFC 9177 §4.5). Scheduling the observers again without a
+     * change is what such a late schedule does.
+     */
+    @Test
+    fun rfc7641Section4_5AChangeThatIsAlreadyNotifiedIsNotNotifiedAgain() = runTest {
+        for (qBlock in listOf(false, true)) {
+            val fixture = StackFixture(this)
+            val counter = Counter()
+            val server = fixture.server(CoapServerConfig(amplification = AmplificationPolicy.OFF, qBlock = QBlockServerConfig(isEnabled = qBlock))) {
+                add(counter)
+            }
+            val client = fixture.client(if (qBlock) CoapClientConfig(qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED)) else CoapClientConfig())
+            val received = mutableListOf<String>()
+            val observation = launch { client.observe(fixture.uri(server, "/counter")).collect { received += it.payloadAsText() } }
+            delay(1.seconds)
+            counter.change(1)
+            delay(5.seconds)
+
+            server.observations.changed(counter)
+            delay(10.seconds)
+
+            assertEquals(listOf("0", "1"), received, "Q-Block $qBlock: one notification per change")
+            val notifications = fixture.sentBy(server.endpoint).filter { it.isResponse && it.options.observe != null }
+            assertEquals(2, notifications.mapNotNull { it.options.observe }.distinct().size, "Q-Block $qBlock: $notifications")
+            observation.cancel()
+        }
+    }
+
+    /**
+     * A counter that changes once more, as another thread would, while the server prepares a notification: after
+     * the notification began, before the handler reads the value. [notificationType] is read in between.
+     */
+    private class ChangingWhilePrepared : ObservableResource("racy") {
+        var value = 0
+        var changeWhilePrepared = false
+
+        override val notificationType: CoapMessageType
+            get() {
+                if (changeWhilePrepared) {
+                    changeWhilePrepared = false
+                    value++
+                    notifyObservers()
+                }
+                return CoapMessageType.CON
+            }
+
+        override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("$value")
+    }
+
+    /**
+     * RFC 7641 §4.5: a change counted before the handler of a notification runs is in that notification, so the
+     * notification it scheduled meanwhile sends nothing; the client gets the latest state once.
+     */
+    @Test
+    fun rfc7641Section4_5AChangeBeforeTheHandlerOfANotificationRunsIsNotNotifiedAgain() = runTest {
+        val fixture = StackFixture(this)
+        val resource = ChangingWhilePrepared()
+        val server = fixture.server { add(resource) }
+        val client = fixture.client()
+        val received = mutableListOf<String>()
+        val observation = launch { client.observe(fixture.uri(server, "/racy")).collect { received += it.payloadAsText() } }
+        delay(1.seconds)
+
+        resource.changeWhilePrepared = true
+        resource.value = 1
+        resource.notifyObservers()
+        delay(10.seconds)
+
+        assertEquals(listOf("0", "2"), received)
+        val notifications = fixture.sentBy(server.endpoint).filter { it.isResponse && it.options.observe != null }
+        assertEquals(2, notifications.mapNotNull { it.options.observe }.distinct().size, "$notifications")
+        observation.cancel()
     }
 
     @Test

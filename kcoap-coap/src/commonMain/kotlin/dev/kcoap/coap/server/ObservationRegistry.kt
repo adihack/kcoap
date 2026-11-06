@@ -193,6 +193,13 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * Non-confirmable is the link's [NotificationPolicy]: a connection has no message types and writes each one
  * as it is.
  *
+ * Changes are coalesced by the resource's [ObservableResource.changeCount], read before each run of the handler,
+ * for the registration response and every notification: a change counted by then is in what the handler
+ * returned, so only a change counted later sends another notification, however many coroutines notify at once.
+ * A change counted while the handler runs is notified again, since the server cannot tell whether the handler
+ * saw it; RFC 7641 §4.5 lets a server send a state again, never skip the latest. A change while the
+ * registration's handler runs, before the observer is listed, is notified once the registration response is out.
+ *
  * No notification goes out before the registration response: on reliable transports the client ignores
  * Observe values and takes notifications in the order they arrive (RFC 8323 §7.1), so the order of
  * sending is the order of freshness.
@@ -225,6 +232,8 @@ internal class ServerObservation(
      * notification bodies takes; null for a registration without Q-Block.
      */
     val qBlockSize: Int? = null,
+    /** The resource's [ObservableResource.changeCount] read before the registration's handler ran. */
+    changesSeen: Long = 0,
 ) : DeliveryOwner {
     /** The client's endpoint. */
     val peer: Endpoint get() = link.peer
@@ -246,8 +255,17 @@ internal class ServerObservation(
     @Volatile
     private var scheduled = false
 
+    /**
+     * The resource's [ObservableResource.changeCount] read before the handler of the latest notification, or of
+     * the registration response, ran: every change counted by then is in it. Written under [mutex]; a stale read
+     * outside it is older, so it only sends a notification to look again.
+     */
     @Volatile
-    private var changedMeanwhile = false
+    private var notifiedChanges = changesSeen
+
+    /** Whether a notification superseded at its next timeout never went out (RFC 7641 §4.5.2): send it again. */
+    @Volatile
+    private var resendDue = false
 
     @Volatile
     private var registrationSent = false
@@ -279,7 +297,7 @@ internal class ServerObservation(
             outstanding = delivery?.takeIf { it.isOutstanding }
             if (confirmable) policy.sent(confirmable = true, now)
             registrationSent = true
-            changedMeanwhile
+            hasNews()
         }
         if (changed) schedule()
     }
@@ -290,7 +308,8 @@ internal class ServerObservation(
                 if (outstanding !== delivery) return
                 outstanding = null
                 // A replacement that never went out, or a change while a NON held the slot: send the latest.
-                if (delivery.isSuperseded || changedMeanwhile) schedule()
+                if (delivery.isSuperseded) resendDue = true
+                if (hasNews()) schedule()
             }
             // §4.5: a Reset or a timed-out Confirmable notification removes the observer.
             DeliveryOutcome.Rejected -> server.observations.remove(this, "reset by client")
@@ -336,37 +355,36 @@ internal class ServerObservation(
      * (RFC 9177 §4.5). Taken under [mutex], so a change that found the body outstanding is not missed.
      */
     suspend fun onBodySettled(body: OutstandingBody) {
-        val changed = mutex.withLock { latest === body && changedMeanwhile }
+        val changed = mutex.withLock { latest === body && hasNews() }
         if (changed) schedule()
     }
+
+    /** Whether a notification is due: a change counted after the latest handler run, or one to send again. */
+    private fun hasNews(): Boolean = resendDue || resource.changeCount != notifiedChanges
 
     private suspend fun notifyNow() = mutex.withLock {
         scheduled = false
         if (!isActive) return@withLock
-        if (!registrationSent) {
-            // Sent when the registration response is out, so that it stays the oldest state.
-            changedMeanwhile = true
-            return@withLock
-        }
+        // Sent when the registration response is out, so that it stays the oldest state: onRegistrationSent.
+        if (!registrationSent) return@withLock
+        // A change that is already in the latest notification, coalesced although it started this coroutine.
+        if (!hasNews()) return@withLock
         val now = server.endpoint.now()
         val body = latest
-        if (body != null && !body.isSettled(now, server.config.nonConfirmableNotificationInterval)) {
-            // RFC 9177 §4.5: a body is never cut short by a newer one; onBodySettled sends the latest state.
-            changedMeanwhile = true
-            return@withLock
-        }
-        // Recorded transmissions that completed meanwhile (an outcome raced the recording) no longer count.
+        // RFC 9177 §4.5: a body is never cut short by a newer one; onBodySettled sends the latest state.
+        if (body != null && !body.isSettled(now, server.config.nonConfirmableNotificationInterval)) return@withLock
+        // Recorded transmissions that completed meanwhile (an outcome raced the recording) no longer count. A
+        // Non-confirmable one holds the slot until onOutcome, which sends the latest state.
         val current = outstanding?.takeIf { it.isOutstanding }
-        if (current != null && !current.isConfirmable) {
-            changedMeanwhile = true
-            return@withLock
-        }
-        changedMeanwhile = false
+        if (current != null && !current.isConfirmable) return@withLock
+        resendDue = false
         // RFC 9175 §2.4 item 3: a body to an address that is not verified (any more) waits for every ACK. Only a
         // resource that asks for NON may get Non-confirmable notifications; any other type it names asks for CON.
         val confirmable = (qBlockSize != null && server.mustConfirmBodies(this)) ||
             policy.nextIsConfirmable(requested = resource.notificationType != CoapMessageType.NON, now)
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
+        // Every change counted from here on may have come after the handler read the state, so it notifies again.
+        notifiedChanges = resource.changeCount
         val notification = server.notification(this, type)
         if (notification == null) {
             // A Q-Block2 body went out (or the observation ended meanwhile).

@@ -28,6 +28,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 public abstract class ObservableResource(name: String) : CoapResource(name) {
     private val sequence = AtomicLong(0)
+    private val changes = AtomicLong(0)
 
     override val isObservable: Boolean get() = true
 
@@ -43,8 +44,16 @@ public abstract class ObservableResource(name: String) : CoapResource(name) {
 
     /** Tells the observers that the state changed. Returns at once; notifications are sent in the background. */
     public fun notifyObservers() {
+        changes.addAndFetch(1)
         root.server?.observations?.changed(this)
     }
+
+    /**
+     * How often [notifyObservers] was called. An observation reads it before each run of the handler, for its
+     * registration response or a notification: every change counted by then is in what the handler returns, and
+     * only a change counted later needs another notification (RFC 7641 §4.5).
+     */
+    internal val changeCount: Long get() = changes.load()
 
     /** How many clients observe this resource now. */
     public val observerCount: Int get() = root.server?.observations?.count(this) ?: 0

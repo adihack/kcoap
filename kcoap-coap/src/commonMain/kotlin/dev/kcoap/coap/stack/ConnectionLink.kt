@@ -80,6 +80,9 @@ internal class ConnectionLink(
     /** RFC 8323 §3.1: nothing acknowledges a response on a connection. */
     override suspend fun acceptResponse(response: CoapMessage) = Unit
 
+    /** RFC 8323 §3.1: nothing acknowledges a response on a connection, and nothing sends one again. */
+    override suspend fun deferResponse(response: CoapMessage) = Unit
+
     /**
      * RFC 8323 §7.2 lets a client abort on a notification with an unknown token; here the response is only
      * dropped, and reported.
