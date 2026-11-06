@@ -166,6 +166,10 @@ final class dev.kcoap.log/RingBufferSink : dev.kcoap.log/LogSink { // dev.kcoap.
     final fun write(dev.kcoap.log/LogRecord) // dev.kcoap.log/RingBufferSink.write|write(dev.kcoap.log.LogRecord){}[0]
 }
 
+open class dev.kcoap.common/KcoapException : kotlin/Exception { // dev.kcoap.common/KcoapException|null[0]
+    constructor <init>(kotlin/String, kotlin/Throwable?) // dev.kcoap.common/KcoapException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
+}
+
 final object dev.kcoap.common/Hex { // dev.kcoap.common/Hex|null[0]
     final fun decode(kotlin/String): kotlin/ByteArray // dev.kcoap.common/Hex.decode|decode(kotlin.String){}[0]
     final fun encode(kotlin/ByteArray): kotlin/String // dev.kcoap.common/Hex.encode|encode(kotlin.ByteArray){}[0]

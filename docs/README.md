@@ -57,7 +57,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | Page | What you find there |
 |---|---|
 | [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published with the first release |
-| [kcoap-common](../kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers (no README yet; see the API reference) |
+| [kcoap-common](../kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers, `KcoapException`, the root of every protocol's exception (no README yet; see the API reference) |
 | [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |
 | [kcoap-crypto-default](../kcoap-crypto-default/README.md) | The default backend per platform, its capabilities and fallbacks, and its R8 rules |
 | [kcoap-crypto-bc](../kcoap-crypto-bc/README.md) | The post-quantum backend: ML-KEM and ML-DSA on Bouncy Castle |
@@ -75,6 +75,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [kcoap-edhoc](../kcoap-edhoc/README.md) | EDHOC Initiator and Responder as sans-IO state machines, suites and credentials |
 | [kcoap-edhoc-oscore](../kcoap-edhoc-oscore/README.md) | EDHOC over CoAP, EDHOC→OSCORE and the combined request |
 | [kcoap-dtls](../kcoap-dtls/README.md) | The DTLS interfaces and registries; the engine comes last and the module is not published until then |
+| [kcoap-swift-smoke](../kcoap-swift-smoke/README.md) | The Swift smoke test of the macOS CI job: kcoap called from Swift through a framework; not published |
 
 ## Project
 

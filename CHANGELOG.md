@@ -12,6 +12,11 @@ adds its entry and migration note below.
 
 ### Added
 
+- `KcoapException` (kcoap-common), the root of the exception of every protocol facade (WP-D2); see "Changed
+  (breaking)". A Swift smoke test (WP-D2, which took over PL-3): the unpublished module kcoap-swift-smoke links a
+  `KcoapSmoke` framework of kcoap-coap for the Apple targets, and its Swift script, which the macOS CI job compiles
+  with `xcrun swiftc` and runs (`scripts/test swift`, `./gradlew :kcoap-swift-smoke:swiftSmoke`), builds a
+  `CoapClientConfig` with explicit values and catches a request timeout and a malformed URI as `NSError`.
 - Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
   `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
   they replace.
@@ -303,6 +308,73 @@ adds its entry and migration note below.
   types and algorithms. kcoap-crypto-bc reads them instead of its own constants. Additions only.
 
 ### Changed (breaking)
+
+One exception root, and `@Throws` for Swift (WP-D2):
+
+- **Every protocol exception extends `KcoapException`** (kcoap-common) instead of `Exception`: `CoapException`,
+  `OscoreException`, `EdhocException` with `EdhocPeerErrorException` and `EdhocTransferException`, `CborException`
+  and `CertificateFormatException`. Their reasons, fields and messages are unchanged, and `KcoapException` extends
+  `Exception`, so every existing `catch` still matches and compiled code keeps linking; the ABI dumps record the new
+  supertype. The signals of the SPIs between the layers (`MessageSecurityException`, `CoapFormatException`,
+  `SessionEndedException`, `AeadAuthenticationException`, `UnsupportedAlgorithmException`,
+  `CertificateValidationException`) stay outside the root, as each layer translates them at its boundary.
+  *Migration:* nothing is required. Code that catches several of these types, or `Exception` to get them all, can
+  catch the one root instead:
+
+  ```kotlin
+  // Before
+  try { handshake.run() } catch (e: EdhocException) { retryLater(e) } catch (e: CoapException) { retryLater(e) }
+
+  // After
+  try { handshake.run() } catch (e: KcoapException) { retryLater(e) }
+  ```
+
+- **`@Throws` on the public suspend entry points and on `CoapUri.parse`, so Swift callers get an `NSError`
+  instead of a crash.** Kotlin/Native ends the process when an exception leaves a function that does not list
+  its type in `@Throws`, and before this change only `CancellationException` was listed, implicitly. Now
+  `KcoapException` and `CancellationException` are listed on the requests, `ping` and `discover` of `CoapClient`,
+  `CoapEndpoint.ping`, the eight steps of `EdhocInitiator` and `EdhocResponder`, `EdhocClientHandshake.run` and
+  `runCombined`, `EdhocServer.completeCombined`, `PeerSecurity.install(client, uri, protection)`,
+  `SecurityContext.derive` and `EdhocSession.oscoreContext`; `IllegalArgumentException` on `CoapUri.parse`; and
+  `MessageSecurityException` and `CancellationException` on the four operations of the message-security SPI
+  (`protectRequest`, `unprotectResponse`, `unprotectRequest`, `protectResponse`), which every implementation,
+  kcoap-oscore's included, inherits. Mistakes of the caller (`IllegalArgumentException`,
+  `IllegalStateException`) are not listed and still end a Swift process, as a failed precondition does.
+  *Migration:* in Swift, `CoapUri.parse` now throws, so it needs `try`; the suspend functions were `async throws`
+  already, and their `catch` now receives the failure:
+
+  ```swift
+  let uri = try CoapUri.Companion.shared.parse(text: "coap://192.0.2.1/sensors/temp")
+  do {
+      let response = try await client.request(request: request)
+  } catch {
+      let kotlin = (error as NSError).userInfo["KotlinException"]   // a CoapException, a KcoapException
+  }
+  ```
+
+  An implementation of the message-security SPI that declares no `@Throws`, as kcoap's own do, inherits the
+  SPI's list; Kotlin/Native accepts an override with a `@Throws` of its own only when it names the same
+  exceptions, `MessageSecurityException` and `CancellationException`. On the JVM the annotation adds `throws`
+  clauses to these methods, which only Java code sees, and which `ThrowsDeclarationsTest` (kcoap-edhoc-oscore)
+  reads back to check every list.
+- **`EdhocClientHandshake.run` and `runCombined` fail with an `EdhocException` when the OSCORE context cannot be
+  derived** (WP-D2): an exception of the `sequenceStore` or of the crypto backend in that last step, or a
+  cancellation of their own while the caller is still active, used to pass through unchanged, which `@Throws` does
+  not list, so a Swift caller crashed. It is now an `EdhocException` with error code 1, no error message to send and
+  that exception as `cause`, as `EdhocServer` already reported such a failure on its side; the session is still
+  wiped. `SecurityContext.derive` and `EdhocSession.oscoreContext`, called directly, still pass these exceptions
+  unchanged. `PeerSecurity.install(client, uri, protection)` likewise reports a resolver's runtime failure, such as a
+  platform's DNS exception or the resolver's own timeout, as `CoapException(UNRESOLVED_HOST)` with it as cause, as the
+  client's requests do, instead of passing it through. *Migration:* code that caught the store's own exception from
+  a handshake catches `EdhocException` and reads its `cause`:
+
+  ```kotlin
+  // Before
+  try { handshake.run() } catch (e: IOException) { storeUnavailable(e) }
+
+  // After
+  try { handshake.run() } catch (e: EdhocException) { (e.cause as? IOException)?.let(::storeUnavailable) ?: throw e }
+  ```
 
 Two configuration builders and explicit `Endpoint` classes (WP-D1):
 

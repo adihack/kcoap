@@ -1,8 +1,13 @@
 package dev.kcoap.cbor
 
-/** Thrown for malformed or unsupported CBOR, with the byte offset where reading stopped. */
+import dev.kcoap.common.KcoapException
+
+/**
+ * Thrown for malformed or unsupported CBOR (RFC 8949), with the byte offset where reading stopped, and for COSE
+ * structures that are not what RFC 9052 requires. A [KcoapException].
+ */
 public class CborException(message: String, public val offset: Int = -1) :
-    Exception(if (offset >= 0) "$message (at byte $offset)" else message)
+    KcoapException(if (offset >= 0) "$message (at byte $offset)" else message, null)
 
 /** The eight CBOR major types (RFC 8949 §3.1). */
 public enum class CborType { UNSIGNED, NEGATIVE, BYTES, TEXT, ARRAY, MAP, TAG, SIMPLE }

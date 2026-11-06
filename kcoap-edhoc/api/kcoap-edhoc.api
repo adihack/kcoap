@@ -203,7 +203,7 @@ public final class dev/kcoap/edhoc/EdhocError$Companion {
 	public final fun wrongSelectedCipherSuite (Ljava/util/List;)Ldev/kcoap/edhoc/EdhocError;
 }
 
-public class dev/kcoap/edhoc/EdhocException : java/lang/Exception {
+public class dev/kcoap/edhoc/EdhocException : dev/kcoap/common/KcoapException {
 	public fun <init> (Ldev/kcoap/edhoc/EdhocError;Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ldev/kcoap/edhoc/EdhocError;Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getError ()Ldev/kcoap/edhoc/EdhocError;

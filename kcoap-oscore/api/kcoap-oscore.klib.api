@@ -79,7 +79,7 @@ final class dev.kcoap.oscore/OscoreClient : dev.kcoap.coap.security/ClientMessag
     final suspend fun protectRequest(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap.security/ProtectedRequest? // dev.kcoap.oscore/OscoreClient.protectRequest|protectRequest(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
 }
 
-final class dev.kcoap.oscore/OscoreException : kotlin/Exception { // dev.kcoap.oscore/OscoreException|null[0]
+final class dev.kcoap.oscore/OscoreException : dev.kcoap.common/KcoapException { // dev.kcoap.oscore/OscoreException|null[0]
     constructor <init>(dev.kcoap.oscore/OscoreError, kotlin/String? = ..., kotlin/Throwable? = ...) // dev.kcoap.oscore/OscoreException.<init>|<init>(dev.kcoap.oscore.OscoreError;kotlin.String?;kotlin.Throwable?){}[0]
 
     final val error // dev.kcoap.oscore/OscoreException.error|{}error[0]

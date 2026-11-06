@@ -13,7 +13,7 @@ platform's cryptography) and `kcoap-crypto-bc` (post-quantum on Bouncy Castle).
 | `AesCcm`, `Hkdf`, `Shake256`, `Kmac256` | AES-CCM on the backend's AES block (RFC 3610), HKDF on its HMAC (RFC 5869), SHAKE256 and KMAC256 on Keccak (FIPS 202, NIST SP 800-185) |
 | `Sec1` | Compressed P-256 and P-384 points expanded to `04 \|\| x \|\| y` (SEC 1 v2 §2.3.4) |
 | `EcdsaSignatureCodec` | ECDSA signatures between raw `r \|\| s` (COSE) and DER (X.509, TLS) |
-| `x509.X509Certificate`, `x509.SubjectPublicKeyInfo`, `x509.CertificateFormatException` | The parts of a certificate and of a SubjectPublicKeyInfo that EDHOC and DTLS need; one exception for whatever cannot be used |
+| `x509.X509Certificate`, `x509.SubjectPublicKeyInfo`, `x509.CertificateFormatException` | The parts of a certificate and of a SubjectPublicKeyInfo that EDHOC and DTLS need; one exception for whatever cannot be used, a `KcoapException` (kcoap-common) |
 | `CertificateValidator` | The SPI for chain validation, shared by EDHOC and DTLS; no implementation ships yet (below) |
 
 ## The contract at the seam

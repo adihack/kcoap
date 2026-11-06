@@ -15,6 +15,7 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.ResponseMode
+import dev.kcoap.common.KcoapException
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ChannelSecurityKind
 import dev.kcoap.transport.Connector
@@ -24,12 +25,10 @@ import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -61,6 +60,12 @@ import kotlinx.coroutines.withContext
  * - `CancellationException` only when the calling coroutine is cancelled, which cancels the exchange. A lower
  *   layer that cancels itself while the caller is still active, as a resolver whose own `withTimeout` expires
  *   does, fails the call with [CoapException] like any other failure of that layer.
+ *
+ * Every request, [ping] and [discover] lists [KcoapException], the root of [CoapException], and
+ * `CancellationException` in `@Throws`, so on Apple platforms Swift catches these failures as an `NSError`, with the
+ * Kotlin exception in its `userInfo` under `"KotlinException"`. A mistake of the caller is not listed and ends the
+ * process there, as a failed precondition does in Swift: a Swift caller parses a URI it did not write itself with
+ * [CoapUri.parse], which lists `IllegalArgumentException`, and passes the [CoapUri].
  *
  * Under message security the client acts only on responses it verified (ADR 0008). A protected request answered
  * only by an error that came without message security, such as OSCORE's unprotected 4.01 (RFC 8613 §8.2), is
@@ -155,6 +160,7 @@ public class CoapClient private constructor(
      * allows it and the server supports it, otherwise with Block1 and Block2 (RFC 7959) where the body needs
      * them.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun request(request: CoapRequest): CoapResponse {
         val peer = resolve(request.uri)
         log.debug { "$request to $peer" }
@@ -164,26 +170,32 @@ public class CoapClient private constructor(
     }
 
     /** Sends a [method] request to [uri], set up by [configure]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun request(method: CoapCode, uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapRequest.Builder(method, uri).apply(configure).build())
 
     /** GET (RFC 7252 §5.8.1) of [uri]; [configure] adds options or makes it Non-confirmable. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun get(uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapCode.GET, uri, configure)
 
     /** GET of the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun get(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         get(CoapUri.parse(uri), configure)
 
     /** DELETE (RFC 7252 §5.8.4) of [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun delete(uri: CoapUri, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         request(CoapCode.DELETE, uri, configure)
 
     /** DELETE of the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun delete(uri: String, configure: CoapRequest.Builder.() -> Unit = {}): CoapResponse =
         delete(CoapUri.parse(uri), configure)
 
     /** POST (RFC 7252 §5.8.2) of [payload] in [contentFormat] to [uri]; large bodies go in Block1 blocks. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun post(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -192,6 +204,7 @@ public class CoapClient private constructor(
     ): CoapResponse = withBody(CoapCode.POST, uri, payload, contentFormat, configure)
 
     /** POST to the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun post(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -200,6 +213,7 @@ public class CoapClient private constructor(
     ): CoapResponse = post(CoapUri.parse(uri), payload, contentFormat, configure)
 
     /** PUT (RFC 7252 §5.8.3) of [payload] in [contentFormat] to [uri]; large bodies go in Block1 blocks. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun put(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -208,6 +222,7 @@ public class CoapClient private constructor(
     ): CoapResponse = withBody(CoapCode.PUT, uri, payload, contentFormat, configure)
 
     /** PUT to the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun put(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -216,6 +231,7 @@ public class CoapClient private constructor(
     ): CoapResponse = put(CoapUri.parse(uri), payload, contentFormat, configure)
 
     /** FETCH (RFC 8132 §2): a GET with a request body. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun fetch(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -224,6 +240,7 @@ public class CoapClient private constructor(
     ): CoapResponse = withBody(CoapCode.FETCH, uri, payload, contentFormat, configure)
 
     /** FETCH to the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun fetch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -232,6 +249,7 @@ public class CoapClient private constructor(
     ): CoapResponse = fetch(CoapUri.parse(uri), payload, contentFormat, configure)
 
     /** PATCH (RFC 8132 §3). */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun patch(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -240,6 +258,7 @@ public class CoapClient private constructor(
     ): CoapResponse = withBody(CoapCode.PATCH, uri, payload, contentFormat, configure)
 
     /** PATCH to the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun patch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -248,6 +267,7 @@ public class CoapClient private constructor(
     ): CoapResponse = patch(CoapUri.parse(uri), payload, contentFormat, configure)
 
     /** iPATCH (RFC 8132 §3): an idempotent PATCH. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ipatch(
         uri: CoapUri,
         payload: ByteArray = ByteArray(0),
@@ -256,6 +276,7 @@ public class CoapClient private constructor(
     ): CoapResponse = withBody(CoapCode.IPATCH, uri, payload, contentFormat, configure)
 
     /** iPATCH to the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ipatch(
         uri: String,
         payload: ByteArray = ByteArray(0),
@@ -333,9 +354,11 @@ public class CoapClient private constructor(
      * CoAP ping of the server at [uri]: an Empty Confirmable message over UDP (RFC 7252 §4.3), true if it
      * answered with a Reset (or ACK); a Ping over a reliable transport (RFC 8323 §5.4), true if the Pong came.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ping(uri: CoapUri): Boolean = endpoint.ping(resolve(uri))
 
     /** CoAP ping of the server at the CoAP URI [uri]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ping(uri: String): Boolean = ping(CoapUri.parse(uri))
 
     /**
@@ -346,6 +369,7 @@ public class CoapClient private constructor(
      * @throws CoapException with [CoapException.Reason.BAD_RESPONSE] unless the answer is 2.05 link format; for a
      *   malformed document, its message says where, and the parser's exception is its cause.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun discover(server: CoapUri, query: String? = null): List<WebLink> {
         val uri = CoapUri(server.scheme, server.host, server.port, listOf(".well-known", "core"), listOfNotNull(query))
         val response = get(uri) { accept(ContentFormat.LINK_FORMAT) }
@@ -361,6 +385,7 @@ public class CoapClient private constructor(
     }
 
     /** Resource discovery at the server of the CoAP URI [server]; see [discover]. */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun discover(server: String, query: String? = null): List<WebLink> = discover(CoapUri.parse(server), query)
 
     /** Closes the endpoint if the client created it. */
@@ -372,11 +397,9 @@ public class CoapClient private constructor(
 
     /**
      * The peer for [uri], through [CoapClientConfig.resolver], with its failures translated as its contract
-     * says: a [CoapException], such as [CoapException.Reason.UNRESOLVED_HOST], and an `IllegalArgumentException`
-     * for a host the resolver cannot resolve by design pass unchanged; any other exception is a lookup that failed
-     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause. That includes a cancellation of the
-     * resolver's own, such as its `withTimeout` expiring, while the caller is still active; the caller's
-     * cancellation passes unchanged.
+     * says ([resolvePeer]): a lookup that fails at runtime, a cancellation of the resolver's own included, is
+     * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, while a [CoapException], an
+     * `IllegalArgumentException` and the caller's cancellation pass unchanged.
      *
      * Nothing is looked up on a closed endpoint, where the call fails like [CoapEndpoint.closeCause] at once, nor
      * for a `coaps` URI: without DTLS (RFC 7252 §9.1) its request would go out in plaintext, against RFC 7252
@@ -390,16 +413,7 @@ public class CoapClient private constructor(
                 CoapException.Reason.TRANSPORT_UNAVAILABLE,
             )
         }
-        return try {
-            config.resolver.resolve(uri)
-        } catch (e: CoapException) {
-            throw e
-        } catch (e: IllegalArgumentException) {
-            throw e
-        } catch (e: Exception) {
-            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
-            throw CoapException("Cannot resolve ${uri.host}: ${e.message}", CoapException.Reason.UNRESOLVED_HOST, e)
-        }
+        return resolvePeer(uri)
     }
 
     /** The request message without token and Message ID: URI options (RFC 7252 §6.4), options, body. */

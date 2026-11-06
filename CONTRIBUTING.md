@@ -85,6 +85,7 @@ Each test suite is one command, and every run ends with a table of tests per tar
 | `scripts/test interop` | cross-tests against libcoap and libedhoc in both roles; builds their Docker images |
 | `scripts/test coverage` | unit and interop tests, the coverage report and the coverage floor |
 | `scripts/test apple` | the common tests on macOS and the iOS simulator (macOS only) |
+| `scripts/test swift` | the Swift smoke test: kcoap called from Swift through a framework (macOS only) |
 | `scripts/test all` | unit, interop and coverage |
 
 Extra arguments go to Gradle, for example `scripts/test interop --tests '*Oscore*'`.

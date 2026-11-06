@@ -6,6 +6,7 @@ import dev.kcoap.cbor.CborInt
 import dev.kcoap.cbor.CborText
 import dev.kcoap.cbor.CborValue
 import dev.kcoap.cbor.CborWriter
+import dev.kcoap.common.KcoapException
 import kotlin.jvm.JvmOverloads
 
 /**
@@ -100,7 +101,8 @@ public class EdhocError(
 
 /**
  * An EDHOC session failed. [error] is what RFC 9528 §6 says to tell the peer, and [errorMessage] is that
- * error message encoded, ready to send, or null when nothing may be sent.
+ * error message encoded, ready to send, or null when nothing may be sent. Like the exceptions of kcoap's other
+ * protocols, it is a [KcoapException].
  *
  * Messages and diagnostics never contain key material or secret-dependent detail. When the peer fails to
  * authenticate (its credential is not trusted or does not fit the cipher suite, a certificate chain is
@@ -114,7 +116,7 @@ public open class EdhocException(
     public val error: EdhocError,
     message: String = error.diagnostic ?: error.toString(),
     cause: Throwable? = null,
-) : Exception(message, cause) {
+) : KcoapException(message, cause) {
     /** ERR_CODE of [error]. */
     public val errorCode: Int get() = error.code
 

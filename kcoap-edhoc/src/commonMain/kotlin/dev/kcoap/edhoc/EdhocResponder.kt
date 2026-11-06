@@ -1,5 +1,6 @@
 package dev.kcoap.edhoc
 
+import dev.kcoap.common.KcoapException
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.UnsupportedAlgorithmException
@@ -29,6 +30,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * message to send to the Initiator; the state machine is then [EdhocPhase.ABORTED]. After
  * [processMessage1] the application can inspect [method], [cipherSuite] and [peerConnectionIdentifier]
  * before answering.
+ *
+ * The four steps list [KcoapException], the root of [EdhocException], and `CancellationException` in `@Throws`,
+ * so on Apple platforms Swift catches an EDHOC failure as an `NSError`, with the Kotlin exception in its
+ * `userInfo` under `"KotlinException"`; a call out of order is a mistake of the caller and is not listed.
  *
  * Calling a method out of order throws [IllegalStateException] and leaves the state unchanged. Instances
  * are not thread-safe.
@@ -74,6 +79,7 @@ public class EdhocResponder(
      * the crypto backend runs. A selected suite that is not supported, or preceded in SUITES_I by a
      * supported one, fails with error code 2 and a SUITES_R of supported suites.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun processMessage1(message1: ByteArray) {
         expect<State.Start>("processMessage1")
         step("message_1") {
@@ -123,6 +129,7 @@ public class EdhocResponder(
      * When it fails or is cancelled, the ephemeral key Y and the PRKs derived so far are wiped (RFC 9528
      * §9.8), like the secrets of every later state when the session aborts.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun createMessage2(): ByteArray {
         val verified = expect<State.VerifiedMessage1>("createMessage2")
         return step("message_2") {
@@ -207,6 +214,7 @@ public class EdhocResponder(
      * ID_CRED_I and verifies Signature_or_MAC_3. On success the state machine is [EdhocPhase.COMPLETED]
      * and returns the session, which [session] returns afterwards too.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun processMessage3(message3: ByteArray): EdhocSession {
         val waiting = expect<State.WaitingForMessage3>("processMessage3")
         return step("message_3") {
@@ -295,6 +303,7 @@ public class EdhocResponder(
      * Composes message_4 (RFC 9528 §5.5.2), for application profiles that use it: it gives the Initiator
      * key confirmation when no protected application message flows from the Responder (RFC 9528 §5.5).
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun createMessage4(): ByteArray {
         val completed = expect<State.Completed>("createMessage4")
         return step("message_4") {

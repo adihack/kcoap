@@ -124,6 +124,14 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   too, a ping on a connection included: the closed state is checked under the lock that registers the
   exchange. A malformed link-format document from a server is `BAD_RESPONSE`, with the parser's message.
   `Reason` may gain constants in any minor release, so a `when` over it keeps an `else` branch.
+  `CoapException` is a `KcoapException` (kcoap-common), the root of every protocol's exception in kcoap, so one
+  `catch` covers it and the OSCORE and EDHOC failures alike.
+- **Swift**: the requests, `ping` and `discover` of `CoapClient`, and `CoapEndpoint.ping`, list `KcoapException`
+  and `CancellationException` in `@Throws`, so on Apple platforms Swift catches a `CoapException` as an `NSError`
+  (`do { try await client.request(request: request) } catch { ... }`), with the Kotlin exception in its
+  `userInfo` under `"KotlinException"`. Mistakes of the caller are not listed and end the process, as a failed
+  precondition does in Swift; parse a URI that is typed in with `CoapUri.parse`, which throws for Swift. The
+  Swift smoke test of the macOS CI job ([kcoap-swift-smoke](../kcoap-swift-smoke/README.md)) checks both.
 - **Configuration**: `CoapEndpointConfig` and `CoapClientConfig` are built with a DSL
   (`CoapClientConfig { requestTimeout = 5.seconds }`) or a `Builder`, which Swift uses too, and have a `Default`
   and `toBuilder()`; new options go into the builder, so neither source nor compiled callers break when one is

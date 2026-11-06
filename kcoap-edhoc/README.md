@@ -47,6 +47,11 @@ try {
 Calls out of order throw `IllegalStateException`. `EdhocPhase` mirrors the states of RFC 9528
 Appendix I.
 
+`EdhocException` is a `KcoapException` (kcoap-common), the root of every protocol's exception in kcoap. The
+eight steps (`createMessage1` to `processMessage4`, `processMessage1` to `createMessage4`) list it and
+`CancellationException` in `@Throws`, so on Apple platforms Swift catches an EDHOC failure as an `NSError`,
+with the Kotlin exception in its `userInfo` under `"KotlinException"`.
+
 ### Only suites the backend runs
 
 Platforms differ in what their cryptography offers: WebCrypto has no ChaCha20/Poly1305, so suites 4 and

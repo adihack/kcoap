@@ -247,7 +247,7 @@ public final class dev/kcoap/crypto/UnsupportedAlgorithmException : java/lang/Ex
 	public final fun getAlgorithm ()Ljava/lang/String;
 }
 
-public final class dev/kcoap/crypto/x509/CertificateFormatException : java/lang/Exception {
+public final class dev/kcoap/crypto/x509/CertificateFormatException : dev/kcoap/common/KcoapException {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 }

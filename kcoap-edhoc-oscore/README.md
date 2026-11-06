@@ -109,7 +109,14 @@ client.get("coap://192.0.2.1/lights")
 `{ edhocServer.handle(it.payload, peer) }`, fits as well. `runCombined()` returns a `CombinedHandshake`,
 which destructures into the session and the protection. A handshake fails with an `EdhocException`:
 `EdhocPeerErrorException` when the server sent an EDHOC error, `EdhocTransferException` (with the
-`response`) when it answered with something that is not EDHOC. A run that fails or is cancelled at any step
+`response`) when it answered with something that is not EDHOC; `CoapException`s of the transfer pass through.
+When the OSCORE context cannot be derived at the end because the `sequenceStore` or the crypto backend threw, the
+run fails with an `EdhocException` (error code 1) with that failure as cause, as `EdhocServer` does on its side.
+`PeerSecurity.install(client, uri, protection)` reports a lookup of the client's resolver that fails at runtime as
+the client's requests do, a `CoapException` with `UNRESOLVED_HOST` and the failure as cause.
+Both kinds are `KcoapException`s (kcoap-common), which `run`, `runCombined`, `EdhocServer.completeCombined`,
+`PeerSecurity.install(client, uri, protection)` and `EdhocSession.oscoreContext` list with `CancellationException`
+in `@Throws`, so Swift catches them as an `NSError`. A run that fails or is cancelled at any step
 wipes what it holds (RFC 9528 §9.8): the ephemeral key X while it waits for message_2, PRK_4e3m and the
 session's PRK_out and PRK_exporter after message_3.
 

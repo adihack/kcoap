@@ -856,7 +856,7 @@ final class dev.kcoap.coap.stack/CoapEndpointConfig { // dev.kcoap.coap.stack/Co
     }
 }
 
-final class dev.kcoap.coap.stack/CoapException : kotlin/Exception { // dev.kcoap.coap.stack/CoapException|null[0]
+final class dev.kcoap.coap.stack/CoapException : dev.kcoap.common/KcoapException { // dev.kcoap.coap.stack/CoapException|null[0]
     constructor <init>(kotlin/String, dev.kcoap.coap.stack/CoapException.Reason, kotlin/Throwable? = ..., dev.kcoap.coap/CoapResponse? = ...) // dev.kcoap.coap.stack/CoapException.<init>|<init>(kotlin.String;dev.kcoap.coap.stack.CoapException.Reason;kotlin.Throwable?;dev.kcoap.coap.CoapResponse?){}[0]
 
     final val reason // dev.kcoap.coap.stack/CoapException.reason|{}reason[0]

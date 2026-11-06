@@ -40,7 +40,7 @@ public final class dev/kcoap/cbor/CborBytes : dev/kcoap/cbor/CborValue {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class dev/kcoap/cbor/CborException : java/lang/Exception {
+public final class dev/kcoap/cbor/CborException : dev/kcoap/common/KcoapException {
 	public fun <init> (Ljava/lang/String;I)V
 	public synthetic fun <init> (Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getOffset ()I

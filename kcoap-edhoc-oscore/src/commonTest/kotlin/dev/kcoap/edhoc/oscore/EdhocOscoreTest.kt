@@ -605,7 +605,8 @@ class EdhocOscoreTest {
 
             override suspend fun store(contextName: String, limit: Long) = Unit
         }
-        assertFailsWith<IllegalStateException> { handshake(failingStore) { edhoc.handle(it.payload, peer) }.runCombined() }
+        val storeFailed = assertFailsWith<EdhocException> { handshake(failingStore) { edhoc.handle(it.payload, peer) }.runCombined() }
+        assertIs<IllegalStateException>(storeFailed.cause, "the store's exception is the cause")
         assertWiped("the store failed")
         assertEquals(2, sessions.size)
         for (session in sessions) {

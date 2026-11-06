@@ -64,7 +64,9 @@ val frame = ReliableMessageCodec.WebSocket.encode(request)  // RFC 8323 §4.2: n
   `CoapUri.parseOrNull` and `LinkFormat.parseOrNull` take text a peer sent, such as a `/.well-known/core`
   document and the link targets in it, and return null instead of throwing. `CoapUri.fromOptions` rebuilds a
   URI from options the application built; `CoapUri.fromOptionsOrNull` from the options of a received request,
-  returning null for one no URI has, such as an empty Uri-Port (the port 0).
+  returning null for one no URI has, such as an empty Uri-Port (the port 0). `CoapUri.parse` lists
+  `IllegalArgumentException` in `@Throws`, since URIs are often typed in: on Apple platforms Swift catches a
+  malformed one as an `NSError` (`try CoapUri.Companion.shared.parse(text:)`).
 - **Value types**: `CoapRequest` and `CoapResponse` are equal by their parts (the body by content); `CoapUri`,
   `WebLink` and the messages copy the lists and byte arrays they are given. `CoapResponse.from(message)`
   takes the response out of a message; `CoapMessageType.fromValue` returns null for a value no type has.
@@ -73,7 +75,9 @@ val frame = ReliableMessageCodec.WebSocket.encode(request)  // RFC 8323 §4.2: n
   another exception.
 - **Message-security SPI**: where RFC 8613 Figure 1 puts OSCORE, between the request/response layer and the
   messaging layer. kcoap-coap's stack calls it, kcoap-oscore implements it, and kcoap-edhoc-oscore decorates
-  it (RFC 9668).
+  it (RFC 9668). Its four operations list `MessageSecurityException` and `CancellationException` in `@Throws`,
+  which every implementation inherits; `MessageSecurityException` is a signal between the layers, not a
+  `KcoapException`, and kcoap-coap translates it at its boundary.
 
 ## Not here
 

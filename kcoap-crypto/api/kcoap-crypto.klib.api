@@ -205,7 +205,7 @@ abstract class dev.kcoap.crypto/PrivateKey { // dev.kcoap.crypto/PrivateKey|null
     open fun toString(): kotlin/String // dev.kcoap.crypto/PrivateKey.toString|toString(){}[0]
 }
 
-final class dev.kcoap.crypto.x509/CertificateFormatException : kotlin/Exception { // dev.kcoap.crypto.x509/CertificateFormatException|null[0]
+final class dev.kcoap.crypto.x509/CertificateFormatException : dev.kcoap.common/KcoapException { // dev.kcoap.crypto.x509/CertificateFormatException|null[0]
     constructor <init>(kotlin/String, kotlin/Throwable? = ...) // dev.kcoap.crypto.x509/CertificateFormatException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
 }
 
