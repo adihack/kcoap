@@ -109,8 +109,9 @@ class GettingStartedExamplesTest {
         }
     }
 
-    suspend fun oscoreClient(scope: CoroutineScope, masterSecret: ByteArray, store: SequenceNumberStore, port: Int) {
-        val context = SecurityContext.derive(
+    // Once per process, shared by every client that talks to that server (below).
+    suspend fun clientContext(masterSecret: ByteArray, store: SequenceNumberStore): SecurityContext =
+        SecurityContext.derive(
             SecurityContextParameters(
                 masterSecret = masterSecret,
                 senderId = byteArrayOf(0x00),
@@ -119,6 +120,8 @@ class GettingStartedExamplesTest {
             crypto,
             sequenceStore = store, // durable for a pre-shared key
         )
+
+    suspend fun oscoreClient(scope: CoroutineScope, context: SecurityContext, port: Int) {
         val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig { security = OscoreClient(context) })
         println(client.get("coap://127.0.0.1:$port/lights").payloadAsText())
         client.close()
@@ -206,7 +209,7 @@ class GettingStartedExamplesTest {
         val port = freePort()
         val masterSecret = crypto.randomBytes(16)
         val server = oscoreServer(scope, masterSecret, EphemeralSequenceNumberStore(), port)
-        oscoreClient(scope, masterSecret, EphemeralSequenceNumberStore(), port)
+        oscoreClient(scope, clientContext(masterSecret, EphemeralSequenceNumberStore()), port)
         val plain = CoapClient(KtorUdpTransport.bind(), scope)
         val refused = plain.get("coap://127.0.0.1:$port/lights")
         val status = plain.get("coap://127.0.0.1:$port/status")
@@ -216,6 +219,19 @@ class GettingStartedExamplesTest {
         assertEquals(listOf("on"), output)
         assertEquals(CoapCode.UNAUTHORIZED, refused.code, "without OSCORE the resource is refused")
         assertEquals("up", status.payloadAsText())
+    }
+
+    @Test
+    fun clientsThatShareOneDerivedContextKeepItsSequenceNumbersApart() = onLoopback { scope ->
+        val port = freePort()
+        val masterSecret = crypto.randomBytes(16)
+        val server = oscoreServer(scope, masterSecret, EphemeralSequenceNumberStore(), port)
+        val context = clientContext(masterSecret, EphemeralSequenceNumberStore())
+        oscoreClient(scope, context, port)
+        oscoreClient(scope, context, port) // a second screen, say: the same context, the next sequence number
+        server.close()
+
+        assertEquals(listOf("on", "on"), output, "the server's replay window accepts both")
     }
 
     @Test

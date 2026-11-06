@@ -92,7 +92,7 @@ as dependencies of these. Every artifact below is in `kcoap-bom`.
 | `coap+tcp` (RFC 8323) | `kcoap-transport-ktor` | `KtorTcpConnector` | `KtorTcpListener` | JVM, Android, Apple, Linux |
 | `coaps+tcp` (TLS) | `kcoap-transport-ktor` | `KtorTlsConnector` (JVM and Android only) | none in kcoap: a TLS-terminating reverse proxy in front of `KtorTcpListener` ([ADR 0010](adr/0010-server-side-tls.md)) | client on JVM and Android |
 | `coap+ws` (RFC 8323) | `kcoap-transport-ktor-websocket`; server: `kcoap-transport-ktor-websocket-server` and a ktor server engine you choose | `KtorWebSocketConnector` | `KtorWebSocketListener` | client everywhere, browsers and Node.js included; server on the JVM, Apple and Linux |
-| `coaps+ws` (TLS) | as `coap+ws` | `KtorWebSocketConnector()` on Apple, js and wasmJs; on the JVM and Android with an `HttpClient` you pass | none in kcoap: a ktor engine that runs TLS (Netty, Jetty) or a TLS-terminating proxy | see [platforms](platforms.md#tls-support-per-runtime) |
+| `coaps+ws` (TLS) | as `coap+ws` | `KtorWebSocketConnector()` on Apple, js and wasmJs; on the JVM and Android, `KtorWebSocketConnector(client)` with an `HttpClient` whose engine checks host names (OkHttp, or the Java engine on the JVM), not CIO ([why](platforms.md#clients)) | none in kcoap: a ktor engine that runs TLS (Netty, Jetty) or a TLS-terminating proxy | see [platforms](platforms.md#tls-support-per-runtime) |
 | `coaps` (DTLS) | none yet | — | — | DTLS comes last (roadmap E1); a `coaps` request fails with `CoapException(TRANSPORT_UNAVAILABLE)` before anything is sent |
 | in memory, for tests | `kcoap-testkit` | `InMemoryNetwork`, `InMemoryConnections` | the same | everywhere |
 
@@ -136,8 +136,10 @@ suspend fun helloClient(scope: CoroutineScope) {
 }
 ```
 
-- The `scope` is yours: the endpoint's coroutines run in it, and cancelling it closes the endpoint. On Android
-  that is a lifecycle scope, on a server the application's.
+- The `scope` is yours: the endpoint's coroutines run in it, and cancelling it closes the endpoint. Give it the
+  endpoint's lifetime: on Android an `Application`-level scope (or `ProcessLifecycleOwner`'s) for endpoints and
+  contexts that outlive a screen, not an Activity's `lifecycleScope`; on a server the application's
+  ([mobile lifecycle](platforms.md#mobile-lifecycle)).
 - Error codes come back as responses (`response.isSuccess`). What fails at runtime throws a `CoapException`, with a
   `reason` such as `RESPONSE_TIMEOUT`, `RESET` or `TRANSPORT_UNAVAILABLE`; every protocol's exception extends
   `KcoapException`, so one `catch` covers kcoap. `IllegalArgumentException` and `IllegalStateException` mean a
@@ -177,8 +179,9 @@ suspend fun oscoreServer(scope: CoroutineScope, masterSecret: ByteArray, store: 
     }
 }
 
-suspend fun oscoreClient(scope: CoroutineScope, masterSecret: ByteArray, store: SequenceNumberStore) {
-    val context = SecurityContext.derive(
+// Once per process, shared by every client that talks to that server (below).
+suspend fun clientContext(masterSecret: ByteArray, store: SequenceNumberStore): SecurityContext =
+    SecurityContext.derive(
         SecurityContextParameters(
             masterSecret = masterSecret,
             senderId = byteArrayOf(0x00),
@@ -187,6 +190,8 @@ suspend fun oscoreClient(scope: CoroutineScope, masterSecret: ByteArray, store: 
         crypto,
         sequenceStore = store, // durable for a pre-shared key
     )
+
+suspend fun oscoreClient(scope: CoroutineScope, context: SecurityContext) {
     val client = CoapClient(KtorUdpTransport.bind(), scope, CoapClientConfig { security = OscoreClient(context) })
     println(client.get("coap://127.0.0.1:5683/lights").payloadAsText())
     client.close()
@@ -199,6 +204,12 @@ suspend fun oscoreClient(scope: CoroutineScope, masterSecret: ByteArray, store: 
   recipes for the JVM and Android, Apple, Linux, browsers and Node.js. A restored context proves its freshness with
   Echo first (Appendix B.1.2), which the client does by itself. `EphemeralSequenceNumberStore` is only for keys that
   are new in this process run, as EDHOC's are.
+- **One live context per key.** Derive a pre-shared context once per process and share it, as `clientContext` is
+  meant to be used; never derive it twice at the same time from the same store and context name, from two screens
+  say. Two live contexts hand out the same sequence numbers, so one nonce would protect two messages under one
+  Sender Key, which RFC 8613 §7.2 forbids and kcoap cannot detect
+  ([kcoap-oscore](../kcoap-oscore/README.md#sequence-numbers-and-freshness)). On the server, the one
+  `OscoreServer` holds the context for every request.
 - **It fails closed** ([ADR 0008](adr/0008-fail-closed-message-security.md)). With `security` set, every resource
   takes OSCORE requests only, unless its `AccessPolicy` says otherwise; a plain request gets 4.01 before any handler
   runs. A client without a context for a server sends nothing and fails with `CoapException(SECURITY)`, and it acts
@@ -308,10 +319,13 @@ fun reliableClient(scope: CoroutineScope): CoapClient =
 ```
 
 That client sends `coap+tcp`, `coaps+tcp` (the TLS connector, on the JVM and Android) and `coap+ws` requests, and
-`coaps+ws` where the WebSocket connector's engine authenticates the server. A request whose scheme the endpoint
-cannot serve, `coaps` included, fails with `CoapException(TRANSPORT_UNAVAILABLE)` before anything is sent. Servers
-over TCP and WebSockets are in the [guide](guide-client-server.md#over-tcp-and-websockets); TLS for servers ends at
-a reverse proxy ([platforms](platforms.md#servers)).
+`coaps+ws` where the WebSocket connector's own engine authenticates the server: on Apple, in browsers and on
+Node.js. On the JVM and Android, give the connector an `HttpClient` whose engine checks host names, such as OkHttp
+or (on the JVM) the Java engine, for `coaps+ws`; not CIO, whose name check falls short of RFC 9525 §6
+([platforms](platforms.md#clients)). A request whose scheme the endpoint cannot serve, `coaps` included, fails with
+`CoapException(TRANSPORT_UNAVAILABLE)` before anything is sent. Servers over TCP and WebSockets are in the
+[guide](guide-client-server.md#over-tcp-and-websockets); TLS for servers ends at a reverse proxy
+([platforms](platforms.md#servers)).
 
 ## Next steps
 
