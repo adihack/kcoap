@@ -1202,6 +1202,7 @@ class QBlockObserveTest {
 
         assertEquals(emptyList(), s.fixture.sentBy(s.client.endpoint).filter { it.type == CoapMessageType.RST }, "no block of the new body is reset")
         assertEquals(listOf(body(64, 0), replacement).map { it.toList() }, s.received.map { it.payload.toList() })
+        assertEquals(1, s.client.endpoint.exchangeCount(), "the request's token went with the body it started")
         assertNull(s.failure)
     }
 
