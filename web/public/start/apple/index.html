@@ -90,7 +90,7 @@
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
           <span class="callout-title">Not released, and no Swift package yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local; run that build on the Mac that builds your app. There is no XCFramework and no Swift Package Manager package. kcoap’s public suspend functions list <code>KcoapException</code> in <code>@Throws</code>, so their failures reach Swift as an <code>NSError</code>; a Swift smoke test in the macOS CI job checks that, and has not had its first run yet. CI runs the common tests on macOS and the iOS simulator; nothing has run on an iPhone yet.</p>
+          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local; run that build on the Mac that builds your app. There is no XCFramework and no Swift Package Manager package. kcoap’s public suspend functions list <code>KcoapException</code> in <code>@Throws</code>, so their failures reach Swift as an <code>NSError</code>; a Swift smoke test in the macOS CI job checks that, and has passed since its first run on 6 November 2026. CI runs the common tests on macOS and the iOS simulator; nothing has run on an iPhone yet.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
@@ -241,11 +241,11 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h3>Local network</h3>
         <p>iOS asks the user before an app talks to peers on the local network. Add a usage description for it (<code>NSLocalNetworkUsageDescription</code> in Info.plist) if your app reaches CoAP devices on the LAN.</p>
         <h3>What CI checks</h3>
-        <p>The macOS job runs every common test on <code>macosArm64</code> and <code>iosSimulatorArm64</code>, with CryptoKit and CommonCrypto underneath, and the WebSocket loopback test on the Darwin engine. It also builds a <code>KcoapSmoke</code> framework of <code>kcoap-coap</code> and compiles and runs a Swift script against it, which catches a timeout and a malformed URI as <code>NSError</code>; that step has not run yet. The release workflow compiles <code>iosArm64</code>. CryptoKit signs Ed25519 with randomness, so on Apple the RFC 8032 and RFC 9529 signature checks verify signatures instead of comparing bytes.</p>
+        <p>The macOS job runs every common test on <code>macosArm64</code> and <code>iosSimulatorArm64</code>, with CryptoKit and CommonCrypto underneath, and the WebSocket loopback test on the Darwin engine. It also builds a <code>KcoapSmoke</code> framework of <code>kcoap-coap</code> and compiles and runs a Swift script against it, which catches a timeout and a malformed URI as <code>NSError</code>; that step has passed since its first run on 6 November 2026. The release workflow compiles <code>iosArm64</code>. CryptoKit signs Ed25519 with randomness, so on Apple the RFC 8032 and RFC 9529 signature checks verify signatures instead of comparing bytes.</p>
         <h3>Not done yet on Apple</h3>
         <ul>
           <li>An XCFramework, a Swift package and a Swift facade with Flow bridging (E4). Swift-only apps wait for that.</li>
-          <li>A run on a real iPhone, a first run of the Swift smoke test, a durable store tested on Apple, and an iOS guide.</li>
+          <li>A run on a real iPhone, a durable store tested on Apple, and an iOS guide.</li>
         </ul>
 
         <h2 id="troubleshooting">Troubleshooting</h2>

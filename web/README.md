@@ -72,7 +72,7 @@ Settings → Builds):
 | Git repository | `adihack/kcoap` |
 | Git branch (production) | `feat/protocol-core` until pull request #1 merges, then `main` |
 | Root directory | `web` |
-| Build command | empty |
+| Build command | `python3 ../scripts/check-site` (it builds nothing; a failed check stops the deploy) |
 | Deploy command | `npx wrangler deploy`; pinned: `npx wrangler@4.152.0 deploy` (below) |
 | Non-production branch command | `npx wrangler versions upload`; pinned: `npx wrangler@4.152.0 versions upload` |
 | Build watch paths (optional) | include `web/*`, so only changes to the site start a build |
@@ -87,32 +87,39 @@ Wrangler's changelog. Which form to use is the owner's choice; the site's brief 
 is read from the repository root or from the root directory. After setting it, push a change to a nested
 file such as `web/public/start/jvm/index.html` and check that a build starts; if none does, use `*`.
 
-**What deploys.** Workers Builds deploys every push to the production branch, whether or not the GitHub
-"Website" check passes: a commit that fails `scripts/check-site` still goes live. Run the script before
-pushing a change to `web/`. To make Cloudflare refuse such a commit, set the build command to
+**What deploys.** Workers Builds deploys every push to the production branch, and it does not wait for
+the GitHub "Website" check. The build command therefore runs the same check first:
 `python3 ../scripts/check-site` (the build clones the whole repository, the root directory is `web`, and the
-build image has Python 3); it builds nothing, so the site keeps no build step, but a failed check stops the
-deploy. That is the owner's choice: the settings above leave the build command empty.
+build image has Python, 3.14 by default). It builds nothing, so the site keeps no build step, but a commit
+that fails the check is not deployed and the build shows the check's errors. Run the script before pushing a
+change to `web/` anyway. Once pull request #1 has merged, the "Website" check also becomes required on
+`main` (below), so a failing change cannot merge either.
 
 The Worker's name in the dashboard must stay `kcoap`, the `name` in `wrangler.jsonc`, or the build fails.
 Current Cloudflare documentation calls the non-production setting **Preview command** and gives it the
 default `npx wrangler preview`, which creates a Preview; `npx wrangler versions upload` creates a version
 with its own URL instead. Neither touches production.
 
-`wrangler.jsonc` sets only `name`, `compatibility_date` and `assets` (`directory`, `not_found_handling`,
-`html_handling`). It has no `main`, because the Worker serves assets only, and no `routes`: the custom
-domain is attached in the dashboard (Settings → Domains & Routes). Without `routes`, Wrangler's
-`workers_dev` setting defaults to true, so the site also answers on the account's `workers.dev`
-subdomain; the canonical links in every page point search engines at kcoap.dev. To turn that copy off,
-declare the domain in `wrangler.jsonc` instead of adding `"workers_dev": false` alone:
-`"routes": [{ "pattern": "kcoap.dev", "custom_domain": true }]` makes `workers_dev` default to false, and
-`"preview_urls": true` keeps the URLs of non-production builds, since its initial value depends on
-`workers_dev`.
-Without `routes`, `"workers_dev": false` would leave the configuration with no deploy target of its own.
+`wrangler.jsonc` sets `name`, `compatibility_date`, `workers_dev`, `preview_urls` and `assets`
+(`directory`, `not_found_handling`, `html_handling`). It has no `main`, because the Worker serves assets
+only, and no `routes`: the custom domain is attached in the dashboard (Settings → Domains & Routes), which
+is what Cloudflare's documentation describes for routes managed in the dashboard ("remove the `route` and
+`routes` keys from your config file and add `workers_dev = false`"). Without `routes`, `workers_dev` would
+default to true and the site would also answer on the account's `workers.dev` subdomain, so it is set to
+`false`; Wrangler then logs that the Worker has no deploy targets of its own, and kcoap.dev keeps serving
+the new version. `"preview_urls": false` also turns off the version and preview URLs, which live on
+`workers.dev` too; left out, Wrangler would keep whatever the Worker had. Both apply on every deploy, so
+the dashboard cannot turn them back on for long. A build for another branch still uploads a version; it
+only has no URL to open. If the preview command fails because of that, set it to
+`npx wrangler versions upload`, or turn off builds for non-production branches.
 
-**www.kcoap.dev** does not resolve, and a Worker on kcoap.dev does not receive it. To send it to
-kcoap.dev, add a proxied `AAAA` record `www` → `100::` and a Redirect Rule from `www.kcoap.dev/*` to
-`https://kcoap.dev/${1}` (Custom Domains documentation, "www").
+**www.kcoap.dev** redirects to kcoap.dev with a zone rule; the Worker never sees it. In the dashboard
+(kcoap.dev → Rules → Overview → Create rule → Redirect Rule): match the wildcard pattern
+`https://www.kcoap.dev/*`, target URL `https://kcoap.dev/${1}`, status code 301, preserve the query string.
+The rule needs a proxied DNS record for `www`; Cloudflare offers to create one when the rule is saved, or
+add it under DNS → Records as type `AAAA`, name `www`, IPv6 address `100::`, proxied (a placeholder: no
+request ever reaches it). The pattern matches HTTPS only, which is all a browser sends to a `.dev` name,
+since the whole `.dev` domain is on the HSTS preload list.
 
 **DNS.** The custom domain needs no DNS record of your own, TXT or otherwise: on a zone that Cloudflare
 hosts, attaching a Custom Domain creates the DNS record and the certificate. The only TXT record the
@@ -169,7 +176,12 @@ Read on 6 November 2026:
 - `_headers`: syntax, splats, joined values, `!` to remove, 100 rules, 2,000 characters a line, and the
   default `Cache-Control` and `ETag`: https://developers.cloudflare.com/workers/static-assets/headers/
 - Wrangler configuration (`name`, `compatibility_date`, `assets` and its allowed values, `main` optional
-  for assets-only Workers, `workers_dev`): https://developers.cloudflare.com/workers/wrangler/configuration/
+  for assets-only Workers, `workers_dev` and its default, `preview_urls`, routes managed in the dashboard):
+  https://developers.cloudflare.com/workers/wrangler/configuration/
+- The build image and its Python version: https://developers.cloudflare.com/workers/ci-cd/builds/build-image/
+- The www redirect (wildcard pattern, `${1}`, 301, query string kept; HTTPS only):
+  https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/ and
+  https://developers.cloudflare.com/rules/url-forwarding/single-redirects/create-dashboard/
 - Workers Builds, and the Worker name that must match: https://developers.cloudflare.com/workers/ci-cd/builds/
 - Build settings (root directory, build command, deploy command, preview command):
   https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
@@ -193,6 +205,8 @@ Read on 6 November 2026:
 3. `grep -rn 'feat/protocol-core' web/public` then lists the sentences that explain the branch (the
    install steps on `/start/` and the platform guides); rewrite or remove them, run `scripts/check-site`
    and commit.
+4. On GitHub, make the "Website" check required on `main` (Settings → Rules → Rulesets, or the branch
+   protection rule), beside the DCO check, so a change that fails `scripts/check-site` cannot merge.
 
 ## Facts with a date
 
@@ -202,5 +216,5 @@ Some pages state the project's state on a given day. Update them when it changes
   packages on `/releases/` and the date beside them (TEMPLATE.md, section 7).
 - The "Before 0.1.0 is tagged" list and the static "No release yet" note on `/releases/`.
 - The state of the work packages that the pages describe: TLS, the browser topology through libcoap's proxy,
-  the Swift smoke test (pending its first CI run), post-quantum EDHOC on Android (not run on a device).
+  the Swift smoke test (passing in CI since its first run on 6 November 2026), post-quantum EDHOC on Android (not run on a device).
 - The `lastmod` dates in `sitemap.xml`.

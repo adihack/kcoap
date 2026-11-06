@@ -6,6 +6,12 @@
   "name": "kcoap",
   // A date in the past; it picks the Workers runtime version. Static assets do not depend on it.
   "compatibility_date": "2026-10-01",
+  // The site answers on kcoap.dev only. The custom domain is attached in the dashboard, so there are no
+  // "routes" here, and without them workers_dev would default to true and serve a second copy on the
+  // account's workers.dev subdomain. preview_urls keeps the version and preview URLs, which are also on
+  // workers.dev, off as well; a deploy applies both every time.
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     // Everything in web/public is uploaded and served as it is; there is no build step.
     "directory": "./public",
