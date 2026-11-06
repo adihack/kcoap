@@ -14,6 +14,7 @@ implemented. New records take the next number.
 | [0006](0006-q-block.md) | Q-Block (RFC 9177) as sans-IO state machines, off by default, with kcoap's token, retry and lifetime policies | Accepted |
 | [0007](0007-build-governance.md) | The build guards the architecture: common-only cores, ABI dumps, opt-in markers | Accepted |
 | [0008](0008-fail-closed-message-security.md) | Fail-closed message security: resource access policies on the server, only verified responses acted on by the client | Accepted |
+| [0009](0009-browser-topology-interop.md) | The browser topology is cross-tested through libcoap's own forward-proxy, with the device on the default port | Accepted |
 
 The full design these come from, with the review findings behind each, is in
 [../target-architecture.md](../target-architecture.md).

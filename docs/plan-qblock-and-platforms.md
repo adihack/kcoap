@@ -406,7 +406,7 @@ public class QBlockServerConfig(
 - **Done.** `js` and `wasmJs` builds of the protocol modules. WebCrypto with capability checks and fallbacks. WebSocket client. Common tests on Node for both targets.
 - **Missing, by priority:**
   1. Tests in a real browser (W1: headless Chrome job).
-  2. Browser → proxy → device end to end with OSCORE and EDHOC, and `coaps+ws` (I1).
+  2. Browser → proxy → device end to end with OSCORE and EDHOC, and `coaps+ws` (I1). I1 ran it from the JVM over `coap+ws`; `coaps+ws` moved to T1 and the run from a browser to PL-4 (Amendment (I1) in §3).
   3. Offering only the EDHOC suites that run there (A2; WebCrypto lacks ChaCha20).
   4. JS/TypeScript facade, `@JsExport`, npm package (kmp-7), and a bundle-size budget (P1).
   5. OSCORE over HTTP (deferred).
@@ -816,6 +816,21 @@ public class QBlockServerConfig(
   layer, above the link. They match responses to a token, the same on both links, and a Q-Block body on a
   connection uses them too (`ExchangeInbox.forReliableBody`); the link reaches them only through the
   `DeliveryOutcome` of what it sent (ACK, Reset, timeout), which only the datagram link reports.
+
+**Amendment (I1).**
+- Done in I1 ([ADR 0009](adr/0009-browser-topology-interop.md)), what target-architecture.md's WP-I1 scope and
+  Accept require: a WebSocket-only kcoap client on the JVM through libcoap 4.3.5b's forward-proxy, `coap+ws` in
+  and `coap` out, to a kcoap UDP device, with OSCORE (the device authorizing on the `OscoreIdentity`), EDHOC, the
+  RFC 9668 combined request and an observation, green in `scripts/test interop` on Linux. The Q-Block-off
+  assertion is in: a client set to `QBlockMode.PROBE` sends protected bodies in inner RFC 7959 blocks over
+  WebSockets, with no Q-Block option on either side of the proxy.
+- Not done, two parts this plan attached to I1, moved:
+  - `coaps+ws` to the gateway ("Web browser", missing item 2) moves to T1. It needs a certificate on the proxy
+    and trust configuration in kcoap's WebSocket connector, which is T1's work; T1 adds the same run with the
+    proxy's WebSocket listener behind TLS.
+  - Chrome in CI (the I1 row's Verify column) moves to PL-4. I1's client runs on the JVM, so no browser ran;
+    PL-4, which runs in Chrome in CI, runs the topology from the js test target in a headless browser, with
+    W1's `BrowserAgainstJvmListenerTest` harness and the libcoap proxy started beside it.
 
 **SRV-2: server hardening.**
 - Caps with tests for `DeduplicationCache`, `MessageIdAllocator`, `ObservationRegistry` and the exchange map, against spoofed CON floods.

@@ -23,10 +23,17 @@ kotlin {
             implementation(project(":kcoap-testkit"))
         }
         jvmTest.dependencies {
-            // For WP-I1 (docs/target-architecture.md §4.3), which adds the first jvmTest here: the combined
-            // EDHOC + OSCORE flow end to end over real sockets, with real ML-KEM / ML-DSA.
+            // The browser-topology interop (WP-I1): a WebSocket client and a UDP device with libcoap's proxy between
+            // them. Post-quantum EDHOC cannot cross that proxy yet (docs/adr/0009-browser-topology-interop.md).
             implementation(project(":kcoap-transport-ktor"))
-            implementation(project(":kcoap-crypto-bc"))
+            implementation(project(":kcoap-transport-ktor-websocket"))
         }
     }
+}
+
+tasks.withType<Test>().configureEach {
+    // The browser-topology interop runs or skips depending on docker, which Gradle cannot see as an input, so a
+    // result from one environment must never be reused in another.
+    inputs.property("libcoapImage", providers.environmentVariable("KCOAP_LIBCOAP_IMAGE").orElse("kcoap/libcoap:v4.3.5b"))
+    outputs.cacheIf { false }
 }

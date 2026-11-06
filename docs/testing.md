@@ -48,6 +48,11 @@ real sockets, with kcoap in each role: CoAP client and server against libcoap, O
 server against libcoap, EDHOC Initiator and Responder against libedhoc, post-quantum suite included.
 The tests skip themselves when Docker or an image is missing. See `interop/README.md`.
 
+They need Docker's host network, so Linux, and one port: the browser-topology test (WP-I1) puts its device on
+UDP port 5683 of a loopback address of its own, 127.a.b.c, since libcoap's proxy forwards only there, so
+nothing may hold UDP 5683 on the wildcard address (a manual `coap-server -p 5683`, for example). Runs at the
+same time, from several worktrees too, do not collide ([ADR 0009](adr/0009-browser-topology-interop.md)).
+
 ## Running the suites
 
 `scripts/test` runs each suite with one command and prints a table of tests per target at the end:

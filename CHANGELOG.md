@@ -15,6 +15,17 @@ adds its entry and migration note below.
 - Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
   `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
   they replace.
+- Tests only, no API change: the browser topology cross-tested end to end (WP-I1,
+  [ADR 0009](docs/adr/0009-browser-topology-interop.md)). In `BrowserTopologyInteropTest` (kcoap-edhoc-oscore,
+  run by `scripts/test interop`) a WebSocket-only kcoap client reaches a kcoap UDP device through libcoap
+  v4.3.5b's `coap-server -P` as a forward-proxy: OSCORE with the freshness challenge and inner block-wise bodies,
+  EDHOC, the RFC 9668 combined request and an EDHOC error, an OSCORE observation, the device authorizing on the
+  client's `OscoreIdentity` or `EdhocIdentity` (a protected 4.03 for an EDHOC peer it does not admit). Four
+  deviations of libcoap's proxy are pinned by `upstream…` tests; a fifth, request bodies of several blocks
+  corrupted, is documented, and keeps post-quantum EDHOC off that path for now. The device listens on UDP port
+  5683 of a loopback address of its own (127.a.b.c), so concurrent runs do not collide, but nothing may hold UDP
+  5683 on the host's wildcard address; each proxy container is removed when its test ends and stops by itself
+  after ten minutes.
 - The CoAP client's error contract (WP-B3): every runtime failure of a `CoapClient`, `CoapEndpoint` or
   `CoapServer` call is a `CoapException`, with two new reasons, `SECURITY` (message security could not protect
   the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
