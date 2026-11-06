@@ -24,10 +24,12 @@ import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -56,7 +58,9 @@ import kotlinx.coroutines.withContext
  * - `IllegalArgumentException` or `IllegalStateException` only for a mistake of the caller: a URI string that
  *   is not a CoAP URI, observing with a method other than GET or FETCH, or a host the configured
  *   [EndpointResolver] cannot resolve by design, such as a name given to [EndpointResolver.Default].
- * - `CancellationException` when the calling coroutine is cancelled, which cancels the exchange.
+ * - `CancellationException` only when the calling coroutine is cancelled, which cancels the exchange. A lower
+ *   layer that cancels itself while the caller is still active, as a resolver whose own `withTimeout` expires
+ *   does, fails the call with [CoapException] like any other failure of that layer.
  *
  * Under message security the client acts only on responses it verified (ADR 0008). A protected request answered
  * only by an error that came without message security, such as OSCORE's unprotected 4.01 (RFC 8613 §8.2), is
@@ -365,7 +369,9 @@ public class CoapClient private constructor(
      * The peer for [uri], through [CoapClientConfig.resolver], with its failures translated as its contract
      * says: a [CoapException], such as [CoapException.Reason.UNRESOLVED_HOST], and an `IllegalArgumentException`
      * for a host the resolver cannot resolve by design pass unchanged; any other exception is a lookup that failed
-     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause.
+     * at runtime, [CoapException.Reason.UNRESOLVED_HOST] with it as cause. That includes a cancellation of the
+     * resolver's own, such as its `withTimeout` expiring, while the caller is still active; the caller's
+     * cancellation passes unchanged.
      *
      * Nothing is looked up on a closed endpoint, where the call fails like [CoapEndpoint.closeCause] at once, nor
      * for a `coaps` URI: without DTLS (RFC 7252 §9.1) its request would go out in plaintext, against RFC 7252
@@ -381,13 +387,12 @@ public class CoapClient private constructor(
         }
         return try {
             config.resolver.resolve(uri)
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: CoapException) {
             throw e
         } catch (e: IllegalArgumentException) {
             throw e
         } catch (e: Exception) {
+            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
             throw CoapException("Cannot resolve ${uri.host}: ${e.message}", CoapException.Reason.UNRESOLVED_HOST, e)
         }
     }

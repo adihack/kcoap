@@ -19,12 +19,14 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -156,6 +158,23 @@ class ClientErrorContractTest {
         assertNull(withTimeoutOrNull(1.seconds) { client.get("coap://sensor.example/x") })
     }
 
+    /**
+     * A lookup that times out in its own `withTimeout`, as a DNS resolver's does, is a failed lookup: the caller is
+     * still active, so a `CancellationException` would end its coroutine without a word.
+     */
+    @Test
+    fun aLookupThatTimesOutOnItsOwnIsUnresolvedHost() = runTest {
+        val fixture = StackFixture(this)
+        val client = fixture.client(CoapClientConfig(resolver = EndpointResolver { withTimeout(1.seconds) { awaitCancellation() } }))
+
+        val error = assertFailsWith<CoapException> { client.get("coap://sensor.example/x") }
+        assertEquals(CoapException.Reason.UNRESOLVED_HOST, error.reason)
+        assertIs<TimeoutCancellationException>(error.cause)
+        assertTrue("sensor.example" in error.message.orEmpty(), error.message)
+        assertTrue(fixture.traffic.isEmpty())
+        assertEquals(CoapException.Reason.UNRESOLVED_HOST, assertFailsWith<CoapException> { client.ping("coap://sensor.example") }.reason)
+    }
+
     @Test
     fun anyFailureOfTheSecurityLayerIsSecurityWithItsCause() = runTest {
         val fixture = StackFixture(this)
@@ -173,6 +192,23 @@ class ClientErrorContractTest {
         assertEquals(0, client.endpoint.exchangeCount())
         val observing = assertFailsWith<CoapException> { client.observe("coap://127.0.0.1:9/x").collect() }
         assertEquals(CoapException.Reason.SECURITY, observing.reason)
+    }
+
+    /** A security layer whose own `withTimeout` expires, as a slow sequence-number store's may, failed to protect. */
+    @Test
+    fun aProtectionThatTimesOutOnItsOwnIsSecurity() = runTest {
+        val fixture = StackFixture(this)
+        val security = object : ClientMessageSecurity {
+            override suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest =
+                withTimeout(1.seconds) { awaitCancellation() }
+        }
+        val client = fixture.client(CoapClientConfig(security = security))
+
+        val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.SECURITY, error.reason)
+        assertIs<TimeoutCancellationException>(error.cause)
+        assertTrue(fixture.traffic.isEmpty(), "nothing was sent")
+        assertEquals(0, client.endpoint.exchangeCount())
     }
 
     @Test

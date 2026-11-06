@@ -23,6 +23,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -317,9 +319,10 @@ public class CoapEndpoint private constructor(
 
     /**
      * [security]'s protection of [request] for [peer]. Its failures are translated at this boundary, as for every
-     * client call (CoapException): any exception but a cancellation becomes [CoapException.Reason.SECURITY],
-     * with the security layer's own as cause, whatever its type, so a failing sequence-number store under OSCORE
-     * is reported like a missing context.
+     * client call (CoapException): any exception becomes [CoapException.Reason.SECURITY], with the security
+     * layer's own as cause, whatever its type, so a failing sequence-number store under OSCORE is reported like a
+     * missing context. That includes a cancellation of the layer's own, such as a store's `withTimeout` expiring,
+     * while the caller is still active; the caller's cancellation passes unchanged.
      */
     private suspend fun protect(
         security: ClientMessageSecurity,
@@ -328,9 +331,8 @@ public class CoapEndpoint private constructor(
     ): ProtectedRequest? {
         try {
             return security.protectRequest(request, peer)
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
+            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
             log.debug { "Message security did not protect ${request.code} to $peer: ${e.message}" }
             throw CoapException(
                 "Message security could not protect ${request.code} to $peer: ${e.message}",

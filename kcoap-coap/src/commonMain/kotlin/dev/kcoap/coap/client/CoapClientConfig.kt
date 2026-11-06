@@ -81,7 +81,8 @@ public enum class ObserveCancellation {
  * a mistake of configuration that no retry fixes, such as a host name given to [Default], which knows no DNS.
  * [CoapClient] passes both on, and reports any other exception of [resolve] as
  * [CoapException.Reason.UNRESOLVED_HOST] with it as cause, so a resolver built on a platform's DNS may let that
- * platform's exceptions through.
+ * platform's exceptions through. That includes the cancellation of a lookup that times out in its own
+ * `withTimeout` while the caller is still active; only the caller's own cancellation passes as one.
  *
  * A [CoapClient] does not resolve `coaps` URIs: without DTLS (RFC 7252 §9.1) it fails such a call with
  * [CoapException.Reason.TRANSPORT_UNAVAILABLE] before the resolver runs.
