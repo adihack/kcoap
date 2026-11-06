@@ -107,10 +107,13 @@ each ([TEMPLATE.md](TEMPLATE.md#icons)), which saves 3.2 KB on `/features/` and 
 stylesheet and the icons' attributes they weighed 172 KB, 152 KB and 99 to 113 KB.
 
 Pages link the sheets in a fixed order, `site.css` first ([TEMPLATE.md](TEMPLATE.md#1-the-head)); each sheet
-keeps its rules in the order they had when `site.css` was the only stylesheet, so the cascade gives the same
-result as before. Before moving a rule to another sheet, check what it competes with: between two rules of
-equal specificity, the one in the later sheet wins. `scripts/check-site` checks the order, that every class a
-page uses is in a sheet it links, and that no sheet names a class none of its pages uses.
+keeps its rules in the order they had when `site.css` was the only stylesheet, so the markup the pages have
+today gets the same cascade as before. Only that markup: between two rules of equal specificity the one in the
+later sheet wins, some such pairs changed order with the split, and a page that nests components from two
+sheets in a new way, such as a `.steps` list in a `.checks` item, can get the other rule (examples in
+[TEMPLATE.md](TEMPLATE.md#1-the-head)). Before moving a rule to another sheet, check what it competes with.
+`scripts/check-site` checks the order, that every class a page uses is in a sheet it links, and that no sheet
+names a class none of its pages uses; it does not check the cascade.
 
 ## Cloudflare settings
 

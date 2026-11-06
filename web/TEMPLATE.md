@@ -73,8 +73,8 @@ paint and adds the `js` class that the mobile menu and tabs rely on. Drop the `<
 
 Every page links `site.css` first, then only the other stylesheets it uses, always in this order:
 `figures.css`, `components.css`, `guide.css`, `home.css`. Each sheet keeps its rules in the order they had
-when `site.css` was the only stylesheet, so this order keeps every result of the cascade; the header of
-`site.css` says which sheet holds what.
+when `site.css` was the only stylesheet, so with this order the markup the pages have today gets the cascade it
+had then; the header of `site.css` says which sheet holds what.
 
 | Page | Stylesheets, in order |
 |---|---|
@@ -89,6 +89,14 @@ A new page links what its classes need. `scripts/check-site` fails when a page u
 one that `site.js` or `releases.js` sets) that no stylesheet it links names, when a sheet names a class that
 no page linking it uses, when a page links a sheet it uses nothing from, and when the order is not the one
 above.
+
+The order keeps the cascade only for the markup the pages have today. Between two rules of equal specificity
+the one in the later sheet now wins, where in the one stylesheet it may have come first, so nesting components
+from different sheets in a new way can change which wins: a `.steps` list in a `.checks` item gets the steps'
+padding and number badge instead of the check mark; a `.release-item` heading inside `.prose` gets the margin
+of `.prose h3`; `.jump-links` inside `.toc` or `.pager` get their link padding; `.evidence` or `.release-notes`
+items inside `.toc` get its list spacing. `scripts/check-site` checks classes, not the cascade, so it does not
+notice. For such a page, compare a screenshot with the nesting and without it, or move one of the two rules.
 
 A page with a script of its own loads it right after `site.js`, with `defer` (only `/releases/` has one:
 `<script src="/assets/releases.js" defer></script>`). `404.html` is served at every missing path, so it has

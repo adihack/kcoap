@@ -33,7 +33,8 @@ The directory defaults to web/public next to this script. Every HTML page in it 
   out, which a browser fetches for a home screen or a bookmark, not to show a page; the output lists every
   page's weight and its gzip size;
 - stylesheets: every page links site.css first and the others in the order of SHEET_ORDER, which keeps the
-  cascade as one stylesheet had it, and only sheets it uses; every class in a page's HTML, or set by a script
+  cascade one stylesheet gave the markup the pages have today (not every nesting a new page could add:
+  web/TEMPLATE.md, section 1), and only sheets it uses; every class in a page's HTML, or set by a script
   it loads (SCRIPT_CLASSES), is named by a rule in a stylesheet the page links; and every class a stylesheet
   names is used by a page that links it, or set by one of their scripts (no dead CSS);
 - sitemap.xml listing every page except 404.html, and nothing that is not a page; robots.txt allowing
@@ -63,7 +64,8 @@ MAX_PAGE_BYTES = 150 * 1024
 # bookmark or a pinned tab, not to show a page. The tab icons (rel="icon": favicon.ico, the SVG logo) count.
 UNCOUNTED_ICON_RELS = {"apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"}
 # The stylesheets in the order a page links them (site.css first, the others only where used). Each keeps its
-# rules in the order they had in the one site.css they came from, so this order keeps the cascade as it was.
+# rules in the order they had in the one site.css they came from, so this order keeps the cascade the pages had
+# for the markup they have today; a new nesting of components from two sheets can change it (web/TEMPLATE.md).
 SHEET_ORDER = ["assets/site.css", "assets/figures.css", "assets/components.css", "assets/guide.css",
                "assets/home.css"]
 # Classes the scripts add to a page, and the markup that makes them do it: an attribute ("[data-tabs]") or a

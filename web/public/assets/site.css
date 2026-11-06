@@ -14,9 +14,9 @@
  *   home.css        the home page's sections                  /
  *
  * A page links site.css first, then the others it needs in the order above. Each sheet keeps its rules in
- * the order they had when this was the only stylesheet, and that order of the sheets keeps every result of
- * the cascade as it was. Between two rules of equal specificity the later sheet wins, so before moving a
- * rule to another sheet, check what it competes with.
+ * the order they had when this was the only stylesheet, so the markup the pages have today gets the cascade
+ * it had then. Between two rules of equal specificity the later sheet wins, so check what a rule competes
+ * with before moving it to another sheet, or before nesting components from two sheets in a new way.
  *
  * Contents
  *   1. Tokens (light, dark by system preference, dark by choice)
