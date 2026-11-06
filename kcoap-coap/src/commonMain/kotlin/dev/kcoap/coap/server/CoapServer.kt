@@ -361,11 +361,14 @@ public class CoapServer private constructor(
         }
 
         val context = RequestContext(effective, peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
+        // A change counted from here on may be missing from the response: the observation notifies it (RFC 7641 §4.5).
+        val changesSeen = observable?.changeCount ?: 0L
         var response = acceptable(options, invoke(resource, context))
         var observation: ServerObservation? = null
         if (registering && response.isSuccess) {
             observation = ServerObservation(
                 this, observable, inbound.link, request.token, effective, unprotected, unprotected?.identity, block2?.size, key, now,
+                changesSeen = changesSeen,
             )
             val registration = observations.register(observation)
             if (registration == ObservationRegistry.Registration.ADDED) {
@@ -417,11 +420,13 @@ public class CoapServer private constructor(
         }
         val observable = (resource as? ObservableResource)?.takeIf { it.isObservable }
         val context = RequestContext(request, inbound.peer, unprotected?.identity, resource, inbound, inbound.peerIdentity)
+        // A change counted from here on may be missing from the response: the observation notifies it (RFC 7641 §4.5).
+        val changesSeen = observable?.changeCount ?: 0L
         val response = acceptable(options, invoke(resource, context))
         if (options.observe == OBSERVE_REGISTER && isObserveMethod && observable != null && response.isSuccess) {
             val observation = ServerObservation(
                 this, observable, inbound.link, request.token, request, unprotected, unprotected?.identity, null, key,
-                endpoint.now(), qBlockSize = blockSize,
+                endpoint.now(), qBlockSize = blockSize, changesSeen = changesSeen,
             )
             val registration = observations.register(observation)
             if (registration == ObservationRegistry.Registration.ADDED) {
