@@ -35,7 +35,8 @@ internal class InboundRequest(
 
     /**
      * Set when the request is answered before anything acted on it: message security rejected it, the server
-     * refused it (access policy, unknown path or method, unrecognized critical option, overload), so processing
+     * refused it (access policy, unknown path, unrecognized critical option, proxying, a body too large, an
+     * address check before a registration, overload), so processing
      * it again ends the same way and its deduplication entry may be forgotten for room (RFC 7252 §4.5). Read on
      * a datagram link when the answer goes out.
      */

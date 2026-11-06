@@ -85,8 +85,8 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
      * the place of the oldest *repeatable* one, a message §4.5 lets the endpoint process again because that
      * ends the same way: a request with an idempotent method (GET, PUT, DELETE, FETCH, iPATCH) once answered or
      * acknowledged, a message answered with a Reset, or a request answered before anything acted on it (a
-     * message-security failure, an access refusal, an unknown path or method, an unrecognized critical option,
-     * an overload refusal). A duplicate of a forgotten message is processed as a new one (§4.5 "relaxed"
+     * message-security failure, an access refusal, an unknown path, an unrecognized critical option, an
+     * overload refusal). A duplicate of a forgotten message is processed as a new one (§4.5 "relaxed"
      * deduplication). When nothing repeatable is left, a new message is dropped silently, without state and
      * without an answer that would go to a possibly spoofed source (§11.3), and reported as
      * [EndpointEvent.LimitReached] with `DEDUPLICATION_ENTRIES`; its sender retransmits a Confirmable one, and
