@@ -5,7 +5,7 @@ package dev.kcoap.crypto.testsuite
  * an operation fails or gives a wrong result, or it says no and the operations run, or fail with another
  * exception than `UnsupportedAlgorithmException`, or the answer changes.
  */
-public class CapabilityViolation(
+public class CapabilityViolation internal constructor(
     /** The question: an `AeadAlgorithm`, `KeyType`, `SignatureAlgorithm`, `KemAlgorithm` or `HashAlgorithm`. */
     public val question: Enum<*>,
     /** What the backend's `supports` member answered (its first answer, if it changed). */
