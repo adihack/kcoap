@@ -64,7 +64,8 @@ import kotlinx.coroutines.withContext
  * and options without Observe, ETag, payload (a FETCH keeps its payload unless it was uploaded with Q-Block1)
  * or Q-Block1, with the Request-Tag of the upload. Tokens are kept until the body ends, except those the
  * cores release and, for a long download, the oldest of [MAX_OPEN_FOLLOW_UPS] follow-ups; the requests for a
- * notification body go when that body is delivered, given up or superseded. On a reliable
+ * notification body go when that body is delivered, given up or superseded, except the one whose answer starts
+ * its replacement, which goes with that body, since the rest of it comes on its token. On a reliable
  * transport nothing is asked for again (Appendix B), so the inbox there has room for every block of the
  * largest body ([ExchangeInbox.forReliableBody]) and never drops one.
  *
@@ -884,8 +885,9 @@ internal class QBlockClient(private val client: CoapClient) {
          * changed representation). Otherwise it starts a new body, which supersedes the one in progress, when it
          * is fresher than every one before (RFC 7641 §3.4), or, without Observe, when it answers a request for
          * blocks of the body in progress ([origin] being one), which the server ran its handler again for: an
-         * answer to a request of an earlier body may be older than the bodies since. A body of one block needs no
-         * assembly.
+         * answer to a request of an earlier body may be older than the bodies since. That request then goes with
+         * the new body rather than the old one, since the rest of the new body comes on its token. A body of one
+         * block needs no assembly.
          */
         private suspend fun onNotificationBlock(observer: Observer, origin: Sent, message: CoapMessage, block: BlockOption) {
             val followUp = origin.exchange.key.token.takeIf { origin.blocks != null }
@@ -905,12 +907,16 @@ internal class QBlockClient(private val client: CoapClient) {
                 etag?.let { finish(it) }
                 return logger.debug { "Dropped a stale notification $observe (RFC 7641 §3.4)" }
             }
+            // Without Observe, the block answers a request for blocks of the body in progress, which the server
+            // ran its handler again for: the rest of the new body comes on that request's token, so it is kept.
+            val carried = if (observe == null) followUp?.also { current?.requests?.remove(it) } else null
             current?.let {
                 logger.debug { "A newer notification supersedes the one in progress (§4.4)" }
                 finishNotification(it)
             }
             if (block.number == 0L && !block.more) {
                 etag?.let { finish(it) }
+                carried?.let { releaseFollowUp(it) }
                 return observer.onNotification(response(message))
             }
             if (etag == null) return logger.debug { "Dropped a block without ETag" }
@@ -925,6 +931,7 @@ internal class QBlockClient(private val client: CoapClient) {
                 allowsBert = limits.allowsBert,
             )
             val next = Notification(etag, receiver)
+            carried?.let { next.requests += it }
             notification = next
             notificationActions(next, receiver.onBlock(endpoint.now(), message))
         }
@@ -966,6 +973,12 @@ internal class QBlockClient(private val client: CoapClient) {
             for (token in body.requests) release(token)
             followUps.removeAll { it.key.token in body.requests }
             releaseLease()
+        }
+
+        /** Forgets the Continue or request for missing blocks on [token] (§4.3). */
+        private suspend fun releaseFollowUp(token: String) {
+            release(token)
+            followUps.removeAll { it.key.token == token }
         }
 
         private fun finish(etag: ByteArray) {

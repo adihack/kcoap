@@ -1172,6 +1172,60 @@ class QBlockObserveTest {
         assertNull(s.failure)
     }
 
+    /**
+     * RFC 9177 §4.4: a notification body whose block 0 never came is asked for again with `0/M=1`, which runs the
+     * server's handler again. The answer, on the token of that request, starts a new body without Observe, and the
+     * rest of that body follows on the same token. The client keeps that token for the new body instead of
+     * releasing it with the body it replaces, so no block of the new body is reset and the new body is delivered.
+     */
+    @Test
+    fun rfc9177Section4_4ABodyStartedByTheAnswerToARequestForTheWholeBodyKeepsThatRequestsToken() = runTest {
+        val s = scripted()
+        s.observe(this)
+        val (peer, registration) = s.requests.receive()
+        val token = registration.token
+        s.sendBody(peer, token, body(64, 0), 0, 1)
+        val lost = body(4 * 64, 1)
+        for (num in 1L..3L) s.server.send(peer, s.block(token, num, lost, 1, 2).withHeader(CoapMessageType.CON, 0x7500 + num.toInt()))
+
+        val (_, again) = s.requests.receive()
+        assertEquals(listOf(BlockOption(0, true, 2)), again.options.qBlock2List, "the whole body is asked for again")
+        assertTrue(s.fixture.now >= parameters.maxTransmitSpan, "after MAX_TRANSMIT_SPAN: ${s.fixture.now}")
+        val replacement = body(4 * 64, 2)
+        s.server.send(peer, s.block(again.token, 0, replacement, 2, observe = null))
+        // The rest arrives once the client has taken block 0, as it would over a network with some latency.
+        delay(10.milliseconds)
+        for (num in 1L..3L) {
+            s.server.send(peer, s.block(again.token, num, replacement, 2, observe = null).withHeader(CoapMessageType.CON, 0x7600 + num.toInt()))
+        }
+        delay(1.seconds)
+
+        assertEquals(emptyList(), s.fixture.sentBy(s.client.endpoint).filter { it.type == CoapMessageType.RST }, "no block of the new body is reset")
+        assertEquals(listOf(body(64, 0), replacement).map { it.toList() }, s.received.map { it.payload.toList() })
+        assertNull(s.failure)
+    }
+
+    /** The same, answered with a body of one block: it is delivered, and the request's token goes with it. */
+    @Test
+    fun rfc9177Section4_4AnAnswerOfOneBlockToARequestForTheWholeBodyIsDeliveredAndReleasesItsToken() = runTest {
+        val s = scripted()
+        s.observe(this)
+        val (peer, registration) = s.requests.receive()
+        val token = registration.token
+        s.sendBody(peer, token, body(64, 0), 0, 1)
+        val lost = body(4 * 64, 1)
+        for (num in 1L..3L) s.server.send(peer, s.block(token, num, lost, 1, 2).withHeader(CoapMessageType.CON, 0x7500 + num.toInt()))
+
+        val (_, again) = s.requests.receive()
+        val small = body(40, 2)
+        s.server.send(peer, s.block(again.token, 0, small, 2, observe = null))
+        delay(1.seconds)
+
+        assertEquals(listOf(body(64, 0), small).map { it.toList() }, s.received.map { it.payload.toList() })
+        assertEquals(1, s.client.endpoint.exchangeCount(), "only the observation's token stays")
+        assertNull(s.failure)
+    }
+
     @Test
     fun rfc9177Section4_4ANotificationBodyBeyondTheLimitFailsTheObservation() = runTest {
         val s = scripted(maxResponseBodySize = 1000)
