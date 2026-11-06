@@ -113,10 +113,10 @@ adds its entry and migration note below.
   of missing blocks, and `0/M=1` with the cached body's Request-Tag are served from the cache. A body that
   gives way in the cache while it still sends finishes its sets, bodies done sending give way first, and a
   GET or FETCH body of one block is not cached. An upload holds only the blocks that arrived, whatever its
-  Size1 claims, and any request body of one message beyond `maxBodySize` gets 4.13, Q-Block2 or not. On TCP
-  and WebSockets blocks go back to back and the requests in between count as answered, so a Ping with
-  Custody is not held up. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`, everything sent in answer
-  to one request to an address not yet verified counts against the factor, later sets and the
+  Size1 claims, and any request body of one message beyond `maxRequestBodySize` gets 4.13, Q-Block2 or
+  not. On TCP and WebSockets blocks go back to back and the requests in between count as answered, so a
+  Ping with Custody is not held up. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`, everything
+  sent in answer to one request to an address not yet verified counts against the factor, later sets and the
   retransmissions of a Confirmable block included: a first burst beyond it gets a 4.01 with Echo instead,
   later sets beyond it stop, and a Continue is a request of its own. The server warns at start when Q-Block
   is on (RFC 9177 §11): without `security`, or for the requests without OSCORE that a server with `security`
@@ -137,13 +137,13 @@ adds its entry and migration note below.
   supports it, bodies that need blocks go in Q-Block1 and responses come in Q-Block2, with 2.31, Continue,
   4.08 lists and requests for missing blocks recovering lost blocks without a round trip per block. A
   body follows its request's message type: use `nonConfirmable()` for the bursts of §7.2; Confirmable
-  bodies go in lock-step. `CoapClientConfig.blockSize` and `maxResponseBodySize` apply. A NON upload holds
-  at most four sets of unconfirmed requests (40 by default) and waits for the server's 2.31 or 4.08 beyond
-  that, so a long body stays well below `maxExchangesPerPeer`. Requests with No-Response, Observe or block
-  options of their own, observations, requests under message security and requests over TCP or WebSockets
-  (unless `onReliableTransports`) keep RFC 7959; so does a request a server rejects with 4.02 or a Reset
-  before answering anything else, which is sent again with RFC 7959. Requests under message security keep
-  it unless `withMessageSecurity` (QB-5, below).
+  bodies go in lock-step. `CoapClientConfig.preferredBlockSize` and `maxResponseBodySize` apply. A NON
+  upload holds at most four sets of unconfirmed requests (40 by default) and waits for the server's 2.31
+  or 4.08 beyond that, so a long body stays well below `maxExchangesPerPeer`. Requests with No-Response,
+  Observe or block options of their own, observations, requests under message security and requests over TCP
+  or WebSockets (unless `onReliableTransports`) keep RFC 7959; so does a request a server rejects with 4.02
+  or a Reset before answering anything else, which is sent again with RFC 7959. Requests under message
+  security keep it unless `withMessageSecurity` (QB-5, below).
   `missingBlockMBit` asks for the missing tail of a set with one option. The client reports the Q-Block
   events of the server's entry above: `EndpointEvent.QBlockFallback` once per finding that a server does
   not take Q-Block, `EndpointEvent.QBlockRecovery` and `EndpointEvent.PartialBodyDropped` for its bodies.

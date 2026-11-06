@@ -65,7 +65,7 @@ The critiques' corrections are already applied in this table. "Policy" marks a k
 | 36 | §7.2 | SHOULD | srv | A Continue sends the set starting at NUM on the original token, at once | Even if those blocks were already sent (Figure 10). A repeated Continue within the same NON_TIMEOUT_RANDOM window is ignored |
 | 37 | §7, App. B | RULE | both | Reliable transports: no sets, gaps, 2.31, CF-272 4.08 or timers; blocks back to back | The server marks intermediate requests answered, so Custody and Release are not stuck |
 | 38 | §11; 9175 §2.4, §2.6 | NOT REC. / SHOULD | both | NoSec Q-Block is not recommended; mitigate amplification towards unauthenticated peers | WARN when NoSec. Echo address check before NON bursts larger than 3× the request bytes (SRV-1) |
-| 39 | 7959 §7.1 | SHOULD | srv | Bound the state | Size1 > maxBodySize gets 4.13 with Size1; NUM×size ≥ Size1 or a last block that does not add up gets 4.00; per-peer and global caps give 5.03 with Max-Age |
+| 39 | 7959 §7.1 | SHOULD | srv | Bound the state | Size1 > maxRequestBodySize gets 4.13 with Size1; NUM×size ≥ Size1 or a last block that does not add up gets 4.00; per-peer and global caps give 5.03 with Max-Age |
 | 40 | 8613 §7.4, §8.4 | outside RFC 8613 | cli | OSCORE assumes a single response per request | Several responses are allowed only to requests that carried inner Q-Block1 or Q-Block2: each needs a new Partial IV, checked against a per-request replay window (QB-5) |
 | 41 | §8, §9 | MUST | proxy | Proxy rules | Not applicable (no proxy, coap-core-7) |
 
@@ -155,9 +155,9 @@ public class QBlockServerConfig(
 | internal | NON_TIMEOUT_RANDOM | uniform in [2 s, 3 s], once per body | libcoap uses [2, 2.5] s |
 | internal | NON_PROBING_WAIT | 245 s + NON_TIMEOUT_RANDOM, so 247–248 s | Caps the BodyLease |
 | `QBlockClientConfig` | as in the code above | | With `security != null` and `withMessageSecurity = false`, Q-Block is off for that whole client |
-| reused | `CoapClientConfig.blockSize` / `maxResponseBodySize` | null / 1 MiB | SZX fixed per body; Size2 checked before allocating |
+| reused | `CoapClientConfig.preferredBlockSize` / `maxResponseBodySize` | null / 1 MiB | SZX fixed per body; Size2 checked before allocating |
 | `QBlockServerConfig` | as in the code above | | `completedBodies` lifetime = nonPartialTimeout |
-| reused | `CoapServerConfig.maxBlockSize`, `maxBodySize`, `securityReserve`, `nonConfirmableNotificationInterval` | 1024, 1 MiB, 64, 3 s | One notification body counts as one notification |
+| reused | `CoapServerConfig.maxBlockSize`, `maxRequestBodySize`, `securityReserve`, `nonConfirmableNotificationInterval` | 1024, 1 MiB, 64, 3 s | One notification body counts as one notification |
 
 ### 1.4 Behaviour (corrected algorithms)
 
@@ -559,7 +559,8 @@ public class QBlockServerConfig(
     cached body (a Continue, missing blocks, or `0/M=1` with the body's Request-Tag); one with a payload is
     a new request whose handler runs (§4.1: a client offers Q-Block2 for the response that way), and gets
     4.00 next to a Q-Block2 block above 0. The Figure 12 match without Request-Tag applies only to requests
-    without payload. A request body of one message beyond `maxBodySize` gets 4.13 with Size1, Q-Block2 or not.
+    without payload. A request body of one message beyond `maxRequestBodySize` gets 4.13 with Size1, Q-Block2
+    or not.
   - Amplification: `mustVerifyAddress` is called for each burst (the first set on the request, a Continue's
     set, a missing-block answer, and each later set on the timer) with everything sent in answer to that
     request so far plus the burst, a separate Confirmable block counted with its MAX_RETRANSMIT
