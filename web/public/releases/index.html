@@ -69,7 +69,7 @@
       <ul class="fact-tiles" aria-label="Release status">
         <li class="fact-tile"><span class="fact-tile-label">Version now</span><span class="fact-tile-value"><code>0.1.0-SNAPSHOT</code></span></li>
         <li class="fact-tile"><span class="fact-tile-label">First release</span><span class="fact-tile-value">0.1.0</span></li>
-        <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">8 of 13 merged</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">12 of 13 merged</span></li>
         <li class="fact-tile"><span class="fact-tile-label">Published to</span><span class="fact-tile-value">Nowhere yet</span></li>
       </ul>
     </div>
@@ -105,20 +105,19 @@
           <li class="meter-block is-done" title="merged">A2</li>
           <li class="meter-block is-done" title="merged">A3</li>
           <li class="meter-block is-done" title="merged">A4</li>
-          <li class="meter-block is-active" title="in progress">A5</li>
+          <li class="meter-block is-done" title="merged">A5</li>
           <li class="meter-block is-done" title="merged">W1</li>
           <li class="meter-block is-done" title="merged">B1</li>
           <li class="meter-block is-done" title="merged">B2</li>
-          <li class="meter-block" title="not started">B3</li>
+          <li class="meter-block is-done" title="merged">B3</li>
           <li class="meter-block is-done" title="merged">C1</li>
-          <li class="meter-block" title="not started">D1</li>
-          <li class="meter-block" title="not started">D2</li>
+          <li class="meter-block is-done" title="merged">D1</li>
+          <li class="meter-block is-done" title="merged">D2</li>
           <li class="meter-block" title="not started">C3</li>
         </ol>
         <ul class="meter-legend">
-          <li class="is-done">8 merged</li>
-          <li class="is-active">1 in progress</li>
-          <li>4 not started</li>
+          <li class="is-done">12 merged</li>
+          <li>1 not started</li>
         </ul>
       </div>
       <div class="table-wrap mt-2">
@@ -129,19 +128,19 @@
             <tr><th scope="row">A2</th><td>EDHOC capability-aware negotiation, typed retry, returned sessions</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">A3</th><td>The EDHOC and OSCORE glue on interfaces and the application model</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">A4</th><td><code>kcoap-crypto</code> as the home of shared crypto blocks</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
-            <tr><th scope="row">A5</th><td><code>DefaultCryptoBackend</code> as a final adapter</td><td class="state-col"><span class="badge badge-partial">in progress</span></td></tr>
+            <tr><th scope="row">A5</th><td><code>DefaultCryptoBackend</code> as a final adapter</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">W1</th><td>RFC 8323 transport follow-ups</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">B1</th><td>One internal link per peer under the CoAP endpoint</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">B2</th><td><code>kcoap-coap-message</code> split out of <code>kcoap-coap</code></td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
-            <tr><th scope="row">B3</th><td>The public API of <code>kcoap-coap</code> cleaned up</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">B3</th><td>The public API of <code>kcoap-coap</code> cleaned up</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">C1</th><td>Build governance: ABI dumps, common-only cores, opt-in markers</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
-            <tr><th scope="row">D1</th><td>Two configuration builders and explicit endpoint classes</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
-            <tr><th scope="row">D2</th><td>A <code>KcoapException</code> root, <code>@Throws</code> and a Swift smoke test</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">D1</th><td>Two configuration builders and explicit endpoint classes</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">D2</th><td>A <code>KcoapException</code> root, <code>@Throws</code> and a Swift smoke test</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
             <tr><th scope="row">C3</th><td>Assembly and documentation: a BOM, a getting-started guide, a platforms guide</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
           </tbody>
         </table>
       </div>
-      <p class="muted">TLS for <code>coaps+tcp</code> (T1), browser interop (I1), consumer samples (P1) and a crypto conformance suite (C2) do not block a release; C3 builds on C2, so C2 lands first in practice. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
+      <p class="muted">TLS for stream transports (T1), browser interop (I1) and a crypto conformance suite (C2) have merged, but do not block a release; nor do consumer samples (P1) and the rest of the CoAP errors and observability work (B4). <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
     </div>
   </section>
 
@@ -175,6 +174,7 @@
       <div class="card">
         <ul class="checks mb-0">
           <li class="is-open">The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
+          <li class="is-open">Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed.</li>
           <li class="is-open">CHANGELOG.md has an entry for the version, with migration notes.</li>
           <li class="is-open">The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
           <li class="is-open">The Maven Central and signing secrets are set.</li>
