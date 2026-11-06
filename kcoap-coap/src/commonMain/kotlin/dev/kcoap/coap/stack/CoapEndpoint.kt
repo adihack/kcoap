@@ -79,7 +79,7 @@ public class CoapEndpoint private constructor(
     public constructor(
         transport: DatagramTransport,
         scope: CoroutineScope,
-        config: CoapEndpointConfig = CoapEndpointConfig(),
+        config: CoapEndpointConfig = CoapEndpointConfig.Default,
     ) : this(transport, emptyList(), emptyList(), scope, config)
 
     /**
@@ -91,7 +91,7 @@ public class CoapEndpoint private constructor(
      */
     public constructor(
         scope: CoroutineScope,
-        config: CoapEndpointConfig = CoapEndpointConfig(),
+        config: CoapEndpointConfig = CoapEndpointConfig.Default,
         transport: DatagramTransport? = null,
         connectors: List<Connector> = emptyList(),
         listeners: List<ConnectionListener> = emptyList(),
