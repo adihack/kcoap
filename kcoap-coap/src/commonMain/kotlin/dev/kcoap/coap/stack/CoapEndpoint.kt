@@ -642,7 +642,7 @@ public class CoapEndpoint private constructor(
         val handler = requestHandler
         if (handler == null) {
             if (link.capabilities.hasReset) {
-                request.reject("no server on this endpoint")
+                request.reject(EndpointEvent.MessageRejected.Reason.NO_SERVER)
             } else {
                 request.respond(CoapMessage.response(message, CoapCode.NOT_IMPLEMENTED))
             }
@@ -735,7 +735,7 @@ public class CoapEndpoint private constructor(
         if (exchange == null) {
             // RFC 7252 §5.3.2 and RFC 7641 §3.5: an unexpected response is rejected, which also cancels an
             // observation the client forgot (RFC 7641 §3.6); a connection has no Reset and drops it.
-            link.rejectResponse(message, "no exchange for token ${message.tokenHex}")
+            link.rejectResponse(message, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN, "token ${message.tokenHex}")
             return
         }
         // RFC 8323 §3.1: on a connection there is nothing to answer at the messaging layer.
@@ -756,7 +756,7 @@ public class CoapEndpoint private constructor(
                 is ClientExchange.Inspection.Rejected -> {
                     // The exchange ends, and its last event takes the room back.
                     reservation?.release()
-                    link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
+                    link.rejectResponse(message, EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, inspection.cause.message)
                     exchange.refuse(inspection.cause)
                     return
                 }

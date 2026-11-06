@@ -219,27 +219,61 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
     }
 
     final class MalformedMessage : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason, kotlin/String? = ...) // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.coap.stack.EndpointEvent.MalformedMessage.Reason;kotlin.String?){}[0]
 
+        final val detail // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.detail.<get-detail>|<get-detail>(){}[0]
         final val peer // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.peer|{}peer[0]
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.peer.<get-peer>|<get-peer>(){}[0]
         final val reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason.<get-reason>|<get-reason>(){}[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason.<get-reason>|<get-reason>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> { // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason|null[0]
+            enum entry FORMAT_ERROR // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR|null[0]
+            enum entry UNKNOWN_VERSION // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.UNKNOWN_VERSION|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.values|values#static(){}[0]
+        }
     }
 
     final class MessageRejected : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.MessageRejected|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Int, kotlin/String) // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Int;kotlin.String){}[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Int, dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason, kotlin/String? = ...) // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Int;dev.kcoap.coap.stack.EndpointEvent.MessageRejected.Reason;kotlin.String?){}[0]
 
+        final val detail // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.detail.<get-detail>|<get-detail>(){}[0]
         final val messageId // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.messageId|{}messageId[0]
             final fun <get-messageId>(): kotlin/Int // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.messageId.<get-messageId>|<get-messageId>(){}[0]
         final val peer // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.peer|{}peer[0]
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.peer.<get-peer>|<get-peer>(){}[0]
         final val reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason.<get-reason>|<get-reason>(){}[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason.<get-reason>|<get-reason>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> { // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason|null[0]
+            enum entry EMPTY_NON_CONFIRMABLE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.EMPTY_NON_CONFIRMABLE|null[0]
+            enum entry FOREIGN_TOKEN // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.FOREIGN_TOKEN|null[0]
+            enum entry INVALID_ACKNOWLEDGEMENT // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_ACKNOWLEDGEMENT|null[0]
+            enum entry INVALID_RESET // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_RESET|null[0]
+            enum entry NO_SERVER // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.NO_SERVER|null[0]
+            enum entry PING // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.PING|null[0]
+            enum entry RESERVED_CODE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.RESERVED_CODE|null[0]
+            enum entry UNKNOWN_SIGNAL // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNKNOWN_SIGNAL|null[0]
+            enum entry UNKNOWN_TOKEN // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN|null[0]
+            enum entry UNRECOGNIZED_CRITICAL_OPTION // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.values|values#static(){}[0]
+        }
     }
 
     final class ObserverAdded : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.ObserverAdded|null[0]

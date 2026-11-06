@@ -264,6 +264,11 @@ class ReliableMessagingTest {
         val events = messaging.takeEffects().events()
         assertEquals(2, events.size)
         assertTrue(events.all { it is EndpointEvent.MessageRejected && it.messageId == 0 })
+        assertEquals(
+            listOf(EndpointEvent.MessageRejected.Reason.UNKNOWN_SIGNAL, EndpointEvent.MessageRejected.Reason.RESERVED_CODE),
+            events.map { (it as EndpointEvent.MessageRejected).reason },
+        )
+        assertEquals(listOf("7.09", "6.01"), events.map { (it as EndpointEvent.MessageRejected).detail?.substringBefore(' ') })
         assertFalse(messaging.isClosed)
     }
 
@@ -274,7 +279,9 @@ class ReliableMessagingTest {
         // TKL 9 is reserved.
         messaging.onReceived(1.seconds, "0901".hexToBytes())
         val effects = messaging.takeEffects()
-        assertIs<EndpointEvent.MalformedMessage>(effects.events().first())
+        val malformed = assertIs<EndpointEvent.MalformedMessage>(effects.events().first())
+        assertEquals(EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR, malformed.reason)
+        assertEquals("Reserved token length 9", malformed.detail)
         assertEquals(CoapCode.ABORT, effects.written().single().code)
         assertTrue(messaging.isClosed)
     }

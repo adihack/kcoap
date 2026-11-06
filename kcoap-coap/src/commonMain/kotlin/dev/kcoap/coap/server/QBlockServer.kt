@@ -171,7 +171,7 @@ internal class QBlockServer(
         if (violation != null) {
             log.debug { "Refused a Q-Block request from ${ref.inbound.peer}: $violation" }
             if (violation.resetIfNonConfirmable && !ref.inbound.isConfirmable) {
-                ref.inbound.reject(violation.diagnostic)
+                ref.inbound.reject(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, violation.diagnostic)
                 return null
             }
             val refusal = CoapResponse.error(violation.code, violation.diagnostic)

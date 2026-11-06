@@ -33,17 +33,100 @@ public sealed interface EndpointEvent {
         override fun toString(): String = "DuplicateReceived(peer=$peer, mid=$messageId)"
     }
 
-    /** A datagram was not a well-formed message (RFC 7252 §4.2); it was answered with a Reset if Confirmable. */
-    public class MalformedMessage(override val peer: Endpoint, public val reason: String) : EndpointEvent {
-        override fun toString(): String = "MalformedMessage(peer=$peer, reason=$reason)"
+    /**
+     * What [peer] sent was not a well-formed message. A datagram was answered with a Reset if its header showed a
+     * Confirmable message, and dropped otherwise (RFC 7252 §4.2, §4.3); a connection was aborted (RFC 8323 §5.6).
+     * [reason] is a bounded set fit for counting; [detail] is what the parser said, for a log.
+     */
+    public class MalformedMessage(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a message was malformed. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /** A datagram with a CoAP version other than 1, silently ignored (RFC 7252 §3). */
+            UNKNOWN_VERSION,
+
+            /**
+             * A message format error (RFC 7252 §3, §3.1, §4.2; RFC 8323 §3.2, §4.2): a header, token, option or
+             * payload marker that breaks the encoding, or on a connection a message above the Max-Message-Size this
+             * side announced (RFC 8323 §5.3.1).
+             */
+            FORMAT_ERROR,
+        }
+
+        override fun toString(): String =
+            "MalformedMessage(peer=$peer, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 
     /**
-     * We rejected a message with a Reset, or dropped it, because we lacked the context to process it. On
-     * reliable transports, which have no Message IDs, [messageId] is 0.
+     * A well-formed message from [peer] was rejected with a Reset, dropped or ignored, because it broke a rule of
+     * the messaging layer or this endpoint lacked the context to process it. On reliable transports, which have no
+     * Message IDs, [messageId] is 0. [reason] is a bounded set fit for counting; [detail], when there is one, adds
+     * what a log needs, such as the numbers of unrecognized options.
      */
-    public class MessageRejected(override val peer: Endpoint, public val messageId: Int, public val reason: String) : EndpointEvent {
-        override fun toString(): String = "MessageRejected(peer=$peer, mid=$messageId, reason=$reason)"
+    public class MessageRejected(
+        override val peer: Endpoint,
+        public val messageId: Int,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a message was rejected. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /** An Empty Confirmable message, a CoAP ping, answered with a Reset as RFC 7252 §4.3 asks. */
+            PING,
+
+            /**
+             * An Empty Non-confirmable message, dropped: a Non-confirmable message carries a request or a response
+             * (RFC 7252 §4.3).
+             */
+            EMPTY_NON_CONFIRMABLE,
+
+            /**
+             * A code of a reserved class (1, 6 or 7 over datagrams, RFC 7252 §4.2, §4.3), rejected with a Reset if
+             * Confirmable and dropped otherwise; on a connection a code that is neither a request, a response nor
+             * signaling, dropped.
+             */
+            RESERVED_CODE,
+
+            /** A signaling code (7.xx) that RFC 8323 §5 does not assign, dropped. */
+            UNKNOWN_SIGNAL,
+
+            /** A request to an endpoint without a server, rejected with a Reset (RFC 7252 §4.2). */
+            NO_SERVER,
+
+            /**
+             * A response whose token matches no exchange, rejected with a Reset (RFC 7252 §5.3.2), which also cancels
+             * an observation the client no longer has (RFC 7641 §3.6); dropped on a connection.
+             */
+            UNKNOWN_TOKEN,
+
+            /**
+             * A Non-confirmable request, or a response, with a critical option this endpoint does not recognize, or
+             * one that counts as such for its length or repetition (RFC 7252 §5.4.1, §5.4.3, §5.4.5): rejected with a
+             * Reset, or dropped on a connection. A Confirmable request gets 4.02 Bad Option instead.
+             */
+            UNRECOGNIZED_CRITICAL_OPTION,
+
+            /**
+             * An Acknowledgement carrying a request or a code of a reserved class, silently ignored (RFC 7252
+             * §4.2).
+             */
+            INVALID_ACKNOWLEDGEMENT,
+
+            /**
+             * A response piggybacked on the Acknowledgement of a request, whose token is not the request's
+             * (RFC 7252 §5.3.2): ignored, so the request stays outstanding.
+             */
+            FOREIGN_TOKEN,
+
+            /** A Reset that is not Empty, silently ignored (RFC 7252 §4.2). */
+            INVALID_RESET,
+        }
+
+        override fun toString(): String =
+            "MessageRejected(peer=$peer, mid=$messageId, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 
     /** The DTLS session to [peer] ended; its exchanges and observations were failed (RFC 7252 §9.1.1). */

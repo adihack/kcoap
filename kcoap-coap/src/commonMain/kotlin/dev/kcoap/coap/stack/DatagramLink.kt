@@ -222,9 +222,9 @@ internal class DatagramLink(
         withMessaging { forgetUnanswered(peer, messageId) }
     }
 
-    /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3). */
-    suspend fun reject(peer: Endpoint, messageId: Int, reason: String) {
-        withMessaging { reject(peer, messageId, reason) }
+    /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3), for [reason]. */
+    suspend fun reject(peer: Endpoint, messageId: Int, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+        withMessaging { reject(peer, messageId, reason, detail) }
     }
 
     /** Nothing acted on the message [messageId] from [peer]; see [UdpMessaging.markRepeatable]. */
@@ -444,8 +444,8 @@ internal class DatagramLink(
             forgetUnanswered(peer, response.messageId)
         }
 
-        override suspend fun rejectResponse(response: CoapMessage, reason: String) {
-            this@DatagramLink.reject(peer, response.messageId, reason)
+        override suspend fun rejectResponse(response: CoapMessage, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+            this@DatagramLink.reject(peer, response.messageId, reason, detail)
         }
 
         override suspend fun respond(request: InboundRequest, response: CoapMessage, owner: DeliveryOwner?, confirmable: Boolean): Delivery? {
@@ -464,8 +464,8 @@ internal class DatagramLink(
             acknowledge(request)
         }
 
-        override suspend fun reject(request: InboundRequest, reason: String) {
-            this@DatagramLink.reject(peer, request.message.messageId, reason)
+        override suspend fun reject(request: InboundRequest, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+            this@DatagramLink.reject(peer, request.message.messageId, reason, detail)
         }
 
         override suspend fun leaveUnanswered(request: InboundRequest) {

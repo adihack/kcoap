@@ -87,9 +87,9 @@ internal class ConnectionLink(
      * RFC 8323 §7.2 lets a client abort on a notification with an unknown token; here the response is only
      * dropped, and reported.
      */
-    override suspend fun rejectResponse(response: CoapMessage, reason: String) {
-        log.debug { "Dropped a response from $peer: $reason" }
-        owner.onEvent(EndpointEvent.MessageRejected(peer, 0, reason))
+    override suspend fun rejectResponse(response: CoapMessage, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+        log.debug { "Dropped a response from $peer ($reason)" + (detail?.let { ": $it" } ?: "") }
+        owner.onEvent(EndpointEvent.MessageRejected(peer, 0, reason, detail))
     }
 
     // ---------------------------------------------------------------- requests this side receives
@@ -108,8 +108,8 @@ internal class ConnectionLink(
     }
 
     /** RFC 8323 has no Reset; the request is only dropped, and counts as answered for Custody and Release. */
-    override suspend fun reject(request: InboundRequest, reason: String) {
-        log.debug { "Dropped a request from $peer: $reason" }
+    override suspend fun reject(request: InboundRequest, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+        log.debug { "Dropped a request from $peer ($reason)" + (detail?.let { ": $it" } ?: "") }
         driver.answered(request.sequence)
     }
 

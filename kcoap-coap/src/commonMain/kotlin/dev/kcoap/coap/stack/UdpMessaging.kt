@@ -26,7 +26,9 @@ import kotlin.time.Duration.Companion.seconds
  *   retransmission is delivered ([forgetUnanswered], §4.2),
  * - Empty ACKs for slow requests, switching to a separate response (§5.2.2),
  * - Resets for Empty Confirmable messages (CoAP ping), reserved code classes and format errors
- *   (§4.2, §4.3), and silently ignored invalid ACKs and RSTs,
+ *   (§4.2, §4.3), and silently ignored invalid ACKs and RSTs, each reported as an [EndpointEvent.MessageRejected]
+ *   or [EndpointEvent.MalformedMessage] and logged once at DEBUG, without an exception: a source address proves
+ *   nothing (§11.4), so a peer must not be able to fill the log at network rate,
  * - NSTART outstanding interactions per peer (§4.7, RFC 7641 §4.5.1), with Non-confirmable messages
  *   holding a slot for as long as the caller asks (PROBING_RATE for requests), and Non-confirmable
  *   Q-Block bodies holding one slot for the whole body through a [BodyLease] (RFC 9177 §7.2),
@@ -378,11 +380,14 @@ internal class UdpMessaging(
         received[MessageKey(from, messageId)]?.let(received::markRepeatable)
     }
 
-    /** Rejects a delivered message with a Reset (§4.2, §4.3), remembered for duplicates of a Confirmable one. */
-    fun reject(from: Endpoint, messageId: Int, reason: String) {
+    /**
+     * Rejects a delivered message with a Reset (§4.2, §4.3), remembered for duplicates of a Confirmable one, and
+     * reports it as [EndpointEvent.MessageRejected] for [reason], with [detail] for a log.
+     */
+    fun reject(from: Endpoint, messageId: Int, reason: EndpointEvent.MessageRejected.Reason, detail: String? = null) {
         val entry = received[MessageKey(from, messageId)] ?: return
         if (entry.state != InboundEntry.State.PENDING) return
-        sendReset(entry, reason)
+        sendReset(entry, reason, detail)
     }
 
     /**
@@ -444,15 +449,21 @@ internal class UdpMessaging(
     }
 
     private fun onFormatError(from: Endpoint, error: CoapFormatException) {
-        effects += MessagingEffect.Event(EndpointEvent.MalformedMessage(from, error.message ?: "format error"))
+        // The codec ignores silently only a datagram of another version (§3).
+        val reason = if (error.silentlyIgnore) {
+            EndpointEvent.MalformedMessage.Reason.UNKNOWN_VERSION
+        } else {
+            EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR
+        }
+        effects += MessagingEffect.Event(EndpointEvent.MalformedMessage(from, reason, error.message))
         val messageId = error.messageId
         // §4.2: a Confirmable message with a format error is rejected with a Reset; everything else is
         // silently dropped (§4.3), and so is a message of an unknown version (§3).
         if (error.silentlyIgnore || error.type != CoapMessageType.CON || messageId == null) {
-            log.warn { "Dropped a malformed datagram from $from: ${error.message}" }
+            debug(from, messageId ?: -1) { "Dropped a malformed datagram ($reason): ${error.message}" }
             return
         }
-        log.warn { "Rejecting a malformed Confirmable message $messageId from $from: ${error.message}" }
+        debug(from, messageId) { "Rejecting a malformed Confirmable message ($reason): ${error.message}" }
         val reset = CoapMessage.empty(CoapMessageType.RST, messageId)
         encodeForSending(from, reset)?.let { transmit(from, reset, it) }
     }
@@ -460,7 +471,7 @@ internal class UdpMessaging(
     private fun onAcknowledgement(now: Duration, from: Endpoint, ack: CoapMessage) {
         // §4.2: an ACK carrying a request or a reserved code class is rejected by silently ignoring it.
         if (!ack.isEmpty && !ack.isResponse) {
-            log.warn { "Ignored an ACK that carries ${ack.code} from $from" }
+            ignore(from, ack, EndpointEvent.MessageRejected.Reason.INVALID_ACKNOWLEDGEMENT, "${ack.code}")
             return
         }
         val transmission = outbound[MessageKey(from, ack.messageId)]
@@ -477,7 +488,7 @@ internal class UdpMessaging(
         val piggybacked = ack.takeIf { it.isResponse && transmission.message.isRequest }
         if (piggybacked != null && !piggybacked.hasToken(transmission.message.token)) {
             // §5.3.2 rule 2: a piggybacked response matches by Message ID and token; this one does not.
-            log.warn { "Ignored a piggybacked response with a foreign token from $from" }
+            ignore(from, ack, EndpointEvent.MessageRejected.Reason.FOREIGN_TOKEN, "${piggybacked.code}")
             return
         }
         debug(from, ack.messageId) { if (piggybacked != null) "Piggybacked response ${piggybacked.code}" else "Acknowledged" }
@@ -487,7 +498,7 @@ internal class UdpMessaging(
     private fun onReset(now: Duration, from: Endpoint, reset: CoapMessage) {
         // §4.2: a Reset that is not Empty is silently ignored.
         if (!reset.isEmpty) {
-            log.warn { "Ignored a non-empty RST from $from" }
+            ignore(from, reset, EndpointEvent.MessageRejected.Reason.INVALID_RESET, "${reset.code}")
             return
         }
         val transmission = outbound[MessageKey(from, reset.messageId)]
@@ -514,7 +525,7 @@ internal class UdpMessaging(
         schedule(entry.expiresAt)
         when {
             // §4.2, §4.3: an Empty Confirmable message elicits a Reset ("CoAP ping").
-            message.isEmpty -> sendReset(entry, "CoAP ping")
+            message.isEmpty -> sendReset(entry, EndpointEvent.MessageRejected.Reason.PING)
             message.isRequest -> {
                 entry.ackDeadline = separateResponseDelay?.let { now + it }?.also(::schedule)
                 received.pending += entry
@@ -524,7 +535,7 @@ internal class UdpMessaging(
             // verifying it and checking its critical options (RFC 7252 §5.4.1), however long that takes.
             message.isResponse -> effects += MessagingEffect.DeliverResponse(from, message)
             // Reserved code classes 1, 6 and 7 (signaling exists only on reliable transports, RFC 8323).
-            else -> sendReset(entry, "reserved code ${message.code}")
+            else -> sendReset(entry, EndpointEvent.MessageRejected.Reason.RESERVED_CODE, "${message.code}")
         }
     }
 
@@ -533,8 +544,12 @@ internal class UdpMessaging(
         received[key]?.let { return onDuplicate(it) }
         if (!message.isRequest && !message.isResponse) {
             // §4.3: Empty NON and reserved classes are rejected; we drop them silently.
-            effects += MessagingEffect.Event(EndpointEvent.MessageRejected(from, message.messageId, "NON ${message.code}"))
-            log.warn { "Dropped a Non-confirmable ${message.code} from $from" }
+            val reason = if (message.isEmpty) {
+                EndpointEvent.MessageRejected.Reason.EMPTY_NON_CONFIRMABLE
+            } else {
+                EndpointEvent.MessageRejected.Reason.RESERVED_CODE
+            }
+            ignore(from, message, reason, "${message.code}")
             return
         }
         val idempotent = message.isIdempotentRequest
@@ -818,10 +833,10 @@ internal class UdpMessaging(
         if (bytes != null) transmit(entry.key.peer, ack, bytes)
     }
 
-    private fun sendReset(entry: InboundEntry, reason: String) {
+    private fun sendReset(entry: InboundEntry, reason: EndpointEvent.MessageRejected.Reason, detail: String? = null) {
         val peer = entry.key.peer
-        debug(peer, entry.key.messageId) { "Rejecting with RST: $reason" }
-        effects += MessagingEffect.Event(EndpointEvent.MessageRejected(peer, entry.key.messageId, reason))
+        debug(peer, entry.key.messageId) { "Rejecting with RST ($reason)" + (detail?.let { ": $it" } ?: "") }
+        effects += MessagingEffect.Event(EndpointEvent.MessageRejected(peer, entry.key.messageId, reason, detail))
         val reset = CoapMessage.empty(CoapMessageType.RST, entry.key.messageId)
         val bytes = encodeForSending(peer, reset)
         entry.answer(if (entry.type == CoapMessageType.CON) bytes else null)
@@ -829,6 +844,12 @@ internal class UdpMessaging(
         // Processing a duplicate again ends in the same Reset.
         received.markRepeatable(entry)
         if (bytes != null) transmit(peer, reset, bytes)
+    }
+
+    /** Drops or ignores [message] from [from] without an answer (§4.2, §4.3), logged once at DEBUG and reported. */
+    private fun ignore(from: Endpoint, message: CoapMessage, reason: EndpointEvent.MessageRejected.Reason, detail: String) {
+        debug(from, message.messageId) { "Ignored a ${message.type} ($reason): $detail" }
+        effects += MessagingEffect.Event(EndpointEvent.MessageRejected(from, message.messageId, reason, detail))
     }
 
     private fun InboundEntry.answer(bytes: ByteArray?) {

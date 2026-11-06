@@ -242,6 +242,9 @@ class RequestResponseTest {
             }
         }
         assertEquals(CoapException.Reason.RESET, error.reason)
+        val rejected = fixture.events.filterIsInstance<EndpointEvent.MessageRejected>().single()
+        assertEquals(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, rejected.reason)
+        assertEquals("options 65001", rejected.detail)
     }
 
     @Test
@@ -321,6 +324,9 @@ class RequestResponseTest {
             client.get("coap://${fixture.address(plain).host}:${fixture.address(plain).port}/x")
         }
         assertEquals(CoapException.Reason.RESET, error.reason)
+        val rejected = fixture.events.filterIsInstance<EndpointEvent.MessageRejected>().single()
+        assertEquals(EndpointEvent.MessageRejected.Reason.NO_SERVER, rejected.reason)
+        assertEquals(fixture.address(client.endpoint), rejected.peer)
     }
 
     @Test
@@ -354,6 +360,10 @@ class RequestResponseTest {
         impostor.send(clientAddress, UdpMessageCodec.encode(forged))
         val reset = UdpMessageCodec.decode((impostor.receive() as DatagramEvent.Received).datagram)
         assertEquals(CoapMessageType.RST, reset.type)
+        val rejected = fixture.events.filterIsInstance<EndpointEvent.MessageRejected>().single()
+        assertEquals(EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN, rejected.reason)
+        assertEquals(impostor.localEndpoint to 1, rejected.peer to rejected.messageId)
+        assertEquals("token ${request.tokenHex}", rejected.detail)
 
         // The real server answers separately: Empty ACK first, then a Confirmable response.
         target.send(clientAddress, UdpMessageCodec.encode(CoapMessage.empty(CoapMessageType.ACK, request.messageId)))

@@ -162,7 +162,7 @@ internal class QBlockWire(
                 is MessagingEffect.DeliverResponse -> {
                     if (tokenIndex(effect.message.token) in client.released) {
                         // RFC 9177 §4.3: the token was forgotten, so the response is rejected.
-                        clientMessaging.reject(effect.from, effect.message.messageId, "Released token")
+                        clientMessaging.reject(effect.from, effect.message.messageId, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN)
                         clientEffects()
                     } else {
                         clientMessaging.acknowledge(effect.from, effect.message.messageId)

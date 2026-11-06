@@ -289,7 +289,7 @@ public class CoapServer private constructor(
             val numbers = unrecognized.joinToString { it.number.toString() }
             if (!inbound.isConfirmable) {
                 // RFC 7252 §5.4.1: in a Non-confirmable message they cause a rejection.
-                inbound.reject("unrecognized critical options $numbers")
+                inbound.reject(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, "options $numbers")
                 return null
             }
             return refused(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))

@@ -70,9 +70,12 @@ internal class InboundRequest(
         isAnswered = true
     }
 
-    /** Rejects the request with a Reset, or silently for a Non-confirmable request or on a connection. */
-    suspend fun reject(reason: String) {
-        link.reject(this, reason)
+    /**
+     * Rejects the request with a Reset, or silently for a Non-confirmable request or on a connection, for [reason],
+     * with [detail] for a log.
+     */
+    suspend fun reject(reason: EndpointEvent.MessageRejected.Reason, detail: String? = null) {
+        link.reject(this, reason, detail)
         isAnswered = true
     }
 

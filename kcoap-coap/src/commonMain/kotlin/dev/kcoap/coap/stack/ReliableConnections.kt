@@ -279,7 +279,7 @@ internal class ReliableConnections(
                 log.debug { "Refused a connection from $peer: ${config.reliable.maxConnections} connections are open" }
                 onEvent(EndpointEvent.LimitReached(peer, EndpointEvent.LimitReached.Limit.CONNECTIONS))
             } else {
-                log.warn { "Refused a connection from $peer: ${refusal.reason}" }
+                log.debug { "Refused a connection from $peer: ${refusal.reason}" }
             }
             closeQuietly(connection)
             return

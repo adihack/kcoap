@@ -574,18 +574,46 @@ public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/
 }
 
 public final class dev/kcoap/coap/stack/EndpointEvent$MalformedMessage : dev/kcoap/coap/stack/EndpointEvent {
-	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
 	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
-	public final fun getReason ()Ljava/lang/String;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class dev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason : java/lang/Enum {
+	public static final field FORMAT_ERROR Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static final field UNKNOWN_VERSION Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+}
+
 public final class dev/kcoap/coap/stack/EndpointEvent$MessageRejected : dev/kcoap/coap/stack/EndpointEvent {
-	public fun <init> (Ldev/kcoap/transport/Endpoint;ILjava/lang/String;)V
+	public fun <init> (Ldev/kcoap/transport/Endpoint;ILdev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;ILdev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
 	public final fun getMessageId ()I
 	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
-	public final fun getReason ()Ljava/lang/String;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason : java/lang/Enum {
+	public static final field EMPTY_NON_CONFIRMABLE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field FOREIGN_TOKEN Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_ACKNOWLEDGEMENT Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_RESET Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field NO_SERVER Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field PING Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field RESERVED_CODE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNKNOWN_SIGNAL Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNKNOWN_TOKEN Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNRECOGNIZED_CRITICAL_OPTION Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
 }
 
 public final class dev/kcoap/coap/stack/EndpointEvent$ObserverAdded : dev/kcoap/coap/stack/EndpointEvent {
