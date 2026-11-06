@@ -81,6 +81,27 @@ class EndpointMatchingTest {
         assertEquals("Tcp(host=example.com, port=5683, usesTls=true)", Endpoint.Tcp("EXAMPLE.com", 5683, true).toString())
     }
 
+    /**
+     * RFC 3986 §3.2.2: text with a signed group or a leading zero in an octet is no IP literal but a name, so it is
+     * not normalized into an address; RFC 3986 §7.4: a resolver may read `010.0.0.1` as octal, another host.
+     */
+    @Test
+    fun rfc3986Section3_2_2TextThatIsNoStrictLiteralComparesAsAName() {
+        assertEquals("::-1", Endpoint.Tcp("::-1", 5683).host)
+        assertDifferentPeers(Endpoint.Tcp("::-1", 5683), Endpoint.Tcp("::ffff", 5683))
+        assertDifferentPeers(Endpoint.Tcp("::+1", 5683), Endpoint.Tcp("::1", 5683))
+        assertEquals("010.0.0.1", Endpoint.Tcp("010.0.0.1", 5683).host)
+        assertDifferentPeers(Endpoint.Tcp("010.0.0.1", 5683), Endpoint.Tcp("10.0.0.1", 5683))
+        assertDifferentPeers(Endpoint.Udp("010.0.0.1", 5683), Endpoint.Udp("10.0.0.1", 5683))
+        assertDifferentPeers(Endpoint.Udp("::-1", 5683), Endpoint.Udp("::ffff", 5683))
+        assertDifferentPeers(
+            Endpoint.WebSocket("ws://010.0.0.1/.well-known/coap"),
+            Endpoint.WebSocket("ws://10.0.0.1/.well-known/coap"),
+        )
+        assertSamePeer(Endpoint.WebSocket("ws://[::-1]/.well-known/coap"), Endpoint.WebSocket("ws://[::-1]:80/.well-known/coap"))
+        assertDifferentPeers(Endpoint.WebSocket("ws://[::+1]/.well-known/coap"), Endpoint.WebSocket.of("::1", 80))
+    }
+
     /** RFC 8323 §8.3 and §8.4 with RFC 6455 §3: a missing port is 80 for `ws` and 443 for `wss`, an empty path `/`. */
     @Test
     fun rfc8323Section8_3WebSocketUrisCompareWithTheirDefaultPorts() {

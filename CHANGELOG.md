@@ -371,6 +371,11 @@ Two configuration builders and explicit `Endpoint` classes (WP-D1):
   `Endpoint.WebSocket(uri)`, `Endpoint.Opaque("ble", address)`. The `host` of a `Udp` or `Tcp` built from an IP
   literal that was not in canonical form is `IpLiteral.canonical(text)`, not the text: compare endpoints, or
   that, instead of the text.
+- **`IpLiteral.parse` and `IpLiteral.canonical` take only what RFC 3986 §3.2.2 calls an IP literal**: a decimal
+  octet without a leading zero and hex groups without a sign. `010.0.0.1`, which a resolver may read as octal
+  (RFC 3986 §7.4), and `::-1` used to be read as `10.0.0.1` and `::ffff`; now they are names, so an endpoint keeps
+  them in lower case, unequal to the address, and `EndpointResolver.Default` refuses them in a datagram URI as it
+  refuses other names. *Migration:* write IP literals without leading zeros in octets.
 - **`CoapException.Reason` and `OscoreError` may gain constants in any minor release, also after 1.0**, as their
   KDoc and [versioning.md](docs/versioning.md#how-the-build-enforces-it) now say, so a new constant is an
   addition. *Migration:* keep an `else` branch in every `when` over them.

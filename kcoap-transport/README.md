@@ -27,8 +27,9 @@ markers, which every module above it reaches through this one; no third-party li
 - `CoapScheme`: `coap`, `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws`, `coaps+ws`, with the ALPN id and
   the WebSocket subprotocol and path of RFC 8323. `Endpoint.Tcp` records TLS; `Endpoint.WebSocket.of`
   builds the `ws`/`wss` URI of an authority.
-- `IpLiteral`: the canonical text of IP addresses in `Endpoint.Udp` (dotted IPv4, RFC 5952 IPv6), so
-  endpoints from transports and from URIs compare equal.
+- `IpLiteral`: the canonical text of IP addresses in `Endpoint.Udp` and `Endpoint.Tcp` (dotted IPv4, RFC 5952
+  IPv6), so endpoints from transports and from URIs compare equal. It parses the IP literals of RFC 3986 §3.2.2
+  only: `010.0.0.1` and `::-1` are names.
 
 Adapters live in their own modules: `kcoap-transport-ktor` (UDP and TCP on ktor-network),
 `kcoap-transport-ktor-websocket` and `kcoap-transport-ktor-websocket-server` (WebSockets on the ktor

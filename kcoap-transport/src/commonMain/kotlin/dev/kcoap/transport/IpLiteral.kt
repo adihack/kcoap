@@ -39,10 +39,18 @@ public object IpLiteral {
         return "$head::$tail"
     }
 
-    /** The canonical text of an IPv4 or IPv6 literal (without brackets or zone), or null if [text] is none. */
+    /**
+     * The canonical text of an IPv4 or IPv6 literal (without brackets or zone), or null if [text] is none, by
+     * the grammar of [parse].
+     */
     public fun canonical(text: String): String? = parse(text)?.let(::format)
 
-    /** The bytes of an IPv4 or IPv6 literal, or null if [text] is none. */
+    /**
+     * The bytes of an IPv4 or IPv6 literal, or null if [text] is none. The grammar is RFC 3986 §3.2.2's
+     * `IPv4address` and `IPv6address`: a decimal octet has no leading zero and a group is one to four hex digits,
+     * without a sign. Other text is a name, not an address: `010.0.0.1` is no literal, since RFC 3986 §7.4 warns
+     * that resolvers may read it as octal, an address other than `10.0.0.1`.
+     */
     public fun parse(text: String): ByteArray? = if (':' in text) parseIpv6(text) else parseIpv4(text)
 
     private fun parseIpv4(text: String): ByteArray? {
@@ -50,7 +58,9 @@ public object IpLiteral {
         if (parts.size != 4) return null
         val bytes = ByteArray(4)
         for ((i, part) in parts.withIndex()) {
+            // RFC 3986 §3.2.2 dec-octet: one to three digits, without a leading zero.
             if (part.isEmpty() || part.length > 3 || !part.all { it in '0'..'9' }) return null
+            if (part.length > 1 && part[0] == '0') return null
             val value = part.toInt()
             if (value > 255) return null
             bytes[i] = value.toByte()
@@ -72,8 +82,9 @@ public object IpLiteral {
                     groups += ((ipv4[2].toInt() and 0xFF) shl 8) or (ipv4[3].toInt() and 0xFF)
                     continue
                 }
-                if (part.isEmpty() || part.length > 4) return false
-                groups += part.toIntOrNull(16) ?: return false
+                // RFC 3986 §3.2.2 h16: one to four hex digits, which toInt(16) alone would also accept with a sign.
+                if (part.isEmpty() || part.length > 4 || !part.all { it.isHexDigit() }) return false
+                groups += part.toInt(16)
             }
             return true
         }
@@ -87,3 +98,6 @@ public object IpLiteral {
         return ByteArray(16) { i -> (all[i / 2] ushr (if (i % 2 == 0) 8 else 0)).toByte() }
     }
 }
+
+/** RFC 3986 §2.1 HEXDIG, in either case. */
+internal fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'

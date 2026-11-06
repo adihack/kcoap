@@ -395,6 +395,8 @@ class EdgeCaseTest {
         assertEquals(Endpoint.Udp("::1", 5683), resolver.resolve(CoapUri.parse("coap://[0:0:0:0:0:0:0:1]")))
         assertEquals(Endpoint.Udp("127.0.0.1", 1234), resolver.resolve(CoapUri.parse("coap://localhost:1234")))
         assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://example.com")) }
+        // RFC 3986 §3.2.2 and §7.4: a leading zero makes a name, which a resolver may read as octal.
+        assertFailsWith<IllegalArgumentException> { resolver.resolve(CoapUri.parse("coap://010.0.0.1")) }
     }
 
     /** RFC 8323 §8: responses come on the connection, so names stay names for the connector to resolve. */

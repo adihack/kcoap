@@ -252,8 +252,6 @@ private fun normalizedPercentEncoding(text: String): String {
     return out.toString()
 }
 
-private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
-
 /** RFC 3986 §2.3. */
 private fun Char.isUnreserved(): Boolean =
     this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '-' || this == '.' || this == '_' || this == '~'
