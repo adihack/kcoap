@@ -90,13 +90,14 @@ as dependencies of these. Every artifact below is in `kcoap-bom`.
 | `coap` (UDP, RFC 7252) | `kcoap-transport-ktor` | `KtorUdpTransport` | `KtorUdpTransport` | JVM, Android, Apple, Linux |
 | `coap+tcp` (RFC 8323) | `kcoap-transport-ktor` | `KtorTcpConnector` | `KtorTcpListener` | JVM, Android, Apple, Linux |
 | `coaps+tcp` (TLS) | `kcoap-transport-ktor` | `KtorTlsConnector` (JVM and Android only) | none in kcoap: a TLS-terminating reverse proxy in front of `KtorTcpListener` ([ADR 0010](adr/0010-server-side-tls.md)) | client on JVM and Android |
-| `coap+ws` (RFC 8323) | `kcoap-transport-ktor-websocket`; server: `kcoap-transport-ktor-websocket-server` and a ktor server engine you choose | `KtorWebSocketConnector` | `KtorWebSocketListener` | client everywhere, browsers and Node.js included; server on JVM, Android, Apple, Linux |
+| `coap+ws` (RFC 8323) | `kcoap-transport-ktor-websocket`; server: `kcoap-transport-ktor-websocket-server` and a ktor server engine you choose | `KtorWebSocketConnector` | `KtorWebSocketListener` | client everywhere, browsers and Node.js included; server on the JVM, Apple and Linux |
 | `coaps+ws` (TLS) | as `coap+ws` | `KtorWebSocketConnector()` on Apple, js and wasmJs; on the JVM and Android with an `HttpClient` you pass | none in kcoap: a ktor engine that runs TLS (Netty, Jetty) or a TLS-terminating proxy | see [platforms](platforms.md#tls-support-per-runtime) |
 | `coaps` (DTLS) | none yet | — | — | DTLS comes last (roadmap E1); a `coaps` request fails with `CoapException(TRANSPORT_UNAVAILABLE)` before anything is sent |
 | in memory, for tests | `kcoap-testkit` | `InMemoryNetwork`, `InMemoryConnections` | the same | everywhere |
 
-OSCORE and EDHOC protect messages end to end on every one of these, so over `coap`, `coap+tcp` and `coap+ws`
-message security does what `coaps` would do for one hop, and more.
+OSCORE and EDHOC protect requests and responses end to end over every one of these, proxies included, so they are
+the way to secure `coap` until DTLS lands. They leave the messaging layer (type, Message ID, token) unprotected,
+which DTLS and TLS cover hop by hop ([architecture](architecture.md#layers)).
 
 ### By platform
 
