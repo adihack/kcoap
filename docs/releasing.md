@@ -104,8 +104,8 @@ Before tagging 0.1.0:
 - the install instructions (README, getting-started.md, versioning.md, the module READMEs) name 0.1.0 from
   Maven Central, not a snapshot from Maven Local: **done** on 2026-11-06. The website follows once the
   artifacts are on Maven Central ([after the release](#after-the-release));
-- GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages); otherwise the API reference
-  job fails after the release is out.
+- GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages), or the API reference job
+  fails after the release is out: **done** (checked on 2026-11-06).
 
 ## After the release
 
