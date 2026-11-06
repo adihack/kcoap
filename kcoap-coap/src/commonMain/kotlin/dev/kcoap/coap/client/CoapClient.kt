@@ -333,7 +333,8 @@ public class CoapClient private constructor(
 
     /**
      * Resource discovery (RFC 6690 §4): GETs `/.well-known/core` from [server] (any URI of the server; its
-     * path is replaced), with [query] as RFC 6690 §4.1 filter such as `rt=temperature-c`, and parses it.
+     * path is replaced), with [query] as RFC 6690 §4.1 filter such as `rt=temperature-c`, and parses it. The
+     * links are the server's input: their targets are text, to be parsed with [CoapUri.parseOrNull].
      *
      * @throws CoapException with [CoapException.Reason.BAD_RESPONSE] unless the answer is 2.05 link format.
      */
@@ -343,11 +344,8 @@ public class CoapClient private constructor(
         if (response.code != CoapCode.CONTENT) {
             throw CoapException("Discovery answered ${response.code}", CoapException.Reason.BAD_RESPONSE)
         }
-        return try {
-            LinkFormat.parse(response.payloadAsText())
-        } catch (e: IllegalArgumentException) {
-            throw CoapException("Discovery returned no valid link format: ${e.message}", CoapException.Reason.BAD_RESPONSE, e)
-        }
+        return LinkFormat.parseOrNull(response.payloadAsText())
+            ?: throw CoapException("Discovery returned no valid link format", CoapException.Reason.BAD_RESPONSE)
     }
 
     /** Resource discovery at the server of the CoAP URI [server]; see [discover]. */

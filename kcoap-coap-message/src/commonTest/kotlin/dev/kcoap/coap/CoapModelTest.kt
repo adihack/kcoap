@@ -215,6 +215,25 @@ class CoapModelTest {
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%zz") }
         assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%2") }
         assertFailsWith<IllegalArgumentException> { CoapUri(CoapScheme.COAP, "h", port = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:0/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:65536/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h:99999999999/") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://[]/") }
+        // RFC 3986 §2.1: a percent-encoding is two hex digits, never a signed number.
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%+F") }
+        assertFailsWith<IllegalArgumentException> { CoapUri.parse("coap://h/%-1") }
+    }
+
+    @Test
+    fun parseOrNullTakesWhatParseTakesAndNothingElse() {
+        val valid = "coap://Example.COM:5683/~sensors/temp%20a?first=1&rt=x%26y"
+        assertEquals(CoapUri.parse(valid), CoapUri.parseOrNull(valid))
+        val malformed = listOf(
+            "/relative", "http://example.com/", "coap://example.com/#frag", "coap:///path", "coap://h/%zz",
+            "coap://h/%2", "coap://h:0/", "coap://h:65536/", "coap://h:99999999999/", "coap://[]/", "coap://h/%+F",
+            "", "<>",
+        )
+        for (text in malformed) assertNull(CoapUri.parseOrNull(text), text)
     }
 
     @Test
