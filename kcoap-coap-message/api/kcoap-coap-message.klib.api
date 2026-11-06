@@ -21,7 +21,7 @@ final enum class dev.kcoap.coap/CoapMessageType : kotlin/Enum<dev.kcoap.coap/Coa
     final fun values(): kotlin/Array<dev.kcoap.coap/CoapMessageType> // dev.kcoap.coap/CoapMessageType.values|values#static(){}[0]
 
     final object Companion { // dev.kcoap.coap/CoapMessageType.Companion|null[0]
-        final fun fromValue(kotlin/Int): dev.kcoap.coap/CoapMessageType // dev.kcoap.coap/CoapMessageType.Companion.fromValue|fromValue(kotlin.Int){}[0]
+        final fun fromValue(kotlin/Int): dev.kcoap.coap/CoapMessageType? // dev.kcoap.coap/CoapMessageType.Companion.fromValue|fromValue(kotlin.Int){}[0]
     }
 }
 
@@ -282,6 +282,8 @@ final class dev.kcoap.coap/CoapRequest { // dev.kcoap.coap/CoapRequest|null[0]
     final val uri // dev.kcoap.coap/CoapRequest.uri|{}uri[0]
         final fun <get-uri>(): dev.kcoap.coap/CoapUri // dev.kcoap.coap/CoapRequest.uri.<get-uri>|<get-uri>(){}[0]
 
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap/CoapRequest.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.coap/CoapRequest.hashCode|hashCode(){}[0]
     final fun toBuilder(): dev.kcoap.coap/CoapRequest.Builder // dev.kcoap.coap/CoapRequest.toBuilder|toBuilder(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap/CoapRequest.toString|toString(){}[0]
 
@@ -328,7 +330,6 @@ final class dev.kcoap.coap/CoapResponse { // dev.kcoap.coap/CoapResponse|null[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap/CoapResponse.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // dev.kcoap.coap/CoapResponse.hashCode|hashCode(){}[0]
     final fun payloadAsText(): kotlin/String // dev.kcoap.coap/CoapResponse.payloadAsText|payloadAsText(){}[0]
-    final fun toMessage(kotlin/ByteArray): dev.kcoap.coap/CoapMessage // dev.kcoap.coap/CoapResponse.toMessage|toMessage(kotlin.ByteArray){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap/CoapResponse.toString|toString(){}[0]
     final fun withOptions(kotlin/Function1<dev.kcoap.coap/OptionSet.Builder, kotlin/Unit>): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.withOptions|withOptions(kotlin.Function1<dev.kcoap.coap.OptionSet.Builder,kotlin.Unit>){}[0]
 
@@ -339,7 +340,7 @@ final class dev.kcoap.coap/CoapResponse { // dev.kcoap.coap/CoapResponse|null[0]
         final fun created(kotlin/Array<out kotlin/String>...): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.created|created(kotlin.Array<out|kotlin.String>...){}[0]
         final fun deleted(): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.deleted|deleted(){}[0]
         final fun error(dev.kcoap.coap/CoapCode, kotlin/String? = ...): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.error|error(dev.kcoap.coap.CoapCode;kotlin.String?){}[0]
-        final fun of(dev.kcoap.coap/CoapMessage): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.of|of(dev.kcoap.coap.CoapMessage){}[0]
+        final fun from(dev.kcoap.coap/CoapMessage): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.from|from(dev.kcoap.coap.CoapMessage){}[0]
     }
 }
 
@@ -369,6 +370,7 @@ final class dev.kcoap.coap/CoapUri { // dev.kcoap.coap/CoapUri|null[0]
     final object Companion { // dev.kcoap.coap/CoapUri.Companion|null[0]
         final fun fromOptions(dev.kcoap.transport/CoapScheme, kotlin/String, kotlin/Int, dev.kcoap.coap/OptionSet): dev.kcoap.coap/CoapUri // dev.kcoap.coap/CoapUri.Companion.fromOptions|fromOptions(dev.kcoap.transport.CoapScheme;kotlin.String;kotlin.Int;dev.kcoap.coap.OptionSet){}[0]
         final fun parse(kotlin/String): dev.kcoap.coap/CoapUri // dev.kcoap.coap/CoapUri.Companion.parse|parse(kotlin.String){}[0]
+        final fun parseOrNull(kotlin/String): dev.kcoap.coap/CoapUri? // dev.kcoap.coap/CoapUri.Companion.parseOrNull|parseOrNull(kotlin.String){}[0]
     }
 }
 
@@ -829,6 +831,7 @@ final object dev.kcoap.coap/LinkFormat { // dev.kcoap.coap/LinkFormat|null[0]
 
     final fun filter(kotlin.collections/List<dev.kcoap.coap/WebLink>, kotlin.collections/List<kotlin/String>): kotlin.collections/List<dev.kcoap.coap/WebLink> // dev.kcoap.coap/LinkFormat.filter|filter(kotlin.collections.List<dev.kcoap.coap.WebLink>;kotlin.collections.List<kotlin.String>){}[0]
     final fun parse(kotlin/String): kotlin.collections/List<dev.kcoap.coap/WebLink> // dev.kcoap.coap/LinkFormat.parse|parse(kotlin.String){}[0]
+    final fun parseOrNull(kotlin/String): kotlin.collections/List<dev.kcoap.coap/WebLink>? // dev.kcoap.coap/LinkFormat.parseOrNull|parseOrNull(kotlin.String){}[0]
     final fun serialize(kotlin.collections/List<dev.kcoap.coap/WebLink>): kotlin/String // dev.kcoap.coap/LinkFormat.serialize|serialize(kotlin.collections.List<dev.kcoap.coap.WebLink>){}[0]
 }
 
