@@ -12,6 +12,16 @@ adds its entry and migration note below.
 
 ### Added
 
+- A `coaps+tcp` client on the JVM (WP-T1, RFC 8323 §8.2, §9.1), in kcoap-transport-ktor: `KtorTlsConnector` on
+  ktor-network-tls, configured by `TlsClientConfig` (`trust`, `pinner`, `allowsAnyPortWithoutAlpn`) with
+  `TlsTrust.Platform` (the platform trust store, the default) or `TlsTrust.Anchors`, and the certificate-pinning
+  hook `CertificatePinner` with RFC 7469 SPKI pins (`CertificatePinner.publicKeySha256`). It validates the server's
+  chain, checks that the certificate names the host (RFC 9525 §6) and reports the validated path as the
+  connection's `PeerIdentity.Certificate`. ktor-network-tls limits it to TLS 1.2 without ALPN, so ports other than
+  5684 need `allowsAnyPortWithoutAlpn` (RFC 8323 §8.2), and to the JVM: Linux native and Apple builds have no TLS
+  there. Cross-tested with libcoap 4.3.5b on OpenSSL, as is `coaps+ws` through the WebSocket connector
+  (`KcoapClientAgainstLibcoapTlsTest`). Servers terminate TLS at a reverse proxy for now
+  ([ADR 0010](docs/adr/0010-server-side-tls.md)); what each runtime has is in [docs/platforms.md](docs/platforms.md).
 - Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
   `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
   they replace.
@@ -881,6 +891,15 @@ Build governance (WP-C1):
 
 ### Security
 
+- CoAP client (WP-T1): a `coaps+tcp` or `coaps+ws` request went out on whatever peer the `EndpointResolver`
+  returned, so a resolver that mapped such a URI to a plain `Endpoint.Tcp` or `Endpoint.WebSocket` sent it in
+  plaintext (RFC 8323 §9). `CoapClient` now sends a `coaps+tcp` or `coaps+ws` request only when a connector or
+  listener of its endpoint serves the scheme, which a transport does only when it runs TLS (`KtorTlsConnector`,
+  `KtorWebSocketConnector`), and only to a peer reached over TLS; otherwise the call fails with
+  `CoapException(TRANSPORT_UNAVAILABLE)`, before the host is resolved or before anything is sent. A call without
+  such a transport used to fail with the same reason after resolving, saying "needs a Connector"; it now fails
+  before, saying the scheme "needs TLS". `coaps` stays refused until DTLS. *Migration:* add `KtorTlsConnector` (on
+  the JVM) for `coaps+tcp`; a connector of your own lists `coaps+tcp` or `coaps+ws` only if it runs TLS for them.
 - CoAP client (WP-B3): a request to a `coaps` URI went out in plaintext. kcoap has no DTLS yet, and the
   default resolver mapped `coaps` to a plain UDP endpoint, so the datagram transport sent it unencrypted,
   against RFC 7252 §6.2. Every call with a `coaps` URI now fails with `CoapException(TRANSPORT_UNAVAILABLE)`
