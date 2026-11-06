@@ -609,6 +609,17 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low.
 - **Accept:** the ABI dump shows `final`; crypto-bc's `jvmRuntimeClasspath` does not contain kcoap-crypto-default; the memo stress test (S1 helper) passes; BackendDefaultsTest, the BC differential tests and ACVP pass.
 
+> **Amendment (A5).** Done as listed. kcoap-crypto-default's main code imports nothing from kcoap-common since
+> A4 moved the point decompression out, so `implementation(kcoap-common)` is declared for its commonTest (the
+> hex helpers); kcoap-crypto-bc's main code uses `wipe` and declares it for jvmMain. `FakePostQuantumBackend`
+> became a final decorator that answers `supports` for ML-KEM and ML-DSA without probing, as
+> `BouncyCastleCryptoBackend` does, and SuiteNegotiationTest's subclass of it a wrapper too. The memo exposes
+> its answers internally, because the KEM and SHAKE256 probes never reach the provider and could only be
+> counted by a subclass. The JVM ABI dump has no line for the public `<init>()V`: the dumper leaves out a
+> public no-argument constructor whose primary constructor is not public (`OptionSet.Builder` shows the same);
+> the klib dump lists it. Beyond the list: the Decorator row in docs/code-style.md (MB-5 item 5) and the
+> Android sample's post-quantum flavor.
+
 **WP-C2: Crypto conformance suite (published) and PQ metadata**
 
 - **Findings:** U4 (1); critique C and E.

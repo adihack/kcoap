@@ -11,7 +11,8 @@ RFC checklist is in `rfc-compliance.md`.
 ## Module dependencies
 
 ```
-kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default ── kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
+kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default
+              │                ├─ kcoap-crypto-bc (JVM: ML-KEM, ML-DSA)
               │                └─ kcoap-cose ─┐
               ├─ kcoap-cbor ──────────────────┤
               ├─ kcoap-transport ─┬─ kcoap-transport-ktor (UDP, TCP)
@@ -24,7 +25,9 @@ kcoap-common ─┬─ kcoap-crypto ─┬─ kcoap-crypto-default ── kcoap-
 ```
 
 Protocol modules depend on SPIs, never on a backend or transport: applications choose
-`kcoap-crypto-default` or `kcoap-crypto-bc`, and `kcoap-transport-ktor` or their own transport.
+`kcoap-crypto-default` or a backend of their own, and `kcoap-transport-ktor` or their own transport.
+`kcoap-crypto-bc` does not depend on `kcoap-crypto-default` either: it adds ML-KEM and ML-DSA to whatever
+classical backend the application passes, `BouncyCastleCryptoBackend(DefaultCryptoBackend())` in most.
 
 `kcoap-coap-message` is CoAP's wire vocabulary: the message model, options, URIs, link format, the codecs and
 the message-security SPI, with no coroutines. `kcoap-coap` builds the endpoint stack on it and exports it
@@ -39,7 +42,7 @@ messages of another stack, a proxy or a gateway. `kcoap-edhoc-oscore` needs both
 |---|---|
 | SPI interface with a default implementation | `CryptoBackend`, `DatagramTransport`, `ClientMessageSecurity`/`ServerMessageSecurity`, `CredentialResolver`, `LogSink`, `SecurityContextRepository` (`InMemoryContextRepository`) |
 | SPI the application must supply | `SequenceNumberStore`: durable before `store()` returns, with recipes per runtime in `kcoap-oscore/README.md`; `EphemeralSequenceNumberStore` only for keys new in this process run. `MutableSecurityContextRepository` for an EDHOC server: `EdhocServer` adds a context per handshake, so production servers supply one with a bound; `InMemoryContextRepository` has none |
-| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend; a key-store backend around a software one, overriding only the private-key operations (kcoap-crypto README) |
+| Decorator | `CombinedRequestServer` and `CombinedRequestSecurity` around any `ServerMessageSecurity` and `ClientMessageSecurity`, OSCORE's in practice (RFC 9668); `BouncyCastleCryptoBackend` around the classical backend; a key-store backend around a software one, overriding only the private-key operations (kcoap-crypto README). Backends are final and extended only this way ([ADR 0002](adr/0002-delegation-not-subclassing.md)) |
 | Strategy | EDHOC ephemeral exchange (Diffie-Hellman or KEM); message codecs per framing |
 | Template method | `CoapResource.handleGet()` and siblings; `ObservableResource` |
 | State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
