@@ -677,6 +677,18 @@ public final class dev/kcoap/coap/stack/EndpointEvent$ReleaseReceived : dev/kcoa
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class dev/kcoap/coap/stack/EndpointEvent$RequestCompleted : dev/kcoap/coap/stack/EndpointEvent {
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;ILjava/lang/String;Ldev/kcoap/coap/CoapCode;ZLdev/kcoap/coap/security/SecurityIdentity;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDuration-UwyO8pc ()J
+	public final fun getMethod-xRAr_a8 ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getResourcePath ()Ljava/lang/String;
+	public final fun getResponseCode-4e_WcJ0 ()Ldev/kcoap/coap/CoapCode;
+	public final fun getSecurityIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public final fun isSuppressed ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class dev/kcoap/coap/stack/EndpointEvent$ResetReceived : dev/kcoap/coap/stack/EndpointEvent {
 	public fun <init> (Ldev/kcoap/transport/Endpoint;I)V
 	public final fun getMessageId ()I
@@ -707,6 +719,24 @@ public final class dev/kcoap/coap/stack/EndpointEvent$Retransmitted : dev/kcoap/
 	public final fun getMessageId ()I
 	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$SecurityRejected : dev/kcoap/coap/stack/EndpointEvent {
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;ILdev/kcoap/coap/security/MessageSecurityException;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;ILdev/kcoap/coap/security/MessageSecurityException;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getError ()Ldev/kcoap/coap/security/MessageSecurityException;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public final fun getResponseCode-xRAr_a8 ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason : java/lang/Enum {
+	public static final field FRESHNESS_CHALLENGE Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static final field VERIFICATION_FAILED Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
 }
 
 public final class dev/kcoap/coap/stack/EndpointEvent$SessionEnded : dev/kcoap/coap/stack/EndpointEvent {

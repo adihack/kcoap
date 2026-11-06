@@ -807,6 +807,9 @@ public class CoapEndpoint private constructor(
         emit(event)
     }
 
+    /** Whether anyone listens to events, so that an event that takes work to build can be skipped when not. */
+    internal val reportsEvents: Boolean get() = config.eventListener !== EndpointEventListener.None
+
     override fun toString(): String = "CoapEndpoint(${datagram?.transport ?: "no datagram transport"})"
 
     private fun describeTransports(connectors: List<Connector>, listeners: List<ConnectionListener>): String =

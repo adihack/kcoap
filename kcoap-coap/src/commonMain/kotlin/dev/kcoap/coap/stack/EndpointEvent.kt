@@ -1,5 +1,8 @@
 package dev.kcoap.coap.stack
 
+import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 
@@ -373,6 +376,70 @@ public sealed interface EndpointEvent {
      */
     public class PartialBodyDropped(override val peer: Endpoint, public val reason: String) : EndpointEvent {
         override fun toString(): String = "PartialBodyDropped(peer=$peer, reason=$reason)"
+    }
+
+    /**
+     * A `CoapServer` finished a request from [peer]: one event per request message, each block of a Block1 or
+     * Q-Block1 body included, also for a request that message security rejected or challenged, so it counts
+     * OSCORE traffic, whose outer codes are all a [MessageInterceptor] sees.
+     *
+     * Every field is bounded, fit for a metric's labels: [method] and [responseCode] are the inner codes, as the
+     * resource saw them (the outer method on the wire for a request message security could not read), and
+     * [resourcePath] is the path in the resource tree of the resource the request named, never the Uri-Path the
+     * client sent, and null when none exists (a 4.04) or message security rejected the request before its path
+     * could be read.
+     *
+     * @property responseCode the code of the response the server sent, or with [isSuppressed] the one it left out
+     *   because the client asked for no such response (No-Response, RFC 7967 §2). Null when the request got no
+     *   response of its own: a Non-confirmable one rejected for an unrecognized critical option (RFC 7252 §5.4.1),
+     *   a block in the middle of a Q-Block1 set (RFC 9177 §4.3), or a response a bound of the endpoint refused.
+     * @property securityIdentity who message security authenticated, or null for a request without it.
+     * @property duration from when the server started on the request to when its response went to the link, on the
+     *   endpoint's `TimeSource`.
+     */
+    public class RequestCompleted(
+        override val peer: Endpoint,
+        public val method: CoapCode,
+        public val resourcePath: String?,
+        public val responseCode: CoapCode?,
+        public val isSuppressed: Boolean,
+        public val securityIdentity: SecurityIdentity?,
+        public val duration: Duration,
+    ) : EndpointEvent {
+        override fun toString(): String =
+            "RequestCompleted(peer=$peer, method=$method, resource=$resourcePath, response=$responseCode" +
+                (if (isSuppressed) " suppressed" else "") + ", identity=${securityIdentity?.description}, duration=$duration)"
+    }
+
+    /**
+     * Message security on a `CoapServer` did not let a request from [peer] reach a resource, for [reason], and
+     * answered it with [responseCode]. Its [RequestCompleted] follows. [error] is what the security layer threw for a
+     * request that failed verification; with kcoap-oscore its cause is the `OscoreException`, whose `OscoreError`
+     * can be counted.
+     */
+    public class SecurityRejected(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val responseCode: CoapCode,
+        public val error: MessageSecurityException? = null,
+    ) : EndpointEvent {
+        /** Why message security stopped a request. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /**
+             * The request failed verification, such as an unknown context, a replay or a failed decryption, and was
+             * answered unprotected with Max-Age 0 (RFC 8613 §8.2).
+             */
+            VERIFICATION_FAILED,
+
+            /**
+             * The request verified, but the security layer answered it with a challenge instead of passing it on,
+             * such as OSCORE's protected 4.01 with Echo after a reboot (RFC 8613 Appendix B.1.2).
+             */
+            FRESHNESS_CHALLENGE,
+        }
+
+        override fun toString(): String =
+            "SecurityRejected(peer=$peer, reason=$reason, response=$responseCode" + (error?.let { ", error=${it.message}" } ?: "") + ")"
     }
 
     /** A client was added to the observers of [path] (RFC 7641 §4.1). */
