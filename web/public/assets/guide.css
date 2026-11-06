@@ -1,0 +1,283 @@
+/*
+ * kcoap.dev: the guide layout.
+ *
+ * Linked last by /start/ and the platform guides under it, after site.css and components.css. site.css
+ * explains how the stylesheets are split and in which order a page links them.
+ *
+ * Contents: long-form text; a guide page with its "On this page" list; questions and answers; expected
+ * output; previous and next guide; the platform matrix.
+ */
+
+/* Long-form text (part 2's pages). */
+.prose {
+  max-width: 760px;
+}
+
+.prose h2 {
+  margin-top: 2.75rem;
+  font-size: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+}
+
+.prose h3 {
+  margin-top: 2rem;
+}
+
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose li::marker {
+  color: var(--c-accent);
+}
+
+/* A guide page: the text, with an "On this page" list beside it on wide screens and above it on small ones. */
+.doc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+}
+
+.doc-layout > * {
+  min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .doc-layout {
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 4rem;
+    align-items: start;
+  }
+
+  .doc-layout > .toc {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: calc(var(--header-h) + 28px);
+    max-height: calc(100vh - var(--header-h) - 56px);
+    overflow-y: auto;
+  }
+
+  .doc-layout > .doc-body {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}
+
+.toc {
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg-soft);
+  font-size: var(--fs-sm);
+}
+
+@media (min-width: 1100px) {
+  .toc {
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    border: 0;
+    border-left: 1px solid var(--c-border);
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+@media (max-width: 1099px) {
+  .toc {
+    max-width: 840px;
+  }
+}
+
+.toc-title {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+
+.toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 560px) and (max-width: 1099px) {
+  .toc ol {
+    columns: 2;
+    column-gap: 2rem;
+  }
+}
+
+.toc li {
+  break-inside: avoid;
+}
+
+.toc li + li {
+  margin-top: 0;
+}
+
+.toc a {
+  display: block;
+  padding: 0.3rem 0;
+  color: var(--c-text-2);
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.toc a:hover {
+  color: var(--c-accent);
+  text-decoration: underline;
+}
+
+.doc-body.prose {
+  max-width: 840px;
+}
+
+.doc-body > h2 {
+  margin-top: 3.5rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--c-border);
+}
+
+.doc-body > h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.doc-body .steps {
+  margin-bottom: 1.5rem;
+}
+
+.doc-body .steps h3 {
+  margin-top: 0;
+}
+
+/* Questions and answers, such as troubleshooting: each answer under its question. */
+.qa-list {
+  margin: 0 0 1.5rem;
+  font-size: var(--fs-sm);
+}
+
+.qa-list dt {
+  position: relative;
+  padding-left: 1.4rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.qa-list dt::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: var(--c-amber);
+}
+
+.qa-list dt + dd {
+  margin: 0.3rem 0 0;
+  padding-left: 1.4rem;
+  color: var(--c-text-2);
+}
+
+.qa-list dd + dt {
+  margin-top: 1.25rem;
+}
+
+/* Expected output of a sample. */
+.code-block-output pre {
+  color: var(--c-code-muted);
+}
+
+/* Previous and next guide. */
+.pager {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin-top: 3.5rem;
+}
+
+.pager a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--c-text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pager a:hover {
+  border-color: var(--c-accent-line);
+  box-shadow: var(--shadow-2);
+}
+
+.pager-label {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--c-text-3);
+}
+
+.pager-title {
+  font-weight: 750;
+  color: var(--c-accent);
+}
+
+.pager-prev .pager-label::before {
+  content: "\2190\00a0";
+}
+
+.pager-next {
+  text-align: right;
+}
+
+.pager-next .pager-label::after {
+  content: "\00a0\2192";
+}
+
+/* A table that compares platforms: first column sticks while the rest scrolls. */
+.matrix th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 9.5rem;
+  background: var(--c-surface);
+}
+
+.matrix thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.matrix td {
+  min-width: 8.5rem;
+}
+
+.matrix .badge {
+  margin-bottom: 0.2rem;
+}
+
+.matrix small {
+  display: block;
+  color: var(--c-text-3);
+  line-height: 1.4;
+}
+
+@media (max-width: 599px) {
+  .matrix th[scope="row"] {
+    min-width: 7rem;
+  }
+
+  .matrix td {
+    min-width: 7.5rem;
+  }
+}

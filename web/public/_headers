@@ -16,7 +16,7 @@
   Strict-Transport-Security: max-age=63072000; includeSubDomains
 
 # Caching. Everything keeps Cloudflare's default, "public, max-age=0, must-revalidate", with an ETag, unless
-# a rule below says otherwise: the pages, the stylesheet and the scripts keep their names between deploys
+# a rule below says otherwise: the pages, the stylesheets and the scripts keep their names between deploys
 # (they are not fingerprinted), so they revalidate on every load and always match. The images change
 # rarely and may be kept a day. Each image has a rule of its own: Cloudflare documents a splat only at the
 # end of a path, and no file may match two rules that set the same header (scripts/check-site checks both).

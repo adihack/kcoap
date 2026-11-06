@@ -1,0 +1,479 @@
+/*
+ * kcoap.dev: the home page's sections.
+ *
+ * Linked last by / only, after site.css, figures.css and components.css. site.css explains how the
+ * stylesheets are split and in which order a page links them.
+ *
+ * Contents
+ *   1. The code window: tabs in a dark title bar
+ *   2. Hero, status line, feature grid, points beside a diagram, call to action
+ */
+
+/* 1. The code window --------------------------------------------------------------------------------- */
+
+/* Tabs in a dark code window's title bar. */
+.tabs-window {
+  border: 1px solid var(--c-code-border);
+  border-radius: var(--radius-xl);
+  background: var(--c-code-bg);
+  overflow: hidden;
+  box-shadow: var(--shadow-3);
+}
+
+.tabs-window .tab-list {
+  width: 100%;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0 0.5rem;
+  gap: 0;
+  border: 0;
+  border-bottom: 1px solid var(--c-code-border);
+  border-radius: 0;
+  background: var(--c-code-bar);
+}
+
+.tabs-window .tab {
+  position: relative;
+  min-height: 46px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0;
+  color: var(--c-code-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.tabs-window .tab:hover {
+  color: var(--c-code-text);
+}
+
+.tabs-window .tab[aria-selected="true"] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--c-code-text);
+}
+
+.tabs-window .tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0.6rem;
+  right: 0.6rem;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--c-amber);
+}
+
+.tabs-window .tab:focus-visible {
+  outline-color: var(--c-amber);
+  outline-offset: -3px;
+}
+
+.tabs-window .tab-panel {
+  padding: 0;
+}
+
+.tabs-window .tab-panel:focus-visible {
+  outline-color: var(--c-amber);
+  outline-offset: -3px;
+}
+
+.tabs-window .tab-panel-title {
+  margin: 0;
+  padding: 0.6rem 1.1rem;
+  border-bottom: 1px solid var(--c-code-border);
+  background: var(--c-code-bar);
+  color: var(--c-code-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+
+.tabs-window .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.tabs-window .code-block pre {
+  padding: 1.35rem 1.5rem;
+}
+
+.js .tabs-window .code-block pre {
+  padding-bottom: 3.25rem;
+}
+
+.js .tabs-window.tabs-ready .code-block pre {
+  min-height: 27.5rem;
+}
+
+.js .tabs-window .code-block:not(:has(.code-block-label)):not([data-no-copy]) pre {
+  padding-top: 1.35rem;
+}
+
+.tabs-window .copy-button {
+  top: auto;
+  bottom: 12px;
+  right: 12px;
+}
+
+@media (max-width: 599px) {
+  .tabs-window .tab-list {
+    padding-inline: 0.25rem;
+  }
+
+  .tabs-window .tab {
+    padding-inline: 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .tabs-window .code-block pre {
+    padding: 1.1rem 1rem;
+  }
+
+  .js .tabs-window .code-block pre {
+    padding-bottom: 3.25rem;
+  }
+
+  .js .tabs-window.tabs-ready .code-block pre {
+    min-height: 0;
+  }
+
+  .js .tabs-window .code-block:not(:has(.code-block-label)):not([data-no-copy]) pre {
+    padding-top: 1.1rem;
+  }
+}
+
+.tabs-window-foot {
+  margin: 0;
+  padding: 0.7rem 1.1rem;
+  border-top: 1px solid var(--c-code-border);
+  background: var(--c-code-bar);
+  color: var(--c-code-muted);
+  font-size: var(--fs-xs);
+}
+
+.tabs-window-foot code {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--c-code-text);
+}
+
+.tabs-window-foot a {
+  color: var(--c-code-text);
+  text-decoration-color: var(--c-code-muted);
+}
+
+/* 2. Home page sections ------------------------------------------------------------------------------ */
+
+.hero {
+  position: relative;
+  padding-block: clamp(3rem, 2rem + 4vw, 6rem) clamp(3.5rem, 2rem + 5vw, 7rem);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Blocks in the background, in the logo's language, fading out to the bottom. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(var(--c-hero-dot) 1.5px, transparent 1.6px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(70% 80% at 70% 0%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(70% 80% at 70% 0%, #000 0%, transparent 75%);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 70rem;
+  height: 40rem;
+  right: -20rem;
+  top: -18rem;
+  background: radial-gradient(closest-side, var(--c-hero-glow), transparent);
+}
+
+.hero-copy {
+  max-width: 920px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.hero-code {
+  max-width: 880px;
+  margin: clamp(2.5rem, 2rem + 3vw, 4.5rem) auto 0;
+  text-align: left;
+}
+
+.hero-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 0 0 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--c-text);
+}
+
+.hero-brand img {
+  width: 56px;
+  height: 56px;
+  display: block;
+  border-radius: 13px;
+  box-shadow: 0 10px 24px -10px rgba(11, 110, 121, 0.55);
+}
+
+.hero h1 {
+  max-width: 24ch;
+  margin-inline: auto;
+  margin-bottom: 1.25rem;
+}
+
+.hero h1 .accent {
+  color: var(--c-accent);
+}
+
+.hero .lede {
+  max-width: 40rem;
+  margin-inline: auto;
+  margin-bottom: 1.5rem;
+}
+
+.hero .btn-row {
+  justify-content: center;
+}
+
+@media (max-width: 599px) {
+  .hero .lede {
+    font-size: var(--fs-base);
+  }
+
+  .hero .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 22rem;
+    margin-inline: auto;
+  }
+
+  .hero-brand {
+    font-size: 1.5rem;
+  }
+
+  .hero-brand img {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 2rem;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--c-amber) 60%, transparent);
+  border-radius: 999px;
+  background: var(--c-amber-soft);
+  color: var(--c-amber-ink);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+}
+
+.status-pill::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-amber) 30%, transparent);
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1.25rem;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--c-text-3);
+}
+
+.hero-meta li + li {
+  margin-top: 0;
+}
+
+.hero-meta li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hero-meta svg {
+  width: 15px;
+  height: 15px;
+  color: var(--c-accent);
+}
+
+/* Feature grid on the home page. */
+.feature-grid {
+  display: grid;
+  gap: clamp(14px, 1.6vw, 20px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 600px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 760px) {
+  .feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.feature-grid .card {
+  padding: clamp(20px, 2vw, 26px);
+}
+
+/* Bullet points beside a diagram. */
+.point-list {
+  margin: 1.5rem 0 1.75rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1rem;
+}
+
+.point-list li {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.point-list li strong {
+  display: block;
+  color: var(--c-text);
+  font-size: var(--fs-base);
+  margin-bottom: 0.1rem;
+}
+
+.point-list svg {
+  width: 2rem;
+  height: 2rem;
+  padding: 6px;
+  border-radius: 9px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.cta-band {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(28px, 4vw, 48px);
+  border-radius: var(--radius-xl);
+  background: #0b6e79;
+  color: #ffffff;
+  isolation: isolate;
+}
+
+.cta-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1.5px, transparent 1.6px);
+  background-size: 24px 24px;
+  -webkit-mask-image: linear-gradient(100deg, transparent 30%, #000 100%);
+  mask-image: linear-gradient(100deg, transparent 30%, #000 100%);
+}
+
+:root[data-theme="dark"] .cta-band {
+  background: #0d4d55;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cta-band {
+    background: #0d4d55;
+  }
+}
+
+.cta-band h2,
+.cta-band p {
+  color: #ffffff;
+}
+
+.cta-band p {
+  opacity: 0.92;
+}
+
+.cta-band .btn-primary {
+  background: #ffc145;
+  color: #2b1d00;
+}
+
+.cta-band .btn-primary:hover {
+  background: #ffd47a;
+  color: #2b1d00;
+}
+
+.cta-band .btn-secondary {
+  background: transparent;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: none;
+}
+
+.cta-band .btn-secondary:hover {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.cta-band :focus-visible {
+  outline-color: #ffc145;
+}
+
+@media (max-width: 599px) {
+  .cta-band .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .status-pill::before {
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-amber) 30%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--c-amber) 0%, transparent);
+  }
+}

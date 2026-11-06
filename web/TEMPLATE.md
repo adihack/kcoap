@@ -8,23 +8,27 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 ## Rules every page follows
 
 - **No inline CSS or JavaScript.** The Content-Security-Policy forbids `<style>`, `style="..."`, inline
-  `<script>` and `on*=` attributes. All CSS is in `/assets/site.css`, all JavaScript in `/assets/site.js`.
-  SVG presentation attributes (`fill`, `stroke`, `transform`, `viewBox`) are fine.
+  `<script>` and `on*=` attributes. All CSS is in the stylesheets in `/assets/` (section 1 says which a page
+  links), all JavaScript in `/assets/site.js`. SVG presentation attributes (`fill`, `stroke`, `transform`,
+  `viewBox`) are fine.
 - **One `h1` per page**, `lang="en"`, the skip link, `<main id="main">`.
 - **Repository links** use exactly `https://github.com/adihack/kcoap/blob/feat/protocol-core/<path>` (or
   `tree/` for folders), so one replacement switches them to `main` after PR #1 merges.
 - **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
-- **Size:** keep each page with its images under about 150 KB before compression.
-- **Assets are not fingerprinted.** `site.css`, `site.js` and the images keep their names between deploys, so
-  cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or a short
-  `max-age`), not as immutable.
+- **Size:** a page with every stylesheet, script and image it loads, its tab icon included, stays within 150 KB
+  before compression. `scripts/check-site` checks it and prints each page's weight
+  ([README](README.md#page-weight)).
+- **Assets are not fingerprinted.** The stylesheets, `site.js` and the images keep their names between
+  deploys, so cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or
+  a short `max-age`), not as immutable.
 
 ## 1. The head
 
-Change the five marked values: title, description, canonical path, and the same path and texts in the Open
-Graph and Twitter tags. The title is "Page name · kcoap" on every page except the home page.
+Change the marked values: title, description, canonical path, the same path and texts in the Open Graph and
+Twitter tags, and the stylesheets after `site.css` (below). The title is "Page name · kcoap" on every page
+except the home page.
 
 ```html
 <!doctype html>
@@ -42,6 +46,8 @@ Graph and Twitter tags. The title is "Page name · kcoap" on every page except t
 <link rel="icon" href="/assets/kcoap-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/components.css">                    <!-- CHANGE -->
+<link rel="stylesheet" href="/assets/guide.css">                         <!-- CHANGE -->
 <script src="/assets/site.js"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="kcoap">
@@ -65,6 +71,33 @@ Graph and Twitter tags. The title is "Page name · kcoap" on every page except t
 `site.js` is loaded in the head without `defer` on purpose: it applies a remembered theme before the first
 paint and adds the `js` class that the mobile menu and tabs rely on. Drop the `<!-- CHANGE -->` comments.
 
+Every page links `site.css` first, then only the other stylesheets it uses, always in this order:
+`figures.css`, `components.css`, `guide.css`, `home.css`. Each sheet keeps its rules in the order they had
+when `site.css` was the only stylesheet, so with this order the markup the pages have today gets the cascade it
+had then; the header of `site.css` says which sheet holds what.
+
+| Page | Stylesheets, in order |
+|---|---|
+| `/` | `site.css`, `figures.css`, `components.css`, `home.css` |
+| `/start/` and every guide under it | `site.css`, `components.css`, `guide.css` |
+| `/features/` | `site.css`, `figures.css` |
+| `/releases/` | `site.css`, `figures.css`, `components.css` |
+| `/sponsors/` | `site.css`, `components.css` |
+| `404.html` | `site.css`, `figures.css` |
+
+A new page links what its classes need. `scripts/check-site` fails when a page uses a class (in its markup, or
+one that `site.js` or `releases.js` sets) that no stylesheet it links names, when a sheet names a class that
+no page linking it uses, when a page links a sheet it uses nothing from, and when the order is not the one
+above.
+
+The order keeps the cascade only for the markup the pages have today. Between two rules of equal specificity
+the one in the later sheet now wins, where in the one stylesheet it may have come first, so nesting components
+from different sheets in a new way can change which wins: a `.steps` list in a `.checks` item gets the steps'
+padding and number badge instead of the check mark; a `.release-item` heading inside `.prose` gets the margin
+of `.prose h3`; `.jump-links` inside `.toc` or `.pager` get their link padding; `.evidence` or `.release-notes`
+items inside `.toc` get its list spacing. `scripts/check-site` checks classes, not the cascade, so it does not
+notice. For such a page, compare a screenshot with the nesting and without it, or move one of the two rules.
+
 A page with a script of its own loads it right after `site.js`, with `defer` (only `/releases/` has one:
 `<script src="/assets/releases.js" defer></script>`). `404.html` is served at every missing path, so it has
 no canonical link and no `og:url`, and adds `<meta name="robots" content="noindex">` instead.
@@ -81,19 +114,19 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
       <img src="/assets/kcoap-logo.svg" alt="" width="32" height="32">
       <span>kcoap</span>
     </a>
-    <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon icon-menu" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon icon-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <nav class="site-nav" id="site-nav" aria-label="Main">
       <ul>
         <li><a href="/start/">Get started</a></li>
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
-      <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
-      <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+      <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
+      <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
     </div>
   </div>
 </header>
@@ -195,7 +228,8 @@ Copy it as is, followed by `</body></html>`.
 
 ## 5. Components
 
-All classes are defined in `site.css`, whose header lists its sections.
+The classes are defined in the stylesheets in `/assets/`: in `site.css` unless this section names another
+sheet. Each sheet's header lists its sections.
 
 ### Layout
 
@@ -203,17 +237,17 @@ All classes are defined in `site.css`, whose header lists its sections.
 |---|---|
 | `.container`, `.container-narrow` | page width with the side gutter (16 px on phones) |
 | `.section`, `.section-soft`, `.section-tight` | vertical rhythm; soft has the tinted background |
-| `.section-head`, `.section-head-center` | eyebrow + h2 + lede above a section's content |
+| `.section-head` | eyebrow + h2 + lede above a section's content |
 | `.eyebrow` | small uppercase label with the amber block |
 | `.lede`, `.muted` | larger intro text; secondary text |
-| `.grid .grid-2` / `.grid-3` / `.grid-4` | responsive card grids |
+| `.grid .grid-2` / `.grid-3` | responsive card grids |
 | `.split`, `.split-reverse` | text beside a figure from 960 px; the reverse puts the figure first |
-| `.prose` | long-form text with styled lists and headings |
+| `.prose` | long-form text with styled lists and headings (`guide.css`) |
 | `.page-head`, `.breadcrumb` | the top of every page but the home page |
 
 ### Buttons and links
 
-`<a class="btn btn-primary">`, `.btn-secondary`, `.btn-ghost`, size `.btn-lg`, in a `.btn-row`. An icon
+`<a class="btn btn-primary">`, `.btn-secondary`, size `.btn-lg`, in a `.btn-row`. An icon
 SVG inside a button sits before or after the text. `.link-arrow` adds a trailing arrow to a text link.
 
 ### Badges for states
@@ -287,7 +321,7 @@ split long calls, and write version-catalog arrays one entry per line. Only a on
 `tok-s` (string), `tok-c` (comment), `tok-f` (function call), `tok-t` (type), `tok-n` (number). Shell
 commands carry no `$` prompt, so a copy pastes cleanly.
 
-### Tabs
+### Tabs (`components.css`)
 
 ```html
 <div class="tabs" data-tabs data-tab-group="gradle" data-tabs-label="Build file format">
@@ -309,22 +343,25 @@ choice follows them from page to page. The labels must match exactly across a gr
 
 ### Steps, facts, checks, meter
 
+Steps and the meter are in `components.css`, facts and checks in `site.css`.
+
 - `<ol class="steps">` with an `<h3>` in each `<li>`: numbered setup steps (the number badge is CSS).
 - `<dl class="facts">`: term and value pairs (minimum versions, coordinates).
 - `<ul class="checks">`: a list with a teal check per item; `<li class="is-open">` gets an amber ring for an
   open item. The state is also text, for screen readers and forced colours: every item starts with
   `<span class="visually-hidden">Done: </span>` or, when open, `<span class="visually-hidden">Open: </span>`.
-- `<ol class="meter">` of `<li class="meter-block is-done|is-active">`: progress drawn as blocks, with a
-  `.meter-legend` list under it (the home page's release-freeze meter). Each block ends with its state in
-  text, `A1<span class="visually-hidden">, merged</span>` (or `, in progress`, `, not started`); no `title`.
+- `<ol class="meter">` of `<li class="meter-block is-done">` (merged) or `<li class="meter-block">` (not
+  started): progress drawn as blocks, with a `.meter-legend` list under it (the home page's release-freeze
+  meter). Each block ends with its state in text, `A1<span class="visually-hidden">, merged</span>` (or
+  `, not started`); no `title`.
 
-### Platform links
+### Platform links (`components.css`)
 
 `<ul class="platform-strip">` of `<li><a class="platform-link" href="/start/jvm/">ICON<span><strong>JVM</strong><span>Servers and desktop</span></span></a></li>`:
 one, two or three columns by width. The six icons (server, phone, apple, gateway, browser, terminal) are in
 the home page's strip; copy them from there.
 
-### Figures and diagrams
+### Figures and diagrams (`figures.css`)
 
 ```html
 <figure class="figure">
@@ -350,8 +387,8 @@ the home page's strip; copy them from there.
   `d-line-soft`, `d-lifeline`, `d-arrow`, `d-arrow-accent`, `d-arrow-amber`, `d-arrow-lost`; arrow heads
   in `<marker>`s with `d-head`, `d-head-accent`, `d-head-amber`; text `d-title`, `d-big`, `d-sub`,
   `d-small`, `d-mono`, `d-mono-small`, `d-caps`, `d-block-num`, `d-on-accent`, `d-on-accent-2`, `d-on-amber`,
-  `d-accent-text`, `d-amber-text`, `d-lost-text`; fills `d-fill-accent`, `d-fill-amber`, `d-fill-on-accent`,
-  `d-fill-lost`, `d-row-alt`; icons `d-icon-accent`, `d-icon-on-accent`; marks `d-check`, `d-stroke-lost`.
+  `d-accent-text`, `d-lost-text`; fills `d-fill-accent`, `d-fill-amber`, `d-fill-on-accent`, `d-row-alt`;
+  icons `d-icon-accent`, `d-icon-on-accent`; marks `d-check`, `d-stroke-lost`.
 - Prefix every id inside an SVG with `fig-<name>-` (titles, descriptions, markers) so ids stay unique on the
   page. The five home-page diagrams (`fig-stack`, `fig-edhoc`, `fig-qblock`, `fig-platforms`,
   `fig-interop`) can be copied as they are to `/features/`; rename their ids if two copies share a page.
@@ -361,28 +398,31 @@ the home page's strip; copy them from there.
 
 ### Icons
 
-Icons are drawn for this site: 24×24 viewBox, `fill="none" stroke="currentColor" stroke-width="1.75"
-stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"`. Copy them from
-`index.html`. Do not use third-party icon sets or brand logos (no GitHub, Android, Apple or Kotlin marks):
-the GitHub link uses the repository glyph from the header.
+Icons are drawn for this site as lines on a 24×24 grid: `<svg class="icon" viewBox="0 0 24 24"
+aria-hidden="true" focusable="false">`, with any other class after `icon` (`class="icon icon-menu"`). The
+`icon` class in `site.css` gives them their stroke (`currentColor`, 1.75 wide, round caps and joins) and no
+fill, so the markup carries only the shapes: written on each icon, those five attributes cost about 90 bytes,
+and `/` and `/features/` have about 40 icons each. Copy the icons from `index.html`. Do not use third-party
+icon sets or brand logos (no GitHub, Android, Apple or Kotlin marks): the GitHub link uses the repository
+glyph from the header.
 
 ### Inner pages
 
-| Class | Use |
-|---|---|
-| `ul.fact-tiles` > `li.fact-tile` > `.fact-tile-label` + `.fact-tile-value` | four key facts under a page head’s lede |
-| `.container.doc-layout` > `nav.toc` + `div.doc-body.prose` | a guide: the text with an “On this page” list (`p.toc-title` and an `ol` of `#id` links to its `h2`s), beside it from 1100 px and above it below that |
-| `p.code-note` with the check-circle icon, or `p.code-note.code-note-names` with the info icon | under a code block: how the sample was checked (compiled in CI, or names checked only) |
-| `.code-block.code-block-output` with `data-no-copy` | expected output of a sample, labelled “Output” |
-| `nav.pager` > `a.pager-prev` / `a.pager-next` > `.pager-label` + `.pager-title` | previous and next guide at the end of a guide |
-| `ul.jump-links` | chips that jump to the sections of a long page |
-| `table.matrix` | a comparison table whose row headers stick while it scrolls |
-| `table.table-stack` with `data-label` on cells | a table whose rows become stacked blocks on phones; each cell’s label comes from `data-label` |
-| `.state-col`, `.row-ids` | a narrow column of state badges; the checklist row ids under a cell, as a link |
-| `dl.qa-list` | questions and answers, such as troubleshooting |
-| `.feature-icon`, `.feature-code`, `.evidence` (`.evidence-title`) | a feature section on `/features/`: its icon, a code sample under the split, the box of tests and open items |
-| `[data-release-feed]`, `.release-list`, `.release-item`, `.release-meta`, `.release-notes`, `.release-loading`, `.block-loader` | the GitHub releases on `/releases/`, rendered by `releases.js` |
-| `.notfound`, `.notfound-code`, `.diagram-lost` | the 404 page |
+| Class | Use | Sheet |
+|---|---|---|
+| `ul.fact-tiles` > `li.fact-tile` > `.fact-tile-label` + `.fact-tile-value` | four key facts under a page head’s lede | `components.css` |
+| `.container.doc-layout` > `nav.toc` + `div.doc-body.prose` | a guide: the text with an “On this page” list (`p.toc-title` and an `ol` of `#id` links to its `h2`s), beside it from 1100 px and above it below that | `guide.css` |
+| `p.code-note` with the check-circle icon, or `p.code-note.code-note-names` with the info icon | under a code block: how the sample was checked (compiled in CI, or names checked only) | `site.css` |
+| `.code-block.code-block-output` with `data-no-copy` | expected output of a sample, labelled “Output” | `guide.css` |
+| `nav.pager` > `a.pager-prev` / `a.pager-next` > `.pager-label` + `.pager-title` | previous and next guide at the end of a guide | `guide.css` |
+| `ul.jump-links` | chips that jump to the sections of a long page | `site.css` |
+| `table.matrix` | a comparison table whose row headers stick while it scrolls | `guide.css` |
+| `table.table-stack` with `data-label` on cells | a table whose rows become stacked blocks on phones; each cell’s label comes from `data-label` | `site.css` |
+| `.state-col`, `.row-ids` | a narrow column of state badges; the checklist row ids under a cell, as a link | `site.css` |
+| `dl.qa-list` | questions and answers, such as troubleshooting | `guide.css` |
+| `.feature-icon`, `.feature-code`, `.evidence` (`.evidence-title`) | a feature section on `/features/`: its icon, a code sample under the split, the box of tests and open items | `site.css` |
+| `[data-release-feed]`, `.release-list`, `.release-item`, `.release-meta`, `.release-notes`, `.release-status`, `.block-loader` | the GitHub releases on `/releases/`, rendered by `releases.js` | `components.css` |
+| `.notfound`, `.notfound-code`, `.diagram-lost` | the 404 page | `figures.css` |
 
 Diagrams added for these pages: `fig-vectors`, `fig-failclosed`, `fig-sansio`, `fig-crypto` (on `/features/`)
 and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the “lost” red.
