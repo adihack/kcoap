@@ -25,8 +25,9 @@ Bouncy Castle. Most applications pass `DefaultCryptoBackend()` and declare both 
 
 ```kotlin
 dependencies {
-    implementation("dev.kcoap:kcoap-crypto-default")   // the classical algorithms, on cryptography-kotlin
-    implementation("dev.kcoap:kcoap-crypto-bc")        // ML-KEM and ML-DSA
+    val kcoap = "0.1.0-SNAPSHOT"                              // one version for every kcoap module
+    implementation("dev.kcoap:kcoap-crypto-default:$kcoap")   // the classical algorithms, on cryptography-kotlin
+    implementation("dev.kcoap:kcoap-crypto-bc:$kcoap")        // ML-KEM and ML-DSA
 }
 ```
 

@@ -34,7 +34,9 @@ The public API is the class `DefaultCryptoBackend` with its no-argument construc
 members, nothing else. It always uses the platform's default provider, and no cryptography-kotlin type
 appears in it, so cryptography-kotlin is an `implementation` dependency: your code does not compile against
 it, and its 0.x releases do not change kcoap's API. Choosing a provider (a FIPS JCA provider, say) may be
-added later as a feature of its own.
+added later as a feature of its own. Until then, an application that needs another provider implements
+`CryptoBackend` on it (on cryptography-kotlin, which it then declares itself), or wraps `DefaultCryptoBackend()`
+in a decorator that overrides the operations the provider must perform.
 
 The class is final ([ADR 0002](../docs/adr/0002-delegation-not-subclassing.md)). To change or add
 operations, wrap it in a decorator that delegates everything else, and call the delegate where a subclass

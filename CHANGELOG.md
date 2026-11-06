@@ -273,6 +273,11 @@ adds its entry and migration note below.
   cryptography-kotlin itself declares it. A subclass becomes a decorator that delegates the rest:
   `class MyBackend(private val inner: CryptoBackend = DefaultCryptoBackend()) : CryptoBackend by inner`, calling
   `inner.sign(...)` where it called `super.sign(...)` ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
+  Code that passed another provider (`CryptographyProvider.JDK` on a FIPS `java.security.Provider`, say, or a
+  specific Apple or OpenSSL provider) has no replacement in this release: implement `CryptoBackend` on that
+  provider, on cryptography-kotlin, which the application then declares itself, or wrap
+  `DefaultCryptoBackend()` in a decorator that overrides the affected operations. Choosing a provider may come
+  back later as a feature of its own ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
   The decorator's `supports` members ask the delegate, which probes its own operations and never the
   decorator's overrides: a decorator that adds or takes away an algorithm overrides the matching `supports`
   members, as `BouncyCastleCryptoBackend` does.
