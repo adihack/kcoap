@@ -36,7 +36,7 @@ class BouncyCastleCryptoBackendTest {
             val encapsulation = backend.encapsulate(algorithm, pair.publicKey)
 
             assertEquals(algorithm.keyType.publicKeyLength, pair.publicKey.size, algorithm.name)
-            assertEquals(MlKem.SEED_LENGTH, pair.privateKey.encoded.size, algorithm.name)
+            assertEquals(algorithm.keyType.seedLength, pair.privateKey.encoded.size, algorithm.name)
             assertEquals(algorithm.ciphertextLength, encapsulation.ciphertext.size, algorithm.name)
             assertEquals(algorithm.sharedSecretLength, encapsulation.sharedSecret().size, algorithm.name)
             assertContentEquals(
@@ -54,7 +54,7 @@ class BouncyCastleCryptoBackendTest {
     @Test
     fun tamperedCiphertextYieldsTheImplicitRejectionSecret() = runTest {
         for (algorithm in KemAlgorithm.entries) {
-            val seed = ByteArray(MlKem.SEED_LENGTH) { it.toByte() }
+            val seed = ByteArray(MlKem.ML_KEM_512.seedLength) { it.toByte() }
             val z = seed.copyOfRange(32, 64)
             val pair = BouncyCastleCryptoBackend(ScriptedRandomBackend(seed)).generateKeyPair(algorithm.keyType)
             val encapsulation = backend.encapsulate(algorithm, pair.publicKey)
@@ -80,7 +80,7 @@ class BouncyCastleCryptoBackendTest {
         assertFailsWith<IllegalArgumentException> { backend.encapsulate(KemAlgorithm.ML_KEM_768, pair.publicKey) }
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(pair.privateKey, ciphertext.copyOf(767)) }
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(pair.privateKey, ciphertext + byteArrayOf(0)) }
-        val wrongLength = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(MlKem.SEED_LENGTH + 1))
+        val wrongLength = SoftwarePrivateKey(KeyType.ML_KEM_512, ByteArray(MlKem.ML_KEM_512.seedLength + 1))
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(wrongLength, ciphertext) }
         val foreign = object : PrivateKey(KeyType.ML_KEM_512) {}
         assertFailsWith<IllegalArgumentException> { backend.decapsulate(foreign, ciphertext) }
@@ -116,7 +116,7 @@ class BouncyCastleCryptoBackendTest {
             val signature = backend.sign(algorithm, pair.privateKey, data)
 
             assertEquals(algorithm.keyType.publicKeyLength, pair.publicKey.size, algorithm.name)
-            assertEquals(MlDsa.SEED_LENGTH, pair.privateKey.encoded.size, algorithm.name)
+            assertEquals(algorithm.keyType.seedLength, pair.privateKey.encoded.size, algorithm.name)
             assertEquals(algorithm.signatureLength, signature.size, algorithm.name)
             assertTrue(backend.verify(algorithm, pair.publicKey, data, signature), algorithm.name)
             assertFalse(backend.verify(algorithm, pair.publicKey, data.flipped(0), signature), algorithm.name)
@@ -186,7 +186,7 @@ class BouncyCastleCryptoBackendTest {
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, dsa65.privateKey, data) }
         val foreign = object : PrivateKey(KeyType.ML_DSA_44) {}
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, foreign, data) }
-        val wrongLength = SoftwarePrivateKey(KeyType.ML_DSA_44, ByteArray(MlDsa.SEED_LENGTH + 1))
+        val wrongLength = SoftwarePrivateKey(KeyType.ML_DSA_44, ByteArray(MlDsa.ML_DSA_44.seedLength + 1))
         assertFailsWith<IllegalArgumentException> { backend.sign(algorithm, wrongLength, data) }
         assertFailsWith<IllegalArgumentException> { backend.verify(algorithm, dsa65.publicKey, data, ByteArray(2420)) }
         assertFailsWith<IllegalArgumentException> { backend.verify(algorithm, ByteArray(0), data, ByteArray(2420)) }

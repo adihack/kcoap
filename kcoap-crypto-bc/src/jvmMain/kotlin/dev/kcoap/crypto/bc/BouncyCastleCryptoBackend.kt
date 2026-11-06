@@ -61,8 +61,8 @@ public class BouncyCastleCryptoBackend(
 
     /** ML-KEM.KeyGen (FIPS 203 Algorithm 19) or ML-DSA.KeyGen (FIPS 204 Algorithm 1), with the seed as private key. */
     override suspend fun generateKeyPair(type: KeyType): KeyPair {
-        MlKem.of(type)?.let { kem -> return withRandomBytes(MlKem.SEED_LENGTH) { seed -> kem.generateKeyPair(seed) } }
-        MlDsa.of(type)?.let { dsa -> return withRandomBytes(MlDsa.SEED_LENGTH) { seed -> dsa.generateKeyPair(seed) } }
+        MlKem.of(type)?.let { kem -> return withRandomBytes(kem.seedLength) { seed -> kem.generateKeyPair(seed) } }
+        MlDsa.of(type)?.let { dsa -> return withRandomBytes(dsa.seedLength) { seed -> dsa.generateKeyPair(seed) } }
         return classical.generateKeyPair(type)
     }
 
