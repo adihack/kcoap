@@ -33,8 +33,8 @@ In order, as far as the order is known:
 
 1. **The first release, 0.1.0.** The freeze list has merged; what [releasing.md](releasing.md#release-freeze) still
    asks before the tag: the deprecated constructors of `CoapEndpointConfig` and `CoapClientConfig` removed, a
-   CHANGELOG entry for the version, the `dev.kcoap` namespace verified and the signing secrets set (the owner's
-   steps), and the consumer samples of WP-P1 (a JVM consumer on the BOM, a js consumer with a bundle-size budget).
+   CHANGELOG entry for the version, the Maven Central and signing secrets set (the owner's steps), and the
+   consumer samples of WP-P1 (a JVM consumer on the BOM, a js consumer with a bundle-size budget).
 2. **The rest of the CoAP work packages.** SRV-2 (server hardening: 4.29 Too Many Requests, sequence tokens on TLS
    connections, the remaining bounds) and WP-B4 (the rest of the error and observability findings: a
    `ResponseRejected` event, reason enums for rejected and malformed messages, `stats()`, `CoapResponseException`).

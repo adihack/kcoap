@@ -61,7 +61,7 @@ kotlin {
 
 A Maven build imports the BOM with `<scope>import</scope>` and names the JVM artifacts (`kcoap-coap-jvm`), as the
 [kcoap-bom README](../kcoap-bom/README.md#what-it-constrains) shows. The release coordinates will be the same,
-`dev.kcoap:<module>:<version>` from `mavenCentral()`, once the `dev.kcoap` namespace is verified and the
+`dev.kcoap:<module>:<version>` from `mavenCentral()`, under the verified `dev.kcoap` namespace, once the
 [release freeze](releasing.md#release-freeze) is over.
 
 ## Which modules to add
