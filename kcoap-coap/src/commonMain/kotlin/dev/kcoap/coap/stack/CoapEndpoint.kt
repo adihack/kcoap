@@ -687,15 +687,7 @@ public class CoapEndpoint private constructor(
         // only once it was handed on: if it was not taken, it is left for its sender to send again (§4.2). No
         // timer answers it meanwhile (UdpMessaging), so every way out of here answers or defers it.
         val taken = try {
-            val inspection = try {
-                exchange.inspect(message)
-            } catch (e: Throwable) {
-                // An unexpected failure of the message security: the response is dropped, as one that failed
-                // verification, but acknowledged, so the peer does not retransmit it until it gives up.
-                link.acceptResponse(message)
-                throw e
-            }
-            when (inspection) {
+            when (val inspection = exchange.inspect(message)) {
                 is ClientExchange.Inspection.Accepted -> exchange.accept(inspection.response, reservation)
                 is ClientExchange.Inspection.Rejected -> {
                     // The exchange ends, and its last event takes the room back.
@@ -707,6 +699,12 @@ public class CoapEndpoint private constructor(
                 is ClientExchange.Inspection.Unverified -> exchange.acceptUnverified(inspection.response, inspection.reason, reservation)
                 ClientExchange.Inspection.Dropped -> true
             }
+        } catch (e: Throwable) {
+            // An unexpected failure, of the message security or while the response was handed on: it is dropped,
+            // as one that failed verification, but acknowledged, so the peer does not retransmit it until it gives
+            // up and, for a notification, removes the observer (RFC 7641 §4.5). An answered one stays answered.
+            withContext(NonCancellable) { link.acceptResponse(message) }
+            throw e
         } finally {
             reservation?.release()
         }
