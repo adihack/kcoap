@@ -1,5 +1,4 @@
 public final class dev/kcoap/crypto/bc/BouncyCastleCryptoBackend : dev/kcoap/crypto/CryptoBackend {
-	public fun <init> ()V
 	public fun <init> (Ldev/kcoap/crypto/CryptoBackend;Z)V
 	public synthetic fun <init> (Ldev/kcoap/crypto/CryptoBackend;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun aead (Ldev/kcoap/crypto/AeadAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;

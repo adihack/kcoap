@@ -1,6 +1,7 @@
 package dev.kcoap.sample.android
 
 import dev.kcoap.crypto.CryptoBackend
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.bc.BouncyCastleCryptoBackend
 
 /**
@@ -9,4 +10,4 @@ import dev.kcoap.crypto.bc.BouncyCastleCryptoBackend
  */
 internal const val CRYPTO_SETUP: String = "BouncyCastleCryptoBackend over DefaultCryptoBackend"
 
-internal fun cryptoBackend(): CryptoBackend = BouncyCastleCryptoBackend()
+internal fun cryptoBackend(): CryptoBackend = BouncyCastleCryptoBackend(classical = DefaultCryptoBackend())

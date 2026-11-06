@@ -96,6 +96,7 @@ Use the pattern that matches the need; do not add abstraction a second implement
 | Need | Pattern | Example |
 |---|---|---|
 | Replaceable subsystem | Interface (SPI) with a default implementation | `CryptoBackend`, `DatagramTransport` |
+| Changing or adding to an implementation | Decorator (`X by delegate`); implementations are final, never subclassed ([ADR 0002](adr/0002-delegation-not-subclassing.md)) | `BouncyCastleCryptoBackend` around a classical backend; test doubles around `DefaultCryptoBackend` |
 | Variant behaviour | Strategy | EDHOC key exchange: Diffie-Hellman or KEM |
 | User-defined resources | Template method on an abstract class | `CoapResource.handleGet()` |
 | Notifications | `fun interface` callbacks or `Flow` | `LogSink`, Observe notifications |

@@ -9,7 +9,6 @@ import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
 import dev.kcoap.crypto.SignatureAlgorithm
 import dev.kcoap.crypto.SoftwarePrivateKey
-import dev.kcoap.crypto.backend.DefaultCryptoBackend
 
 /**
  * [CryptoBackend] with the post-quantum algorithms of the EDHOC PQ cipher suites (draft-ietf-lake-pqsuites):
@@ -34,13 +33,17 @@ import dev.kcoap.crypto.backend.DefaultCryptoBackend
  * The `supports` members answer for ML-KEM and ML-DSA without probing, since Bouncy Castle always has them,
  * and ask [classical] about everything else (docs/adr/0001-crypto-capabilities.md).
  *
+ * This module does not choose the classical backend: the application passes one, usually
+ * `BouncyCastleCryptoBackend(DefaultCryptoBackend())` with kcoap-crypto-default, or its own (a secure element,
+ * the Android KeyStore), in which case cryptography-kotlin is not needed at all.
+ *
  * @param classical the backend for every algorithm that is not ML-KEM or ML-DSA, and for randomness.
  * @param isSigningDeterministic whether ML-DSA signs with the deterministic variant (`rnd = {0}^32`, FIPS 204
  *   §3.4) instead of the default hedged one. Deterministic signatures are reproducible, which known-answer
  *   tests need; hedged ones resist fault and side-channel attacks better.
  */
 public class BouncyCastleCryptoBackend(
-    private val classical: CryptoBackend = DefaultCryptoBackend(),
+    private val classical: CryptoBackend,
     private val isSigningDeterministic: Boolean = false,
 ) : CryptoBackend by classical {
 

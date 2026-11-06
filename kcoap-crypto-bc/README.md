@@ -5,7 +5,7 @@ Castle's lightweight API (`bcprov-jdk18on`), for the EDHOC PQ cipher suites of d
 libedhoc's private suite -24 uses ML-KEM-512 for the ephemeral key exchange and ML-DSA-44 for signatures.
 
 ```kotlin
-val crypto = BouncyCastleCryptoBackend()                     // wraps DefaultCryptoBackend
+val crypto = BouncyCastleCryptoBackend(classical = DefaultCryptoBackend())   // kcoap-crypto-default
 val responder = crypto.generateKeyPair(KeyType.ML_KEM_512)
 val sent = crypto.encapsulate(KemAlgorithm.ML_KEM_512, responder.publicKey)
 val received = crypto.decapsulate(responder.privateKey, sent.ciphertext)   // same bytes as sent.sharedSecret()
@@ -14,11 +14,25 @@ sent.destroy()                                                              // o
 
 ## What it does
 
-`BouncyCastleCryptoBackend(classical = DefaultCryptoBackend(), isSigningDeterministic = false)` implements
-`generateKeyPair`, `importKeyPair`, `sign`, `verify`, `encapsulate` and `decapsulate` for the ML-KEM and ML-DSA
-key types and delegates everything else (hashes, HMAC, AEADs, X25519, P-256/384, Ed25519, ECDSA) to `classical`.
-Its `supports` members answer yes for ML-KEM and ML-DSA without probing and pass every other question to
-`classical` ([ADR 0001](../docs/adr/0001-crypto-capabilities.md)), so EDHOC offers suite -24 with it.
+`BouncyCastleCryptoBackend(classical, isSigningDeterministic = false)` implements `generateKeyPair`,
+`importKeyPair`, `sign`, `verify`, `encapsulate` and `decapsulate` for the ML-KEM and ML-DSA key types and
+delegates everything else (hashes, HMAC, AEADs, X25519, P-256/384, Ed25519, ECDSA) to `classical`. Its `supports`
+members answer yes for ML-KEM and ML-DSA without probing and pass every other question to `classical`
+([ADR 0001](../docs/adr/0001-crypto-capabilities.md)), so EDHOC offers suite -24 with it.
+
+The module does not choose the classical backend, and depends only on `kcoap-crypto` (with `kcoap-common`) and
+Bouncy Castle. Most applications pass `DefaultCryptoBackend()` and declare both modules:
+
+```kotlin
+dependencies {
+    val kcoap = "0.1.0-SNAPSHOT"                              // one version for every kcoap module
+    implementation("dev.kcoap:kcoap-crypto-default:$kcoap")   // the classical algorithms, on cryptography-kotlin
+    implementation("dev.kcoap:kcoap-crypto-bc:$kcoap")        // ML-KEM and ML-DSA
+}
+```
+
+An application with a classical backend of its own (a secure element, the Android KeyStore, a decorator of
+another backend) passes that one instead and leaves out kcoap-crypto-default, and with it cryptography-kotlin.
 
 | Algorithm | Parameter sets | Spec |
 |---|---|---|
@@ -68,8 +82,9 @@ cases per parameter set, embedded as hex in `src/jvmTest/.../vectors` by `tools/
 
 ML-DSA cases are all external-interface, pure, empty-context ones, the only variant the backend exposes. Besides
 the vectors, the tests cover round trips for every parameter set, implicit rejection against kcoap's own SHAKE256,
-tampered, truncated and malformed signatures, every input check, delegation of the classical algorithms, and the
-wiping of drawn randomness.
+tampered, truncated and malformed signatures, every input check, delegation of the classical algorithms (to
+`DefaultCryptoBackend`, a test-only dependency here, and to a minimal backend with only the required
+primitives), and the wiping of drawn randomness.
 
 ```bash
 ./gradlew :kcoap-crypto-bc:jvmTest :kcoap-crypto-bc:koverXmlReport

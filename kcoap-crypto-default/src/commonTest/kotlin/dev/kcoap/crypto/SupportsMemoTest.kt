@@ -50,30 +50,24 @@ class SupportsMemoTest {
 
     /**
      * The KEM and SHAKE256 probes never reach the provider (this backend refuses ML-KEM key types before any
-     * lookup, and SHAKE256 is common code), so the backend's own operations count them: the KEM probe starts
-     * with [CryptoBackend.generateKeyPair], the hash probe of an XOF with [CryptoBackend.digest] alone.
+     * lookup, and SHAKE256 is common code), so the memo itself shows that they run once: the first question
+     * leaves its answer there, and a question that finds an answer there is not probed.
      */
     @Test
     fun theKemAndShake256QuestionsAreProbedOnce() = runTest {
-        val backend = object : DefaultCryptoBackend(CountingProvider()) {
-            var keyPairs = 0
-            var digests = 0
+        val backend = DefaultCryptoBackend(CountingProvider())
 
-            override suspend fun generateKeyPair(type: KeyType): KeyPair {
-                keyPairs++
-                return super.generateKeyPair(type)
-            }
+        assertFalse(backend.supports(KemAlgorithm.ML_KEM_512), "this backend has no KEM")
+        assertTrue(backend.supports(HashAlgorithm.SHAKE256))
 
-            override suspend fun digest(algorithm: HashAlgorithm, data: ByteArray): ByteArray {
-                digests++
-                return super.digest(algorithm, data)
-            }
-        }
-
-        repeat(3) { assertFalse(backend.supports(KemAlgorithm.ML_KEM_512), "this backend has no KEM") }
-        assertEquals(1, backend.keyPairs, "ML-KEM-512 is probed once")
-        repeat(3) { assertTrue(backend.supports(HashAlgorithm.SHAKE256)) }
-        assertEquals(1, backend.digests, "SHAKE256 is probed once")
+        assertFalse(backend.capabilities.answer(KemAlgorithm.ML_KEM_512) { error("ML-KEM-512 is probed again") })
+        assertTrue(backend.capabilities.answer(HashAlgorithm.SHAKE256) { error("SHAKE256 is probed again") })
+        // A recorded answer is what supports returns, even one no probe would give.
+        val recorded = DefaultCryptoBackend(CountingProvider())
+        recorded.capabilities.answer(KemAlgorithm.ML_KEM_512) { true }
+        recorded.capabilities.answer(HashAlgorithm.SHAKE256) { false }
+        repeat(3) { assertTrue(recorded.supports(KemAlgorithm.ML_KEM_512), "ML-KEM-512 comes from the memo") }
+        repeat(3) { assertFalse(recorded.supports(HashAlgorithm.SHAKE256), "SHAKE256 comes from the memo") }
     }
 
     /** Callers racing on real threads (one event loop on JS and Wasm) share the first caller's probe. */

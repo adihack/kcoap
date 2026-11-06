@@ -2,6 +2,7 @@ package dev.kcoap.edhoc
 
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.KeyType
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.bc.BouncyCastleCryptoBackend
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -25,7 +26,7 @@ import kotlin.test.fail
  * Skipped without Docker or the image.
  */
 class LibedhocInteropTest {
-    private val backend = BouncyCastleCryptoBackend()
+    private val backend = BouncyCastleCryptoBackend(DefaultCryptoBackend())
 
     /** The suites libedhoc implements, apart from the post-quantum one tested separately. */
     private val classicalSuites =

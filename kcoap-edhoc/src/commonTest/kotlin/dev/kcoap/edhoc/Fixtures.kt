@@ -146,35 +146,52 @@ internal object Fixtures {
 }
 
 /**
- * The default backend plus test doubles for the post-quantum algorithms, until a real ML-KEM / ML-DSA
- * backend is available. They have the sizes of FIPS 203 / FIPS 204 but none of their security:
+ * [classical] plus test doubles for the post-quantum algorithms, until a real ML-KEM / ML-DSA backend is
+ * available on every target. They have the sizes of FIPS 203 / FIPS 204 but none of their security:
  *
  * - ML-KEM is a Diffie-Hellman shim: the encapsulation key is an X25519 public key padded to the ML-KEM
  *   size, the ciphertext an ephemeral X25519 public key padded likewise, the shared secret their X25519.
  * - ML-DSA "signs" with SHAKE256 over the public key and the message; the private key is the public key.
+ *
+ * A decorator, as `BouncyCastleCryptoBackend` is (docs/adr/0002-delegation-not-subclassing.md): it answers
+ * the `supports` questions about what it adds itself, without probing, and passes the others to [classical].
+ * A test that needs a broken variant wraps it the same way.
  */
-internal open class FakePostQuantumBackend : DefaultCryptoBackend() {
+internal class FakePostQuantumBackend(
+    private val classical: CryptoBackend = DefaultCryptoBackend(),
+) : CryptoBackend by classical {
     var encapsulations: Int = 0
         private set
 
-    override suspend fun generateKeyPair(type: KeyType): KeyPair = when (type) {
-        KeyType.ML_KEM_512, KeyType.ML_KEM_768, KeyType.ML_KEM_1024 -> {
-            val inner = super.generateKeyPair(KeyType.X25519)
+    /** True for the ML-KEM and ML-DSA key types; [classical]'s answer for the others. */
+    override suspend fun supports(type: KeyType): Boolean =
+        type.isMlKem() || type.isMlDsa() || classical.supports(type)
+
+    /** True for ML-DSA-44/65/87; [classical]'s answer for the others. */
+    override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
+        algorithm.keyType.isMlDsa() || classical.supports(algorithm)
+
+    /** True for ML-KEM-512/768/1024, which are all the KEMs there are. */
+    override suspend fun supports(algorithm: KemAlgorithm): Boolean = algorithm.keyType.isMlKem()
+
+    override suspend fun generateKeyPair(type: KeyType): KeyPair = when {
+        type.isMlKem() -> {
+            val inner = classical.generateKeyPair(KeyType.X25519)
             val decapsulationKey = SoftwarePrivateKey(type, (inner.privateKey as SoftwarePrivateKey).encoded())
             KeyPair(pad(inner.publicKey, type.publicKeyLength), decapsulationKey)
         }
-        KeyType.ML_DSA_44, KeyType.ML_DSA_65, KeyType.ML_DSA_87 -> {
+        type.isMlDsa() -> {
             val publicKey = randomBytes(type.publicKeyLength)
             KeyPair(publicKey, SoftwarePrivateKey(type, publicKey))
         }
-        else -> super.generateKeyPair(type)
+        else -> classical.generateKeyPair(type)
     }
 
     override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation {
         require(publicKey.size == algorithm.keyType.publicKeyLength) { "Wrong encapsulation key size" }
         encapsulations++
-        val ephemeral = super.generateKeyPair(KeyType.X25519)
-        val secret = super.keyAgreement(ephemeral.privateKey, publicKey.copyOf(32))
+        val ephemeral = classical.generateKeyPair(KeyType.X25519)
+        val secret = classical.keyAgreement(ephemeral.privateKey, publicKey.copyOf(32))
         return KemEncapsulation(pad(ephemeral.publicKey, algorithm.ciphertextLength), secret)
     }
 
@@ -182,14 +199,14 @@ internal open class FakePostQuantumBackend : DefaultCryptoBackend() {
         val algorithm = KemAlgorithm.entries.first { it.keyType == privateKey.type }
         require(ciphertext.size == algorithm.ciphertextLength) { "Wrong ciphertext size" }
         val inner = SoftwarePrivateKey(KeyType.X25519, (privateKey as SoftwarePrivateKey).encoded())
-        return super.keyAgreement(inner, ciphertext.copyOf(32))
+        return classical.keyAgreement(inner, ciphertext.copyOf(32))
     }
 
     override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray =
         if (algorithm.keyType.isMlDsa()) {
             fakeSignature(algorithm, (privateKey as SoftwarePrivateKey).encoded(), data)
         } else {
-            super.sign(algorithm, privateKey, data)
+            classical.sign(algorithm, privateKey, data)
         }
 
     override suspend fun verify(
@@ -200,11 +217,13 @@ internal open class FakePostQuantumBackend : DefaultCryptoBackend() {
     ): Boolean = if (algorithm.keyType.isMlDsa()) {
         constantTimeEquals(fakeSignature(algorithm, publicKey, data), signature)
     } else {
-        super.verify(algorithm, publicKey, data, signature)
+        classical.verify(algorithm, publicKey, data, signature)
     }
 
     private fun fakeSignature(algorithm: SignatureAlgorithm, publicKey: ByteArray, data: ByteArray): ByteArray =
         Shake256.digest(publicKey + data, algorithm.signatureLength)
+
+    private fun KeyType.isMlKem(): Boolean = this in setOf(KeyType.ML_KEM_512, KeyType.ML_KEM_768, KeyType.ML_KEM_1024)
 
     private fun KeyType.isMlDsa(): Boolean = this in setOf(KeyType.ML_DSA_44, KeyType.ML_DSA_65, KeyType.ML_DSA_87)
 

@@ -59,15 +59,28 @@ import dev.whyoleg.cryptography.operations.SignatureVerifier
  *
  * The `supports` members probe once per instance and memoize the answer (docs/adr/0001-crypto-capabilities.md):
  * the first question about an algorithm runs its operations on throwaway keys, and every later one is a
- * lookup, however many callers ask at once. Probes call this backend's own operations, so a subclass that
- * overrides an operation is asked about its own; those operations must not ask `supports` in turn.
+ * lookup, however many callers ask at once.
  *
- * Private keys are [SoftwarePrivateKey]s holding raw key material in memory.
+ * Private keys are [SoftwarePrivateKey]s holding raw key material in memory. The copies of it that the
+ * platform takes or hands out are wiped once the platform is done with them; the platform's own key objects
+ * cannot be wiped.
+ *
+ * The class is final (docs/adr/0002-delegation-not-subclassing.md). To change or add operations, wrap it in a
+ * decorator, `class MyBackend(d: CryptoBackend) : CryptoBackend by d`, as `BouncyCastleCryptoBackend` adds
+ * ML-KEM and ML-DSA. A decorator overrides the `supports` members of what it changes or adds: the delegate
+ * answers them by probing its own operations, never the decorator's.
+ *
+ * No cryptography-kotlin type is part of this module's public API, so the API does not follow
+ * cryptography-kotlin's releases. The provider is always the platform's default one.
  */
-public open class DefaultCryptoBackend(
-    private val provider: CryptographyProvider = CryptographyProvider.Default,
+public class DefaultCryptoBackend internal constructor(
+    private val provider: CryptographyProvider,
 ) : CryptoBackend {
-    private val capabilities = CapabilityMemo()
+    /** A backend on the platform's default provider: JCA, CryptoKit and CommonCrypto, OpenSSL or WebCrypto. */
+    public constructor() : this(CryptographyProvider.Default)
+
+    /** The answers of the `supports` members; internal so that tests can see what it holds. */
+    internal val capabilities: CapabilityMemo = CapabilityMemo()
 
     /** Probed once per instance: an AEAD built under a zero key encrypts an empty message. */
     override suspend fun supports(algorithm: AeadAlgorithm): Boolean =
@@ -80,7 +93,7 @@ public open class DefaultCryptoBackend(
     override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
         capabilities.answer(algorithm) { probe(algorithm) }
 
-    /** Probed once per instance; this backend has no KEM, so the answer is false unless a subclass adds one. */
+    /** Probed once per instance; this backend has no KEM, so the answer is false (a decorator may add one). */
     override suspend fun supports(algorithm: KemAlgorithm): Boolean =
         capabilities.answer(algorithm) { probe(algorithm) }
 
@@ -136,16 +149,13 @@ public open class DefaultCryptoBackend(
         return PlatformAead(algorithm.name, cipher, tagLength = algorithm.tagLength, nonceLength = algorithm.nonceLength)
     }
 
-    override suspend fun generateKeyPair(type: KeyType): KeyPair = platformKeyPair(type)
-
-    /** [generateKeyPair] on the provider, which no subclass replaces. */
-    private suspend fun platformKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
+    override suspend fun generateKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
         when (type) {
             KeyType.X25519, KeyType.X448 -> {
                 val pair = platform(XDH).keyPairGenerator(type.xdhCurve()).generateKey()
                 KeyPair(
                     pair.publicKey.encodeToByteArray(XDH.PublicKey.Format.RAW),
-                    SoftwarePrivateKey(type, pair.privateKey.encodeToByteArray(XDH.PrivateKey.Format.RAW)),
+                    softwareKeyOf(type, pair.privateKey.encodeToByteArray(XDH.PrivateKey.Format.RAW)),
                 )
             }
 
@@ -153,7 +163,7 @@ public open class DefaultCryptoBackend(
                 val pair = platform(EdDSA).keyPairGenerator(EdDSA.Curve.Ed25519).generateKey()
                 KeyPair(
                     pair.publicKey.encodeToByteArray(EdDSA.PublicKey.Format.RAW),
-                    SoftwarePrivateKey(type, pair.privateKey.encodeToByteArray(EdDSA.PrivateKey.Format.RAW)),
+                    softwareKeyOf(type, pair.privateKey.encodeToByteArray(EdDSA.PrivateKey.Format.RAW)),
                 )
             }
 
@@ -161,7 +171,7 @@ public open class DefaultCryptoBackend(
                 val pair = platform(ECDH).keyPairGenerator(type.ecCurve()).generateKey()
                 KeyPair(
                     pair.publicKey.encodeToByteArray(EC.PublicKey.Format.RAW),
-                    SoftwarePrivateKey(type, pair.privateKey.encodeToByteArray(EC.PrivateKey.Format.RAW)),
+                    softwareKeyOf(type, pair.privateKey.encodeToByteArray(EC.PrivateKey.Format.RAW)),
                 )
             }
 
@@ -170,48 +180,53 @@ public open class DefaultCryptoBackend(
     }
 
     override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray): ByteArray {
-        val raw = privateKey.softwareKey().encoded()
         val type = privateKey.type
-        return withKeysOf(type, type.name) {
-            when (type) {
-                KeyType.X25519, KeyType.X448 -> {
-                    val xdh = platform(XDH)
-                    val own = xdh.privateKeyDecoder(type.xdhCurve()).decodeFromByteArray(XDH.PrivateKey.Format.RAW, raw)
-                    val peer = xdh.publicKeyDecoder(type.xdhCurve()).decodeFromByteArray(XDH.PublicKey.Format.RAW, peerPublicKey)
-                    own.sharedSecretGenerator().generateSharedSecretToByteArray(peer)
-                }
+        return privateKey.withRawKey { raw ->
+            withKeysOf(type, type.name) {
+                when (type) {
+                    KeyType.X25519, KeyType.X448 -> {
+                        val xdh = platform(XDH)
+                        val own = xdh.privateKeyDecoder(type.xdhCurve())
+                            .decodeFromByteArray(XDH.PrivateKey.Format.RAW, raw)
+                        val peer = xdh.publicKeyDecoder(type.xdhCurve())
+                            .decodeFromByteArray(XDH.PublicKey.Format.RAW, peerPublicKey)
+                        own.sharedSecretGenerator().generateSharedSecretToByteArray(peer)
+                    }
 
-                KeyType.P256, KeyType.P384 -> {
-                    val ecdh = platform(ECDH)
-                    val own = ecdh.privateKeyDecoder(type.ecCurve()).decodeFromByteArray(EC.PrivateKey.Format.RAW, raw)
-                    val peer = ecdh.publicKeyDecoder(type.ecCurve())
-                        .decodeFromByteArray(EC.PublicKey.Format.RAW, uncompressedPoint(type, peerPublicKey))
-                    own.sharedSecretGenerator().generateSharedSecretToByteArray(peer)
-                }
+                    KeyType.P256, KeyType.P384 -> {
+                        val ecdh = platform(ECDH)
+                        val own = ecdh.privateKeyDecoder(type.ecCurve())
+                            .decodeFromByteArray(EC.PrivateKey.Format.RAW, raw)
+                        val peer = ecdh.publicKeyDecoder(type.ecCurve())
+                            .decodeFromByteArray(EC.PublicKey.Format.RAW, uncompressedPoint(type, peerPublicKey))
+                        own.sharedSecretGenerator().generateSharedSecretToByteArray(peer)
+                    }
 
-                else -> throw UnsupportedAlgorithmException(type.name)
+                    else -> throw UnsupportedAlgorithmException(type.name)
+                }
             }
         }
     }
 
     override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray {
         require(privateKey.type == algorithm.keyType) { "$algorithm needs a ${algorithm.keyType} key, got ${privateKey.type}" }
-        val raw = privateKey.softwareKey().encoded()
-        return withKeysOf(algorithm.keyType, algorithm.name) {
-            when (algorithm) {
-                SignatureAlgorithm.EDDSA ->
-                    platform(EdDSA).privateKeyDecoder(EdDSA.Curve.Ed25519)
-                        .decodeFromByteArray(EdDSA.PrivateKey.Format.RAW, raw)
-                        .signatureGenerator()
-                        .generateSignature(data)
+        return privateKey.withRawKey { raw ->
+            withKeysOf(algorithm.keyType, algorithm.name) {
+                when (algorithm) {
+                    SignatureAlgorithm.EDDSA ->
+                        platform(EdDSA).privateKeyDecoder(EdDSA.Curve.Ed25519)
+                            .decodeFromByteArray(EdDSA.PrivateKey.Format.RAW, raw)
+                            .signatureGenerator()
+                            .generateSignature(data)
 
-                SignatureAlgorithm.ES256, SignatureAlgorithm.ES384 ->
-                    platform(ECDSA).privateKeyDecoder(algorithm.keyType.ecCurve())
-                        .decodeFromByteArray(EC.PrivateKey.Format.RAW, raw)
-                        .signatureGenerator(algorithm.ecdsaDigest(), ECDSA.SignatureFormat.RAW)
-                        .generateSignature(data)
+                    SignatureAlgorithm.ES256, SignatureAlgorithm.ES384 ->
+                        platform(ECDSA).privateKeyDecoder(algorithm.keyType.ecCurve())
+                            .decodeFromByteArray(EC.PrivateKey.Format.RAW, raw)
+                            .signatureGenerator(algorithm.ecdsaDigest(), ECDSA.SignatureFormat.RAW)
+                            .generateSignature(data)
 
-                else -> throw UnsupportedAlgorithmException(algorithm.name)
+                    else -> throw UnsupportedAlgorithmException(algorithm.name)
+                }
             }
         }
     }
@@ -268,7 +283,7 @@ public open class DefaultCryptoBackend(
      */
     private suspend fun generatesKeysOf(type: KeyType): Boolean = capabilities.answer(KeyGeneration(type)) {
         try {
-            platformKeyPair(type).privateKey.destroy()
+            generateKeyPair(type).privateKey.destroy()
             true
         } catch (_: UnsupportedAlgorithmException) {
             false
@@ -284,11 +299,6 @@ public open class DefaultCryptoBackend(
      */
     private fun <A : CryptographyAlgorithm> platform(id: CryptographyAlgorithmId<A>): A =
         provider.getOrNull(id) ?: throw UnsupportedAlgorithmException(id.name)
-
-    /** The key material of a [SoftwarePrivateKey]; any other handle belongs to a different backend. */
-    protected fun PrivateKey.softwareKey(): SoftwarePrivateKey =
-        this as? SoftwarePrivateKey
-            ?: throw IllegalArgumentException("${this::class.simpleName} was not created by a software backend")
 
     private class PlatformAead(
         private val algorithm: String,

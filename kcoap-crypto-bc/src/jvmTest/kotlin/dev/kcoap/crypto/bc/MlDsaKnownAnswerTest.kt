@@ -1,5 +1,6 @@
 package dev.kcoap.crypto.bc
 
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.bc.vectors.ML_DSA_KEYGEN_VECTORS
 import dev.kcoap.crypto.bc.vectors.ML_DSA_SIGGEN_VECTORS
 import dev.kcoap.crypto.bc.vectors.ML_DSA_SIGVER_VECTORS
@@ -12,7 +13,7 @@ import kotlin.test.assertTrue
 
 /** FIPS 204 known-answer tests from NIST's ACVP vectors, replayed through the public backend. */
 class MlDsaKnownAnswerTest {
-    private val deterministic = BouncyCastleCryptoBackend(isSigningDeterministic = true)
+    private val deterministic = BouncyCastleCryptoBackend(DefaultCryptoBackend(), isSigningDeterministic = true)
 
     /** FIPS 204 Algorithm 1 with NIST's `ξ`: the public key matches, the seed is the private key. */
     @Test

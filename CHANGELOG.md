@@ -262,6 +262,34 @@ adds its entry and migration note below.
 
 ### Changed (breaking)
 
+`DefaultCryptoBackend` as a final adapter (WP-A5, [ADR 0002](docs/adr/0002-delegation-not-subclassing.md)):
+
+- **`DefaultCryptoBackend` is final, and its only public constructor takes no argument.** The constructor
+  that took a cryptography-kotlin `CryptographyProvider` is internal, the protected `softwareKey()` is
+  private, and `kcoap-crypto-default` declares cryptography-kotlin as an `implementation` dependency, so no
+  cryptography-kotlin type is part of kcoap's API and its 0.x releases no longer change it. The backend uses
+  the platform's default provider, as `DefaultCryptoBackend()` always did. *Migration:* replace
+  `DefaultCryptoBackend(CryptographyProvider.Default)` with `DefaultCryptoBackend()`; code that uses
+  cryptography-kotlin itself declares it. A subclass becomes a decorator that delegates the rest:
+  `class MyBackend(private val inner: CryptoBackend = DefaultCryptoBackend()) : CryptoBackend by inner`, calling
+  `inner.sign(...)` where it called `super.sign(...)` ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
+  Code that passed another provider (`CryptographyProvider.JDK` on a FIPS `java.security.Provider`, say, or a
+  specific Apple or OpenSSL provider) has no replacement in this release: implement `CryptoBackend` on that
+  provider, on cryptography-kotlin, which the application then declares itself, or wrap
+  `DefaultCryptoBackend()` in a decorator that overrides the affected operations. Choosing a provider may come
+  back later as a feature of its own ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
+  The decorator's `supports` members ask the delegate, which probes its own operations and never the
+  decorator's overrides: a decorator that adds or takes away an algorithm overrides the matching `supports`
+  members, as `BouncyCastleCryptoBackend` does.
+- **`BouncyCastleCryptoBackend` requires its classical backend**, and `kcoap-crypto-bc` no longer depends on
+  `kcoap-crypto-default` (it exports `kcoap-crypto` instead), so an application that wants Bouncy Castle only
+  for ML-KEM and ML-DSA chooses the classical algorithms itself. *Migration:* write
+  `BouncyCastleCryptoBackend(DefaultCryptoBackend())` for `BouncyCastleCryptoBackend()`, and
+  `BouncyCastleCryptoBackend(DefaultCryptoBackend(), isSigningDeterministic = true)` for
+  `BouncyCastleCryptoBackend(isSigningDeterministic = true)`, and declare `dev.kcoap:kcoap-crypto-default` next
+  to `dev.kcoap:kcoap-crypto-bc`. An application with a classical backend of its own (a secure element, the
+  Android KeyStore) passes that one and can leave out kcoap-crypto-default and cryptography-kotlin.
+
 kcoap-crypto as the home of shared crypto blocks (WP-A4):
 
 - **`X509Certificate` moved from `dev.kcoap.edhoc` (kcoap-edhoc) to `dev.kcoap.crypto.x509` (kcoap-crypto)**,
@@ -718,3 +746,8 @@ Build governance (WP-C1):
 - EDHOC (WP-SEC1): when composing message_2 failed or was cancelled (C_R equal to C_I, an EAD handler
   failing, a server handler cancelled), the Responder's ephemeral key Y and PRK_3e2m were left for the
   garbage collector; they are wiped now (RFC 9528 §9.8).
+- kcoap-crypto-default (WP-A5): every key generation, key agreement and signature of `DefaultCryptoBackend`
+  left a copy of the raw private key for the garbage collector, the one handed to the platform or taken
+  from it. These copies are now wiped once the platform is done with them, as `BouncyCastleCryptoBackend`
+  already did. The platform's own key objects (JCA keys, say) cannot be wiped, so this narrows the exposure
+  of the key material rather than removing it.

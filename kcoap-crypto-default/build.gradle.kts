@@ -5,13 +5,20 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
+            // CryptoBackend, the supertype of DefaultCryptoBackend, and the types of its members.
             api(project(":kcoap-crypto"))
-            api(libs.cryptography.core)
+            // implementation: no cryptography-kotlin type is in this module's public API (the provider
+            // constructor is internal), so consumers do not compile against cryptography-kotlin.
+            implementation(libs.cryptography.core)
             implementation(libs.cryptography.provider.optimal)
+            // wipe for the raw key copies.
+            implementation(project(":kcoap-common"))
             // The Mutex of the capability memo.
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
+            // hexToBytes and toHex for the vectors.
+            implementation(project(":kcoap-common"))
             // Stress.run and Stress.race for the memo under real concurrency.
             implementation(project(":kcoap-testkit"))
         }

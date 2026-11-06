@@ -4,6 +4,7 @@ import dev.kcoap.cose.CwtClaimsSet
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CertificateValidationException
 import dev.kcoap.crypto.CertificateValidator
+import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KemEncapsulation
@@ -66,7 +67,7 @@ class PostQuantumTest {
         assertEquals(1 + 1 + 3 + 800 + 1, message1.size)
         assertEquals("0037590320", message1.copyOf(5).toHexString())
         responder.processMessage1(message1)
-        // The backend's one probe of ML-KEM-512 (the capability check) has run by now.
+        // Only the handshake from message_2 on counts, whatever the capability checks did before.
         val encapsulationsBefore = backend.encapsulations
         val message2 = responder.createMessage2()
         initiator.processMessage2(message2)
@@ -168,7 +169,7 @@ class PostQuantumTest {
         assertEquals("G_X has the wrong length for cipher suite -24", failure.error.diagnostic)
 
         // A backend whose encapsulation has the wrong size is caught before anything is sent.
-        val broken = object : FakePostQuantumBackend() {
+        val broken = object : CryptoBackend by backend {
             override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation =
                 KemEncapsulation(ByteArray(767), ByteArray(32))
         }
@@ -180,9 +181,9 @@ class PostQuantumTest {
         assertEquals(EdhocPhase.ABORTED, responder.phase)
 
         // A decapsulation of the wrong size is caught when message_2 arrives.
-        val shortSecrets = object : FakePostQuantumBackend() {
+        val shortSecrets = object : CryptoBackend by backend {
             override suspend fun decapsulate(privateKey: PrivateKey, ciphertext: ByteArray): ByteArray =
-                super.decapsulate(privateKey, ciphertext).copyOf(31)
+                backend.decapsulate(privateKey, ciphertext).copyOf(31)
         }
         val (initiatorConfig, honestConfig) = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, suite)
         val pqInitiator = EdhocInitiator(initiatorConfig, shortSecrets)
@@ -215,27 +216,26 @@ class PostQuantumTest {
     fun theResponderDestroysTheEncapsulation() = runTest {
         for (isWrongSize in listOf(false, true)) {
             val handedOut = mutableListOf<KemEncapsulation>()
-            val recording = object : FakePostQuantumBackend() {
+            val recording = object : CryptoBackend by backend {
                 override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation {
                     val encapsulation = if (isWrongSize) {
                         KemEncapsulation(ByteArray(767), ByteArray(32) { 1 })
                     } else {
-                        super.encapsulate(algorithm, publicKey)
+                        backend.encapsulate(algorithm, publicKey)
                     }
                     return encapsulation.also { handedOut += it }
                 }
             }
             val (initiatorConfig, responderConfig) = Fixtures.configs(backend, EdhocMethod.SIGNATURE_SIGNATURE, suite)
             val responder = EdhocResponder(responderConfig, recording)
-            // The capability probe of ML-KEM-512 encapsulates too, and destroys its own result.
+            // The capability check asks the delegate, so nothing is handed out before message_2.
             responder.processMessage1(EdhocInitiator(initiatorConfig, backend).createMessage1())
-            val probes = handedOut.size
             if (isWrongSize) {
                 assertFailsWith<EdhocException> { responder.createMessage2() }
             } else {
                 responder.createMessage2()
             }
-            val encapsulation = handedOut.drop(probes).single()
+            val encapsulation = handedOut.single()
             assertFailsWith<IllegalStateException>("wrong size: $isWrongSize") { encapsulation.sharedSecret() }
         }
     }

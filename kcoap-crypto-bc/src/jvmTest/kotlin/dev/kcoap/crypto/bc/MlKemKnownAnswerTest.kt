@@ -3,6 +3,7 @@ package dev.kcoap.crypto.bc
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SoftwarePrivateKey
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.bc.vectors.ML_KEM_512_INVALID_DK
 import dev.kcoap.crypto.bc.vectors.ML_KEM_512_INVALID_DK_EK
 import dev.kcoap.crypto.bc.vectors.ML_KEM_512_INVALID_EK
@@ -18,7 +19,7 @@ import kotlin.test.assertFalse
 
 /** FIPS 203 known-answer tests from NIST's ACVP vectors, replayed through the public backend. */
 class MlKemKnownAnswerTest {
-    private val backend = BouncyCastleCryptoBackend()
+    private val backend = BouncyCastleCryptoBackend(DefaultCryptoBackend())
 
     /** FIPS 203 Algorithm 19 with NIST's `d` and `z`: the encapsulation key matches, the seed is the private key. */
     @Test
