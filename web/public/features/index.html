@@ -131,12 +131,12 @@
       <h3 class="mt-3" id="interop-edhoc-title">EDHOC sessions against libedhoc</h3>
       <div class="table-wrap">
         <table class="table-stack" aria-labelledby="interop-edhoc-title">
-          <caption>Every row runs with kcoap as Initiator and as Responder. Also covered: suite negotiation with error code 2 both ways, tampered messages answered with error code 1, and EAD items.</caption>
+          <caption>Every row runs with kcoap as Initiator and as Responder, except the two <code>x5chain</code> cases, which run in the role named. Also covered: suite negotiation with error code 2 both ways, tampered messages answered with error code 1, and EAD items.</caption>
           <thead><tr><th scope="col">Suite</th><th scope="col">Algorithms</th><th scope="col">Methods</th><th scope="col">Credentials</th></tr></thead>
           <tbody>
-            <tr><th scope="row">0</th><td data-label="Algorithms">X25519, Ed25519, AES-CCM-16-64-128</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code>; Ed25519 <code>x5chain</code></td></tr>
+            <tr><th scope="row">0</th><td data-label="Algorithms">X25519, Ed25519, AES-CCM-16-64-128</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code>; an Ed25519 <code>x5chain</code>, with kcoap as Initiator</td></tr>
             <tr><th scope="row">2</th><td data-label="Algorithms">P-256, ES256, AES-CCM-16-64-128</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code></td></tr>
-            <tr><th scope="row">4</th><td data-label="Algorithms">X25519, Ed25519, ChaCha20-Poly1305</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code>; Ed25519 <code>x5chain</code></td></tr>
+            <tr><th scope="row">4</th><td data-label="Algorithms">X25519, Ed25519, ChaCha20-Poly1305</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code>; an Ed25519 <code>x5chain</code>, with libedhoc as Initiator</td></tr>
             <tr><th scope="row">24</th><td data-label="Algorithms">P-384, ES384, A256GCM</td><td data-label="Methods">0, 1, 2, 3</td><td data-label="Credentials">CCS by <code>kid</code></td></tr>
             <tr><th scope="row">−24</th><td data-label="Algorithms">ML-KEM-512, ML-DSA-44, SHAKE256</td><td data-label="Methods">0</td><td data-label="Credentials">CCS with an AKP key; ML-DSA-44 <code>x5chain</code></td></tr>
           </tbody>
