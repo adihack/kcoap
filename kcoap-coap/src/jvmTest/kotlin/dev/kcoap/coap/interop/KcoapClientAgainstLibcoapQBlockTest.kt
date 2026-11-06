@@ -609,20 +609,34 @@ class KcoapClientAgainstLibcoapQBlockTest {
 
     // ---------------------------------------------------------------- K8
 
+    /**
+     * Pinned (K8): libcoap 4.3.5's server keeps a body for 4 × NON_TIMEOUT (8 s) after it last sent the body's last
+     * block; a request for a block after that runs its handler again and gets that block alone, without ETag and
+     * Size2, where RFC 9177 §4.4 has every block of a body carry the body's ETag. The client loses every copy of
+     * block 23, the last, until such an answer comes: libcoap answers its requests for block 23 from the cache
+     * first, and one of them comes 8 s or more after libcoap last sent the block, since they back off
+     * (NON_RECEIVE_TIMEOUT × 2^n: 4, 8, 16 s). The client takes a block without ETag and Size2 for a changed
+     * representation and asks for the whole body again (`0/M`), which libcoap sends with a new ETag.
+     */
     @Test
     fun upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8() = withServer("-L", "7", "-v", "7") { server ->
-        var lost = 0
-        withClient(dropIn = { message -> message.options.qBlock2?.number == 2L && message.options.size2 != null && lost++ < 2 }) { client ->
+        fun isLastBlock(message: CoapMessage) = message.code == CoapCode.CONTENT && message.options.qBlock2?.number == 23L
+        fun isUntagged(message: CoapMessage) = message.options.etags.isEmpty() && message.options.size2 == null
+        fun answeredUntagged() = received().any { isLastBlock(it.message) && isUntagged(it.message) }
+        withClient(dropIn = { message -> isLastBlock(message) && !isUntagged(message) && !answeredUntagged() }) { client ->
             val response = client.get("${server.uri}/example_data") { nonConfirmable() }
 
             assertContentEquals(exampleData, response.payload)
-            val asked = requests("/example_data").filter { 2L in it.message.options.qBlock2List.map(BlockOption::number) }
-            assertEquals(2, asked.size, "block 2 asked for twice: ${requests("/example_data").map { it.message.qBlock2 }}")
-            val unTagged = received().filter { it.message.options.qBlock2 != null && it.message.options.etags.isEmpty() }
-            assertTrue(unTagged.isNotEmpty(), "libcoap answers without ETag once its cache expired")
-            assertTrue(unTagged.all { it.message.options.size2 == null })
-            val restart = requests("/example_data").last { it.message.qBlock2 == listOf("0/M/64") }
-            assertTrue(restart.at > unTagged.first().at, "the GET starts again")
+            val asked = requests("/example_data").filter { it.message.qBlock2 == listOf("23/_/64") }.map { it.message.tokenHex }
+            val answers = synchronized(wire) { wire.filter { !it.outgoing && isLastBlock(it.message) && it.message.tokenHex in asked } }
+            val untagged = answers.filter { isUntagged(it.message) }
+            assertEquals(1, untagged.size, "libcoap answers a request for block 23 without ETag and Size2 once: $answers")
+            val cached = answers.filter { it.at < untagged.single().at }
+            assertTrue(cached.isNotEmpty() && cached.all { it.dropped && it.message.options.etags.size == 1 }, "from its cache before: $answers")
+            val restarts = requests("/example_data").filter { it.message.qBlock2 == listOf("0/M/64") && it.at > untagged.single().at }
+            assertEquals(1, restarts.size, "the GET starts again: ${requests("/example_data").map { it.message.qBlock2 }}")
+            val etags = blocks().filter { !isUntagged(it.message) }.map { it.message.options.etags.single().toList() }.distinct()
+            assertEquals(2, etags.size, "the body again, with a new ETag: $etags")
             assertNoMessageMixesBlockAndQBlock()
         }
     }

@@ -61,8 +61,10 @@ Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` t
 
 - three separate gaps in an upload get a plain 4.08 ("Too many missing blocks"), and the body is given up
   (`upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4`);
-- a block asked for once its 8 s cache expired comes without ETag and Size2, from the handler run again
-  (`upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8`);
+- a block asked for once its cache expired, 8 s (4 × NON_TIMEOUT) after it last sent the body's last block,
+  comes without ETag and Size2, from the handler run again; kcoap's client then asks for the whole body again
+  (`upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8`, which loses the last block until
+  then);
 - only block 0 of a 2.01 or 2.04 body is sent (`-e`); the rest comes when the client asks for it
   (`upstreamLibcoapSendsOnlyBlock0OfAnEchoedPutBodyAndTheRestIsFetchedK9`);
 - without `-L`, its 4.02 to the probe repeats the Q-Block2 option it rejects
@@ -80,6 +82,16 @@ Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` t
 - a request with both Block2 and Q-Block2 gets 4.00 "Both Block2 and Q-Block2 invalid" instead of the 4.02 of
   RFC 9177 §4.1 (`upstreamLibcoapAnswersBlock2MixedWithQBlock2With400`, a raw datagram, since kcoap never sends
   the mix).
+
+One more was seen in a run and is not pinned, since it shows only when two random Message IDs come close:
+
+- **Message IDs reused** (server). `handle_request` in `src/coap_net.c` gives a Non-confirmable response the
+  Message ID of the request it answers, while the blocks a body sends on its own take IDs from the session's
+  counter. When the client's IDs run into the range that counter used shortly before, a response repeats an ID
+  libcoap sent within NON_LIFETIME, which RFC 7252 §4.4 forbids, and kcoap drops it as a duplicate (§4.5). In
+  one local run of K8 (kcoap's IDs from 0xeb6c, libcoap's from 0xeb6f) the answers for blocks 2 and 23 were
+  dropped that way until the test timed out at 90 s. Any Non-confirmable case against `coap-server` can meet
+  it, with odds of roughly one in a thousand per case.
 
 Two more deviations named in the plan (§1.6) are known from libcoap's source but not pinned:
 
