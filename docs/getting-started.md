@@ -22,7 +22,8 @@ git clone --branch feat/protocol-core https://github.com/adihack/kcoap.git && cd
 
 Then import the bill of materials, `kcoap-bom`, and add the modules without versions. kcoap's modules share
 internal plumbing, so a build uses one version for all of them, and the BOM sets it for the modules you name and
-for those they bring along ([kcoap-bom](../kcoap-bom/README.md)):
+for those they bring along; a library built on a newer kcoap moves them all to its version together
+([kcoap-bom](../kcoap-bom/README.md#version-alignment)):
 
 ```kotlin
 // build.gradle.kts of a JVM or Android project

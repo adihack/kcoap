@@ -14,8 +14,10 @@ adds its entry and migration note below.
 
 - `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
   `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
-  also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. It constrains
-  the multiplatform module and the JVM artifact of every published module; the constraints are generated from the
+  also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. Every published
+  module depends on the BOM of its own version as a platform, so in Gradle a library built on a newer kcoap moves
+  every kcoap module to that version together (version alignment). It constrains the multiplatform module and the
+  JVM artifact of every published module; the constraints are generated from the
   modules the build publishes, never written by hand, and `verifyBomConstraints` (part of `check` and
   `scripts/test unit`) checks the published POM and module metadata against the build's publications. It is
   published with the modules, to the same repositories.

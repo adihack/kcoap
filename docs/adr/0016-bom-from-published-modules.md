@@ -22,10 +22,16 @@ Kotlin frameworks do not share types.
   `kcoap.publishing` publishes, the multiplatform module and its JVM artifact (Gradle resolves the other targets
   through the module metadata; Maven names the JVM artifact). The tier plugins apply `kcoap.publishing` to every
   module not marked `kcoap.unpublished`, so the published set and the BOM cannot disagree.
+- **Aligned in Gradle.** A platform's constraints are only `requires` versions: when another library asks for one
+  kcoap module at a higher version, Gradle picks that version for that module alone. So every published module
+  also depends on kcoap-bom at its own version, as a platform (Gradle's version alignment, as kotlinx-coroutines
+  and Jackson publish it): the higher module brings the higher BOM, conflict resolution keeps it, and its
+  constraints lift every other kcoap module to the same version. The POM carries the same dependency as a
+  `dependencyManagement` import.
 - **Checked, not trusted.** `verifyBomConstraints` (part of `check` and `scripts/test unit`) compares the POM and
   the module metadata the BOM publishes with the build's own publications, every variant of the latter;
-  `BomPluginTest` checks the plugin on TestKit builds, including a stray and a missing constraint and a variant
-  without constraints.
+  `BomPluginTest` checks the plugin on TestKit builds, including a stray and a missing constraint, a variant
+  without constraints, and a module that arrives at a higher version through another library.
 - **No export-everything umbrella framework now.** A KMP app's own shared framework `export()`s the kcoap types its
   Swift code needs. A prebuilt XCFramework for Swift-only apps comes from a dedicated facade module with a curated
   surface (roadmap E4, kcoap-apple), after the first publish.
@@ -33,6 +39,8 @@ Kotlin frameworks do not share types.
 ## Consequences
 
 - One line pins kcoap's version in a consumer's build, and the versions of modules that arrive transitively follow
-  it.
+  it. In Gradle that line is a minimum, as any Gradle version is: a library built on a newer kcoap moves every kcoap
+  module to that version together, and `enforcedPlatform(...)` holds them at the BOM's version instead. In Maven the
+  imported BOM's versions win.
 - The BOM has no code, no ABI dump and no API reference page; it is published wherever the modules are.
 - A Swift-only app cannot use kcoap until E4; a KMP app can, through its own framework.

@@ -9,6 +9,10 @@
 // (bomArtifactIds, KcoapBom.kt) when that plugin is applied, so a new module joins the BOM by itself and an
 // unpublished one never does. The BOM is published like the other modules (KcoapPublishing.kt).
 //
+// Each of those modules also depends on the BOM as a platform (dependOnBom, KcoapBom.kt): Gradle's version
+// alignment, so that when another library brings one kcoap module at a higher version, the BOM at that
+// version comes with it and lifts the other kcoap modules too.
+//
 //   ./gradlew :kcoap-bom:verifyBomConstraints   -> the published POM and module metadata constrain exactly
 //                                                  the published modules (part of check and scripts/test unit)
 
@@ -42,6 +46,7 @@ rootProject.subprojects {
         bom.dependencies.constraints {
             bomArtifactIds(module.name).forEach { artifact -> add("api", "$kcoapGroup:$artifact:$kcoapVersion") }
         }
+        module.dependOnBom(bom)
     }
     pluginManager.withPlugin("maven-publish") {
         module.extensions.getByType<PublishingExtension>().publications.withType<MavenPublication>()

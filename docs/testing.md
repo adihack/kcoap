@@ -144,7 +144,8 @@ verification, a published fixture's Maven publications must carry `kcoap.group` 
 tier plugin). A multi-module fixture shaped like kcoap (a UNIVERSAL module, a JVM_LIBRARY one, an unpublished one
 and a BOM) must publish a BOM that constrains exactly the two published modules' multiplatform and JVM artifacts,
 with kcoap's POM, at the version `-Pkcoap.version` gives, and `verifyBomConstraints` must be part of the BOM's
-`check` and fail on a stray and on a missing constraint and on a variant without constraints
+`check` and fail on a stray and on a missing constraint and on a variant without constraints; and an application
+that imports that BOM at 1.0.0 and uses a library built on one module at 2.0.0 must resolve every module at 2.0.0
 (`BomPluginTest`). For the Android API level, a multiplatform fixture must get `checkAndroidApi` over its jvm
 jar and `checkAndroidApiDependencies` over its libraries, both failing on violations, against the API 26
 signature and in `check`; a jvm function that calls `java.util.HexFormat` (API 34) must fail its

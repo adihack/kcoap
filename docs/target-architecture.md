@@ -949,11 +949,14 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > - **kcoap-bom** is a Java platform made by a `kcoap.bom` convention plugin, which constrains, for every module
 >   that applies `kcoap.publishing`, the multiplatform module and its JVM artifact (Maven reads no module metadata,
 >   so a Maven build names the JVM artifact). Publishing moved into `configureKcoapMavenPublishing`, shared by both
->   plugins, so the BOM has the modules' coordinates, POM and repositories. `verifyBomConstraints` (in `check` and
->   `scripts/test unit`) compares the published POM and module metadata with the build's own publications, and
->   `BomPluginTest` (TestKit) covers the plugin, a stray and a missing constraint included. A scratch consumer
->   resolved the BOM's versions for jvm, iosArm64, linuxX64 and js from `commonMain`. The root coverage aggregate
->   now takes only modules that apply Kover, since the BOM has no code.
+>   plugins, so the BOM has the modules' coordinates, POM and repositories. The same plugin makes every published
+>   module depend on the BOM as a platform from `commonMain`, Gradle's version alignment, so a library that brings
+>   one module at a higher version lifts the others with it. `verifyBomConstraints` (in `check` and
+>   `scripts/test unit`) compares the published POM and every variant of the module metadata with the build's own
+>   publications, and `BomPluginTest` (TestKit) covers the plugin, a stray and a missing constraint, a variant
+>   without constraints and the alignment included. A scratch consumer resolved the BOM's versions for jvm,
+>   iosArm64, linuxX64 and js from `commonMain`. The root coverage aggregate now takes only modules that apply
+>   Kover, since the BOM has no code.
 > - **getting-started.md** carries the §2.6 table by protocol, by transport and by platform, and its examples are
 >   compiled and run by `GettingStartedExamplesTest` in kcoap-edhoc-oscore's jvmTest, which takes kcoap-crypto-bc
 >   as a test dependency for the post-quantum backend (a one-line ownership deviation in that build file).

@@ -1,5 +1,6 @@
 import groovy.json.JsonSlurper
 import org.gradle.api.DefaultTask
+import org.gradle.api.Project
 import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
@@ -11,6 +12,8 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.gradle.kotlin.dsl.getByType
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.xpath.XPathConstants
@@ -26,6 +29,22 @@ import org.w3c.dom.NodeList
  * version the BOM already sets.
  */
 fun bomArtifactIds(module: String): List<String> = listOf(module, "$module-jvm")
+
+/**
+ * Makes this published module depend on [bom] as a platform from commonMain, so every variant it publishes
+ * (each target's module metadata, and the POM as a `dependencyManagement` import) names kcoap-bom at the
+ * module's own version. That is Gradle's version alignment, as kotlinx-coroutines and Jackson publish it:
+ * a graph that selects one kcoap module at version N also holds kcoap-bom:N, conflict resolution keeps the
+ * highest kcoap-bom, and its constraints lift every other kcoap module to that version. Without it a higher
+ * version of one module, required by another library, would win for that module alone, and the graph would
+ * mix versions whose `@InternalKcoapApi` calls fail at runtime (finding MB-9).
+ */
+fun Project.dependOnBom(bom: Project) {
+    val platform = dependencies.platform(dependencies.project(mapOf("path" to bom.path)))
+    extensions.getByType<KotlinMultiplatformExtension>().sourceSets.getByName("commonMain").dependencies {
+        api(platform)
+    }
+}
 
 /**
  * Checks the BOM as it is published against what the build publishes: the constraints in its POM

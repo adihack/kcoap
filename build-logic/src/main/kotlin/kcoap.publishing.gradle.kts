@@ -1,6 +1,7 @@
 // Publishing and API documentation for every kcoap library module, applied by the tier plugins unless
 // the module applies kcoap.unpublished first. kcoap-bom (kcoap.bom) constrains every module that applies
-// this plugin, so a new published module joins the BOM by itself.
+// this plugin, and makes the module depend on it as a platform, so a new published module joins the BOM,
+// and its version alignment, by itself.
 //
 //   ./gradlew publishToMavenLocal                              -> ~/.m2, for trying a build locally
 //   ./gradlew publishAllPublicationsToGitHubPackagesRepository  -> GitHub Packages (CI, on release tags)

@@ -123,6 +123,80 @@ class BomPluginTest {
         assertFalse(result.output.contains("module metadata (runtimeElements) lacks"), result.output)
     }
 
+    @Test
+    fun aKcoapModuleThatArrivesAtAHigherVersionLiftsTheOtherModulesThroughTheBom() {
+        // Two published JVM modules and the BOM, published at 1.0.0 and at 2.0.0 into a file repository.
+        val repository = directory.resolve("repo")
+        val producer = Fixture(directory.resolve("producer"), "base")
+            .include(":alpha", ":beta", ":bom")
+            .file("alpha/build.gradle.kts", """plugins { id("kcoap.kmp-jvm-library") }""")
+            .file("beta/build.gradle.kts", """plugins { id("kcoap.kmp-jvm-library") }""")
+            .file("bom/build.gradle.kts", """plugins { id("kcoap.bom") }""")
+            .buildScript(
+                """
+                subprojects {
+                    pluginManager.withPlugin("maven-publish") {
+                        extensions.configure<PublishingExtension> {
+                            repositories { maven { name = "fixture"; url = uri("${repository.toURI()}") } }
+                        }
+                    }
+                }
+                """,
+            )
+        for (version in listOf("1.0.0", "2.0.0")) {
+            producer.runner("publishAllPublicationsToFixtureRepository", "-Pkcoap.version=$version").build()
+        }
+        // A library built against beta 2.0.0, and an application that writes kcoap's version once, through the
+        // BOM at 1.0.0, and also uses that library.
+        repository.resolve("com/example/sdk/1.0/sdk-1.0.pom").apply { parentFile.mkdirs() }.writeText(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>sdk</artifactId>
+              <version>1.0</version>
+              <dependencies>
+                <dependency>
+                  <groupId>dev.kcoap.fixture</groupId>
+                  <artifactId>beta</artifactId>
+                  <version>2.0.0</version>
+                </dependency>
+              </dependencies>
+            </project>
+            """.trimIndent(),
+        )
+        val application = Fixture(directory.resolve("application"), "java-library").buildScript(
+            """
+            repositories {
+                maven { url = uri("${repository.toURI()}") }
+                mavenCentral()
+            }
+            dependencies {
+                implementation(platform("dev.kcoap.fixture:bom:1.0.0"))
+                implementation("dev.kcoap.fixture:alpha")
+                implementation("com.example:sdk:1.0")
+            }
+            tasks.register("kcoapVersions") {
+                val versions = configurations.named("runtimeClasspath").map { classpath ->
+                    classpath.incoming.resolutionResult.allComponents.mapNotNull { it.moduleVersion }
+                        .filter { it.group == "dev.kcoap.fixture" }.map { it.name + ":" + it.version }.sorted()
+                }
+                doLast { println("kcoap versions: " + versions.get().joinToString()) }
+            }
+            """,
+        )
+
+        val output = application.runner("kcoapVersions").build().output
+
+        // beta 2.0.0 brings kcoap-bom 2.0.0, which wins over 1.0.0 and lifts alpha to 2.0.0 as well.
+        assertContains(output, "kcoap versions: alpha-jvm:2.0.0, alpha:2.0.0, beta-jvm:2.0.0, beta:2.0.0, bom:2.0.0")
+        // Maven reads the POM, where the BOM is an import in dependencyManagement at the module's version.
+        val pom = parse(repository.resolve("dev/kcoap/fixture/alpha-jvm/2.0.0/alpha-jvm-2.0.0.pom"))
+        assertEquals("2.0.0", pom.text("/project/dependencyManagement/dependencies/dependency[artifactId='bom']/version"))
+        assertEquals("import", pom.text("/project/dependencyManagement/dependencies/dependency[artifactId='bom']/scope"))
+    }
+
     /**
      * A build shaped like kcoap's: a module of the UNIVERSAL tier, one of the JVM_LIBRARY tier, one marked
      * kcoap.unpublished, and the BOM. Nothing in it is compiled.
