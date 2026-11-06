@@ -91,7 +91,9 @@ One more was seen in a run and is not pinned, since it shows only when two rando
   libcoap sent within NON_LIFETIME, which RFC 7252 §4.4 forbids, and kcoap drops it as a duplicate (§4.5). In
   one local run of K8 (kcoap's IDs from 0xeb6c, libcoap's from 0xeb6f) the answers for blocks 2 and 23 were
   dropped that way until the test timed out at 90 s. Any Non-confirmable case against `coap-server` can meet
-  it, with odds of roughly one in a thousand per case.
+  it, with odds of roughly one in a thousand per case. A failed case of `KcoapClientAgainstLibcoapQBlockTest`
+  prints, after its wire, the IDs libcoap sent on more than one token and which of them kcoap dropped; a run
+  that failed that way met this deviation, not a fault of kcoap, and can be run again.
 
 Two more deviations named in the plan (§1.6) are known from libcoap's source but not pinned:
 

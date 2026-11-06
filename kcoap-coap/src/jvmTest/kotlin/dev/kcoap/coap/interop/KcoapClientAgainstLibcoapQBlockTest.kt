@@ -138,10 +138,30 @@ class KcoapClientAgainstLibcoapQBlockTest {
         } catch (e: Throwable) {
             System.err.println("libcoap log:\n${server.logs().takeLast(20_000)}")
             System.err.println("kcoap wire:\n${wire.joinToString("\n")}")
+            reusedMessageIds()?.let(System.err::println)
             throw e
         } finally {
             server.close()
         }
+    }
+
+    /**
+     * For a failed case: the Message IDs that libcoap sent on more than one token, and which of them kcoap dropped
+     * as duplicates (RFC 7252 §4.5). libcoap's server can give a Non-confirmable response an ID it sent shortly
+     * before (interop/README.md, "Message IDs reused"), and a case whose answers were dropped that way can time out
+     * without a fault of kcoap. Null when libcoap reused none.
+     */
+    private fun reusedMessageIds(): String? {
+        val incoming = synchronized(wire) { wire.filter { !it.outgoing && it.message.type in setOf(CoapMessageType.CON, CoapMessageType.NON) } }
+        val reused = incoming.groupBy { it.message.messageId }
+            .mapValues { (_, lines) -> lines.map { it.message.tokenHex }.distinct() }
+            .filterValues { it.size > 1 }
+        if (reused.isEmpty()) return null
+        val duplicates = synchronized(events) { events.filterIsInstance<EndpointEvent.DuplicateReceived>().map { it.messageId }.toSet() }
+        val lines = reused.entries.joinToString("\n") { (id, tokens) ->
+            "  mid=$id on tokens $tokens${if (id in duplicates) ", dropped by kcoap as a duplicate" else ""}"
+        }
+        return "libcoap reused Message IDs on other tokens (interop/README.md, \"Message IDs reused\"):\n$lines"
     }
 
     private fun withClient(
