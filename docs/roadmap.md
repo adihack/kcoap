@@ -27,21 +27,16 @@ milestones are identifiers, so the ones still open (12, 13) keep theirs.
 | 17 | TLS clients: `coaps+tcp` on the JVM, `coaps+ws` on the WebSocket engine's TLS | `kcoap-transport-ktor`, `kcoap-transport-ktor-websocket` | libcoap 4.3.5b on OpenSSL, JSSE | done (WP-T1); servers terminate TLS at a proxy ([ADR 0010](adr/0010-server-side-tls.md)) |
 | 18 | Platform checks: Android API level 26, Swift from a framework, one version through a BOM, consumers from Maven Local, a browser bundle budget | build, `samples/android-consumer`, `samples/jvm-consumer`, `samples/js-consumer`, `kcoap-swift-smoke`, `kcoap-bom` | `checkAndroidApi`, the CI `android`, `jvm-consumer`, `js-consumer` and `apple` jobs, `verifyBomConstraints`, `verifyKcoapFromBom`, `checkBundleSize` | done (PL-1, D2, C3, P1); no emulator or device run yet |
 | 19 | Server hardening: bounds in total and per peer against spoofed floods, 4.29 Too Many Requests and a client retry-after helper, sequence tokens on TLS connections | `kcoap-coap`, `kcoap-coap-message`, `kcoap-testkit` | `SpoofedFloodTest` (up to 2 000 forged sources, a real client served), `TooManyRequestsTest`, `RetryAfterTest`, `SessionTokenTest`, libcoap's client receiving a 4.29 | done (SRV-2); rate limiting stays the application's (RFC 8516 §3) |
+| 20 | The first release, 0.1.0: every published module and `kcoap-bom`, signed with the release key, with the last CoAP work package, WP-B4 (errors and observability) | every published module, `kcoap-bom` | the release workflow (run 42298365400): the whole CI workflow on the tag, the artifacts on Maven Central and GitHub Packages, the GitHub Release | done on 2026-11-06; the API reference is not online yet ([releasing](releasing.md#after-the-release)) |
 
 ## Next
 
 In order, as far as the order is known:
 
-1. **The first release, 0.1.0.** The freeze list has merged, the Maven Central and signing secrets are set, and
-   WP-P1 removed the deprecated constructors and added the consumer samples (a JVM consumer on the BOM, a js
-   consumer with a bundle-size budget); what [releasing.md](releasing.md#release-freeze) still asks before the tag:
-   CI green on `main` and a CHANGELOG entry for the version.
-2. **The rest of the CoAP work packages.** WP-B4 (the rest of the error and observability findings: a
-   `ResponseRejected` event, reason enums for rejected and malformed messages, `stats()`, `CoapResponseException`).
-3. **Platforms.** Android emulator runs with a capability report per API level (PL-2); a JS facade and npm package
+1. **Platforms.** Android emulator runs with a capability report per API level (PL-2); a JS facade and npm package
    (PL-4); the Apple facade and XCFramework for Swift-only apps (E4, kcoap-apple); the mobile lifecycle helpers
    (E9: re-observe, keepalive policy, transport rebind); a Network.framework adapter (E10); `linuxArm64` (E5).
-4. **Crypto.**
+2. **Crypto.**
 
    | # | Item | Modules | Verified by | State |
    |---|---|---|---|---|
@@ -50,11 +45,11 @@ In order, as far as the order is known:
    Then post-quantum on every target (E3, kcoap-crypto-pq: pure-Kotlin ML-KEM and ML-DSA, ML-DSA verification
    first), key-store adapters as `CryptoBackend` decorators (E7: Android KeyStore, Secure Enclave, non-extractable
    WebCrypto keys, PKCS#11), and message-level AES-CCM on WebCrypto only if a browser benchmark asks for it (E8).
-5. **The rest of the RFCs.** The open MUSTs the [checklist](checklist.md#biggest-gaps) lists in order: caching,
+3. **The rest of the RFCs.** The open MUSTs the [checklist](checklist.md#biggest-gaps) lists in order: caching,
    proxying and multicast (RFC 7252), the companions' gaps, OSCORE's Outer Block-wise and Appendix B.2, EDHOC's
    reverse flow, suite 25 and CWT credentials, the RFC 9668 fallbacks; each lands with its libcoap or libedhoc
    cross-test.
-6. **Large bodies and proxies.** Streamed bodies beside the `ByteArray` API (E6); a kcoap cross-proxy for JVM
+4. **Large bodies and proxies.** Streamed bodies beside the `ByteArray` API (E6); a kcoap cross-proxy for JVM
    servers that front browsers, if WP-I1's results ask for it (E11).
 
 ## Last: DTLS
