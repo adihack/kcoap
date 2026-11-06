@@ -27,6 +27,8 @@ kotlin {
             // them. Post-quantum EDHOC cannot cross that proxy yet (docs/adr/0009-browser-topology-interop.md).
             implementation(project(":kcoap-transport-ktor"))
             implementation(project(":kcoap-transport-ktor-websocket"))
+            // docs/getting-started.md's post-quantum backend, compiled by GettingStartedExamplesTest.
+            implementation(project(":kcoap-crypto-bc"))
         }
     }
 }
