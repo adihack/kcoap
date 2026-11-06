@@ -63,7 +63,9 @@ class ResponseAcknowledgementTest {
         val reset = assertNotNull(fixture.sentBy(client.endpoint, CoapMessageType.RST).singleOrNull())
         assertEquals(response.messageId, reset.messageId)
         assertEquals(emptyList(), fixture.sentBy(client.endpoint, CoapMessageType.ACK), "never acknowledged")
-        assertTrue(fixture.events.any { it is EndpointEvent.MessageRejected && it.messageId == response.messageId })
+        val rejected = fixture.events.filterIsInstance<EndpointEvent.MessageRejected>().single { it.messageId == response.messageId }
+        assertEquals(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, rejected.reason)
+        assertEquals("Response with unrecognized critical options 9999", rejected.detail)
 
         // §4.5: the peer's retransmission is a duplicate and gets the same Reset.
         peer.send(response)

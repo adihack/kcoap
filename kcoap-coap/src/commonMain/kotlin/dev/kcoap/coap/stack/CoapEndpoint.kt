@@ -108,6 +108,10 @@ public class CoapEndpoint private constructor(
     /** How many of [exchanges] each peer has, for [CoapEndpointConfig.maxExchangesPerPeer]; under [lock]. */
     private val exchangesPerPeer = HashMap<Endpoint, Int>()
 
+    /** The size of [exchanges], written under [lock] and read without it by [stats]. */
+    @Volatile
+    private var exchangeCount = 0
+
     /** One permit per running request handler, [CoapEndpointConfig.maxConcurrentRequests] in all. */
     private val handlerPermits = Semaphore(config.maxConcurrentRequests)
     private val clockStart = config.timeSource.markNow()
@@ -383,12 +387,14 @@ public class CoapEndpoint private constructor(
         } else if (previous !== exchange) {
             previous.markReplaced()
         }
+        exchangeCount = exchanges.size
         return exchange
     }
 
     /** Called under [lock]: [exchange] leaves the registry. */
     private fun unregister(exchange: ClientExchange) {
         exchanges.remove(exchange.key)
+        exchangeCount = exchanges.size
         val remaining = (exchangesPerPeer[exchange.peer] ?: 1) - 1
         if (remaining > 0) exchangesPerPeer[exchange.peer] = remaining else exchangesPerPeer.remove(exchange.peer)
     }
@@ -451,11 +457,14 @@ public class CoapEndpoint private constructor(
         return answered
     }
 
-    /** Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation. */
+    /**
+     * Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation.
+     * A timeout is [ClientExchange.responseTimeout], whose cause is the last response that failed verification.
+     */
     internal suspend fun awaitResponse(exchange: ClientExchange, timeout: Duration): CoapMessage {
         try {
             return withTimeoutOrNull(timeout) { exchange.awaitResponse() }
-                ?: throw CoapException("No response from ${exchange.peer} within $timeout", CoapException.Reason.RESPONSE_TIMEOUT)
+                ?: throw exchange.responseTimeout(timeout)
         } catch (e: Throwable) {
             withContext(NonCancellable) { exchange.cancel() }
             throw e
@@ -512,6 +521,23 @@ public class CoapEndpoint private constructor(
         if (lease.isPaced) datagram?.release(lease) else ConnectionLink.release(lease)
     }
 
+    /**
+     * How much the endpoint holds now: exchanges, running handlers, what the datagram messaging layer keeps and
+     * open connections ([EndpointStats]). Reading takes no lock, since every layer keeps its counts up to date as it
+     * changes them, so a metrics library may poll it as often as it likes, from any thread.
+     */
+    public fun stats(): EndpointStats {
+        val datagram = datagram
+        return EndpointStats(
+            exchanges = exchangeCount,
+            runningHandlers = config.maxConcurrentRequests - handlerPermits.availablePermits,
+            transmissions = datagram?.transmissionCount ?: 0,
+            deduplicationEntries = datagram?.deduplicationEntryCount ?: 0,
+            reservedMessageIds = datagram?.reservedMessageIdCount ?: 0,
+            connections = connections.connectionCount,
+        )
+    }
+
     /** Body leases that hold a slot or wait for one, for tests. */
     internal suspend fun leaseCount(): Int = datagram?.leaseCount() ?: 0
 
@@ -520,6 +546,9 @@ public class CoapEndpoint private constructor(
 
     /** What the datagram messaging layer keeps, for tests; null without a datagram transport. */
     internal suspend fun messagingSizes(): UdpMessaging.Sizes? = datagram?.sizes()
+
+    /** Whether the lock of the connections is held, for tests: events are reported outside it. */
+    internal val isConnectionsLocked: Boolean get() = connections.isLocked
 
     private fun ClientExchange.markReplaced() {
         // The new exchange took over the token; the old one gets no more responses.
@@ -588,6 +617,7 @@ public class CoapEndpoint private constructor(
             if (closeCause != null) return@withContext
             closeCause = cause
             exchangesPerPeer.clear()
+            exchangeCount = 0
             exchanges.values.toList().also { exchanges.clear() }
         }
         // The datagram link takes its lock here after closeCause is set, so once it failed what it had, nothing
@@ -642,7 +672,7 @@ public class CoapEndpoint private constructor(
         val handler = requestHandler
         if (handler == null) {
             if (link.capabilities.hasReset) {
-                request.reject("no server on this endpoint")
+                request.reject(EndpointEvent.MessageRejected.Reason.NO_SERVER)
             } else {
                 request.respond(CoapMessage.response(message, CoapCode.NOT_IMPLEMENTED))
             }
@@ -735,7 +765,7 @@ public class CoapEndpoint private constructor(
         if (exchange == null) {
             // RFC 7252 §5.3.2 and RFC 7641 §3.5: an unexpected response is rejected, which also cancels an
             // observation the client forgot (RFC 7641 §3.6); a connection has no Reset and drops it.
-            link.rejectResponse(message, "no exchange for token ${message.tokenHex}")
+            link.rejectResponse(message, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN, "token ${message.tokenHex}")
             return
         }
         // RFC 8323 §3.1: on a connection there is nothing to answer at the messaging layer.
@@ -756,7 +786,7 @@ public class CoapEndpoint private constructor(
                 is ClientExchange.Inspection.Rejected -> {
                     // The exchange ends, and its last event takes the room back.
                     reservation?.release()
-                    link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
+                    link.rejectResponse(message, EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, inspection.cause.message)
                     exchange.refuse(inspection.cause)
                     return
                 }
@@ -803,6 +833,9 @@ public class CoapEndpoint private constructor(
     internal fun report(event: EndpointEvent) {
         emit(event)
     }
+
+    /** Whether anyone listens to events, so that an event that takes work to build can be skipped when not. */
+    internal val reportsEvents: Boolean get() = config.eventListener !== EndpointEventListener.None
 
     override fun toString(): String = "CoapEndpoint(${datagram?.transport ?: "no datagram transport"})"
 

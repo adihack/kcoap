@@ -195,9 +195,9 @@ internal class ReliableMessaging(
             }
         } catch (e: CoapFormatException) {
             // §5.6: a message with a syntax violation is rejected with an Abort and otherwise ignored.
-            val reason = e.message ?: "message format error"
-            effects += ConnectionEffect.Event(EndpointEvent.MalformedMessage(peer, reason))
-            abort("Message format error: $reason")
+            val detail = e.message ?: "message format error"
+            effects += ConnectionEffect.Event(EndpointEvent.MalformedMessage(peer, EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR, detail))
+            abort("Message format error: $detail")
             return
         }
         for (message in messages) {
@@ -229,13 +229,13 @@ internal class ReliableMessaging(
                 effects += ConnectionEffect.DeliverResponse(message)
                 checkDrained()
             }
-            else -> reject(message, "reserved code ${message.code}")
+            else -> reject(message, EndpointEvent.MessageRejected.Reason.RESERVED_CODE)
         }
     }
 
     private fun onSignal(now: Duration, message: CoapMessage) {
         when (val parsed = Signal.parse(message)) {
-            Signal.Parsed.UnknownCode -> reject(message, "unassigned signaling code ${message.code}")
+            Signal.Parsed.UnknownCode -> reject(message, EndpointEvent.MessageRejected.Reason.UNKNOWN_SIGNAL)
             is Signal.Parsed.Invalid -> abort(parsed.reason, parsed.badCsmOption)
             is Signal.Parsed.Known -> when (val signal = parsed.signal) {
                 is Signal.Csm -> onCsm(signal)
@@ -247,10 +247,13 @@ internal class ReliableMessaging(
         }
     }
 
-    /** Messages with no meaning here: there is no Reset on reliable transports, so they are only dropped. */
-    private fun reject(message: CoapMessage, reason: String) {
-        log.warn { "Ignored a message with $reason" }
-        effects += ConnectionEffect.Event(EndpointEvent.MessageRejected(peer, 0, reason))
+    /**
+     * Messages with no meaning here: there is no Reset on reliable transports, so they are only dropped, logged
+     * once at DEBUG and reported.
+     */
+    private fun reject(message: CoapMessage, reason: EndpointEvent.MessageRejected.Reason) {
+        log.debug { "Ignored a ${message.code} ($reason)" }
+        effects += ConnectionEffect.Event(EndpointEvent.MessageRejected(peer, 0, reason, "${message.code}"))
     }
 
     /** §5.3: options are cumulative; an absent one leaves the value in force. */
@@ -299,7 +302,8 @@ internal class ReliableMessaging(
     }
 
     private fun onAbort(abort: Signal.Abort) {
-        log.warn { "Aborted by the peer: ${abort.diagnostic ?: "no reason given"}" }
+        // The peer ends the connection, as with a Release: lifecycle, which the event counts.
+        log.info { "Aborted by the peer: ${abort.diagnostic ?: "no reason given"}" }
         effects += ConnectionEffect.Event(EndpointEvent.AbortReceived(peer, abort.badCsmOption, abort.diagnostic))
         close("aborted by the peer" + (abort.diagnostic?.let { ": $it" } ?: ""))
     }
@@ -400,10 +404,13 @@ internal class ReliableMessaging(
         close("shut down: $diagnostic")
     }
 
-    /** Sends an Abort (§5.6) and closes; nothing received afterwards is processed. */
+    /**
+     * Sends an Abort (§5.6) and closes; nothing received afterwards is processed. What the peer sent or failed to
+     * send causes it, so it is logged at DEBUG and counted by its [EndpointEvent.AbortSent].
+     */
     fun abort(diagnostic: String, badCsmOption: Int? = null) {
         if (phase == Phase.CLOSED || phase == Phase.NEW) return
-        log.warn { "Aborting the connection: $diagnostic" }
+        log.debug { "Aborting the connection: $diagnostic" }
         sendSignal(Signal.Abort(badCsmOption, diagnostic))
         effects += ConnectionEffect.Event(EndpointEvent.AbortSent(peer, diagnostic, badCsmOption))
         close("aborted: $diagnostic")

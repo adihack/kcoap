@@ -823,6 +823,42 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
   that throws `CoapResponseException` with 4.04 gets 4.04 to the client, also as a notification, which ends the
   observation; standard gate.
 
+> **Amendment (B4).** Done as listed, each cited line re-checked against the tree after B3, D1, D2, T1, QB-FIX, SEC2
+> and SRV-2. Where the code had moved on:
+> - **Already done elsewhere.** EO-3 items 2–5 came with SEC2 (`ResponseVerification`, `UNVERIFIED_RESPONSE`) and B3
+>   (`SECURITY`); EO-7 item 1 with S1 and item 9 with B3. EO-3's evidence moved to `ClientExchange.inspect` and
+>   `CoapEndpoint.awaitResponse`; EO-8's "WARN under the endpoint lock" is now the datagram link's lock
+>   (`DatagramLink.withMessaging`), and with those lines at DEBUG a sink runs there only when DEBUG is on.
+> - **The dropped verification failure** is counted per exchange; the `RESPONSE_TIMEOUT` names the count and has the
+>   last failure as cause, for a request (`CoapEndpoint.awaitResponse`) and for a Q-Block body, which looks at all of
+>   its exchanges.
+> - **`ResponseRejected`** has no token: an application never sees one (`CoapResponse` and `RequestContext` leave
+>   them out), so it would only be a label of unbounded values. Its reason also has `UNVERIFIED`, SEC2's unverified
+>   errors; both come from the one place every response passes, so each is reported once whatever the layer above
+>   does with it. A response that matches no exchange keeps its token in `MessageRejected.detail`, for a log.
+> - **`MalformedMessage.Reason`** is `UNKNOWN_VERSION` and `FORMAT_ERROR` only: kcoap-coap-message's
+>   `CoapFormatException` carries no kind, so a finer reason (header, option, a message above Max-Message-Size on
+>   TCP) would mean matching its text; a kind on the exception is a follow-up. `QBlockFallback`, `PartialBodyDropped`
+>   and `ConnectionClosed` keep their free-text reasons; the finding did not list them.
+> - **`RequestCompleted`** takes the resource's path from the request's Uri-Path once it matched a resource, so a
+>   resource removed meanwhile keeps its path; its method is the outer one for a request message security could not
+>   read. No `HandlerFailed`: the 5.00 is in `RequestCompleted`, the exception in the ERROR line.
+> - **`SecurityRejected`** has a reason, `VERIFICATION_FAILED` or `FRESHNESS_CHALLENGE`, for the Appendix B.1.2 path
+>   the finding asked to report too; `MessageSecurityException` gets no `kind`, which would change kcoap-coap-message
+>   and kcoap-oscore.
+> - **`stats()`** are plain functions over counts each layer writes in the critical section it already has, as the
+>   scope asked (no lock on the hot path), not the suspend functions under the lock the finding suggested.
+> - **Ownership deviations**: kcoap-common's `LogConfig` default, `LoggerTest` and README for the WARN default (EO-8
+>   item 5). No expectation in kcoap-oscore or kcoap-edhoc-oscore had to change.
+> - **Found in review**: a datagram from UDP source port 0 could still write a WARN line with a stack trace, since
+>   every answer to it fails to send; it is dropped unparsed now, as `MessageRejected` with `INVALID_SOURCE`, and a
+>   failed send logs no stack trace. `ConnectionOpened` was reported under the connections' lock; it is reported
+>   after it, before the connection starts reading. `RequestCompleted` of a Q-Block2 follow-up reports what went
+>   out on that request (a 4.00, or nothing for a Continue), not the body's code.
+> - **Not done, as written**: EO-7 item 5 and EO-8 for kcoap-oscore and kcoap-edhoc stay with those modules, so they
+>   still log some rejected input at WARN, a dropped OSCORE response a second time next to kcoap-coap's DEBUG line;
+>   `CoapServerConfig.exceptionMapper` (EO-11's optional follow-up) is not added.
+
 **WP-T1: TLS for stream transports**
 
 - **Findings:** critique D (server and gateway TLS).

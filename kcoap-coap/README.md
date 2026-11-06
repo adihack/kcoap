@@ -72,7 +72,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
 - **Server**: resource tree by Uri-Path with template methods (`handleGet` … `handleIPatch`, 4.05 by
   default) or a DSL; 4.04; 4.02 with a diagnostic for unrecognized critical options, wrong lengths and
   repetitions (§5.4.1, §5.4.3, §5.4.5), rejection for NON; 4.06 for Accept (§5.10.4); 5.05 for
-  Proxy-Uri / Proxy-Scheme (§5.10.2); 5.00 for failing handlers; conditional-request helper (§5.10.8);
+  Proxy-Uri / Proxy-Scheme (§5.10.2); an error a handler throws as `CoapResponseException`, from however deep in
+  the application, sent as if returned, and a bare 5.00 for any other exception; conditional-request helper (§5.10.8);
   `/.well-known/core` with `rt`, `if`, `ct`, `sz`, `title`, `obs`, `osc` and RFC 6690 §4.1 filtering;
   No-Response (RFC 7967); the request context, the server's application model, with the `method`, `path`,
   `query`, `options` and `payload`, the peer, its `PeerIdentity` and the `SecurityIdentity`, and without
@@ -111,10 +112,21 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   address for an hour. `CoapServerConfig.amplification` checks Q-Block2 bursts by default, every
   response with `ALL_RESPONSES` (which also sends separate responses to an unverified address
   Non-confirmable, and keeps each POST's or PATCH's response for its repeat), or nothing.
-- **Interceptors and events**: a `MessageInterceptor` chain at the wire, an `EndpointEventListener`.
+- **Interceptors, events and stats**: a `MessageInterceptor` chain at the wire, and an `EndpointEventListener`
+  (combined with `+`) for what has no message of its own: retransmissions, timeouts, Resets, duplicates, malformed
+  and rejected messages, responses the client rejected because they failed verification (`ResponseRejected`), each
+  request a server finished (`RequestCompleted`: inner method and code, the resource's path in the tree, the
+  security identity and the duration) and those message security stopped (`SecurityRejected`), bounds reached,
+  connections, Q-Block and observer changes. Every reason to count by is a bounded enum with an optional `detail`.
+  `CoapEndpoint.stats()` and `CoapServer.stats()` read, without a lock, what is held now: exchanges, running
+  handlers, transmissions, deduplication entries, reserved Message IDs, connections, observers, Block-wise and
+  Q-Block bodies. Rejected input from a peer is logged once, at DEBUG and without a stack trace
+  ([logging](../docs/logging.md)).
 - **Errors**: every runtime failure of a `CoapClient`, `CoapEndpoint` or `CoapServer` call is a
   `CoapException`, whose `Reason` says what failed and whose cause is the lower layer's exception: the peer
-  (`TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET`, `BAD_RESPONSE`, `BLOCKWISE_FAILED`), the session or
+  (`TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET`, `BAD_RESPONSE`, `BLOCKWISE_FAILED`; a `RESPONSE_TIMEOUT` after
+  responses that failed verification, which RFC 8613 §8.4 drops, has the last of them as cause and their count in
+  its message), the session or
   connection (`SESSION_ENDED`, `CONNECTION_CLOSED`), message security (`SECURITY` when the request could not
   be protected and nothing was sent, `UNVERIFIED_RESPONSE`), the host lookup (`UNRESOLVED_HOST`, which an
   `EndpointResolver` throws for a lookup that fails at runtime; any other exception of a resolver is reported
@@ -123,7 +135,7 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   without a transport that runs TLS for it, `TRANSPORT_FAILED`, `CLOSED`).
   `IllegalArgumentException` and `IllegalStateException` are kept for mistakes of the caller, such as a
   malformed URI string, `CancellationException` for a cancelled caller, and error codes are returned as
-  responses. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
+  responses; a server's handler may throw one as `CoapResponseException`. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
   too, a ping on a connection included: the closed state is checked under the lock that registers the
   exchange. A malformed link-format document from a server is `BAD_RESPONSE`, with the parser's message.
   `Reason` may gain constants in any minor release, so a `when` over it keeps an `else` branch.
@@ -215,7 +227,19 @@ application); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
   `interop/README.md`).
 - The client's error contract (`ClientErrorContractTest`): an exchange opened while `close()` runs fails
   with `CLOSED` at once on virtual time, calls after close resolve nothing, `SECURITY` and
-  `UNRESOLVED_HOST` carry their causes, and cancellation is never translated.
+  `UNRESOLVED_HOST` carry their causes, and cancellation is never translated. Responses that fail verification
+  (`VerificationFailureTest`): each a `ResponseRejected`, and the `RESPONSE_TIMEOUT` that follows on virtual time has
+  the last as cause, for a request, an observation and a Q-Block body.
+- Observability: every reason of `MessageRejected` and `MalformedMessage` in the messaging tests
+  (`UdpMessagingTest`, `ReliableMessagingTest`, `RequestResponseTest`), `RequestCompleted` per request with its
+  bounded fields (`RequestCompletedTest`), `SecurityRejected` for a failed verification and a freshness challenge
+  (`MessageSecurityTest`), the stats of an endpoint and a server as state comes and goes (`StatsTest`,
+  `QBlockReliableTest`), listeners combined with `+` (`EndpointEventListenerTest`) and called outside the locks
+  (`ReliableTransportTest`), and `CoapResponseException` for a request and a notification
+  (`CoapResponseExceptionTest`). Rejected input logged once at DEBUG without a stack trace, and nothing at WARN:
+  malformed datagrams, invalid ACKs and Resets, datagrams from UDP source port 0 (`PeerInputLoggingTest`), responses
+  that failed verification (`VerificationFailureTest`) and requests message security rejected
+  (`MessageSecurityTest`).
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class
   (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
   `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; floods from

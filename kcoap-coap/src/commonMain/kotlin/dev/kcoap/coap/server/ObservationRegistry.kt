@@ -70,6 +70,11 @@ internal class ObservationRegistry(private val server: CoapServer) {
     private val perPeer = HashMap<Endpoint, Int>()
     private var isClosed = false
 
+    /** The size of [byKey], written under [lock] and read without it by [CoapServer.stats]. */
+    @Volatile
+    var size: Int = 0
+        private set
+
     /** Each resource's observers; replaced, never changed, under [lock]. */
     private val byResource = AtomicReference<Map<ObservableResource, List<ServerObservation>>>(emptyMap())
 
@@ -95,6 +100,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
                 return Registration.TOO_MANY_FOR_RESOURCE
             }
             byKey[observation.key] = observation
+            size = byKey.size
             if (previous == null) perPeer[observation.peer] = (perPeer[observation.peer] ?: 0) + 1
             previous?.let(::unindex)
             index(observation)
@@ -125,6 +131,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
             val registered = byKey[observation.key] === observation
             if (registered) {
                 byKey.remove(observation.key)
+                size = byKey.size
                 val remaining = (perPeer[observation.peer] ?: 1) - 1
                 if (remaining > 0) perPeer[observation.peer] = remaining else perPeer.remove(observation.peer)
                 unindex(observation)
@@ -165,6 +172,7 @@ internal class ObservationRegistry(private val server: CoapServer) {
             isClosed = true
             byResource.store(emptyMap())
             perPeer.clear()
+            size = 0
             byKey.values.toList().also { byKey.clear() }
         }
         dropped.forEach { it.deactivate() }

@@ -422,7 +422,8 @@ class EdgeCaseTest {
         val events = listOf(
             EndpointEvent.Retransmitted(peer, 1, 2), EndpointEvent.TransmissionTimedOut(peer, 1),
             EndpointEvent.ResetReceived(peer, 1), EndpointEvent.DuplicateReceived(peer, 1),
-            EndpointEvent.MalformedMessage(peer, "bad"), EndpointEvent.MessageRejected(peer, 1, "why"),
+            EndpointEvent.MalformedMessage(peer, EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR, "bad"),
+            EndpointEvent.MessageRejected(peer, 1, EndpointEvent.MessageRejected.Reason.PING),
             EndpointEvent.SessionEnded(peer), EndpointEvent.ObserverAdded(peer, "/a"),
             EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.RESET),
             EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.FAILED, "why"),

@@ -352,6 +352,29 @@ class QBlockServerTest {
     }
 
     @Test
+    fun rfc9177Section4_4EachQBlock2RequestCompletesWithWhatWentOutOnItsOwnToken() = runTest {
+        val f = fixture()
+        f.peer.send(get(f.peer, block(0, true)))
+        assertEquals((0L..9L).toList(), f.peer.drain().numbers())
+        // A Continue, whose set goes on the original token (Figure 8), missing blocks on their request's token,
+        // and a follow-up in another size, refused with 4.00 (§4.4).
+        f.peer.send(get(f.peer, block(10, true)))
+        assertEquals((10L..19L).toList(), f.peer.drain().numbers())
+        f.peer.send(get(f.peer, block(2, false)))
+        assertEquals(listOf(2L), f.peer.drain().numbers())
+        f.peer.send(get(f.peer, block(3, false, 128)))
+        assertEquals(CoapCode.BAD_REQUEST, f.peer.drain().single().code)
+
+        val completed = f.events.filterIsInstance<EndpointEvent.RequestCompleted>()
+        assertEquals(
+            listOf(CoapCode.CONTENT, null, CoapCode.CONTENT, CoapCode.BAD_REQUEST),
+            completed.map { it.responseCode },
+            "the Continue got no response of its own",
+        )
+        assertTrue(completed.all { it.method == CoapCode.GET && it.resourcePath == "/big" && !it.isSuppressed })
+    }
+
+    @Test
     fun rfc9177Section4_4AResetToABlockStopsTheBody() = runTest {
         val f = fixture()
         f.peer.send(get(f.peer, block(0, true)))
@@ -915,6 +938,19 @@ class QBlockServerTest {
         assertTrue(answers.all { it.type == CoapMessageType.NON })
         assertContentEquals(big, f.stored.single())
         assertEquals(0, f.server.qBlock.state().partialBodies)
+    }
+
+    @Test
+    fun rfc9177Section4_3OnlyTheBlocksThatGetAResponseCompleteWithOne() = runTest {
+        val f = fixture()
+        (0L..46L).forEach { f.peer.send(upload(f.peer, it)) }
+        assertEquals(List(4) { CoapCode.CONTINUE } + CoapCode.CHANGED, f.peer.drain().map { it.code })
+
+        // One event per block, those in the middle of a set without a response (RFC 9177 §4.3).
+        val completed = f.events.filterIsInstance<EndpointEvent.RequestCompleted>()
+        assertEquals(47, completed.size)
+        assertEquals(mapOf(null to 42, CoapCode.CONTINUE to 4, CoapCode.CHANGED to 1), completed.groupingBy { it.responseCode }.eachCount())
+        assertTrue(completed.all { it.method == CoapCode.PUT && it.resourcePath == "/store" })
     }
 
     @Test

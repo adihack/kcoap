@@ -126,7 +126,10 @@ The error model is [ADR 0011](adr/0011-error-model.md); in code:
   `CertificateValidationException`) do not extend it, and each layer translates them at its boundary
   ([architecture.md](architecture.md#the-coap-endpoint-as-built), "Errors"). A layer that catches broadly lets a
   cancellation of its caller pass unchanged and reports any other exception of what it calls as its own.
-- CoAP error responses (4.xx, 5.xx) are responses, returned to the caller, not exceptions.
+- CoAP error responses (4.xx, 5.xx) are responses: a client returns them to its caller, never throws them. On the
+  server a resource handler may throw `CoapResponseException` to answer with one from deep in its code; the server
+  turns it into that response, so it never leaves the server and is no facade exception
+  ([ADR 0011](adr/0011-error-model.md#amendment-wp-b4)).
 - A public suspend entry point that can fail lists `@Throws(KcoapException::class, CancellationException::class)`,
   so Swift gets an `NSError` instead of a crash; an override keeps the `@Throws` of what it overrides, which
   Kotlin/Native requires.
@@ -186,8 +189,17 @@ Use the pattern that matches the need; do not add abstraction a second implement
 - Take a `LoggerFactory` in constructors (default `LoggerFactory.Global`) and log under the tags in
   `LogTags`.
 - Messages are lambdas: `log.debug { "..." }`.
-- TRACE: bytes and state transitions. DEBUG: protocol events. INFO: lifecycle. WARN: rejected input.
-  ERROR: failures the library could not handle.
+- TRACE: bytes and state transitions. DEBUG: protocol events, and input from a peer that was rejected or ignored.
+  INFO: lifecycle. WARN: local conditions an operator should act on. ERROR: failures the library could not
+  handle. The table and the reasons are in [logging.md](logging.md#what-the-levels-follow).
+- **Log or throw, never both.** A layer that throws an exception does not also log the failure: whoever catches it
+  decides what it means and logs it, once. A protocol core or security layer may add, at DEBUG, the context its
+  caller cannot see (the step, the Partial IV), and nothing above DEBUG.
+- **Rejected input is logged once, at DEBUG, without the exception**: the layer that decides what happens to the
+  message logs it, and reports it as an `EndpointEvent` where one exists, so it can be counted. A peer chooses how
+  often that happens, and a UDP source proves nothing (RFC 7252 §11.4). An expected protocol exception
+  (`MessageSecurityException`, `CoapFormatException`, `EdhocException`, `CoapResponseException`) is never attached
+  to a record; a stack trace is for a fault on this side, at ERROR.
 - Never log keys, nonces derived from keys, or plaintext; use `log.payload(bytes)` for message bodies.
 
 ## Tests

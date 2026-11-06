@@ -219,27 +219,62 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
     }
 
     final class MalformedMessage : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/String) // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.String){}[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason, kotlin/String? = ...) // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.coap.stack.EndpointEvent.MalformedMessage.Reason;kotlin.String?){}[0]
 
+        final val detail // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.detail.<get-detail>|<get-detail>(){}[0]
         final val peer // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.peer|{}peer[0]
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.peer.<get-peer>|<get-peer>(){}[0]
         final val reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason.<get-reason>|<get-reason>(){}[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.reason.<get-reason>|<get-reason>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> { // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason|null[0]
+            enum entry FORMAT_ERROR // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR|null[0]
+            enum entry UNKNOWN_VERSION // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.UNKNOWN_VERSION|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason> // dev.kcoap.coap.stack/EndpointEvent.MalformedMessage.Reason.values|values#static(){}[0]
+        }
     }
 
     final class MessageRejected : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.MessageRejected|null[0]
-        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Int, kotlin/String) // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Int;kotlin.String){}[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Int, dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason, kotlin/String? = ...) // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Int;dev.kcoap.coap.stack.EndpointEvent.MessageRejected.Reason;kotlin.String?){}[0]
 
+        final val detail // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.detail.<get-detail>|<get-detail>(){}[0]
         final val messageId // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.messageId|{}messageId[0]
             final fun <get-messageId>(): kotlin/Int // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.messageId.<get-messageId>|<get-messageId>(){}[0]
         final val peer // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.peer|{}peer[0]
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.peer.<get-peer>|<get-peer>(){}[0]
         final val reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason|{}reason[0]
-            final fun <get-reason>(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason.<get-reason>|<get-reason>(){}[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.reason.<get-reason>|<get-reason>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> { // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason|null[0]
+            enum entry EMPTY_NON_CONFIRMABLE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.EMPTY_NON_CONFIRMABLE|null[0]
+            enum entry FOREIGN_TOKEN // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.FOREIGN_TOKEN|null[0]
+            enum entry INVALID_ACKNOWLEDGEMENT // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_ACKNOWLEDGEMENT|null[0]
+            enum entry INVALID_RESET // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_RESET|null[0]
+            enum entry INVALID_SOURCE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.INVALID_SOURCE|null[0]
+            enum entry NO_SERVER // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.NO_SERVER|null[0]
+            enum entry PING // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.PING|null[0]
+            enum entry RESERVED_CODE // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.RESERVED_CODE|null[0]
+            enum entry UNKNOWN_SIGNAL // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNKNOWN_SIGNAL|null[0]
+            enum entry UNKNOWN_TOKEN // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN|null[0]
+            enum entry UNRECOGNIZED_CRITICAL_OPTION // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.MessageRejected.Reason.values|values#static(){}[0]
+        }
     }
 
     final class ObserverAdded : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.ObserverAdded|null[0]
@@ -334,6 +369,27 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.ReleaseReceived.toString|toString(){}[0]
     }
 
+    final class RequestCompleted : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.coap/CoapCode, kotlin/String?, dev.kcoap.coap/CoapCode?, kotlin/Boolean, dev.kcoap.coap.security/SecurityIdentity?, kotlin.time/Duration) // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.coap.CoapCode;kotlin.String?;dev.kcoap.coap.CoapCode?;kotlin.Boolean;dev.kcoap.coap.security.SecurityIdentity?;kotlin.time.Duration){}[0]
+
+        final val duration // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.duration|{}duration[0]
+            final fun <get-duration>(): kotlin.time/Duration // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.duration.<get-duration>|<get-duration>(){}[0]
+        final val isSuppressed // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.isSuppressed|{}isSuppressed[0]
+            final fun <get-isSuppressed>(): kotlin/Boolean // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.isSuppressed.<get-isSuppressed>|<get-isSuppressed>(){}[0]
+        final val method // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.method|{}method[0]
+            final fun <get-method>(): dev.kcoap.coap/CoapCode // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.method.<get-method>|<get-method>(){}[0]
+        final val peer // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.peer.<get-peer>|<get-peer>(){}[0]
+        final val resourcePath // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.resourcePath|{}resourcePath[0]
+            final fun <get-resourcePath>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.resourcePath.<get-resourcePath>|<get-resourcePath>(){}[0]
+        final val responseCode // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.responseCode|{}responseCode[0]
+            final fun <get-responseCode>(): dev.kcoap.coap/CoapCode? // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.responseCode.<get-responseCode>|<get-responseCode>(){}[0]
+        final val securityIdentity // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.securityIdentity|{}securityIdentity[0]
+            final fun <get-securityIdentity>(): dev.kcoap.coap.security/SecurityIdentity? // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.securityIdentity.<get-securityIdentity>|<get-securityIdentity>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.RequestCompleted.toString|toString(){}[0]
+    }
+
     final class ResetReceived : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.ResetReceived|null[0]
         constructor <init>(dev.kcoap.transport/Endpoint, kotlin/Int) // dev.kcoap.coap.stack/EndpointEvent.ResetReceived.<init>|<init>(dev.kcoap.transport.Endpoint;kotlin.Int){}[0]
 
@@ -343,6 +399,30 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.ResetReceived.peer.<get-peer>|<get-peer>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.ResetReceived.toString|toString(){}[0]
+    }
+
+    final class ResponseRejected : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason, kotlin/String? = ...) // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.coap.stack.EndpointEvent.ResponseRejected.Reason;kotlin.String?){}[0]
+
+        final val detail // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.detail.<get-detail>|<get-detail>(){}[0]
+        final val peer // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.peer.<get-peer>|<get-peer>(){}[0]
+        final val reason // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.reason|{}reason[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason> { // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason|null[0]
+            enum entry UNVERIFIED // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.UNVERIFIED|null[0]
+            enum entry VERIFICATION_FAILED // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.VERIFICATION_FAILED|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.ResponseRejected.Reason.values|values#static(){}[0]
+        }
     }
 
     final class Retransmitted : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.Retransmitted|null[0]
@@ -356,6 +436,32 @@ sealed interface dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/En
             final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.Retransmitted.peer.<get-peer>|<get-peer>(){}[0]
 
         final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.Retransmitted.toString|toString(){}[0]
+    }
+
+    final class SecurityRejected : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason, dev.kcoap.coap/CoapCode, dev.kcoap.coap.security/MessageSecurityException? = ...) // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.coap.stack.EndpointEvent.SecurityRejected.Reason;dev.kcoap.coap.CoapCode;dev.kcoap.coap.security.MessageSecurityException?){}[0]
+
+        final val error // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.error|{}error[0]
+            final fun <get-error>(): dev.kcoap.coap.security/MessageSecurityException? // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.error.<get-error>|<get-error>(){}[0]
+        final val peer // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.peer.<get-peer>|<get-peer>(){}[0]
+        final val reason // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.reason|{}reason[0]
+            final fun <get-reason>(): dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.reason.<get-reason>|<get-reason>(){}[0]
+        final val responseCode // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.responseCode|{}responseCode[0]
+            final fun <get-responseCode>(): dev.kcoap.coap/CoapCode // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.responseCode.<get-responseCode>|<get-responseCode>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.toString|toString(){}[0]
+
+        final enum class Reason : kotlin/Enum<dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason> { // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason|null[0]
+            enum entry FRESHNESS_CHALLENGE // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.FRESHNESS_CHALLENGE|null[0]
+            enum entry VERIFICATION_FAILED // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.VERIFICATION_FAILED|null[0]
+
+            final val entries // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason> // dev.kcoap.coap.stack/EndpointEvent.SecurityRejected.Reason.values|values#static(){}[0]
+        }
     }
 
     final class SessionEnded : dev.kcoap.coap.stack/EndpointEvent { // dev.kcoap.coap.stack/EndpointEvent.SessionEnded|null[0]
@@ -590,6 +696,13 @@ final class dev.kcoap.coap.server/AccessRequest { // dev.kcoap.coap.server/Acces
     final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessRequest.toString|toString(){}[0]
 }
 
+final class dev.kcoap.coap.server/CoapResponseException : kotlin/Exception { // dev.kcoap.coap.server/CoapResponseException|null[0]
+    constructor <init>(dev.kcoap.coap/CoapResponse) // dev.kcoap.coap.server/CoapResponseException.<init>|<init>(dev.kcoap.coap.CoapResponse){}[0]
+
+    final val response // dev.kcoap.coap.server/CoapResponseException.response|{}response[0]
+        final fun <get-response>(): dev.kcoap.coap/CoapResponse // dev.kcoap.coap.server/CoapResponseException.response.<get-response>|<get-response>(){}[0]
+}
+
 final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServer|null[0]
     constructor <init>(dev.kcoap.coap.stack/CoapEndpoint, dev.kcoap.coap.server/CoapServerConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.coap.stack.CoapEndpoint;dev.kcoap.coap.server.CoapServerConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
     constructor <init>(dev.kcoap.transport/DatagramTransport, kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.server/CoapServerConfig = ..., dev.kcoap.coap.stack/CoapEndpointConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.transport.DatagramTransport;kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.server.CoapServerConfig;dev.kcoap.coap.stack.CoapEndpointConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
@@ -603,6 +716,7 @@ final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServ
         final fun <get-root>(): dev.kcoap.coap.server/CoapResource // dev.kcoap.coap.server/CoapServer.root.<get-root>|<get-root>(){}[0]
 
     final fun add(dev.kcoap.coap.server/CoapResource): dev.kcoap.coap.server/CoapResource // dev.kcoap.coap.server/CoapServer.add|add(dev.kcoap.coap.server.CoapResource){}[0]
+    final fun stats(): dev.kcoap.coap.server/ServerStats // dev.kcoap.coap.server/CoapServer.stats|stats(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap.server/CoapServer.toString|toString(){}[0]
     final suspend fun close() // dev.kcoap.coap.server/CoapServer.close|close(){}[0]
 }
@@ -770,6 +884,21 @@ final class dev.kcoap.coap.server/ResourceBuilder { // dev.kcoap.coap.server/Res
     final fun resource(kotlin/String, kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...): dev.kcoap.coap.server/ObservableResource // dev.kcoap.coap.server/ResourceBuilder.resource|resource(kotlin.String;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
 }
 
+final class dev.kcoap.coap.server/ServerStats { // dev.kcoap.coap.server/ServerStats|null[0]
+    final val block1Transfers // dev.kcoap.coap.server/ServerStats.block1Transfers|{}block1Transfers[0]
+        final fun <get-block1Transfers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.block1Transfers.<get-block1Transfers>|<get-block1Transfers>(){}[0]
+    final val block2Transfers // dev.kcoap.coap.server/ServerStats.block2Transfers|{}block2Transfers[0]
+        final fun <get-block2Transfers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.block2Transfers.<get-block2Transfers>|<get-block2Transfers>(){}[0]
+    final val observers // dev.kcoap.coap.server/ServerStats.observers|{}observers[0]
+        final fun <get-observers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.observers.<get-observers>|<get-observers>(){}[0]
+    final val qBlock1Bodies // dev.kcoap.coap.server/ServerStats.qBlock1Bodies|{}qBlock1Bodies[0]
+        final fun <get-qBlock1Bodies>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.qBlock1Bodies.<get-qBlock1Bodies>|<get-qBlock1Bodies>(){}[0]
+    final val qBlock2Bodies // dev.kcoap.coap.server/ServerStats.qBlock2Bodies|{}qBlock2Bodies[0]
+        final fun <get-qBlock2Bodies>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.qBlock2Bodies.<get-qBlock2Bodies>|<get-qBlock2Bodies>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.server/ServerStats.toString|toString(){}[0]
+}
+
 final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndpoint|null[0]
     constructor <init>(dev.kcoap.transport/DatagramTransport, kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.stack/CoapEndpointConfig = ...) // dev.kcoap.coap.stack/CoapEndpoint.<init>|<init>(dev.kcoap.transport.DatagramTransport;kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.stack.CoapEndpointConfig){}[0]
     constructor <init>(kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.stack/CoapEndpointConfig = ..., dev.kcoap.transport/DatagramTransport? = ..., kotlin.collections/List<dev.kcoap.transport/Connector> = ..., kotlin.collections/List<dev.kcoap.transport/ConnectionListener> = ...) // dev.kcoap.coap.stack/CoapEndpoint.<init>|<init>(kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.stack.CoapEndpointConfig;dev.kcoap.transport.DatagramTransport?;kotlin.collections.List<dev.kcoap.transport.Connector>;kotlin.collections.List<dev.kcoap.transport.ConnectionListener>){}[0]
@@ -784,6 +913,7 @@ final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndp
     final var closeCause // dev.kcoap.coap.stack/CoapEndpoint.closeCause|{}closeCause[0]
         final fun <get-closeCause>(): dev.kcoap.coap.stack/CoapException? // dev.kcoap.coap.stack/CoapEndpoint.closeCause.<get-closeCause>|<get-closeCause>(){}[0]
 
+    final fun stats(): dev.kcoap.coap.stack/EndpointStats // dev.kcoap.coap.stack/CoapEndpoint.stats|stats(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap.stack/CoapEndpoint.toString|toString(){}[0]
     final suspend fun awaitClosed(): dev.kcoap.coap.stack/CoapException // dev.kcoap.coap.stack/CoapEndpoint.awaitClosed|awaitClosed(){}[0]
     final suspend fun close() // dev.kcoap.coap.stack/CoapEndpoint.close|close(){}[0]
@@ -937,6 +1067,23 @@ final class dev.kcoap.coap.stack/CoapException : dev.kcoap.common/KcoapException
     }
 }
 
+final class dev.kcoap.coap.stack/EndpointStats { // dev.kcoap.coap.stack/EndpointStats|null[0]
+    final val connections // dev.kcoap.coap.stack/EndpointStats.connections|{}connections[0]
+        final fun <get-connections>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.connections.<get-connections>|<get-connections>(){}[0]
+    final val deduplicationEntries // dev.kcoap.coap.stack/EndpointStats.deduplicationEntries|{}deduplicationEntries[0]
+        final fun <get-deduplicationEntries>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.deduplicationEntries.<get-deduplicationEntries>|<get-deduplicationEntries>(){}[0]
+    final val exchanges // dev.kcoap.coap.stack/EndpointStats.exchanges|{}exchanges[0]
+        final fun <get-exchanges>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.exchanges.<get-exchanges>|<get-exchanges>(){}[0]
+    final val reservedMessageIds // dev.kcoap.coap.stack/EndpointStats.reservedMessageIds|{}reservedMessageIds[0]
+        final fun <get-reservedMessageIds>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.reservedMessageIds.<get-reservedMessageIds>|<get-reservedMessageIds>(){}[0]
+    final val runningHandlers // dev.kcoap.coap.stack/EndpointStats.runningHandlers|{}runningHandlers[0]
+        final fun <get-runningHandlers>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.runningHandlers.<get-runningHandlers>|<get-runningHandlers>(){}[0]
+    final val transmissions // dev.kcoap.coap.stack/EndpointStats.transmissions|{}transmissions[0]
+        final fun <get-transmissions>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.transmissions.<get-transmissions>|<get-transmissions>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointStats.toString|toString(){}[0]
+}
+
 final class dev.kcoap.coap.stack/ReliableTransportConfig { // dev.kcoap.coap.stack/ReliableTransportConfig|null[0]
     constructor <init>(kotlin/Long = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin/Int = ..., kotlin/Int = ...) // dev.kcoap.coap.stack/ReliableTransportConfig.<init>|<init>(kotlin.Long;kotlin.Boolean;kotlin.time.Duration;kotlin.time.Duration;kotlin.time.Duration?;kotlin.time.Duration;kotlin.time.Duration;kotlin.time.Duration?;kotlin.Int;kotlin.Int){}[0]
 
@@ -1027,5 +1174,6 @@ final class dev.kcoap.coap.stack/TransmissionParameters { // dev.kcoap.coap.stac
     }
 }
 
+final fun (dev.kcoap.coap.stack/EndpointEventListener).dev.kcoap.coap.stack/plus(dev.kcoap.coap.stack/EndpointEventListener): dev.kcoap.coap.stack/EndpointEventListener // dev.kcoap.coap.stack/plus|plus@dev.kcoap.coap.stack.EndpointEventListener(dev.kcoap.coap.stack.EndpointEventListener){}[0]
 final fun dev.kcoap.coap.client/CoapClientConfig(kotlin/Function1<dev.kcoap.coap.client/CoapClientConfig.Builder, kotlin/Unit>): dev.kcoap.coap.client/CoapClientConfig // dev.kcoap.coap.client/CoapClientConfig|CoapClientConfig(kotlin.Function1<dev.kcoap.coap.client.CoapClientConfig.Builder,kotlin.Unit>){}[0]
 final fun dev.kcoap.coap.stack/CoapEndpointConfig(kotlin/Function1<dev.kcoap.coap.stack/CoapEndpointConfig.Builder, kotlin/Unit>): dev.kcoap.coap.stack/CoapEndpointConfig // dev.kcoap.coap.stack/CoapEndpointConfig|CoapEndpointConfig(kotlin.Function1<dev.kcoap.coap.stack.CoapEndpointConfig.Builder,kotlin.Unit>){}[0]

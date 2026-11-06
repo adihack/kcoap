@@ -9,6 +9,7 @@ import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionEndedException
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
@@ -62,6 +63,22 @@ internal class DatagramLink(
         config.maxReservedMessageIdsPerPeer,
     )
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * What [messaging] keeps, for [CoapEndpoint.stats]: written under [lock] after every step of the state machine,
+     * and read without it, which may see a value one step old.
+     */
+    @Volatile
+    var transmissionCount: Int = 0
+        private set
+
+    @Volatile
+    var deduplicationEntryCount: Int = 0
+        private set
+
+    @Volatile
+    var reservedMessageIdCount: Int = 0
+        private set
 
     /** What one datagram may be (RFC 7252 §4.6): the transport's datagram size, in the UDP framing. */
     val limits: MessageLimits = MessageLimits(transport.maxDatagramSize, UdpMessageCodec, allowsBert = false, isReliable = false)
@@ -222,9 +239,9 @@ internal class DatagramLink(
         withMessaging { forgetUnanswered(peer, messageId) }
     }
 
-    /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3). */
-    suspend fun reject(peer: Endpoint, messageId: Int, reason: String) {
-        withMessaging { reject(peer, messageId, reason) }
+    /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3), for [reason]. */
+    suspend fun reject(peer: Endpoint, messageId: Int, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+        withMessaging { reject(peer, messageId, reason, detail) }
     }
 
     /** Nothing acted on the message [messageId] from [peer]; see [UdpMessaging.markRepeatable]. */
@@ -269,6 +286,9 @@ internal class DatagramLink(
                 } finally {
                     effects = messaging.takeEffects()
                     wakeup = messaging.takeWakeup()
+                    transmissionCount = messaging.outboundCount
+                    deduplicationEntryCount = messaging.deduplicationEntryCount
+                    reservedMessageIdCount = messaging.reservedMessageIdCount
                 }
             }
         } finally {
@@ -323,8 +343,9 @@ internal class DatagramLink(
             val cause = CoapException("The transport cannot send to $to: ${e.message}", CoapException.Reason.TRANSPORT_FAILED, e)
             withMessaging { now -> abandon(now, transmission, cause) }
         } catch (e: Exception) {
-            // UDP gives no delivery guarantee anyway; retransmission covers a failed send.
-            log.warn(e) { "Sending ${effect.bytes.size} bytes to $to failed" }
+            // UDP gives no delivery guarantee anyway; retransmission covers a failed send. A network error's
+            // stack trace says nothing its message does not, so the line carries the message only.
+            log.warn { "Sending ${effect.bytes.size} bytes to $to failed: ${e.message}" }
         }
     }
 
@@ -444,8 +465,8 @@ internal class DatagramLink(
             forgetUnanswered(peer, response.messageId)
         }
 
-        override suspend fun rejectResponse(response: CoapMessage, reason: String) {
-            this@DatagramLink.reject(peer, response.messageId, reason)
+        override suspend fun rejectResponse(response: CoapMessage, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+            this@DatagramLink.reject(peer, response.messageId, reason, detail)
         }
 
         override suspend fun respond(request: InboundRequest, response: CoapMessage, owner: DeliveryOwner?, confirmable: Boolean): Delivery? {
@@ -464,8 +485,8 @@ internal class DatagramLink(
             acknowledge(request)
         }
 
-        override suspend fun reject(request: InboundRequest, reason: String) {
-            this@DatagramLink.reject(peer, request.message.messageId, reason)
+        override suspend fun reject(request: InboundRequest, reason: EndpointEvent.MessageRejected.Reason, detail: String?) {
+            this@DatagramLink.reject(peer, request.message.messageId, reason, detail)
         }
 
         override suspend fun leaveUnanswered(request: InboundRequest) {

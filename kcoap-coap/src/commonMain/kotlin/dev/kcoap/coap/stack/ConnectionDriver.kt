@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -86,6 +87,7 @@ internal class ConnectionDriver(
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val pings = HashMap<PendingPing, CompletableDeferred<Boolean>>()
     private var writer: Job? = null
+    private var reader: Job? = null
 
     /** Completes when the peer's first CSM arrived; fails if the connection closes before. */
     val established: CompletableDeferred<Unit> = CompletableDeferred()
@@ -112,9 +114,9 @@ internal class ConnectionDriver(
     val codec: MessageCodec get() = framing.codec
 
     /**
-     * Queues the CSM, then starts writing, reading and the timers. The state machine starts first, since
-     * a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would see it. A
-     * connection this side opens starts with one exchange counted for its opener, so it is not released
+     * Queues the CSM, then starts writing and the timers; reading starts with [startReading]. The state machine
+     * starts first, since a peer may send its own CSM at once, and on a multi-threaded dispatcher the reader would
+     * see it. A connection this side opens starts with one exchange counted for its opener, so it is not released
      * as idle before [handOver].
      *
      * Not suspending, so that the owner registers and starts a driver in one step under its own lock, and
@@ -132,8 +134,17 @@ internal class ConnectionDriver(
         }
         wakeups.trySend(Unit)
         writer = scope.launch(CoroutineName("coap-connection-writer")) { writeLoop() }
-        scope.launch(CoroutineName("coap-connection-reader")) { readLoop() }
+        reader = scope.launch(CoroutineName("coap-connection-reader"), CoroutineStart.LAZY) { readLoop() }
         scope.launch(CoroutineName("coap-connection-timers")) { timerLoop() }
+    }
+
+    /**
+     * Starts reading, after [start]. The owner reports the connection as opened in between, outside its lock, so
+     * every event of what the peer sends, its CSM first, comes after that report. A driver closed in between reads
+     * nothing.
+     */
+    fun startReading() {
+        reader?.start()
     }
 
     /** Waits until the connection is established, or else gone. */

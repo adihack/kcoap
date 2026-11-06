@@ -108,11 +108,12 @@ internal interface PeerLink {
     suspend fun deferResponse(response: CoapMessage)
 
     /**
-     * A response the exchange layer rejects for [reason]: it matches no exchange (RFC 7252 §5.3.2,
-     * RFC 7641 §3.5), or carries a critical option the exchange does not recognize (§5.4.1). A datagram
-     * link answers it with a Reset; a connection has none (RFC 8323 §7.2) and drops it.
+     * A response the exchange layer rejects for [reason], with [detail] for a log: it matches no exchange
+     * (RFC 7252 §5.3.2, RFC 7641 §3.5), or carries a critical option the exchange does not recognize (§5.4.1). A
+     * datagram link answers it with a Reset; a connection has none (RFC 8323 §7.2) and drops it. Either reports
+     * an [EndpointEvent.MessageRejected].
      */
-    suspend fun rejectResponse(response: CoapMessage, reason: String)
+    suspend fun rejectResponse(response: CoapMessage, reason: EndpointEvent.MessageRejected.Reason, detail: String? = null)
 
     // ---------------------------------------------------------------- requests this side receives
 
@@ -134,10 +135,10 @@ internal interface PeerLink {
     suspend fun finishWithoutResponse(request: InboundRequest)
 
     /**
-     * Rejects [request] for [reason]: with a Reset over datagrams (RFC 7252 §4.2, §4.3), silently on a
-     * connection, which has no Reset (RFC 8323 §3.1).
+     * Rejects [request] for [reason], with [detail] for a log: with a Reset over datagrams (RFC 7252 §4.2, §4.3),
+     * reported as an [EndpointEvent.MessageRejected], silently on a connection, which has no Reset (RFC 8323 §3.1).
      */
-    suspend fun reject(request: InboundRequest, reason: String)
+    suspend fun reject(request: InboundRequest, reason: EndpointEvent.MessageRejected.Reason, detail: String? = null)
 
     /**
      * Leaves [request], a Non-confirmable one, without an answer, as an overloaded endpoint drops it. When nothing

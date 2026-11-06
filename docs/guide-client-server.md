@@ -64,6 +64,31 @@ suspend fun startServer(scope: CoroutineScope): CoapServer {
 - An `ObservableResource` (or `observable()` in the DSL) is observed through GET or FETCH with Observe;
   call `notifyObservers()` whenever its state changes.
 
+A handler answers with an error by returning it, or, from code several calls below it, by throwing
+`CoapResponseException` with it:
+
+```kotlin
+class Inventory(private val items: Map<Int, String>) {
+    fun find(id: Int): String =
+        items[id] ?: throw CoapResponseException(CoapResponse.error(CoapCode.NOT_FOUND, "no item $id"))
+}
+
+fun ResourceBuilder.items(inventory: Inventory) = resource("items") {
+    get {
+        val id = query.singleOrNull()?.toIntOrNull()
+            ?: throw CoapResponseException(CoapResponse.error(CoapCode.BAD_REQUEST, "which item?"))
+        CoapResponse.content(inventory.find(id))
+    }
+}
+```
+
+- The client gets the response as thrown, its diagnostic payload included, and the server logs it at DEBUG only,
+  since an error response is an ordinary outcome. Thrown while a notification is produced, it ends the observation
+  like any error notification (RFC 7641 §3.2).
+- Any other exception of a handler is answered with a bare 5.00 Internal Server Error, without the exception's
+  message, and logged at ERROR with its stack trace. To turn your own exceptions into responses in one place,
+  override `handle(context)` in a base class of your resources and catch them there.
+
 ## A client
 
 ```kotlin
@@ -117,6 +142,7 @@ host name given to `EndpointResolver.Default`.
 | `reason` | What happened | What to do |
 |---|---|---|
 | `TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET` | The peer did not acknowledge, did not answer in time, or refused | Retry later; check the address |
+| `RESPONSE_TIMEOUT` with a `MessageSecurityException` as `cause` | Responses came, but none verified, and RFC 8613 §8.4 drops those; the message says how many | Re-establish the context (run EDHOC), as for `UNVERIFIED_RESPONSE` |
 | `SESSION_ENDED`, `CONNECTION_CLOSED` | The DTLS session or the connection ended | The next request opens a new one |
 | `BAD_RESPONSE`, `BLOCKWISE_FAILED` | The response broke the protocol, or a body could not be assembled | Report it; retrying rarely helps |
 | `MESSAGE_TOO_LARGE`, `IDENTIFIERS_EXHAUSTED` | A size limit, or a bound on exchanges or Message IDs (see [Limits](#limits-under-load)), was reached | Smaller bodies, fewer requests in flight |
@@ -174,10 +200,58 @@ throws `IllegalArgumentException` for one out of range.
 PROBING_RATE and MAX_LATENCY and derives EXCHANGE_LIFETIME and the other §4.8.2 values. Interceptors see
 every message at the wire, after OSCORE protection; `toString()` of a message never shows its payload.
 The event listener gets retransmissions, timeouts, Resets, duplicates, rejected and malformed messages,
-bounds reached and observer changes; `EndpointEvent.ObserverRemoved` says why an observer went with a
+responses the client rejected, the requests a server finished, bounds reached and observer changes
+([Monitoring](#monitoring)); `EndpointEvent.ObserverRemoved` says why an observer went with a
 `Reason` (`DEREGISTERED`, `RESET`, `NOT_ACKNOWLEDGED`, `RESOURCE_REMOVED`, `ERROR_RESPONSE`, `SESSION_ENDED`,
 `FAILED`) to count by, and a `detail` to log. New events and reasons may come before 1.0, so keep an `else`
 branch in a `when` over them.
+
+## Monitoring
+
+Events say what happened, to count; `stats()` says what is held now, to graph. Both are cheap enough to leave
+on in production: the listener runs outside the endpoint's locks, and `stats()` reads counts each layer keeps
+current, without a lock.
+
+```kotlin
+val monitoring = CoapEndpointConfig {
+    eventListener = EndpointEventListener { event ->
+        if (event is EndpointEvent.RequestCompleted) {
+            println("${event.method} ${event.resourcePath} -> ${event.responseCode} in ${event.duration}")
+        }
+    } + EndpointEventListener { event ->
+        when (event) {
+            is EndpointEvent.SecurityRejected -> println("security: ${event.reason} ${event.responseCode}")
+            is EndpointEvent.ResponseRejected -> println("rejected a response: ${event.reason}")
+            is EndpointEvent.MessageRejected -> println("rejected a message: ${event.reason}")
+            else -> Unit
+        }
+    }
+}
+
+fun report(server: CoapServer) {
+    println(server.endpoint.stats())
+    println(server.stats())
+}
+```
+
+- `RequestCompleted` comes once per request a server finished, Block1 and Q-Block1 blocks included, with the inner
+  method and response code (also under OSCORE, whose outer codes are all an interceptor sees), the resource's path
+  in the tree (null for a 4.04, never the client's Uri-Path, so it is safe as a metric label), whether No-Response
+  suppressed the answer, the OSCORE identity, and the duration. The endpoint answers some requests before a server
+  sees them: duplicates, from its deduplication cache, and the 5.03 of an overload, which `LimitReached` with
+  `CONCURRENT_REQUESTS` counts.
+- `SecurityRejected` comes when message security stopped a request: `VERIFICATION_FAILED` (answered unprotected,
+  RFC 8613 §8.2; under OSCORE the `error`'s cause is the `OscoreException`) or `FRESHNESS_CHALLENGE` (RFC 8613
+  Appendix B.1.2).
+- `ResponseRejected` comes on the client for a response it did not act on: `VERIFICATION_FAILED`, dropped as RFC
+  8613 §8.4 asks, and `UNVERIFIED`, an error without OSCORE. It is the only sign of a bad notification, which
+  does not end an observation.
+- `MessageRejected` and `MalformedMessage` say why with an enum, and what the parser or the stack saw in `detail`,
+  which is for a log, not a label.
+- `CoapEndpoint.stats()`: open exchanges, running handlers, kept transmissions, deduplication entries, reserved
+  Message IDs and connections; `CoapServer.stats()`: observers, Block1 and Block2 transfers, Q-Block1 and Q-Block2
+  bodies. Each names the bound it is held to in [Limits under load](#limits-under-load).
+- `+` combines listeners; one that throws keeps the event from none of the others.
 
 ## Limits under load
 

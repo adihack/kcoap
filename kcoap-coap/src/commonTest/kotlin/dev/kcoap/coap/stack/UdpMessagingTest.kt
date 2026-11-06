@@ -5,6 +5,11 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.common.hexToBytes
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.test.Test
@@ -59,6 +64,12 @@ class UdpMessagingTest {
 
     private fun List<MessagingEffect>.limits(): List<EndpointEvent.LimitReached.Limit> =
         filterIsInstance<MessagingEffect.Event>().mapNotNull { (it.event as? EndpointEvent.LimitReached)?.limit }
+
+    private fun List<MessagingEffect>.rejections(): List<EndpointEvent.MessageRejected.Reason> =
+        filterIsInstance<MessagingEffect.Event>().mapNotNull { (it.event as? EndpointEvent.MessageRejected)?.reason }
+
+    private fun List<MessagingEffect>.malformed(): List<EndpointEvent.MalformedMessage> =
+        filterIsInstance<MessagingEffect.Event>().mapNotNull { it.event as? EndpointEvent.MalformedMessage }
 
     private fun List<MessagingEffect>.delivered(): List<Int> =
         filterIsInstance<MessagingEffect.DeliverRequest>().map { it.message.messageId }
@@ -163,7 +174,9 @@ class UdpMessagingTest {
         messaging.takeEffects()
 
         messaging.receive(1.seconds, response(CoapMessageType.ACK, messageId, token = "ffff"))
-        assertEquals(emptyList(), messaging.takeEffects().outcomes(), "a foreign token is not a piggybacked response")
+        val ignored = messaging.takeEffects()
+        assertEquals(emptyList(), ignored.outcomes(), "a foreign token is not a piggybacked response")
+        assertEquals(listOf(EndpointEvent.MessageRejected.Reason.FOREIGN_TOKEN), ignored.rejections())
 
         messaging.receive(1.seconds, response(CoapMessageType.ACK, messageId, token = "a1b2"))
         val outcome = assertIs<TransmissionOutcome.Acknowledged>(messaging.takeEffects().outcomes().single())
@@ -193,8 +206,16 @@ class UdpMessagingTest {
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, (messageId + 1) and 0xFFFF))
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.RST, (messageId + 1) and 0xFFFF))
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.ACK, messageId), from = otherPeer)
-        assertEquals(emptyList(), messaging.takeEffects().filterNot { it is MessagingEffect.Event })
+        val effects = messaging.takeEffects()
+        assertEquals(emptyList(), effects.filterNot { it is MessagingEffect.Event })
         assertEquals(Transmission.State.IN_FLIGHT, transmission.state)
+        // The two that break §4.2 are reported; those that match nothing are ordinary late messages.
+        assertEquals(
+            listOf(EndpointEvent.MessageRejected.Reason.INVALID_ACKNOWLEDGEMENT, EndpointEvent.MessageRejected.Reason.INVALID_RESET),
+            effects.rejections(),
+        )
+        val invalidAck = effects.filterIsInstance<MessagingEffect.Event>().first().event as EndpointEvent.MessageRejected
+        assertEquals(messageId to "0.01 GET", invalidAck.messageId to invalidAck.detail)
     }
 
     @Test
@@ -237,12 +258,42 @@ class UdpMessagingTest {
     fun rfc7252Section4_3CoapPingIsAnsweredWithReset() {
         val messaging = messaging()
         messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.CON, 0x1234))
-        val reset = messaging.takeEffects().transmitted().single()
+        val effects = messaging.takeEffects()
+        val reset = effects.transmitted().single()
         assertEquals(CoapMessageType.RST, reset.type)
         assertEquals(0x1234, reset.messageId)
+        assertEquals(listOf(EndpointEvent.MessageRejected.Reason.PING), effects.rejections())
         // §4.5: a duplicate gets the same Reset.
         messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 0x1234))
         assertEquals(listOf(reset), messaging.takeEffects().transmitted())
+    }
+
+    @Test
+    fun rfc768ADatagramFromSourcePort0IsDroppedUnansweredAndLoggedOnceAtDebug() {
+        val records = mutableListOf<LogRecord>()
+        val logs = LoggerFactory(LogConfig.build { level = LogLevel.DEBUG; sink = LogSink { records += it } })
+        val messaging = UdpMessaging(params, 1152, 1.seconds, FixedRandom(0.0), loggerFactory = logs)
+        val portZero = Endpoint.Udp("192.0.2.9", 0)
+
+        // A ping, a request and a malformed Confirmable message would each be answered (RFC 7252 §4.2, §4.3).
+        messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.CON, 0x1234), from = portZero)
+        messaging.receive(Duration.ZERO, request(CoapMessageType.CON, 0x2345), from = portZero)
+        messaging.onDatagram(Duration.ZERO, portZero, "49013456".hexToBytes()) // TKL 9 is reserved (RFC 7252 §3)
+        messaging.onDatagram(Duration.ZERO, portZero, byteArrayOf(0x40))
+        val effects = messaging.takeEffects()
+
+        assertEquals(emptyList(), effects.filterNot { it is MessagingEffect.Event }, "nothing sent, nothing delivered")
+        val rejected = effects.filterIsInstance<MessagingEffect.Event>().map { it.event as EndpointEvent.MessageRejected }
+        assertTrue(rejected.all { it.reason == EndpointEvent.MessageRejected.Reason.INVALID_SOURCE && it.peer == portZero })
+        assertEquals(listOf(0x1234, 0x2345, 0x3456, 0), rejected.map { it.messageId }, "from the header, 0 without one")
+        assertNull(rejected.first().detail)
+        assertEquals(4, records.size, "one line per datagram")
+        assertTrue(records.all { it.level == LogLevel.DEBUG && it.error == null }, "$records")
+        assertEquals(0, messaging.sizes.deduplicationEntries, "and no state kept")
+
+        // Any other port is answered as before.
+        messaging.receive(1.seconds, CoapMessage.empty(CoapMessageType.CON, 0x1234), from = Endpoint.Udp("192.0.2.9", 1))
+        assertEquals(CoapMessageType.RST, messaging.takeEffects().transmitted().single().type)
     }
 
     @Test
@@ -368,7 +419,7 @@ class UdpMessagingTest {
         assertEquals(emptyList(), messaging.takeEffects().transmitted(), "the response waits for the upper layer")
 
         // Verified only now, with a critical option the exchange does not recognize (RFC 7252 §5.4.1).
-        messaging.reject(peer, 11, "unrecognized critical option")
+        messaging.reject(peer, 11, EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION)
         assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 11)), messaging.takeEffects().transmitted())
     }
 
@@ -382,19 +433,22 @@ class UdpMessagingTest {
 
         messaging.receive(Duration.ZERO, response(CoapMessageType.CON, 12))
         messaging.takeEffects()
-        messaging.reject(peer, 12, "unknown token")
-        val reset = messaging.takeEffects().transmitted().single()
+        messaging.reject(peer, 12, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN, "token a1b2")
+        val rejected = messaging.takeEffects()
+        val reset = rejected.transmitted().single()
         assertEquals(CoapMessage.empty(CoapMessageType.RST, 12), reset)
-        messaging.reject(peer, 12, "again")
+        val event = rejected.filterIsInstance<MessagingEffect.Event>().single().event as EndpointEvent.MessageRejected
+        assertEquals(listOf<Any?>(12, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN, "token a1b2"), listOf(event.messageId, event.reason, event.detail))
+        messaging.reject(peer, 12, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN)
         assertEquals(emptyList(), messaging.takeEffects().transmitted(), "answered only once")
         messaging.receive(1.seconds, response(CoapMessageType.CON, 12))
         assertEquals(listOf(reset), messaging.takeEffects().transmitted(), "duplicates get the same RST")
 
         messaging.receive(Duration.ZERO, response(CoapMessageType.NON, 13))
         assertEquals(1, messaging.takeEffects().filterIsInstance<MessagingEffect.DeliverResponse>().size)
-        messaging.reject(peer, 13, "unknown token")
+        messaging.reject(peer, 13, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN)
         assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 13)), messaging.takeEffects().transmitted())
-        messaging.reject(otherPeer, 13, "never received")
+        messaging.reject(otherPeer, 13, EndpointEvent.MessageRejected.Reason.UNKNOWN_TOKEN)
         messaging.acknowledge(otherPeer, 13)
         assertEquals(emptyList(), messaging.takeEffects())
     }
@@ -443,13 +497,18 @@ class UdpMessagingTest {
             messageId = 21
         }
         messaging.receive(Duration.ZERO, signaling)
-        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 21)), messaging.takeEffects().transmitted())
+        val reset = messaging.takeEffects()
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 21)), reset.transmitted())
+        assertEquals(listOf(EndpointEvent.MessageRejected.Reason.RESERVED_CODE), reset.rejections())
 
         messaging.receive(Duration.ZERO, signaling.toBuilder().apply { type = CoapMessageType.NON; messageId = 22 }.build())
         messaging.receive(Duration.ZERO, CoapMessage.empty(CoapMessageType.NON, 23))
         val effects = messaging.takeEffects()
         assertEquals(emptyList(), effects.transmitted())
-        assertEquals(2, effects.count { (it as? MessagingEffect.Event)?.event is EndpointEvent.MessageRejected })
+        assertEquals(
+            listOf(EndpointEvent.MessageRejected.Reason.RESERVED_CODE, EndpointEvent.MessageRejected.Reason.EMPTY_NON_CONFIRMABLE),
+            effects.rejections(),
+        )
     }
 
     @Test
@@ -457,14 +516,25 @@ class UdpMessagingTest {
         val messaging = messaging()
         // CON, MID 0x0102, token length 9 (reserved).
         messaging.onDatagram(Duration.ZERO, peer, "49010102".hexToBytes())
-        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 0x0102)), messaging.takeEffects().transmitted())
+        val reset = messaging.takeEffects()
+        assertEquals(listOf(CoapMessage.empty(CoapMessageType.RST, 0x0102)), reset.transmitted())
+        val malformed = reset.malformed().single()
+        assertEquals(EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR, malformed.reason)
+        assertEquals("Reserved token length 9", malformed.detail)
         // The same header as NON is dropped silently, and so is an unknown version and a short datagram.
         messaging.onDatagram(Duration.ZERO, peer, "59010102".hexToBytes())
         messaging.onDatagram(Duration.ZERO, peer, "80010102".hexToBytes())
         messaging.onDatagram(Duration.ZERO, peer, "40".hexToBytes())
         val effects = messaging.takeEffects()
         assertEquals(emptyList(), effects.transmitted())
-        assertEquals(3, effects.count { (it as? MessagingEffect.Event)?.event is EndpointEvent.MalformedMessage })
+        assertEquals(
+            listOf(
+                EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR,
+                EndpointEvent.MalformedMessage.Reason.UNKNOWN_VERSION,
+                EndpointEvent.MalformedMessage.Reason.FORMAT_ERROR,
+            ),
+            effects.malformed().map { it.reason },
+        )
     }
 
     @Test

@@ -374,12 +374,29 @@ endpoint unless the configuration names one.
    endpoint's clock and timer loop, not through a time abstraction of its own.
 6. There is no multicast yet, so nothing is sent to a group through any transport.
 
-**Observability.** A `MessageInterceptor` chain sees every message at the wire, once per message;
-`EndpointEventListener` gets retransmissions, timeouts, resets, duplicates, malformed datagrams,
-rejections, session ends and observer changes. `ObserverRemoved` carries a `Reason` enum (deregistered,
-Reset, not acknowledged, resource removed, error response, session ended, failed) with an optional
-`detail`, so a metric can count by it without parsing text. Logging follows `code-style.md` under the tags
-`coap.message`, `coap.exchange`, `coap.server`, `coap.client` and `transport`.
+**Observability.** A `MessageInterceptor` chain sees every message at the wire, once per message, and so only the
+outer codes of OSCORE traffic. `EndpointEventListener` (several combine with `+`) gets what has no message of its
+own, emitted outside the locks:
+
+| Layer | Events |
+|---|---|
+| Messaging | `Retransmitted`, `TransmissionTimedOut`, `ResetReceived`, `DuplicateReceived`, `MalformedMessage`, `MessageRejected`, `SessionEnded`, `LimitReached`; on connections `ConnectionOpened`, `CsmReceived`, `ReleaseReceived`, `AbortReceived`, `AbortSent`, `ConnectionClosed` |
+| Client exchanges | `ResponseRejected` (a response that failed verification, or an unverified error), `QBlockFallback`; `QBlockRecovery` and `PartialBodyDropped`, also on a server |
+| Server | `RequestCompleted` (one per request the server processes: inner method and code, the resource's path in the tree, No-Response, the security identity, the duration), `SecurityRejected`, `ObserverAdded`, `ObserverRemoved` |
+
+Every reason a metric would count by is a bounded enum, with an optional free-text `detail` for a log:
+`MalformedMessage.Reason`, `MessageRejected.Reason`, `ResponseRejected.Reason`, `SecurityRejected.Reason`,
+`ObserverRemoved.Reason` and `LimitReached.Limit`; `RequestCompleted` takes the resource's path from the tree, never
+the client's Uri-Path, so its values stay bounded too. For a metrics library, events become counters and histograms,
+and `CoapEndpoint.stats()` and `CoapServer.stats()` gauges: exchanges, running handlers, kept transmissions,
+deduplication entries, reserved Message IDs and connections of an endpoint, observers and Block-wise and Q-Block
+bodies of a server. Each layer writes those counts in the critical section it already has, so reading them takes no
+lock and the hot path gains no lock. There is no metrics library dependency.
+
+Logging follows [logging.md](logging.md) under the tags `coap.message`, `coap.exchange`, `coap.server`,
+`coap.client` and `transport`: rejected input from a peer is logged once, at DEBUG and without a stack trace, by the
+layer that decides what happens to it, so a flood of bad datagrams neither fills the log nor holds the messaging
+lock for sink I/O; the default threshold is WARN.
 
 **Errors.** Each facade has one exception type for what goes wrong at runtime, and translates the
 exceptions of the layers below it at its boundary; `IllegalArgumentException` and `IllegalStateException`
@@ -390,11 +407,13 @@ release, so a `when` over it keeps an `else` branch ([versioning](versioning.md#
 | Signal from below | Becomes |
 |---|---|
 | A peer that does not acknowledge, answer or accept (RFC 7252 §4.2) | `TRANSMISSION_TIMEOUT`, `RESPONSE_TIMEOUT`, `RESET` |
+| `MessageSecurityException` from `unprotectResponse`: the response is dropped (RFC 8613 §8.4) | `ResponseRejected`; if nothing verifies in time, `RESPONSE_TIMEOUT` with the last of them as cause and their count in the message |
 | `SessionEndedException`, a closed connection | `SESSION_ENDED`, `CONNECTION_CLOSED` |
 | Any exception from `ClientMessageSecurity.protectRequest`, such as `MessageSecurityException` | `SECURITY`, nothing sent |
 | `ResponseVerification.Unverified` as the only answer | `UNVERIFIED_RESPONSE` |
-| `MessageSecurityException` from `unprotectRequest` on the server | An unprotected error response (RFC 8613 §8.2) |
-| `CoapFormatException` | A Reset or a silent drop, and `EndpointEvent.MalformedMessage` |
+| `MessageSecurityException` from `unprotectRequest` on the server | An unprotected error response (RFC 8613 §8.2), and `SecurityRejected` |
+| `CoapResponseException` from a resource handler | Its response, as if returned; any other exception of a handler is a bare 5.00 |
+| `CoapFormatException` | A Reset or a silent drop, or an Abort on a connection, and `EndpointEvent.MalformedMessage` |
 | A lookup the `EndpointResolver` could not make at runtime | `UNRESOLVED_HOST` |
 | A `coaps` URI, which needs DTLS (RFC 7252 §6.2), before DTLS exists | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
 | A `coaps+tcp` or `coaps+ws` URI (RFC 8323 §9) that no connector or listener runs TLS for | `TRANSPORT_UNAVAILABLE`, nothing resolved or sent |
@@ -836,8 +855,9 @@ What a server has today, all in the one endpoint (see "Resource bounds" and "Add
 - **State keyed by security context where the protocol allows it**: OSCORE contexts are not bound to addresses, so
   a client that changes address keeps its context; exchanges, observations and block-wise state follow the RFCs and
   are keyed by `Endpoint`.
-- **Hooks for metrics**: `EndpointEventListener`, `MessageInterceptor`, `EdhocServerEventListener`; no metrics
-  library.
+- **Hooks for metrics**: `EndpointEventListener` with `RequestCompleted` per request and `SecurityRejected`,
+  `CoapEndpoint.stats()` and `CoapServer.stats()` for gauges, `MessageInterceptor`, `EdhocServerEventListener`; no
+  metrics library.
 
 Planned: a public sans-IO API level, so the protocol cores can run in a Netty or Vert.x event loop, once the
 internal `PeerLink` seam has been stable for a release ([target-architecture.md](target-architecture.md) §5);

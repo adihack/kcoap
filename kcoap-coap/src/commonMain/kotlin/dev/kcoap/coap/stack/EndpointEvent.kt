@@ -1,5 +1,8 @@
 package dev.kcoap.coap.stack
 
+import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.transport.Endpoint
 import kotlin.time.Duration
 
@@ -33,17 +36,141 @@ public sealed interface EndpointEvent {
         override fun toString(): String = "DuplicateReceived(peer=$peer, mid=$messageId)"
     }
 
-    /** A datagram was not a well-formed message (RFC 7252 §4.2); it was answered with a Reset if Confirmable. */
-    public class MalformedMessage(override val peer: Endpoint, public val reason: String) : EndpointEvent {
-        override fun toString(): String = "MalformedMessage(peer=$peer, reason=$reason)"
+    /**
+     * What [peer] sent was not a well-formed message. A datagram was answered with a Reset if its header showed a
+     * Confirmable message, and dropped otherwise (RFC 7252 §4.2, §4.3); a connection was aborted (RFC 8323 §5.6).
+     * [reason] is a bounded set fit for counting; [detail] is what the parser said, for a log.
+     */
+    public class MalformedMessage(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a message was malformed. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /** A datagram with a CoAP version other than 1, silently ignored (RFC 7252 §3). */
+            UNKNOWN_VERSION,
+
+            /**
+             * A message format error (RFC 7252 §3, §3.1, §4.2; RFC 8323 §3.2, §4.2): a header, token, option or
+             * payload marker that breaks the encoding, or on a connection a message above the Max-Message-Size this
+             * side announced (RFC 8323 §5.3.1).
+             */
+            FORMAT_ERROR,
+        }
+
+        override fun toString(): String =
+            "MalformedMessage(peer=$peer, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 
     /**
-     * We rejected a message with a Reset, or dropped it, because we lacked the context to process it. On
-     * reliable transports, which have no Message IDs, [messageId] is 0.
+     * A well-formed message from [peer] was rejected with a Reset, dropped or ignored, because it broke a rule of
+     * the messaging layer or this endpoint lacked the context to process it; or a datagram was dropped unparsed
+     * because no answer could reach its source ([Reason.INVALID_SOURCE]). On reliable transports, which have no
+     * Message IDs, [messageId] is 0. [reason] is a bounded set fit for counting; [detail], when there is one, adds
+     * what a log needs, such as the numbers of unrecognized options.
      */
-    public class MessageRejected(override val peer: Endpoint, public val messageId: Int, public val reason: String) : EndpointEvent {
-        override fun toString(): String = "MessageRejected(peer=$peer, mid=$messageId, reason=$reason)"
+    public class MessageRejected(
+        override val peer: Endpoint,
+        public val messageId: Int,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a message was rejected. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /** An Empty Confirmable message, a CoAP ping, answered with a Reset as RFC 7252 §4.3 asks. */
+            PING,
+
+            /**
+             * An Empty Non-confirmable message, dropped: a Non-confirmable message carries a request or a response
+             * (RFC 7252 §4.3).
+             */
+            EMPTY_NON_CONFIRMABLE,
+
+            /**
+             * A code of a reserved class (1, 6 or 7 over datagrams, RFC 7252 §4.2, §4.3), rejected with a Reset if
+             * Confirmable and dropped otherwise; on a connection a code that is neither a request, a response nor
+             * signaling, dropped.
+             */
+            RESERVED_CODE,
+
+            /** A signaling code (7.xx) that RFC 8323 §5 does not assign, dropped. */
+            UNKNOWN_SIGNAL,
+
+            /** A request to an endpoint without a server, rejected with a Reset (RFC 7252 §4.2). */
+            NO_SERVER,
+
+            /**
+             * A response whose token matches no exchange, rejected with a Reset (RFC 7252 §5.3.2), which also cancels
+             * an observation the client no longer has (RFC 7641 §3.6); dropped on a connection.
+             */
+            UNKNOWN_TOKEN,
+
+            /**
+             * A Non-confirmable request, or a response, with a critical option this endpoint does not recognize, or
+             * one that counts as such for its length or repetition (RFC 7252 §5.4.1, §5.4.3, §5.4.5): rejected with a
+             * Reset, or dropped on a connection. A Confirmable request gets 4.02 Bad Option instead.
+             */
+            UNRECOGNIZED_CRITICAL_OPTION,
+
+            /**
+             * An Acknowledgement carrying a request or a code of a reserved class, silently ignored (RFC 7252
+             * §4.2).
+             */
+            INVALID_ACKNOWLEDGEMENT,
+
+            /**
+             * A response piggybacked on the Acknowledgement of a request, whose token is not the request's
+             * (RFC 7252 §5.3.2): ignored, so the request stays outstanding.
+             */
+            FOREIGN_TOKEN,
+
+            /** A Reset that is not Empty, silently ignored (RFC 7252 §4.2). */
+            INVALID_RESET,
+
+            /**
+             * A datagram from UDP source port 0, which names no port to answer to (RFC 768), dropped before it was
+             * parsed: a Reset to a ping or to a format error (RFC 7252 §4.2, §4.3), an ACK or a response would all
+             * fail to send. [messageId] is the one in its header, or 0 for a datagram shorter than a header.
+             */
+            INVALID_SOURCE,
+        }
+
+        override fun toString(): String =
+            "MessageRejected(peer=$peer, mid=$messageId, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
+    }
+
+    /**
+     * A response from [peer] to a request message security protected, which the client did not act on because it
+     * was not verified. Nothing else shows it to an observation, whose collectors a failure would end, which
+     * RFC 8613 §8.4.2 forbids for one bad notification. [reason] is a bounded set fit for counting; [detail] is what
+     * the security layer said, for a log.
+     */
+    public class ResponseRejected(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a response was rejected. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /**
+             * It failed verification and was dropped (RFC 8613 §8.4): a protected response that did not verify, a
+             * replay, or an unprotected response that is not an error. Its exchange goes on: a request waits for a
+             * response that verifies, and fails with [CoapException.Reason.RESPONSE_TIMEOUT] when none comes, with
+             * the last such failure as cause and their count in its message; an observation keeps its collectors.
+             */
+            VERIFICATION_FAILED,
+
+            /**
+             * An error that came without message security (RFC 8613 §8.2), which nothing acts on (ADR 0008): a
+             * request that has no verified response yet fails with [CoapException.Reason.UNVERIFIED_RESPONSE], which
+             * carries it, and an established observation drops it.
+             */
+            UNVERIFIED,
+        }
+
+        override fun toString(): String =
+            "ResponseRejected(peer=$peer, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 
     /** The DTLS session to [peer] ended; its exchanges and observations were failed (RFC 7252 §9.1.1). */
@@ -259,6 +386,71 @@ public sealed interface EndpointEvent {
         override fun toString(): String = "PartialBodyDropped(peer=$peer, reason=$reason)"
     }
 
+    /**
+     * A `CoapServer` finished a request from [peer]: one event per request message, each block of a Block1 or
+     * Q-Block1 body included, also for a request that message security rejected or challenged, so it counts
+     * OSCORE traffic, whose outer codes are all a [MessageInterceptor] sees.
+     *
+     * Every field is bounded, fit for a metric's labels: [method] and [responseCode] are the inner codes, as the
+     * resource saw them (the outer method on the wire for a request message security could not read), and
+     * [resourcePath] is the path in the resource tree of the resource the request named, never the Uri-Path the
+     * client sent, and null when none exists (a 4.04), when message security rejected the request before its path
+     * could be read, or when it answered a verified request with a freshness challenge instead of passing it on
+     * (RFC 8613 Appendix B.1.2), which no resource saw.
+     *
+     * @property responseCode the code of the response the server sent, or with [isSuppressed] the one it left out
+     *   because the client asked for no such response (No-Response, RFC 7967 §2). Null when the request got no
+     *   response of its own: a Non-confirmable one rejected for an unrecognized critical option (RFC 7252 §5.4.1),
+     *   a block in the middle of a Q-Block1 set (RFC 9177 §4.3), or a response a bound of the endpoint refused.
+     * @property securityIdentity who message security authenticated, or null for a request without it.
+     * @property duration from when the server started on the request to when its response went to the link, on the
+     *   endpoint's `TimeSource`.
+     */
+    public class RequestCompleted(
+        override val peer: Endpoint,
+        public val method: CoapCode,
+        public val resourcePath: String?,
+        public val responseCode: CoapCode?,
+        public val isSuppressed: Boolean,
+        public val securityIdentity: SecurityIdentity?,
+        public val duration: Duration,
+    ) : EndpointEvent {
+        override fun toString(): String =
+            "RequestCompleted(peer=$peer, method=$method, resource=$resourcePath, response=$responseCode" +
+                (if (isSuppressed) " suppressed" else "") + ", identity=${securityIdentity?.description}, duration=$duration)"
+    }
+
+    /**
+     * Message security on a `CoapServer` did not let a request from [peer] reach a resource, for [reason], and
+     * answered it with [responseCode]. Its [RequestCompleted] follows. [error] is what the security layer threw for a
+     * request that failed verification; with kcoap-oscore its cause is the `OscoreException`, whose `OscoreError`
+     * can be counted.
+     */
+    public class SecurityRejected(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val responseCode: CoapCode,
+        public val error: MessageSecurityException? = null,
+    ) : EndpointEvent {
+        /** Why message security stopped a request. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /**
+             * The request failed verification, such as an unknown context, a replay or a failed decryption, and was
+             * answered unprotected with Max-Age 0 (RFC 8613 §8.2).
+             */
+            VERIFICATION_FAILED,
+
+            /**
+             * The request verified, but the security layer answered it with a challenge instead of passing it on,
+             * such as OSCORE's protected 4.01 with Echo after a reboot (RFC 8613 Appendix B.1.2).
+             */
+            FRESHNESS_CHALLENGE,
+        }
+
+        override fun toString(): String =
+            "SecurityRejected(peer=$peer, reason=$reason, response=$responseCode" + (error?.let { ", error=${it.message}" } ?: "") + ")"
+    }
+
     /** A client was added to the observers of [path] (RFC 7641 §4.1). */
     public class ObserverAdded(override val peer: Endpoint, public val path: String) : EndpointEvent {
         override fun toString(): String = "ObserverAdded(peer=$peer, path=$path)"
@@ -309,19 +501,5 @@ public sealed interface EndpointEvent {
 
         override fun toString(): String =
             "ObserverRemoved(peer=$peer, path=$path, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
-    }
-}
-
-/**
- * Receives [EndpointEvent]s. Called synchronously on the endpoint's coroutines, so it must be quick and
- * must not throw; exceptions are caught and logged.
- */
-public fun interface EndpointEventListener {
-    /** Called for every event. */
-    public fun onEvent(event: EndpointEvent)
-
-    public companion object {
-        /** Ignores all events. */
-        public val None: EndpointEventListener = EndpointEventListener { }
     }
 }

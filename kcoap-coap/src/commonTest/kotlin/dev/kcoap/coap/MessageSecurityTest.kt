@@ -14,6 +14,12 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapException
+import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.test.Test
@@ -188,7 +194,10 @@ class MessageSecurityTest {
     @Test
     fun rfc8613Section8_2SecurityErrorsAreAnsweredUnprotectedWithMaxAgeZero() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(security = ServerSide())) {
+        val records = mutableListOf<LogRecord>()
+        val logs = LoggerFactory(LogConfig.build { level = LogLevel.DEBUG; sink = LogSink { records += it } })
+        val serverEndpoint = fixture.endpointConfig().toBuilder().apply { loggerFactory = logs }.build()
+        val server = fixture.server(CoapServerConfig(security = ServerSide()), serverEndpoint) {
             resource("secret") { get { CoapResponse.content("classified") } }
         }
         val client = fixture.client(CoapClientConfig { security = ClientSide(kid = 9); requestTimeout = 20.seconds })
@@ -206,6 +215,26 @@ class MessageSecurityTest {
         assertEquals(0L, answer.options.maxAge)
         assertNull(answer.options.oscore)
         assertEquals("Security context not found", answer.payloadAsText())
+
+        // The server reports the rejection with what the security layer threw, and the request it completed.
+        val rejected = fixture.events.filterIsInstance<EndpointEvent.SecurityRejected>().single()
+        assertEquals(EndpointEvent.SecurityRejected.Reason.VERIFICATION_FAILED, rejected.reason)
+        assertEquals(CoapCode.UNAUTHORIZED, rejected.responseCode)
+        assertEquals("No context", rejected.error?.message)
+        assertEquals(fixture.address(client.endpoint), rejected.peer)
+        assertTrue("VERIFICATION_FAILED" in rejected.toString() && "No context" in rejected.toString(), rejected.toString())
+        val completed = fixture.events.filterIsInstance<EndpointEvent.RequestCompleted>().single()
+        // Its path could not be read, and its method is the outer one.
+        assertEquals(CoapCode.POST, completed.method)
+        assertNull(completed.resourcePath)
+        assertEquals(CoapCode.UNAUTHORIZED, completed.responseCode)
+        assertNull(completed.securityIdentity)
+
+        // A peer's input that message security refused: one DEBUG line on the server, without a stack trace.
+        assertTrue(records.none { it.level >= LogLevel.WARN }, "${records.filter { it.level >= LogLevel.WARN }}")
+        val logged = records.single { it.message.startsWith("Rejected a protected request") }
+        assertEquals(LogLevel.DEBUG, logged.level)
+        assertNull(logged.error)
     }
 
     @Test
@@ -283,6 +312,18 @@ class MessageSecurityTest {
         assertEquals(1, serverSecurity.challenged)
         assertEquals(1, handled, "the challenged request never reached the resource")
         assertEquals(2, fixture.traffic.count { it.message?.isRequest == true })
+
+        val challenged = fixture.events.filterIsInstance<EndpointEvent.SecurityRejected>().single()
+        assertEquals(EndpointEvent.SecurityRejected.Reason.FRESHNESS_CHALLENGE, challenged.reason)
+        assertEquals(CoapCode.UNAUTHORIZED, challenged.responseCode)
+        assertNull(challenged.error)
+        val completed = fixture.events.filterIsInstance<EndpointEvent.RequestCompleted>()
+        assertEquals(
+            listOf(CoapCode.UNAUTHORIZED to null, CoapCode.CHANGED to "/lock"),
+            completed.map { it.responseCode to it.resourcePath },
+            "the challenge answered for the security layer, the repeat for the resource",
+        )
+        assertTrue(completed.all { it.method == CoapCode.PUT && it.securityIdentity?.description == "kid 1" })
     }
 
     @Test

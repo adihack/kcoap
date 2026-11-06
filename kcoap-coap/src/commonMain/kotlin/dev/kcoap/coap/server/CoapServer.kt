@@ -9,6 +9,7 @@ import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.OptionSet
 import dev.kcoap.coap.codec.UdpMessageCodec
 import dev.kcoap.coap.security.MessageSecurityException
+import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.Blockwise
 import dev.kcoap.coap.stack.CoapEndpoint
@@ -16,6 +17,7 @@ import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
+import dev.kcoap.coap.stack.EndpointEvent.SecurityRejected
 import dev.kcoap.coap.stack.InboundRequest
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.coap.stack.RequestHandler
@@ -63,6 +65,14 @@ import kotlinx.coroutines.SupervisorJob
  * unprotected 5.00 Internal Server Error with Max-Age 0. A failure while sending a notification removes
  * that observer, unless a bound of the endpoint refused it (RFC 7252 §11.3): then the latest state goes later
  * (RFC 7641 §4.5). When even the 5.00 cannot be sent, the failure is logged.
+ *
+ * Every request the server processes ends in an [EndpointEvent.RequestCompleted] to the endpoint's event listener,
+ * with its inner method and response code, the resource it named and how long it took, and one that message
+ * security stopped also in an [EndpointEvent.SecurityRejected]. Requests the endpoint answers before they reach the
+ * server have none: a duplicate answered from the deduplication cache (RFC 7252 §4.5), one after [close], and one
+ * refused with 5.03 because [CoapEndpointConfig.maxConcurrentRequests] handlers run, which
+ * [EndpointEvent.LimitReached] with `CONCURRENT_REQUESTS` counts instead. What a peer sent wrong is logged once, at
+ * DEBUG and without a stack trace; what the server could not handle, such as a failing handler, at ERROR.
  *
  * The server is safe to use from any number of coroutines. Its handlers run on the endpoint's scope, one
  * coroutine per request, and [close] cancels those still running.
@@ -170,6 +180,19 @@ public class CoapServer private constructor(
     public fun add(resource: CoapResource): CoapResource = rootResource.add(resource)
 
     /**
+     * How much the server holds now: observers, and Block-wise and Q-Block bodies in progress ([ServerStats]).
+     * Reading takes no lock, so a metrics library may poll it as often as it likes, from any thread; what its
+     * endpoint holds is [CoapEndpoint.stats].
+     */
+    public fun stats(): ServerStats = ServerStats(
+        observers = observations.size,
+        block1Transfers = blockwise.uploadCount,
+        block2Transfers = blockwise.representationCount,
+        qBlock1Bodies = qBlock.partialBodyCount,
+        qBlock2Bodies = qBlock.servedBodyCount,
+    )
+
+    /**
      * Stops serving: requests from now on are rejected as if there were no server, the handlers still
      * running are cancelled, and observers are dropped silently. A request on a connection whose handler
      * was cancelled before it answered gets 5.03 Service Unavailable, since RFC 8323 §3.3 has every
@@ -193,6 +216,7 @@ public class CoapServer private constructor(
     // ---------------------------------------------------------------- the request pipeline
 
     private suspend fun process(inbound: InboundRequest) {
+        val started = endpoint.now()
         val security = config.security
         val unprotected = if (security == null) {
             null
@@ -202,16 +226,20 @@ public class CoapServer private constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: MessageSecurityException) {
-                log.warn { "Rejected a protected request from ${inbound.peer}: ${e.message}" }
+                // A peer's input that message security refused: logged once, at DEBUG, and reported.
+                log.debug { "Rejected a protected request from ${inbound.peer}: ${e.message}" }
                 // Nothing acted on it, so a duplicate may be processed again (RFC 7252 §4.5).
                 inbound.isRepeatable = true
-                answerUnprotected(inbound, securityError(e))
+                val error = securityError(e)
+                val answer = answerUnprotected(inbound, error)
+                endpoint.report(EndpointEvent.SecurityRejected(inbound.peer, SecurityRejected.Reason.VERIFICATION_FAILED, error.code, e))
+                completed(inbound, inbound.message.code, null, null, answer, started)
                 return
             } catch (e: Exception) {
                 // An application callback behind the security layer failed, such as a context repository.
                 log.error(e) { "The security layer failed on a request from ${inbound.peer}" }
                 inbound.isRepeatable = true
-                answerUnprotected(inbound, internalError())
+                completed(inbound, inbound.message.code, null, null, answerUnprotected(inbound, internalError()), started)
                 return
             }
         }
@@ -220,38 +248,78 @@ public class CoapServer private constructor(
         if (unprotected != null && challenge != null) {
             // RFC 8613 Appendix B.1.2: the security layer answers instead of the resource.
             log.debug { "Security challenge ${challenge.code} for ${inbound.peer}" }
-            try {
+            endpoint.report(EndpointEvent.SecurityRejected(inbound.peer, SecurityRejected.Reason.FRESHNESS_CHALLENGE, challenge.code))
+            val answer = try {
                 inbound.respond(unprotected.protectResponse(challenge.toBuilder().apply { token = request.token }.build()))
+                Answer(challenge.code)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 log.error(e) { "Could not send the security challenge to ${inbound.peer}" }
                 answerUnprotected(inbound, internalError())
             }
+            completed(inbound, request.code, null, unprotected.identity, answer, started)
             return
         }
+        val target = lookUp(request.options.uriPath)
         val reply = try {
-            answer(inbound, request, unprotected) ?: return
+            answer(inbound, request, unprotected, target)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.error(e) { "Failed to answer ${request.code} ${request.options.path}" }
             Reply.Single(CoapResponse(CoapCode.INTERNAL_SERVER_ERROR))
         }
-        send(inbound, request, unprotected, reply)
+        // Null when the request was rejected without a response (RFC 7252 §5.4.1).
+        val answer = if (reply == null) Answer.NONE else send(inbound, request, unprotected, reply)
+        completed(inbound, request.code, request.options.uriPath.takeIf { target.resource != null }, unprotected?.identity, answer, started)
+    }
+
+    /**
+     * What the server sent in answer to a request, for [EndpointEvent.RequestCompleted]: the inner [code] of its
+     * response, or the one No-Response suppressed ([isSuppressed]); null when no response went out.
+     */
+    private class Answer(val code: CoapCode?, val isSuppressed: Boolean = false) {
+        companion object {
+            val NONE = Answer(null)
+        }
+    }
+
+    /**
+     * Reports [EndpointEvent.RequestCompleted] for [inbound], unless no one listens. [resourceSegments] are the
+     * Uri-Path of a request that found its resource, and so that resource's path in the tree, also when it was
+     * removed meanwhile.
+     */
+    private fun completed(
+        inbound: InboundRequest,
+        method: CoapCode,
+        resourceSegments: List<String>?,
+        identity: SecurityIdentity?,
+        answer: Answer,
+        started: Duration,
+    ) {
+        if (!endpoint.reportsEvents) return
+        val duration = endpoint.now() - started
+        val path = resourceSegments?.joinToString("/", prefix = "/")
+        endpoint.report(EndpointEvent.RequestCompleted(inbound.peer, method, path, answer.code, answer.isSuppressed, identity, duration))
     }
 
     /** 5.00 with Max-Age 0, the shape of [securityError]: the answer when the pipeline itself failed. */
     private fun internalError(): CoapResponse = CoapResponse(CoapCode.INTERNAL_SERVER_ERROR, OptionSet.build { maxAge(0) })
 
-    /** Answers without message security; a failure to send even that is only logged, as nothing else can be sent. */
-    private suspend fun answerUnprotected(inbound: InboundRequest, response: CoapResponse) {
+    /**
+     * Answers without message security; a failure to send even that is only logged, as nothing else can be sent.
+     * Returns what went out.
+     */
+    private suspend fun answerUnprotected(inbound: InboundRequest, response: CoapResponse): Answer {
         try {
             inbound.respond(response.toMessage(inbound.message.token))
+            return Answer(response.code)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.error(e) { "Could not answer ${inbound.message.code} from ${inbound.peer}" }
+            return Answer.NONE
         }
     }
 
@@ -269,11 +337,10 @@ public class CoapServer private constructor(
         return CoapResponse(e.responseCode, options, body ?: e.diagnostic?.encodeToByteArray() ?: ByteArray(0))
     }
 
-    /** The reply to [request], or null when the request is rejected without one. */
-    private suspend fun answer(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?): Reply? {
+    /** The reply to [request] for its [target], or null when the request is rejected without one. */
+    private suspend fun answer(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, target: Target): Reply? {
         val options = request.options
         val peer = inbound.peer
-        val target = lookUp(options.uriPath)
         val resource = target.resource
 
         fun refused(response: CoapResponse): Reply.Single = inbound.refusedWith(response, unprotected)
@@ -289,7 +356,7 @@ public class CoapServer private constructor(
             val numbers = unrecognized.joinToString { it.number.toString() }
             if (!inbound.isConfirmable) {
                 // RFC 7252 §5.4.1: in a Non-confirmable message they cause a rejection.
-                inbound.reject("unrecognized critical options $numbers")
+                inbound.reject(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, "options $numbers")
                 return null
             }
             return refused(CoapResponse.error(CoapCode.BAD_OPTION, "Unrecognized critical option $numbers"))
@@ -478,7 +545,8 @@ public class CoapServer private constructor(
         val access = AccessRequest(request.code, path, target.resource, inbound.peer, identity, inbound.peerIdentity)
         val policy = target.access
         if (policy.permits(access)) return null
-        log.warn { "Refused ${request.code} ${request.options.path} from ${inbound.peer} (${identity?.description ?: "no message security"}): $policy" }
+        // A peer's request the policy refused: logged once, at DEBUG; its RequestCompleted counts it.
+        log.debug { "Refused ${request.code} ${request.options.path} from ${inbound.peer} (${identity?.description ?: "no message security"}): $policy" }
         // RFC 7252 §5.9.2.2: 4.01 asks the client to authenticate first; one that message security authenticated
         // and is still refused gets 4.03 (§5.9.2.4).
         return CoapResponse(if (identity == null) CoapCode.UNAUTHORIZED else CoapCode.FORBIDDEN)
@@ -544,38 +612,53 @@ public class CoapServer private constructor(
         return CoapResponse.error(CoapCode.NOT_ACCEPTABLE)
     }
 
+    /**
+     * The handler's response: what it returned, the response of a [CoapResponseException] it threw, an ordinary
+     * outcome logged at DEBUG, or for any other exception a bare 5.00, a failure logged at ERROR.
+     */
     private suspend fun invoke(resource: CoapResource, context: RequestContext): CoapResponse = try {
         resource.handle(context)
     } catch (e: CancellationException) {
         throw e
+    } catch (e: CoapResponseException) {
+        log.debug { "Handler of ${resource.path} answered ${context.method} with ${e.response}" }
+        e.response
     } catch (e: Exception) {
         log.error(e) { "Handler of ${resource.path} failed on ${context.method}" }
         CoapResponse(CoapCode.INTERNAL_SERVER_ERROR)
     }
 
-    private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply) {
+    /** Sends [reply] and returns what went out. */
+    private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply): Answer =
         when (reply) {
             is Reply.Single -> send(inbound, request, unprotected, reply)
             // RFC 9177 §4.3, Appendix B: an Empty ACK for a Confirmable block, and on a connection it counts as answered.
-            Reply.None -> inbound.finishWithoutResponse()
+            Reply.None -> {
+                inbound.finishWithoutResponse()
+                Answer.NONE
+            }
             is Reply.Body -> {
-                val challenge = qBlock.send(QBlockRequest(inbound, request, unprotected), reply)
+                val sent = qBlock.send(QBlockRequest(inbound, request, unprotected), reply)
+                val challenge = sent.challenge
                 if (challenge != null) {
                     send(inbound, request, unprotected, challenge)
-                } else if (reply.isNew) {
-                    // RFC 9177 §4.5: the registration response is a body; notifications follow once it went out.
-                    reply.body.observation?.onRegistrationSent(null, inbound.message.type == CoapMessageType.CON, endpoint.now())
+                } else {
+                    if (reply.isNew) {
+                        // RFC 9177 §4.5: the registration response is a body; notifications follow once it went out.
+                        reply.body.observation?.onRegistrationSent(null, inbound.message.type == CoapMessageType.CON, endpoint.now())
+                    }
+                    // What went out on this request: a block, a refused follow-up's 4.00, or nothing for a Continue.
+                    Answer(sent.code)
                 }
             }
         }
-    }
 
-    private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply.Single) {
+    private suspend fun send(inbound: InboundRequest, request: CoapMessage, unprotected: UnprotectedRequest?, reply: Reply.Single): Answer {
         val response = reply.response
         if (reply.observation == null && isSuppressed(request.options, response.code)) {
             // RFC 7967 §2: the client is not interested; a Confirmable request still gets its ACK.
             inbound.finishWithoutResponse()
-            return
+            return Answer(response.code, isSuppressed = true)
         }
         val message = response.toMessage(request.token)
         if (!reply.isChallenge && mustVerifyAddress(inbound, request, unprotected, listOf(message), isBurst = false)) {
@@ -584,8 +667,7 @@ public class CoapServer private constructor(
             reply.observation?.let {
                 observations.remove(it, ObserverRemoved.Reason.ERROR_RESPONSE, "address not verified")
             }
-            send(inbound, request, unprotected, challenge(inbound.peer, endpoint.now(), kept))
-            return
+            return send(inbound, request, unprotected, challenge(inbound.peer, endpoint.now(), kept))
         }
         val observation = reply.observation
         val confirmable = isSeparateConfirmable(inbound, request, unprotected, reply)
@@ -606,11 +688,11 @@ public class CoapServer private constructor(
                 log.error(e) { "Could not send ${response.code} for ${request.code} ${request.options.path} to ${inbound.peer}" }
             }
             observation?.let { observations.remove(it, ObserverRemoved.Reason.FAILED, "registration: ${e.message}") }
-            if (!bounded) answerUnprotected(inbound, internalError())
-            return
+            return if (bounded) Answer.NONE else answerUnprotected(inbound, internalError())
         }
         // Piggybacked, or written on a connection, the registration response has no delivery of its own.
         observation?.onRegistrationSent(delivery, delivery?.isConfirmable == true, endpoint.now())
+        return Answer(response.code)
     }
 
     // ---------------------------------------------------------------- address verification

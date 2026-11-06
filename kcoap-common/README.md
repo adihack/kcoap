@@ -25,7 +25,7 @@ Logcat or OSLog:
 
 ```kotlin
 KcoapLogging.configure {
-    level = LogLevel.INFO
+    level = LogLevel.INFO                    // lifecycle too; the default is WARN
     level(LogTags.OSCORE, LogLevel.DEBUG)
     sink = ConsoleSink()
 }
@@ -58,7 +58,7 @@ The signals of the SPIs between kcoap's layers (`MessageSecurityException`, `Coa
 
 | Test | What |
 |---|---|
-| `LoggerTest` | the INFO default, levels inherited along tags and cleared again, OFF, messages not built when disabled, fields and child tags, payloads as hex only when enabled, a sink that throws, a global change reaching existing loggers |
+| `LoggerTest` | the WARN default on the console sink, levels inherited along tags and cleared again, OFF, messages not built when disabled, fields and child tags, payloads as hex only when enabled, a sink that throws, a global change reaching existing loggers |
 | `SinkTest` | the ring buffer (newest records in order, a capacity it needs), composite and threshold sinks, the formatter with an error, the console sink |
 | `BytesTest` | hex both ways and bad hex, `constantTimeEquals`, `wipe`, the unsigned big-endian helpers |
 | `KcoapExceptionTest` | a subtype keeps its message and cause, the cause is optional, one `catch` handles every subtype |
