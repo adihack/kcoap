@@ -14,6 +14,7 @@ import dev.kcoap.coap.server.CoapServerConfig
 import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MissingBlocks
@@ -161,12 +162,13 @@ class QBlockObserveTest {
         amplification: AmplificationPolicy = AmplificationPolicy.OFF,
         serverParameters: TransmissionParameters = parameters,
         clientParameters: TransmissionParameters = parameters,
+        serverMessageIds: Int = CoapEndpointConfig.DEFAULT_MAX_RESERVED_MESSAGE_IDS,
     ): Setup {
         val fixture = StackFixture(this, seed)
         val resource = Resource("obs", type, bodies)
         val server = fixture.server(
             CoapServerConfig(amplification = amplification, qBlock = QBlockServerConfig(isEnabled = true)),
-            fixture.endpointConfig(parameters = serverParameters),
+            fixture.endpointConfig(parameters = serverParameters).toBuilder().apply { maxReservedMessageIds = serverMessageIds }.build(),
         ) { add(resource) }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, missingBlockMBit = missingBlockMBit)
         val client = fixture.client(
@@ -809,6 +811,34 @@ class QBlockObserveTest {
         assertEquals(listOf(2L, 3L), asked.options.qBlock2List.map { it.number }, "the blocks the server gave up on")
         assertTrue(setup.fixture.traffic.first { it.message == asked }.at >= 10.seconds + parameters.maxTransmitSpan)
         assertEquals(2, setup.received.size)
+    }
+
+    /**
+     * RFC 7252 §11.3, RFC 7641 §4.5: a block of a notification body that a bound of the endpoint refuses, here for
+     * want of a Message ID, ends that body but keeps the observer, and the latest state comes as a whole body once
+     * Message IDs are free again (§4.4: after EXCHANGE_LIFETIME), without another change.
+     */
+    @Test
+    fun rfc7641Section4_5ANotificationBlockAFullEndpointRefusesKeepsTheObserver() = runTest {
+        // The registration's body takes three Message IDs (block 0 is piggybacked), the next body two of its four.
+        val setup = setup({ body(3 * 1024 + 300, it) }, type = CoapMessageType.CON, serverMessageIds = 5)
+        setup.observe(this, CoapRequest.Builder(CoapCode.GET, CoapUri.parse(setup.uri)).build())
+        delay(10.seconds)
+        setup.resource.change()
+        delay(10.seconds)
+
+        val limits = setup.fixture.events.filterIsInstance<EndpointEvent.LimitReached>().map { it.limit }
+        assertEquals(listOf(EndpointEvent.LimitReached.Limit.MESSAGE_IDS), limits.distinct())
+        assertEquals(1, setup.resource.observerCount)
+        val sent = setup.fixture.sentBy(setup.server.endpoint).filter { it.options.observe == 1L }
+        assertEquals(listOf(0L, 1L), sent.map { it.options.qBlock2!!.number }, "block 2 of the body was refused")
+
+        delay(parameters.exchangeLifetime + 1.minutes)
+        assertEquals(1, setup.resource.observerCount)
+        assertTrue(setup.fixture.events.none { it is EndpointEvent.ObserverRemoved })
+        assertEquals(body(3 * 1024 + 300, 1).toList(), setup.received.last().payload.toList())
+        val whole = setup.fixture.sentBy(setup.server.endpoint).filter { (it.options.observe ?: 0L) > 1L }
+        assertEquals(listOf(0L, 1L, 2L, 3L), whole.map { it.options.qBlock2!!.number }.distinct().sorted(), "a whole body again")
     }
 
     /**

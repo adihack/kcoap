@@ -113,6 +113,9 @@ internal class ConnectionLink(
         driver.answered(request.sequence)
     }
 
+    /** Every request on a connection is answered (RFC 8323 §3.3), so none is left unanswered. */
+    override suspend fun leaveUnanswered(request: InboundRequest) = Unit
+
     // ---------------------------------------------------------------- messages this side starts
 
     /**

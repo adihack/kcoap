@@ -326,6 +326,8 @@ final class dev.kcoap.coap/CoapResponse { // dev.kcoap.coap/CoapResponse|null[0]
         final fun <get-payload>(): kotlin/ByteArray // dev.kcoap.coap/CoapResponse.payload.<get-payload>|<get-payload>(){}[0]
     final val payloadSize // dev.kcoap.coap/CoapResponse.payloadSize|{}payloadSize[0]
         final fun <get-payloadSize>(): kotlin/Int // dev.kcoap.coap/CoapResponse.payloadSize.<get-payloadSize>|<get-payloadSize>(){}[0]
+    final val retryAfter // dev.kcoap.coap/CoapResponse.retryAfter|{}retryAfter[0]
+        final fun <get-retryAfter>(): kotlin.time/Duration? // dev.kcoap.coap/CoapResponse.retryAfter.<get-retryAfter>|<get-retryAfter>(){}[0]
 
     final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.coap/CoapResponse.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // dev.kcoap.coap/CoapResponse.hashCode|hashCode(){}[0]
@@ -341,6 +343,7 @@ final class dev.kcoap.coap/CoapResponse { // dev.kcoap.coap/CoapResponse|null[0]
         final fun deleted(): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.deleted|deleted(){}[0]
         final fun error(dev.kcoap.coap/CoapCode, kotlin/String? = ...): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.error|error(dev.kcoap.coap.CoapCode;kotlin.String?){}[0]
         final fun from(dev.kcoap.coap/CoapMessage): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.from|from(dev.kcoap.coap.CoapMessage){}[0]
+        final fun tooManyRequests(kotlin.time/Duration, kotlin/String? = ...): dev.kcoap.coap/CoapResponse // dev.kcoap.coap/CoapResponse.Companion.tooManyRequests|tooManyRequests(kotlin.time.Duration;kotlin.String?){}[0]
     }
 }
 

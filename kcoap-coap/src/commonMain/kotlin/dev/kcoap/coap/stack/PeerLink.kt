@@ -139,6 +139,13 @@ internal interface PeerLink {
      */
     suspend fun reject(request: InboundRequest, reason: String)
 
+    /**
+     * Leaves [request], a Non-confirmable one, without an answer, as an overloaded endpoint drops it. When nothing
+     * acted on it ([InboundRequest.isRepeatable]), a datagram link lets deduplication forget it for room (RFC 7252
+     * §4.5). A connection answers every request (RFC 8323 §3.3), so it is never asked.
+     */
+    suspend fun leaveUnanswered(request: InboundRequest)
+
     // ---------------------------------------------------------------- messages this side starts
 
     /**

@@ -105,6 +105,7 @@ class LibcoapClientAgainstKcoapTest {
                     attributes = ResourceAttributes(maximumSize = 3000)
                     get { CoapResponse.content(large) }
                 }
+                resource("busy") { get { CoapResponse.tooManyRequests(30.seconds, "slow down") } }
                 add(counter)
             }
             uri = "coap://127.0.0.1:${(server.endpoint.transport as KtorUdpTransport).localEndpoint.port}"
@@ -251,6 +252,21 @@ class LibcoapClientAgainstKcoapTest {
         val gap = real.first - probe.first
         assertTrue(gap < 1.seconds, "the real request follows the 4.02 within 1 s, not after a timeout: $gap")
         assertEquals(CoapCode.CONTENT, sent.last().code)
+    }
+
+    /**
+     * RFC 8516: libcoap's coap-client takes a 4.29 Too Many Requests with Max-Age from kcoap's helper, logs the code
+     * and the option, and reports it as it does any error response: the code and the diagnostic payload.
+     */
+    @Test
+    fun rfc8516LibcoapReceivesTooManyRequestsWithMaxAge() {
+        val result = client("$uri/busy")
+        assertTrue("4.29" in result.receivedCodes(), "$result")
+        val refusal = Libcoap.Wire(isSent = false, line = result.messages.single { " c:4.29 " in it })
+        assertEquals(listOf("30"), refusal.option("Max-Age"), "$result")
+        val sent = this.sent.single { it.code == CoapCode.TOO_MANY_REQUESTS }
+        assertEquals(30L, sent.options.maxAge)
+        assertTrue("4.29 slow down" in result.stderr.lines(), "coap-client prints the code and the diagnostic: $result")
     }
 
     @Test

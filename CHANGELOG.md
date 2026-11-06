@@ -31,6 +31,20 @@ adds its entry and migration note below.
   by layer); and a full pass over docs/architecture.md, docs/roadmap.md and docs/code-style.md (ownership of arrays
   and keys, the API vocabulary, errors, final implementations). The README installs through the BOM and says that
   before 1.0 a minor release may break the API.
+- Bounds in total and per peer on what a flood can fill (SRV-2, RFC 7252 §11.3), each in
+  `CoapEndpointConfig.Builder`: `maxDeduplicationEntriesPerPeer` (10 000), `maxReservedMessageIds` (262 144),
+  `maxReservedMessageIdsPerPeer` (65 536, the Message ID space) and `maxExchanges` (16 384), with the
+  `EndpointEvent.LimitReached.Limit` values `DEDUPLICATION_ENTRIES_PER_PEER`, `MESSAGE_IDS`, `MESSAGE_IDS_PER_PEER`
+  and `EXCHANGES`; what each does at its bound is under "Security". Defaults in
+  [the guide](docs/guide-client-server.md#limits-under-load).
+- 4.29 Too Many Requests (SRV-2, RFC 8516): `CoapResponse.tooManyRequests(retryAfter, diagnostic)` sets Max-Age to
+  the wait in whole seconds, rounded up; `CoapResponse.retryAfter` reads the wait a 4.29 or a 5.03 asks for (its
+  Max-Age, 60 seconds without one); and the client helper `RetryAfter(maxWait, maxAttempts)` sends a request again
+  once that wait has passed, never sooner, returns a refusal whose wait is above `maxWait` at once, and ends the
+  wait when the caller is cancelled. libcoap 4.3.5b's `coap-client` receives the 4.29 with its Max-Age and prints
+  the code. kcoap has no rate limiter of its own: which client asks too often is the application's decision.
+- `kcoap-testkit`: `InMemoryNetwork.spoof(from, to, bytes)` sends a datagram from a forged source address, with
+  nothing attached there, for flood tests (SRV-2).
 - `KcoapException` (kcoap-common), the root of the exception of every protocol facade (WP-D2); see "Changed
   (breaking)". A Swift smoke test (WP-D2, which took over PL-3): the unpublished module kcoap-swift-smoke links a
   `KcoapSmoke` framework of kcoap-coap for the Apple targets, and its Swift script, which the macOS CI job compiles
@@ -335,6 +349,14 @@ adds its entry and migration note below.
 
 ### Changed
 
+- Tokens on TLS connections (SRV-2): `TokenGenerator.sessionSequence`, every endpoint's default, numbers the
+  requests on a `coaps+tcp` or `coaps+ws` connection from zero, as it did on DTLS sessions (RFC 9175 §4.2), and
+  starts again on the next connection; the first request on a connection has the empty token. Plain UDP, TCP
+  and WebSockets keep 8 random bytes (RFC 7252 §5.3.1). TLS does not bind a response to its request, so a count,
+  which never repeats while the keys last, does that better than chance, and inside TLS its predictability gives
+  nothing away.
+- A response that a bound of the endpoint refused (`IDENTIFIERS_EXHAUSTED`) is no longer followed by a 5.00
+  Internal Server Error, which needed the same room, and is logged at debug instead of error (SRV-2).
 - The post-quantum key encodings are part of kcoap-crypto's algorithm types (WP-C2): `KeyType.seedLength` and
   `KeyType.expandedPrivateKeyLength` give the two private-key encodings of the ML-KEM and ML-DSA types (FIPS
   203, FIPS 204), and `SignatureAlgorithm.trLength` the length of ML-DSA's `tr`; they are null for the other
@@ -986,6 +1008,35 @@ Build governance (WP-C1):
 
 ### Security
 
+- Spoofed floods (SRV-2, RFC 7252 §11.3, §11.4):
+  - A full deduplication cache dropped every new message, so a flood from forged addresses kept every other
+    client out for EXCHANGE_LIFETIME, and one source could take the whole cache. It now first forgets the oldest
+    entry RFC 7252 §4.5 lets the endpoint process again (an idempotent request once answered, a message answered
+    with a Reset, a request the server refused before anything acted on it, such as a message-security failure,
+    an access refusal or a 4.04), keeps a quarter of its places for such entries, so a flood of POSTs never keeps
+    a GET out, nor the responses to the endpoint's own requests (a response that matches no exchange, all a
+    forged source can send, is reset at once), and gives each peer at most `maxDeduplicationEntriesPerPeer`. A
+    late duplicate of a forgotten request is processed again, which §4.5 allows for such requests. A request
+    message security verified is never forgotten, an OSCORE GET or FETCH included, since its Partial IV is in
+    the replay window (RFC 8613 §7.4) and a retransmission processed again would get a replay error instead of
+    the answer it lost.
+  - Message IDs were reserved without a bound: a flood of Non-confirmable requests from forged sources made the
+    endpoint reserve one for every response, for EXCHANGE_LIFETIME. Beyond `maxReservedMessageIds`, or
+    `maxReservedMessageIdsPerPeer` towards one peer, the message that needs a new ID is refused instead; §4.4
+    forbids reusing one early. Responses to Non-confirmable requests, which such a flood draws and a client may
+    lose anyway (§5.2.3), are refused already at three quarters of each bound, so the endpoint's own requests,
+    notifications and separate responses to Confirmable requests keep a quarter. A notification a bound refuses
+    does not remove its observer: it goes later with the latest state (RFC 7641 §4.5), after a back-off from
+    ACK_TIMEOUT doubling up to about a minute, and is logged at debug. Piggybacked responses need none.
+  - Separate responses and notifications to forged addresses were kept and retransmitted without a total bound.
+    Beyond `maxExchanges` the endpoint forgets the oldest Non-confirmable message kept only for a Reset, then
+    gives up the oldest Confirmable one that a retransmission did not get acknowledged either, and only then
+    refuses; the client exchanges count against it too.
+  - `SpoofedFloodTest` floods each bound from up to 2 000 forged sources and checks that a client at a real
+    address is still served: piggybacked and separate responses, notifications, and the endpoint's own
+    requests. It also floods every refusal that lets a request be processed again (a message-security failure,
+    an access refusal, an overload 5.03 or drop), and checks that an OSCORE request whose ACK was lost gets that
+    ACK again under that pressure.
 - CoAP client (WP-T1): a `coaps+tcp` or `coaps+ws` request went out on whatever peer the `EndpointResolver`
   returned, so a resolver that mapped such a URI to a plain `Endpoint.Tcp` or `Endpoint.WebSocket` sent it in
   plaintext (RFC 8323 §9). `CoapClient` now sends a `coaps+tcp` or `coaps+ws` request only when a connector or

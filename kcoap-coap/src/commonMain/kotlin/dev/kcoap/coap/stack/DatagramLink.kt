@@ -56,6 +56,10 @@ internal class DatagramLink(
         config.loggerFactory,
         config.maxDeduplicationEntries,
         config.maxExchangesPerPeer,
+        config.maxDeduplicationEntriesPerPeer,
+        config.maxExchanges,
+        config.maxReservedMessageIds,
+        config.maxReservedMessageIdsPerPeer,
     )
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
 
@@ -185,12 +189,15 @@ internal class DatagramLink(
     /** Body leases that hold a slot or wait for one, for tests. */
     suspend fun leaseCount(): Int = lock.withLock { messaging.leaseCount }
 
+    /** What the messaging layer keeps, for tests. */
+    suspend fun sizes(): UdpMessaging.Sizes = lock.withLock { messaging.sizes }
+
     // ---------------------------------------------------------------- answering what arrived
 
     /**
      * Answers the request [requestMessageId] from [peer], which arrived as [requestType]: piggybacked if still
      * possible, else separately as [separateType] (Confirmable requests only); returns the transmission of a
-     * separate response.
+     * separate response. [repeatable] says that nothing acted on the request ([UdpMessaging.respond]).
      */
     suspend fun respond(
         peer: Endpoint,
@@ -199,7 +206,8 @@ internal class DatagramLink(
         response: CoapMessage,
         owner: TransmissionOwner?,
         separateType: CoapMessageType,
-    ): Transmission? = withMessaging { now -> respond(now, peer, requestMessageId, requestType, response, owner, separateType) }
+        repeatable: Boolean = false,
+    ): Transmission? = withMessaging { now -> respond(now, peer, requestMessageId, requestType, response, owner, separateType, repeatable) }
 
     /** Accepts a Confirmable message from [peer] with an Empty ACK (RFC 7252 §5.2.2); nothing for others. */
     suspend fun acknowledge(peer: Endpoint, messageId: Int) {
@@ -217,6 +225,11 @@ internal class DatagramLink(
     /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3). */
     suspend fun reject(peer: Endpoint, messageId: Int, reason: String) {
         withMessaging { reject(peer, messageId, reason) }
+    }
+
+    /** Nothing acted on the message [messageId] from [peer]; see [UdpMessaging.markRepeatable]. */
+    suspend fun markRepeatable(peer: Endpoint, messageId: Int) {
+        withMessaging { markRepeatable(peer, messageId) }
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -437,7 +450,9 @@ internal class DatagramLink(
 
         override suspend fun respond(request: InboundRequest, response: CoapMessage, owner: DeliveryOwner?, confirmable: Boolean): Delivery? {
             val separateType = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
-            return this@DatagramLink.respond(peer, request.message.messageId, request.message.type, response, owner?.forTransmissions(), separateType)
+            return this@DatagramLink.respond(
+                peer, request.message.messageId, request.message.type, response, owner?.forTransmissions(), separateType, request.isRepeatable,
+            )
         }
 
         override suspend fun acknowledge(request: InboundRequest) {
@@ -451,6 +466,10 @@ internal class DatagramLink(
 
         override suspend fun reject(request: InboundRequest, reason: String) {
             this@DatagramLink.reject(peer, request.message.messageId, reason)
+        }
+
+        override suspend fun leaveUnanswered(request: InboundRequest) {
+            if (request.isRepeatable) markRepeatable(peer, request.message.messageId)
         }
 
         override suspend fun notify(message: CoapMessage, confirmable: Boolean, owner: DeliveryOwner, slotHold: Duration?): Delivery {

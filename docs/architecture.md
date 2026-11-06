@@ -287,15 +287,18 @@ connection answered.
 
 **Resource bounds.** Over UDP a source address proves nothing (RFC 7252 §11.4), and §11.3 warns that
 answering spoofed traffic turns a server into an amplifier against the address it names. Everything a
-peer can make the endpoint keep or do is therefore bounded, with defaults sized for servers. At a bound
-the endpoint refuses only the extra work, with an answer at most a few bytes larger than what it
-received (a refusal's Max-Age), keeps serving what it has, and reports `EndpointEvent.LimitReached`:
+peer can make the endpoint keep or do is therefore bounded, in total and per peer, with defaults sized for
+servers. At a bound the endpoint first forgets what the RFCs let it forget, then refuses only the extra
+work, with an answer at most a few bytes larger than what it received (a refusal's Max-Age), keeps serving
+what it has, and reports what it refused as `EndpointEvent.LimitReached`:
 
 | Bound | Default | Beyond it |
 |---|---|---|
-| `CoapEndpointConfig.maxDeduplicationEntries` | 50 000 | a new message is dropped without state or answer; duplicates are still answered (§4.5) |
+| `CoapEndpointConfig.maxDeduplicationEntries`, `maxDeduplicationEntriesPerPeer` | 50 000, 10 000 | the oldest entry §4.5 lets the endpoint process again (an idempotent request once answered, unless OSCORE protects it, RFC 8613 §7.4; a message answered with a Reset; a request refused or dropped before anything acted on it and before message security verified it) makes room; otherwise the new message is dropped without state or answer. Three quarters at most hold non-idempotent requests, so a POST flood never keeps out a GET, nor the responses to the endpoint's own requests |
+| `CoapEndpointConfig.maxReservedMessageIds`, `maxReservedMessageIdsPerPeer` | 262 144, 65 536 | a request or separate response that needs a new Message ID is refused: §4.4 forbids reusing one early; a refused notification goes later with the latest state and keeps its observer. Responses to Non-confirmable requests are refused already at three quarters, so the endpoint keeps a quarter for what it must send. Piggybacked responses need none |
 | `CoapEndpointConfig.maxConcurrentRequests` | 256 | a CON gets a piggybacked 5.03 with Max-Age, a NON is dropped, a connection gets 5.03 |
-| `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response or notification queued behind NSTART is not sent |
+| `CoapEndpointConfig.maxExchangesPerPeer` | 256 | a request fails with `IDENTIFIERS_EXHAUSTED`; a separate response queued behind NSTART is not sent, a notification goes later |
+| `CoapEndpointConfig.maxExchanges` | 16 384 | the oldest Non-confirmable message kept only for a Reset is forgotten, then the oldest Confirmable one still unacknowledged after a retransmission is given up; otherwise as `maxExchangesPerPeer` |
 | `CoapServerConfig.maxObservers`, `maxObserversPerPeer`, `maxObserversPerResource` | 10 000, 32, 1 000 | the registration is served without Observe (RFC 7641 §4.1); re-registrations do not count again |
 | `ReliableTransportConfig.maxPendingConnections` | 128 | an accepted connection that has not sent its CSM yet is closed at once |
 | `ReliableTransportConfig.maxConnections` | 1 024 | an accepted connection beyond it, opened and accepted ones together, is closed at once |
@@ -333,9 +336,9 @@ the endpoint scope's dispatcher, so the time source must advance with that dispa
 `TimeSource.Monotonic` with a real dispatcher, and under `runTest` `testScheduler.timeSource`, with which
 a 247-second lifetime passes in an instant. The endpoint warns once when it sees the two disagree.
 Request timeouts wait on the same dispatcher clock. Retransmission jitter and the first Message ID come
-from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG, with per-session
-sequence numbers on DTLS endpoints (RFC 9175 §4.2), one generator per endpoint unless the configuration
-names one.
+from an injected `Random`; tokens from a `TokenGenerator` backed by the platform CSPRNG, with
+sequence numbers from zero on each DTLS session and TLS connection (RFC 9175 §4.2), one generator per
+endpoint unless the configuration names one.
 
 **Randomness.** Two sources, by layer, and no public `SecureRandom` in kcoap-common
 ([ADR 0015](adr/0015-randomness-by-layer.md)):
@@ -820,24 +823,26 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 
 What a server has today, all in the one endpoint (see "Resource bounds" and "Address verification" above):
 
-- **Every peer-driven resource bounded**, with server-sized defaults: deduplication entries, concurrent requests,
-  exchanges per peer, observers in total, per peer and per resource, pending and open connections, verified
-  addresses, held-back responses, Q-Block bodies; an EDHOC server bounds its pending handshakes in total and per
-  peer and expires them. At a bound the endpoint refuses only the extra work and reports
-  `EndpointEvent.LimitReached`.
+- **Every peer-driven resource bounded**, in total and per peer, with server-sized defaults: deduplication
+  entries, Message IDs, concurrent requests, exchanges, observers in total, per peer and per resource, pending
+  and open connections, verified addresses, held-back responses, Q-Block bodies; an EDHOC server bounds its
+  pending handshakes in total and per peer and expires them. At a bound the endpoint first forgets what the RFCs
+  let it forget, then refuses only the extra work and reports `EndpointEvent.LimitReached`.
 - **Amplification mitigation** (RFC 9175 §2.4): address verification with Echo before large answers to
   unauthenticated clients.
+- **Rate limiting by the application**: `CoapResponse.tooManyRequests` and the client's `RetryAfter` are
+  built (RFC 8516); a per-client limiter in the server is not, since RFC 8516 §3 warns that per-client
+  state can add to the load.
 - **State keyed by security context where the protocol allows it**: OSCORE contexts are not bound to addresses, so
   a client that changes address keeps its context; exchanges, observations and block-wise state follow the RFCs and
   are keyed by `Endpoint`.
 - **Hooks for metrics**: `EndpointEventListener`, `MessageInterceptor`, `EdhocServerEventListener`; no metrics
   library.
 
-Planned: 4.29 Too Many Requests (RFC 8516) and the hardening of SRV-2
-([plan-qblock-and-platforms.md](plan-qblock-and-platforms.md)); a public sans-IO API level, so the protocol cores
-can run in a Netty or Vert.x event loop, once the internal `PeerLink` seam has been stable for a release
-([target-architecture.md](target-architecture.md) §5); several sockets per endpoint (`SO_REUSEPORT`) and
-replay windows and EDHOC sessions shared across nodes, if benchmarks and deployments ask for them.
+Planned: a public sans-IO API level, so the protocol cores can run in a Netty or Vert.x event loop, once the
+internal `PeerLink` seam has been stable for a release ([target-architecture.md](target-architecture.md) §5);
+several sockets per endpoint (`SO_REUSEPORT`) and replay windows and EDHOC sessions shared across nodes, if
+benchmarks and deployments ask for them.
 
 ## Extension points
 

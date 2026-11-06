@@ -33,6 +33,18 @@ internal class InboundRequest(
     var isAnswered: Boolean = false
         private set
 
+    /**
+     * Set when the request is answered, or dropped, before anything acted on it: message security rejected it,
+     * the server refused it (access policy, unknown path, unrecognized critical option, proxying, a body too
+     * large) without message security having verified it, or the endpoint was overloaded. Processing it again
+     * then ends the same way, so its deduplication entry may be forgotten for room (RFC 7252 §4.5). A request
+     * message security verified is never repeatable: verifying recorded it, as OSCORE records its Partial IV in
+     * the replay window (RFC 8613 §7.4). Read on a datagram link when the answer goes out ([PeerLink.respond]),
+     * or when the request is dropped ([PeerLink.leaveUnanswered]).
+     */
+    @Volatile
+    var isRepeatable: Boolean = false
+
     /** What channel security authenticated: TLS on the connection, or the DTLS session of the endpoint. */
     val peerIdentity: PeerIdentity get() = link.peerIdentity
 
@@ -62,6 +74,11 @@ internal class InboundRequest(
     suspend fun reject(reason: String) {
         link.reject(this, reason)
         isAnswered = true
+    }
+
+    /** Leaves a Non-confirmable request without an answer ([PeerLink.leaveUnanswered]). */
+    suspend fun leaveUnanswered() {
+        link.leaveUnanswered(this)
     }
 
     override fun toString(): String = "InboundRequest($peer, $message)"

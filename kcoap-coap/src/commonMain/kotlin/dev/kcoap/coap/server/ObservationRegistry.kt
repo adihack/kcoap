@@ -21,6 +21,7 @@ import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -235,6 +236,11 @@ internal class ObservationRegistry(private val server: CoapServer) {
  * is never replaced by a newer one while it goes out, so a resource that changes faster than its bodies go out
  * still has whole bodies reach the client. A body goes Confirmable, whatever the resource asks, to a client
  * whose address the server checks and has not verified, or no longer ([CoapServer.mustConfirmBodies]).
+ *
+ * A notification that a bound of the endpoint refuses (RFC 7252 §11.3: no Message ID free, no room for one more
+ * message; [CoapException.Reason.IDENTIFIERS_EXHAUSTED], reported as [EndpointEvent.LimitReached]) keeps the
+ * observer: the refusal says nothing about the client, and §4.5 asks only that it eventually sees the latest
+ * state. That state goes once a back-off has passed ([refused]), with any change meanwhile folded into it.
  */
 internal class ServerObservation(
     private val server: CoapServer,
@@ -294,6 +300,14 @@ internal class ServerObservation(
     @Volatile
     private var registrationSent = false
 
+    /** Notifications refused in a row by a bound of the endpoint ([refused]); 0 once one went out. */
+    @Volatile
+    private var refusals = 0
+
+    /** Until when a notification refused by a bound of the endpoint waits ([refused]); none waits once it passed. */
+    @Volatile
+    private var retryAt: Duration? = null
+
     /**
      * What the observation keeps of the Q-Block2 body of its latest notification, or of the registration
      * response, if it has [qBlockSize]; written under [QBlockServer]'s lock.
@@ -343,7 +357,8 @@ internal class ServerObservation(
      * Arranges for a notification with the current state; calls that overlap are coalesced. A notification
      * that cannot be produced, protected or sent (a failing handler aside, which ends the observation with
      * 5.00) removes the observer instead of escaping: the security layer or its sequence-number store may
-     * fail, or the notification may not fit the datagram.
+     * fail, or the notification may not fit the datagram. One that a bound of the endpoint refused does not;
+     * it goes again later ([refused]).
      */
     fun schedule() {
         if (!isActive || scheduled) return
@@ -383,6 +398,27 @@ internal class ServerObservation(
     /** Whether a notification is due: a change counted after the latest handler run, or one to send again. */
     private fun hasNews(): Boolean = resendDue || resource.changeCount != notifiedChanges
 
+    /**
+     * A bound of the endpoint refused the latest notification, or a block of its Q-Block2 body, with [error]
+     * (RFC 7252 §11.3): the observer stays, and the latest state goes again once a back-off has passed (RFC 7641
+     * §4.5), so a full endpoint is not asked again for every change of every observed resource. The back-off is
+     * ACK_TIMEOUT, doubled with every refusal in a row up to [MAX_BACKOFF_DOUBLINGS] times. Takes no lock, since a
+     * Q-Block2 block may be refused while [notifyNow] holds [mutex].
+     */
+    fun refused(error: CoapException) {
+        resendDue = true
+        val now = server.endpoint.now()
+        if (retryAt?.let { now < it } == true) return
+        val wait = server.endpoint.parameters.ackTimeout * (1 shl minOf(refusals, MAX_BACKOFF_DOUBLINGS))
+        refusals++
+        retryAt = now + wait
+        server.log.debug { "Notification of ${resource.path} to $peer not sent, again in $wait: ${error.message}" }
+        server.endpoint.launchGuarded("notify ${resource.path} again") {
+            delay(wait)
+            schedule()
+        }
+    }
+
     private suspend fun notifyNow() = mutex.withLock {
         scheduled = false
         if (!isActive) return@withLock
@@ -391,6 +427,8 @@ internal class ServerObservation(
         // A change that is already in the latest notification, coalesced although it started this coroutine.
         if (!hasNews()) return@withLock
         val now = server.endpoint.now()
+        // A refused notification waits for its back-off; the retry then sends the latest state.
+        if (retryAt?.let { now < it } == true) return@withLock
         val body = latest
         // RFC 9177 §4.5: a body is never cut short by a newer one; onBodySettled sends the latest state.
         if (body != null && !body.isSettled(now, server.config.nonConfirmableNotificationInterval)) return@withLock
@@ -406,19 +444,33 @@ internal class ServerObservation(
         val type = if (confirmable) CoapMessageType.CON else CoapMessageType.NON
         // Every change counted from here on may have come after the handler read the state, so it notifies again.
         notifiedChanges = resource.changeCount
-        val notification = server.notification(this, type)
-        if (notification == null) {
-            // A Q-Block2 body went out (or the observation ended meanwhile).
-            if (latest !== body) policy.sent(confirmable, now)
-            return@withLock
+        val refusedBefore = refusals
+        try {
+            val notification = server.notification(this, type)
+            if (notification == null) {
+                // A Q-Block2 body went out (or the observation ended meanwhile), unless its first block was refused.
+                if (refusals != refusedBefore) return@withLock
+                if (latest !== body) policy.sent(confirmable, now)
+                refusals = 0
+                return@withLock
+            }
+            if (current != null && link.supersede(current, notification)) return@withLock
+            // RFC 7641 §4.5.1: a Non-confirmable notification holds the client's NSTART slot this long.
+            val slotHold = if (confirmable) null else server.config.nonConfirmableNotificationInterval
+            // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
+            outstanding = link.notify(notification, confirmable, this, slotHold)
+            policy.sent(confirmable, now)
+            refusals = 0
+        } catch (e: CoapException) {
+            if (e.reason != CoapException.Reason.IDENTIFIERS_EXHAUSTED) throw e
+            refused(e)
         }
-        if (current != null && link.supersede(current, notification)) return@withLock
-        policy.sent(confirmable, now)
-        // RFC 7641 §4.5.1: a Non-confirmable notification holds the client's NSTART slot this long.
-        val slotHold = if (confirmable) null else server.config.nonConfirmableNotificationInterval
-        // If its outcome arrives before this assignment, isOutstanding is false and the next change sends anew.
-        outstanding = link.notify(notification, confirmable, this, slotHold)
     }
 
     override fun toString(): String = "ServerObservation(${resource.path}, $peer, token=${key.token})"
+
+    private companion object {
+        /** The back-off of a refused notification grows to ACK_TIMEOUT × 2⁵, about a minute, and no further. */
+        const val MAX_BACKOFF_DOUBLINGS = 5
+    }
 }

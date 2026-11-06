@@ -839,6 +839,32 @@ public class QBlockServerConfig(
 - A 4.29 helper with Max-Age, and a client retry-after helper.
 - `TokenGenerator.sessionSequence` for TLS connections.
 
+**Amendment (SRV-2).**
+- Done. WP-S1 had bounded deduplication in total, exchanges per peer and observers; SRV-2 added the rest, every
+  one in `CoapEndpointConfig.Builder`, and what each refuses as `EndpointEvent.LimitReached`:
+  - Deduplication per peer (`maxDeduplicationEntriesPerPeer`). At either bound the cache now forgets the oldest
+    entry RFC 7252 §4.5 lets it process again (an idempotent request once answered, a Reset, a request refused
+    before anything acted on it) before it drops a new message, and keeps a quarter for such entries: dropping
+    alone, as before, let a flood keep every client out.
+  - Message IDs in total and per peer (`maxReservedMessageIds`, `maxReservedMessageIdsPerPeer`), refusing at the
+    bound, since §4.4 forbids early reuse. The per-peer default is the whole ID space, the bound §4.4 sets
+    anyway: lower would cap a peer below what the RFC allows.
+  - Exchanges in total (`maxExchanges`), over the client exchanges and the messages the datagram layer keeps:
+    forgetting Non-confirmable messages kept for a Reset, then giving up Confirmable ones unacknowledged after a
+    retransmission, then refusing.
+  - Observers kept WP-S1's refusal without Observe (RFC 7641 §4.1, §7); the flood test shows the forged observers
+    go when their first Confirmable notification is not acknowledged (§4.5).
+- `SpoofedFloodTest` floods each bound from up to 2 000 forged sources through the new `InMemoryNetwork.spoof`.
+- RFC 8516: `CoapResponse.tooManyRequests`, `CoapResponse.retryAfter`, the client's `RetryAfter`, and libcoap's
+  client receiving a 4.29 with Max-Age. No rate limiter: RFC 8516 §3 leaves the policy to the server's
+  application and warns that per-client state can add to the load.
+- Tokens: a count per TLS connection as per DTLS session (RFC 9175 §4.2). DTLS keeps its count although it is
+  not a reliable transport: §4.2 asks for it on every secure connection, and a count never repeats while the
+  keys last, which matters most where late copies arrive.
+- Question 7 (amplification policy): settled as its default. `Q_BLOCK_BURSTS` stays the default and
+  `ALL_RESPONSES` opt-in, since a client without RFC 9175 cannot answer the 4.01 with Echo that a single large
+  response would then wait behind; the guide recommends `ALL_RESPONSES` for servers that face the Internet.
+
 **PL-1: Android consumer check.**
 - `samples/android-consumer`, a separate build against `mavenLocal`, with AGP and minSdk (Q8) and animal-sniffer over the kcoap jvm jars.
 - A CI job.

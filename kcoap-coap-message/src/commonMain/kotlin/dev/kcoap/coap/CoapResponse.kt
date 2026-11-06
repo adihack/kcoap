@@ -1,6 +1,8 @@
 package dev.kcoap.coap
 
 import dev.kcoap.common.InternalKcoapApi
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A response as the application sees it: code, options and the whole body. Block-wise transfers are
@@ -29,6 +31,16 @@ public class CoapResponse(
 
     /** The Content-Format option, or null. */
     public val contentFormat: Int? get() = options.contentFormat
+
+    /**
+     * How long the server asks the client to wait before it sends this request, or a similar one, again: the
+     * Max-Age of a 4.29 Too Many Requests (RFC 8516 §4) or of a 5.03 Service Unavailable (RFC 7252
+     * §5.9.3.4), or 60 seconds, Max-Age's default (RFC 7252 §5.10.5), when it carries none; null for every other
+     * code. RFC 8516 §1 counts a request with the same method and URI as similar, and lets the application
+     * decide for others. `RetryAfter` in kcoap-coap waits it out and repeats the request.
+     */
+    public val retryAfter: Duration?
+        get() = if (code == CoapCode.TOO_MANY_REQUESTS || code == CoapCode.SERVICE_UNAVAILABLE) options.maxAge.seconds else null
 
     /** The body as UTF-8 text. */
     public fun payloadAsText(): String = body.decodeToString()
@@ -85,6 +97,27 @@ public class CoapResponse(
         }
 
         /**
+         * 4.29 Too Many Requests (RFC 8516 §3), for a client that sends requests more often than the server can or
+         * will handle: its Max-Age is [retryAfter] in whole seconds, rounded up so the client never comes back too
+         * early, and at most 2^32 - 1 (RFC 7252 §5.10.5); the client should not send a similar request before that
+         * (RFC 8516 §4). [diagnostic] becomes the diagnostic payload (RFC 7252 §5.5.2), which may say more about
+         * the overload. RFC 8516 §3 keeps 4.29 for the clients that send too often; an overload that all clients
+         * cause gets 5.03 Service Unavailable, with Max-Age as well.
+         *
+         * @throws IllegalArgumentException when [retryAfter] is negative.
+         */
+        public fun tooManyRequests(retryAfter: Duration, diagnostic: String? = null): CoapResponse {
+            require(!retryAfter.isNegative()) { "Retry-after must not be negative: $retryAfter" }
+            val whole = retryAfter.inWholeSeconds
+            val seconds = if (retryAfter.isInfinite() || whole >= MAX_AGE_LIMIT) {
+                MAX_AGE_LIMIT
+            } else {
+                whole + if (retryAfter > whole.seconds) 1 else 0
+            }
+            return error(CoapCode.TOO_MANY_REQUESTS, diagnostic).withOptions { maxAge(seconds) }
+        }
+
+        /**
          * The response [message] carries: its code, options and payload, without the messaging-layer fields.
          *
          * @throws IllegalArgumentException when [message] has no response code (RFC 7252 §5.9), such as a request
@@ -92,6 +125,9 @@ public class CoapResponse(
          */
         public fun from(message: CoapMessage): CoapResponse =
             CoapResponse(message.code, message.options, message.payload)
+
+        /** RFC 7252 §5.10.5: Max-Age is an unsigned integer of up to 4 bytes. */
+        private const val MAX_AGE_LIMIT: Long = 0xFFFF_FFFFL
 
         private fun contentFormatOption(format: Int?): OptionSet =
             if (format == null) OptionSet.EMPTY else OptionSet.build { contentFormat(format) }
