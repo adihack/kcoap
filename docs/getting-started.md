@@ -302,11 +302,20 @@ val postQuantum = BouncyCastleCryptoBackend(classical = DefaultCryptoBackend())
 ```
 
 Pass `postQuantum` wherever `crypto` goes above, list `CipherSuite.SUITE_PQC_1` in the configurations, and give each
-side an ML-DSA-44 credential. Suite -24 is cross-tested against libedhoc in both roles with EDHOC's own messages
-([kcoap-edhoc](../kcoap-edhoc/README.md)), but not yet over kcoap's CoAP stack. Its message_2 and message_3 exceed a
-UDP datagram and travel block-wise, and the combined request does not yet fall back to the sequential flow when
-message_3 is too large to combine (RFC 9668 §3.2.2 step 3.1), so take `run()` rather than `runCombined()` with it.
-Other targets do not run suite -24 yet (roadmap E3); EDHOC leaves it out there by itself.
+side an ML-DSA-44 credential (a `CoseKey` of type `AKP` with `SignatureAlgorithm.ML_DSA_44`). Its message_2 and
+message_3 exceed a UDP datagram and travel block-wise, and the combined request does not yet fall back to the
+sequential flow when message_3 is too large to combine (RFC 9668 §3.2.2 step 3.1), so the client takes `run()`
+rather than `runCombined()` and installs the context it returns:
+
+```kotlin
+val session = EdhocClientHandshake.over(client, server, config, postQuantum).run() // message_1 to message_3
+security.install(client, server, OscoreClient(session.oscore))
+```
+
+Suite -24 is cross-tested against libedhoc in both roles with EDHOC's own messages
+([kcoap-edhoc](../kcoap-edhoc/README.md)); over kcoap's CoAP stack it runs this way between kcoap's client and
+server (message_2 in Block2, message_3 in Block1), not yet against another CoAP implementation. Other targets do not
+run suite -24 yet (roadmap E3); EDHOC leaves it out there by itself.
 
 ## Over TCP, TLS and WebSockets
 
