@@ -13,6 +13,7 @@ import dev.kcoap.coap.security.UnprotectedRequest
 import dev.kcoap.coap.stack.CoapEndpoint
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEventListener
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.coap.stack.ReliableTransportConfig
 import dev.kcoap.coap.stack.Signal
@@ -74,6 +75,37 @@ class ReliableTransportTest {
         assertTrue(fixture.events.any { it is EndpointEvent.ConnectionOpened && it.isInitiator })
         assertTrue(fixture.events.any { it is EndpointEvent.ConnectionOpened && !it.isInitiator })
         assertEquals(2, fixture.events.count { it is EndpointEvent.CsmReceived })
+    }
+
+    /**
+     * A listener runs outside the endpoint's locks (EndpointEventListener): a slow one must not hold up every accept,
+     * connect and teardown. ConnectionOpened still comes before the connection's own events, its CSM first.
+     */
+    @Test
+    fun rfc8323Section5_3ConnectionOpenedIsReportedOutsideTheLockAndBeforeTheCsm() = runTest {
+        val fixture = ReliableFixture(this)
+        var serverEndpoint: CoapEndpoint? = null
+        var clientEndpoint: CoapEndpoint? = null
+        val serverEvents = mutableListOf<Pair<EndpointEvent, Boolean>>()
+        val clientEvents = mutableListOf<Pair<EndpointEvent, Boolean>>()
+        fun recording(into: MutableList<Pair<EndpointEvent, Boolean>>, endpoint: () -> CoapEndpoint?) =
+            fixture.endpointConfig().toBuilder().apply {
+                eventListener = EndpointEventListener { into += it to (endpoint()?.isConnectionsLocked == true) }
+            }.build()
+        val server = fixture.server(endpointConfig = recording(serverEvents) { serverEndpoint }) {
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        serverEndpoint = server.endpoint
+        val client = fixture.client(endpointConfig = recording(clientEvents) { clientEndpoint })
+        clientEndpoint = client.endpoint
+
+        assertEquals("ok", client.get(fixture.uri("/r")).payloadAsText())
+
+        for ((side, events) in listOf("server" to serverEvents, "client" to clientEvents)) {
+            val connection = events.map { it.first }.filter { it is EndpointEvent.ConnectionOpened || it is EndpointEvent.CsmReceived }
+            assertEquals(listOf(true, false), connection.map { it is EndpointEvent.ConnectionOpened }, "$side: $connection")
+            assertTrue(events.none { it.second }, "$side: every event outside the connections' lock")
+        }
     }
 
     /** RFC 8323 §4: the same over a WebSocket, one message per frame with Len 0. */

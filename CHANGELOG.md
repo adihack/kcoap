@@ -1015,6 +1015,9 @@ Build governance (WP-C1):
   with a stack trace. It is a `MessageRejected` with the new reason `INVALID_SOURCE`, logged at DEBUG. A datagram
   that fails to send for any other reason is still a WARN line, now with the error's message and no stack trace,
   since retransmission covers it.
+- `EndpointEvent.ConnectionOpened` is reported after the connections' lock is released, before the connection
+  starts reading, so its events still come first (WP-B4). A slow event listener held up every accept, connect and
+  connection teardown of the endpoint.
 - A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at all.
   The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind the
   receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block again

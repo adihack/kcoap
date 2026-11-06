@@ -547,6 +547,9 @@ public class CoapEndpoint private constructor(
     /** What the datagram messaging layer keeps, for tests; null without a datagram transport. */
     internal suspend fun messagingSizes(): UdpMessaging.Sizes? = datagram?.sizes()
 
+    /** Whether the lock of the connections is held, for tests: events are reported outside it. */
+    internal val isConnectionsLocked: Boolean get() = connections.isLocked
+
     private fun ClientExchange.markReplaced() {
         // The new exchange took over the token; the old one gets no more responses.
         launchGuarded("cancel a replaced exchange") { cancel() }

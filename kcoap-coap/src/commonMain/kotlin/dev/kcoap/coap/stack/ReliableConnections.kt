@@ -299,17 +299,30 @@ internal class ReliableConnections(
      * or [refusal] names a reason, which is returned. [close] therefore finds every driver it can see
      * started, and shuts it down; a driver it closed before its start would have failed that start with
      * "Already started" and never closed its connection, which only the started writer does.
+     *
+     * A registered connection is reported as [EndpointEvent.ConnectionOpened] once the lock is released, since
+     * every accept, connect and teardown takes it and a listener may be slow, and only then does its driver start
+     * reading, so the events of what the peer sends follow the report.
      */
-    private suspend fun registerAndStart(driver: ConnectionDriver, refusal: () -> Refusal?): Refusal? = lock.withLock {
-        val reason = if (isClosed) Refusal.CLOSED else refusal()
-        if (reason == null) {
-            drivers[driver.peer] = driver
-            connectionCount = drivers.size
-            onEvent(EndpointEvent.ConnectionOpened(driver.peer, driver.isInitiator))
-            driver.start()
+    private suspend fun registerAndStart(driver: ConnectionDriver, refusal: () -> Refusal?): Refusal? {
+        val reason = lock.withLock {
+            val reason = if (isClosed) Refusal.CLOSED else refusal()
+            if (reason == null) {
+                drivers[driver.peer] = driver
+                connectionCount = drivers.size
+                driver.start()
+            }
+            reason
         }
-        reason
+        if (reason == null) {
+            onEvent(EndpointEvent.ConnectionOpened(driver.peer, driver.isInitiator))
+            driver.startReading()
+        }
+        return reason
     }
+
+    /** Whether [lock] is held, for tests: events are reported outside it. */
+    val isLocked: Boolean get() = lock.isLocked
 
     /** Why a new connection is closed at once instead of registered. */
     private enum class Refusal(val reason: String) {
