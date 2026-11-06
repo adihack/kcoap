@@ -1177,5 +1177,6 @@ final class dev.kcoap.coap.stack/TransmissionParameters { // dev.kcoap.coap.stac
     }
 }
 
+final fun (dev.kcoap.coap.stack/EndpointEventListener).dev.kcoap.coap.stack/plus(dev.kcoap.coap.stack/EndpointEventListener): dev.kcoap.coap.stack/EndpointEventListener // dev.kcoap.coap.stack/plus|plus@dev.kcoap.coap.stack.EndpointEventListener(dev.kcoap.coap.stack.EndpointEventListener){}[0]
 final fun dev.kcoap.coap.client/CoapClientConfig(kotlin/Function1<dev.kcoap.coap.client/CoapClientConfig.Builder, kotlin/Unit>): dev.kcoap.coap.client/CoapClientConfig // dev.kcoap.coap.client/CoapClientConfig|CoapClientConfig(kotlin.Function1<dev.kcoap.coap.client.CoapClientConfig.Builder,kotlin.Unit>){}[0]
 final fun dev.kcoap.coap.stack/CoapEndpointConfig(kotlin/Function1<dev.kcoap.coap.stack/CoapEndpointConfig.Builder, kotlin/Unit>): dev.kcoap.coap.stack/CoapEndpointConfig // dev.kcoap.coap.stack/CoapEndpointConfig|CoapEndpointConfig(kotlin.Function1<dev.kcoap.coap.stack.CoapEndpointConfig.Builder,kotlin.Unit>){}[0]

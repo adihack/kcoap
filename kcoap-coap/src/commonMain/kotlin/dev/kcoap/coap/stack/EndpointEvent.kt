@@ -494,17 +494,3 @@ public sealed interface EndpointEvent {
             "ObserverRemoved(peer=$peer, path=$path, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 }
-
-/**
- * Receives [EndpointEvent]s. Called synchronously on the endpoint's coroutines, so it must be quick and
- * must not throw; exceptions are caught and logged.
- */
-public fun interface EndpointEventListener {
-    /** Called for every event. */
-    public fun onEvent(event: EndpointEvent)
-
-    public companion object {
-        /** Ignores all events. */
-        public val None: EndpointEventListener = EndpointEventListener { }
-    }
-}

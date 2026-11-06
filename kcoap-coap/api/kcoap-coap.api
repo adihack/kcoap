@@ -777,6 +777,10 @@ public final class dev/kcoap/coap/stack/EndpointEventListener$Companion {
 	public final fun getNone ()Ldev/kcoap/coap/stack/EndpointEventListener;
 }
 
+public final class dev/kcoap/coap/stack/EndpointEventListenerKt {
+	public static final fun plus (Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/coap/stack/EndpointEventListener;)Ldev/kcoap/coap/stack/EndpointEventListener;
+}
+
 public final class dev/kcoap/coap/stack/EndpointStats {
 	public final fun getConnections ()I
 	public final fun getDeduplicationEntries ()I
