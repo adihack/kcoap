@@ -3,6 +3,7 @@ package dev.kcoap.coap.security
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.CoapMessage
 import dev.kcoap.transport.Endpoint
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Message-level (object) security between the request/response layer and the messaging layer, where
@@ -23,6 +24,12 @@ import dev.kcoap.transport.Endpoint
  * cancelled call must leave replay and sequence-number state consistent: a sequence number it took stays
  * used and is never handed out again (RFC 8613 §7.2.1), and a replay window either accepted the message or
  * is unchanged.
+ *
+ * **Errors.** The four operations list [MessageSecurityException] and `CancellationException` in `@Throws`: the
+ * overrides, kcoap-oscore's OSCORE protection and verification among them, inherit that list, which Kotlin/Native
+ * requires to stay the same down the hierarchy. [MessageSecurityException] is a signal between the layers, not a
+ * `KcoapException`: the CoAP stack translates it at its boundary, into `CoapException.Reason.SECURITY` on the
+ * client and an error response on the server.
  */
 public interface ClientMessageSecurity {
     /**
@@ -39,6 +46,7 @@ public interface ClientMessageSecurity {
      *
      * @throws MessageSecurityException when the request must be protected and cannot be.
      */
+    @Throws(MessageSecurityException::class, CancellationException::class)
     public suspend fun protectRequest(request: CoapMessage, peer: Endpoint): ProtectedRequest?
 }
 
@@ -69,6 +77,7 @@ public interface ProtectedRequest {
      * @throws MessageSecurityException when the response is to be dropped: a protected response that does not
      *   verify, a replay, or an unprotected response that is not an error (RFC 8613 §8.4).
      */
+    @Throws(MessageSecurityException::class, CancellationException::class)
     public suspend fun unprotectResponse(response: CoapMessage): ResponseVerification
 }
 
@@ -82,6 +91,7 @@ public interface ServerMessageSecurity {
      * @throws MessageSecurityException when the request is protected but invalid; the stack answers with
      *   [MessageSecurityException.responseCode], unprotected, as RFC 8613 §8.2 requires.
      */
+    @Throws(MessageSecurityException::class, CancellationException::class)
     public suspend fun unprotectRequest(request: CoapMessage, peer: Endpoint): UnprotectedRequest?
 }
 
@@ -110,6 +120,7 @@ public interface UnprotectedRequest {
      * 2.31 and 4.08 it sends in answer to the request (RFC 9177 §4.3, §4.4), from the coroutine of each, so
      * calls may overlap (see [ClientMessageSecurity]).
      */
+    @Throws(MessageSecurityException::class, CancellationException::class)
     public suspend fun protectResponse(response: CoapMessage): CoapMessage
 }
 

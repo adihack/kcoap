@@ -6,7 +6,9 @@ import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.MessageSecurityException
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.common.KcoapException
 import dev.kcoap.transport.Endpoint
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -63,8 +65,11 @@ public class PeerSecurity(
      * maps one name to different addresses over time needs [install] again for each.
      *
      * @return the endpoint the protection was installed for.
+     * @throws dev.kcoap.coap.stack.CoapException with `UNRESOLVED_HOST` when the resolver's lookup fails at runtime,
+     *   as the resolver's contract says ([dev.kcoap.coap.client.EndpointResolver]).
      * @throws IllegalArgumentException when the resolver cannot resolve the host of [server].
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun install(client: CoapClient, server: CoapUri, security: ClientMessageSecurity): Endpoint {
         val peer = client.config.resolver.resolve(server)
         install(peer, security)

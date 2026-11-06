@@ -6,6 +6,7 @@ import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
+import dev.kcoap.common.KcoapException
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.EdhocError
 import dev.kcoap.edhoc.EdhocInitiator
@@ -18,6 +19,7 @@ import dev.kcoap.oscore.EphemeralSequenceNumberStore
 import dev.kcoap.oscore.OscoreClient
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SequenceNumberStore
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The client (EDHOC Initiator) side of EDHOC over CoAP, forward message flow (RFC 9528 Appendix A.2.1).
@@ -48,6 +50,10 @@ import dev.kcoap.oscore.SequenceNumberStore
  * kcoap-coap's `CoapException` for a request that got no response, passes through as it is. A run that fails or
  * is cancelled at any step wipes what it holds (RFC 9528 §9.8): the Initiator's ephemeral key X while it waits
  * for message_2, PRK_4e3m and the session's PRK_out and PRK_exporter once message_3 is out.
+ *
+ * [run] and [runCombined] list [KcoapException], the root of both, and `CancellationException` in `@Throws`, so on
+ * Apple platforms Swift catches a failed handshake as an `NSError`, with the Kotlin exception in its `userInfo`
+ * under `"KotlinException"`.
  *
  * @param server the scheme, host and port of the server; its path and query are not used.
  * @param path the EDHOC resource on [server], `.well-known/edhoc` (RFC 9528 §10.7) unless the server
@@ -82,6 +88,7 @@ public class EdhocClientHandshake(
     internal var onInitiator: (EdhocInitiator) -> Unit = {}
 
     /** The sequential flow: message_1 to message_3 (and message_4 when [expectMessage4]). */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun run(expectMessage4: Boolean = false): EdhocOscoreSession = wipingOnFailure { initiator ->
         exchangeMessages1And2(initiator)
         val (message3, session) = initiator.createMessage3()
@@ -100,6 +107,7 @@ public class EdhocClientHandshake(
      * The RFC 9668 flow: message_1 and message_2 are exchanged here; message_3 is held back and sent
      * with the first request protected by the returned [CombinedHandshake.security].
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun runCombined(): CombinedHandshake = wipingOnFailure { initiator ->
         exchangeMessages1And2(initiator)
         val (message3, session) = initiator.createMessage3()

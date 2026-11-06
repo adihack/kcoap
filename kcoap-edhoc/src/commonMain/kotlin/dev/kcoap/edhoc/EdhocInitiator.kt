@@ -1,5 +1,6 @@
 package dev.kcoap.edhoc
 
+import dev.kcoap.common.KcoapException
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.UnsupportedAlgorithmException
 import dev.kcoap.log.LogTags
@@ -40,6 +41,10 @@ import kotlin.coroutines.cancellation.CancellationException
  *     reply = transport.exchange(initiator.createMessage1())   // SUITES_I now ends with e.retryWith
  * }
  * ```
+ *
+ * The four steps list [KcoapException], the root of [EdhocException], and `CancellationException` in `@Throws`,
+ * so on Apple platforms Swift catches an EDHOC failure as an `NSError`, with the Kotlin exception in its
+ * `userInfo` under `"KotlinException"`; a call out of order is a mistake of the caller and is not listed.
  *
  * Calling a method out of order throws [IllegalStateException] and leaves the state unchanged. Instances
  * are not thread-safe; drive one from a single coroutine at a time.
@@ -90,6 +95,7 @@ public class EdhocInitiator(
      * knows after asking the backend once; the first call fails with an [EdhocException] naming what is
      * missing when no suite with a credential, or not the configured initial suite, is among them.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun createMessage1(): ByteArray {
         val start = expect<State.Start>("createMessage1")
         return step("message_1", isReply = false) {
@@ -136,6 +142,7 @@ public class EdhocInitiator(
      * that suite and the Initiator is back at [EdhocPhase.START] (RFC 9528 §6.3.1); otherwise the session
      * is aborted.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun processMessage2(message2: ByteArray) {
         val waiting = expect<State.WaitingForMessage2>("processMessage2")
         log.trace { "message_2 ${log.payload(message2)}" }
@@ -225,6 +232,7 @@ public class EdhocInitiator(
      * Composes message_3 (RFC 9528 §5.4.2) and completes the session, which comes with it; [session]
      * returns the same session afterwards.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun createMessage3(): Message3 {
         val verified = expect<State.VerifiedMessage2>("createMessage3")
         return step("message_3") {
@@ -283,6 +291,7 @@ public class EdhocInitiator(
      * Processes message_4 (RFC 9528 §5.5.3), which confirms that the Responder derived the same PRK_out.
      * Only valid after [createMessage3], and only in application profiles that use message_4.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun processMessage4(message4: ByteArray) {
         val completed = expect<State.Completed>("processMessage4")
         step("message_4") {

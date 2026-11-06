@@ -2,12 +2,14 @@ package dev.kcoap.oscore
 
 import dev.kcoap.cbor.CborWriter
 import dev.kcoap.coap.security.SecurityIdentity
+import dev.kcoap.common.KcoapException
 import dev.kcoap.common.constantTimeEquals
 import dev.kcoap.common.wipe
 import dev.kcoap.crypto.Aead
 import dev.kcoap.crypto.AeadAlgorithm
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.Hkdf
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -202,8 +204,11 @@ public class SecurityContext private constructor(
          * @throws IllegalArgumentException when [persistInterval] is out of range, or [sequenceStore]
          *   returns a value outside 0 to 2^40. Exceptions of [sequenceStore] and of [crypto] reach the
          *   caller unchanged. When the first write for a new context throws after it became durable, the
-         *   next derivation counts as a restore.
+         *   next derivation counts as a restore. `@Throws` lists [KcoapException] and `CancellationException`, as
+         *   on kcoap's other entry points, so Swift calls it with `try`; the exceptions named here are not in that
+         *   list, and on Apple platforms they end the process, as a failed precondition does.
          */
+        @Throws(KcoapException::class, CancellationException::class)
         public suspend fun derive(
             parameters: SecurityContextParameters,
             crypto: CryptoBackend,

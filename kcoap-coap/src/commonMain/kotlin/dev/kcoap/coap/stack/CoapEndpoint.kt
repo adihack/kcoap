@@ -5,6 +5,7 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
+import dev.kcoap.common.KcoapException
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
 import dev.kcoap.transport.ConnectionListener
@@ -402,12 +403,14 @@ public class CoapEndpoint private constructor(
      *   transport for [peer], or like [closeCause] once the endpoint is closed, also when it closes while the
      *   ping waits for its connection or its answer, whatever the transport.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ping(peer: Endpoint): Boolean = ping(peer, custody = false)
 
     /**
      * Like [ping]. To a reliable peer, [custody] asks it to answer only once it has processed every
      * request it received before the Ping (RFC 8323 §5.4.1); datagram pings ignore it.
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun ping(peer: Endpoint, custody: Boolean): Boolean {
         attach()
         lock.withLock { ensureOpen() }

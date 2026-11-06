@@ -4,6 +4,7 @@ import dev.kcoap.cbor.CborReader
 import dev.kcoap.cbor.CborType
 import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.stack.TransmissionParameters
+import dev.kcoap.common.KcoapException
 import dev.kcoap.common.toHex
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.ConnectionIdentifier
@@ -167,6 +168,7 @@ public class EdhocServer(
      *   to establish the context; its [EdhocException.errorMessage] is the error to send, which
      *   [CombinedRequestServer] sends in a 5.00 for a failure of this server, as for [handle].
      */
+    @Throws(KcoapException::class, CancellationException::class)
     public suspend fun completeCombined(
         responderId: ConnectionIdentifier,
         message3: ByteArray,

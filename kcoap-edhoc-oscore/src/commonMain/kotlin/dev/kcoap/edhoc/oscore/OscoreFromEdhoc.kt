@@ -1,5 +1,6 @@
 package dev.kcoap.edhoc.oscore
 
+import dev.kcoap.common.KcoapException
 import dev.kcoap.common.wipe
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.EdhocSession
@@ -9,6 +10,7 @@ import dev.kcoap.oscore.OscoreIdentity
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SecurityContextParameters
 import dev.kcoap.oscore.SequenceNumberStore
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The OSCORE security context parameters an EDHOC session establishes (RFC 9528 Appendix A.1):
@@ -91,7 +93,10 @@ internal suspend fun EdhocSession.oscoreParametersFrom(
  *
  * The context's [SecurityContext.identity] is an [EdhocIdentity]: the peer's authenticated credential and the
  * context's Recipient ID, which the requests it verifies carry to access policies and handlers (ADR 0008).
+ *
+ * `@Throws` lists [KcoapException] and `CancellationException`, as for [SecurityContext.derive].
  */
+@Throws(KcoapException::class, CancellationException::class)
 public suspend fun EdhocSession.oscoreContext(
     crypto: CryptoBackend,
     sequenceStore: SequenceNumberStore = EphemeralSequenceNumberStore(),

@@ -78,9 +78,14 @@ public class CoapUri(
          * Parses an absolute `coap`, `coaps`, `coap+tcp`, `coaps+tcp`, `coap+ws` or `coaps+ws` URI, one the
          * application supplies; a URI from a peer goes through [parseOrNull].
          *
+         * The exception is listed in `@Throws`, since the application's URIs are often typed in: on Apple
+         * platforms Swift catches a malformed one as an `NSError` (`try CoapUri.Companion.shared.parse(text:)`),
+         * with the Kotlin exception in its `userInfo` under `"KotlinException"`.
+         *
          * @throws IllegalArgumentException for relative URIs, other schemes, fragments (RFC 7252 §6.4
          *   step 4), missing hosts, ports outside 1..65535 and malformed percent-encodings.
          */
+        @Throws(IllegalArgumentException::class)
         public fun parse(text: String): CoapUri = decompose(text)
 
         /**
