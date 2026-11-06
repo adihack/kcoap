@@ -25,7 +25,9 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 | [OSCORE](../kcoap-oscore/README.md) | Security contexts, OSCORE clients and servers, sequence numbers and freshness |
 | [Durable sequence-number stores](../kcoap-oscore/README.md#writing-a-durable-store) | Recipes per runtime (JVM and Android, Apple, Linux, browsers and Node.js) that keep pre-shared OSCORE keys safe across restarts |
 | [EDHOC with OSCORE over CoAP](../kcoap-edhoc-oscore/README.md) | The EDHOC resource and server, the client handshake, the combined request and what handlers learn about the peer |
+| [JVM application](../samples/jvm-consumer/README.md) | A sample application through `kcoap-bom` that runs getting started's tour: CoAP, OSCORE and EDHOC over UDP on loopback |
 | [Android app](../samples/android-consumer/README.md) | A sample app at minSdk 26 with R8, what an app needs, and the API-level findings for kcoap's libraries |
+| [Browser page](../samples/js-consumer/README.md) | A sample page with OSCORE over CoAP over WebSockets, keys new for each page load, and the size of its production bundle |
 | [Browsers](architecture.md#browsers) | What runs in a browser, how it reaches UDP devices through a WebSocket proxy, and what WebCrypto lacks |
 | [Mobile lifecycle](platforms.md#mobile-lifecycle) | What kcoap does when a phone suspends the app or changes networks, and what the app must do on Android and iOS |
 

@@ -120,9 +120,11 @@ dependencies {
 
 [Getting started](docs/getting-started.md) says which modules each use case needs (client, server, OSCORE,
 EDHOC, post-quantum, each transport and each platform), how to add them in a Kotlin Multiplatform or Maven
-build, and walks through a first client and server, OSCORE and EDHOC. In a Kotlin Multiplatform project the
-adapters a target lacks go into the source sets of the targets that have them: `kcoap-transport-ktor` builds for
-the JVM, Apple and Linux, and browsers use `kcoap-transport-ktor-websocket` instead ([platforms](#platforms)).
+build, and walks through a first client and server, OSCORE and EDHOC, which
+[samples/jvm-consumer](samples/jvm-consumer/README.md) runs as an application of its own. In a Kotlin
+Multiplatform project the adapters a target lacks go into the source sets of the targets that have them:
+`kcoap-transport-ktor` builds for the JVM, Apple and Linux, and browsers use `kcoap-transport-ktor-websocket`
+instead ([platforms](#platforms)).
 
 ## Quick start
 
@@ -252,7 +254,10 @@ the application supplies (as `kcoap-testkit`'s in-memory network does in the tes
 (RFC 8323) with `kcoap-transport-ktor-websocket`, whose js tests also run in a headless browser against
 a JVM listener (Firefox so far; a CI job in Chrome). Browsers have no UDP, so reaching a device takes the
 WebSocket transport and a proxy such as libcoap's `coap-server`; OSCORE and EDHOC stay end to end across
-it. What WebCrypto lacks:
+it. [samples/js-consumer](samples/js-consumer/README.md) is a page that reads a resource with OSCORE over
+`coap+ws`, built as a production webpack bundle of about 1.1 MB minified (310 KB with gzip) under a size budget
+the build checks, and run in headless Chrome in CI ([platforms](docs/platforms.md#bundle-size)). What WebCrypto
+lacks:
 
 - ChaCha20/Poly1305: `UnsupportedAlgorithmException`, so EDHOC suites 4 and 5 are neither offered nor
   accepted there.

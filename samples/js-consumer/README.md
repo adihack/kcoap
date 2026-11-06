@@ -77,10 +77,10 @@ count. Measured by WP-P1 on 2026-11-06, with Kotlin 2.4.21, ktor 3.6.1 and webpa
 The file is `js-consumer.js`, plus a 272-byte chunk with the `ws` package's browser stub, which only Node.js would
 load. Where the bytes go, read from the source map (approximate: the compiler maps only part of what it writes):
 kcoap's modules about 17 % (kcoap-coap 12 %, of which the Q-Block client and receivers a few percent although
-Q-Block is off by default), ktor's client and HTTP code 12 %, kotlinx-coroutines 6 %, kotlinx-serialization 3 %
-(through cryptography-kotlin and ktor), cryptography-kotlin 3 %, the Kotlin standard library and kotlinx-io 3 %, and
-more than half compiler-generated code (class metadata, intrinsics) and code without a mapping, spread over all of
-them.
+Q-Block is off by default), ktor's client and HTTP code 12 %, kotlinx-coroutines 6.5 %, kotlinx-serialization 3 %
+(which cryptography-kotlin's ASN.1 and key-format code uses), cryptography-kotlin 3 %, the Kotlin standard library
+and kotlinx-io 3 %, and more than half compiler-generated code (class metadata, intrinsics) and code without a
+mapping, spread over all of them.
 
 To re-measure: `./gradlew publishToMavenLocal`, then `./gradlew -p samples/js-consumer checkBundleSize`, which prints
 both sizes and writes them to `build/reports/bundle-size.txt`. A change that is meant to grow the bundle raises both

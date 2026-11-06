@@ -40,10 +40,15 @@ Before tagging 0.1.0:
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)); the
   license is already set, and the `dev.kcoap` namespace is verified;
-- `./gradlew publishToMavenLocal` works, a sample consumer builds against it through `kcoap-bom`
-  ([getting started](getting-started.md#add-kcoap-to-a-build); WP-P1's JVM and js consumers), the POMs
-  (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM, and
-  `verifyBomConstraints` is green, so the BOM constrains exactly the published modules;
+- **in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
+  `kcoap-bom` ([getting started](getting-started.md#add-kcoap-to-a-build)): the CI `jvm-consumer` job builds and runs
+  [samples/jvm-consumer](../samples/jvm-consumer/README.md), whose `verifyKcoapFromBom` fails when a kcoap module on
+  its classpath has a version the BOM does not set, and the `js-consumer` job builds
+  [samples/js-consumer](../samples/js-consumer/README.md) within its bundle-size budget and runs it in headless
+  Chrome. `verifyBomConstraints` (the unit job) keeps the BOM equal to the published modules. Still to look at
+  before the tag: that the modules' own POMs (`<module>/build/publications/<target>/pom-default.xml`) name the
+  license, the developer and the SCM, as `PublishingPluginTest` checks the convention plugin does in a fixture
+  build;
 - the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
   release matches the CHANGELOG entry ([versioning](versioning.md)).
 

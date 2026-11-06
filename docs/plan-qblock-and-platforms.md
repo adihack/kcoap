@@ -410,7 +410,8 @@ public class QBlockServerConfig(
   1. Tests in a real browser (W1: headless Chrome job).
   2. Browser → proxy → device end to end with OSCORE and EDHOC, and `coaps+ws` (I1). I1 ran it from the JVM over `coap+ws`; `coaps+ws` moved to T1 and the run from a browser to PL-4 (Amendment (I1) in §3).
   3. Offering only the EDHOC suites that run there (A2; WebCrypto lacks ChaCha20).
-  4. JS/TypeScript facade, `@JsExport`, npm package (kmp-7), and a bundle-size budget (P1).
+  4. JS/TypeScript facade, `@JsExport`, npm package (kmp-7), and a bundle-size budget (P1: done for `js`, in
+     `samples/js-consumer`).
   5. OSCORE over HTTP (deferred).
 - **Q-Block.** The client keeps Q-Block off over WebSocket by default and uses BERT or Block. Through an OSCORE-unaware proxy, inner Q-Block is structurally broken (one response per request, 5.04 on intermediate blocks), so protected browser traffic uses inner RFC 7959. I1 asserts this.
 - **Work packages:** W1, A2, I1, P1 (js), and **PL-4** (JS facade and npm, after C3).
@@ -455,7 +456,7 @@ public class QBlockServerConfig(
 | 26 | I1 | Browser-topology interop, plus a Q-Block-off assertion | A3, B1 | T1, B2 | Linux (libcoap proxy); Chrome in CI |
 | 27–28 | D1 → D2 | Config builders; remainder of `KcoapException` | B3, A3, A4 | T1 | Linux, macOS CI |
 | 29 | C3 | Assembly, `docs/platforms.md`, BOM | B2, C2 | — | Linux |
-| 30 | P1 | Remaining samples (jvm, js), bundle budget | C3, W1 | — | Linux and Chrome in CI |
+| 30 | P1 | Remaining samples (jvm, js), bundle budget. **Done** (Amendment (P1) in target-architecture.md §4.3) | C3, W1 | — | Linux and Chrome in CI |
 | 31 | PL-2 | Android emulator smoke test | PL-1 | everything | Android emulator (CI, KVM) |
 | 32 | PL-4 | JS facade and npm package | C3 | — | Chrome in CI |
 | 33+ | E9, E4, E7, E10, E1 (DTLS last) | Roadmap features | as in target-architecture §4.4 | — | devices, macOS |
@@ -869,6 +870,12 @@ public class QBlockServerConfig(
 - `samples/android-consumer`, a separate build against `mavenLocal`, with AGP and minSdk (Q8) and animal-sniffer over the kcoap jvm jars.
 - A CI job.
 - Accept: the job passes; minSdk is recorded in `docs/platforms.md` (C3 later).
+
+**Amendment (P1).** The rest of P1 is done: `samples/jvm-consumer` and `samples/js-consumer`, both on `kcoap-bom`
+from Maven Local with a CI job each, and the js bundle's size budget in `docs/platforms.md` ("Bundle size"); see
+the Amendment (P1) in [target-architecture.md](target-architecture.md) §4.3. The Android sample moved onto the BOM
+too (it came with C3, after PL-1): its release compile and runtime classpaths resolved here through `kcoap-bom`, in
+both flavors; compiling, dexing and shrinking them needs the Android SDK, so the CI `android` job checks the rest.
 
 **PL-2: Android emulator smoke test.**
 - An emulator on GitHub Linux with KVM.

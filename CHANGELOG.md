@@ -12,6 +12,19 @@ adds its entry and migration note below.
 
 ### Added
 
+- Sample consumers and a browser bundle budget (WP-P1), no API change. Each sample is a Gradle build of its own that
+  takes kcoap from Maven Local through `kcoap-bom` alone, as an application would, and has a CI job that runs
+  `publishToMavenLocal` from the commit first:
+  - [samples/jvm-consumer](samples/jvm-consumer/README.md) runs getting started's tour, a CoAP GET, an OSCORE GET and
+    EDHOC then OSCORE over UDP on loopback, compiled to Java 17 bytecode; its `verifyKcoapFromBom` fails when any
+    kcoap module on the runtime classpath, also one that arrives as a dependency, has a version the BOM does not set.
+  - [samples/js-consumer](samples/js-consumer/README.md) is a browser page (Kotlin/JS IR, a production webpack
+    bundle) that reads a resource with OSCORE over CoAP over WebSockets, with keys its server makes for each page
+    load; its tests run the page's code on the JVM, the minified bundle on Node.js and, in CI, the bundle in headless
+    Chrome. `checkBundleSize` fails when the bundle exceeds the budget in `bundle-budget.properties`: 1 149 569 bytes
+    minified and 316 415 bytes with gzip measured, plus 5 % ([docs/platforms.md](docs/platforms.md#bundle-size)).
+  [samples/android-consumer](samples/android-consumer/README.md) takes its versions from `kcoap-bom` now too.
+  getting-started.md, platforms.md, testing.md and the README link the samples.
 - `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
   `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
   also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. Every published
