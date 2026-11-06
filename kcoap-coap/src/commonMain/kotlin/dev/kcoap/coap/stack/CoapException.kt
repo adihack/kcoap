@@ -13,9 +13,10 @@ import dev.kcoap.common.KcoapException
  * exceptions of kcoap's other protocols; `IllegalArgumentException` and `IllegalStateException` are kept for
  * mistakes of the caller, such as a malformed URI string.
  *
- * Responses with error codes (4.xx, 5.xx) are not exceptions; they are returned as responses. The exception is a
- * protected request answered only by an error that message security could not verify, which ends with
- * [Reason.UNVERIFIED_RESPONSE] and carries that error as [response].
+ * On the client side, responses with error codes (4.xx, 5.xx) are not exceptions: a request returns them as
+ * responses. The exception is a protected request answered only by an error that message security could not
+ * verify, which ends with [Reason.UNVERIFIED_RESPONSE] and carries that error as [response]. On the server side the
+ * reverse holds for a handler, which may answer with an error by throwing `CoapResponseException`.
  *
  * [Reason] may gain constants in any minor release, so a `when` over [reason] keeps an `else` branch.
  *

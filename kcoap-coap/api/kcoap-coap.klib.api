@@ -697,6 +697,13 @@ final class dev.kcoap.coap.server/AccessRequest { // dev.kcoap.coap.server/Acces
     final fun toString(): kotlin/String // dev.kcoap.coap.server/AccessRequest.toString|toString(){}[0]
 }
 
+final class dev.kcoap.coap.server/CoapResponseException : kotlin/Exception { // dev.kcoap.coap.server/CoapResponseException|null[0]
+    constructor <init>(dev.kcoap.coap/CoapResponse) // dev.kcoap.coap.server/CoapResponseException.<init>|<init>(dev.kcoap.coap.CoapResponse){}[0]
+
+    final val response // dev.kcoap.coap.server/CoapResponseException.response|{}response[0]
+        final fun <get-response>(): dev.kcoap.coap/CoapResponse // dev.kcoap.coap.server/CoapResponseException.response.<get-response>|<get-response>(){}[0]
+}
+
 final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServer|null[0]
     constructor <init>(dev.kcoap.coap.stack/CoapEndpoint, dev.kcoap.coap.server/CoapServerConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.coap.stack.CoapEndpoint;dev.kcoap.coap.server.CoapServerConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
     constructor <init>(dev.kcoap.transport/DatagramTransport, kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.server/CoapServerConfig = ..., dev.kcoap.coap.stack/CoapEndpointConfig = ..., kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...) // dev.kcoap.coap.server/CoapServer.<init>|<init>(dev.kcoap.transport.DatagramTransport;kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.server.CoapServerConfig;dev.kcoap.coap.stack.CoapEndpointConfig;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]

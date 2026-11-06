@@ -596,10 +596,17 @@ public class CoapServer private constructor(
         return CoapResponse.error(CoapCode.NOT_ACCEPTABLE)
     }
 
+    /**
+     * The handler's response: what it returned, the response of a [CoapResponseException] it threw, an ordinary
+     * outcome logged at DEBUG, or for any other exception a bare 5.00, a failure logged at ERROR.
+     */
     private suspend fun invoke(resource: CoapResource, context: RequestContext): CoapResponse = try {
         resource.handle(context)
     } catch (e: CancellationException) {
         throw e
+    } catch (e: CoapResponseException) {
+        log.debug { "Handler of ${resource.path} answered ${context.method} with ${e.response}" }
+        e.response
     } catch (e: Exception) {
         log.error(e) { "Handler of ${resource.path} failed on ${context.method}" }
         CoapResponse(CoapCode.INTERNAL_SERVER_ERROR)

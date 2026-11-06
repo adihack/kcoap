@@ -232,6 +232,11 @@ public abstract class dev/kcoap/coap/server/CoapResource {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class dev/kcoap/coap/server/CoapResponseException : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/coap/CoapResponse;)V
+	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
+}
+
 public final class dev/kcoap/coap/server/CoapServer {
 	public fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/server/CoapServerConfig;Lkotlin/jvm/functions/Function1;)V
 	public synthetic fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/server/CoapServerConfig;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V

@@ -19,10 +19,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  * ```
  *
  * Handlers run concurrently on the server's coroutines, one per request, so a resource must be thread
- * safe. A handler that throws produces 5.00 Internal Server Error, and so does a failure anywhere else in
- * the server's pipeline, the security layer and the application callbacks behind it included (see
- * [CoapServer]); a failing notification removes its observer. Children can be added and removed at any
- * time, for example to create resources on PUT or POST.
+ * safe. A handler answers with an error either by returning it or, from deeper in the application's code, by
+ * throwing [CoapResponseException] with it, which is logged at DEBUG only. A handler that throws anything else
+ * produces 5.00 Internal Server Error, logged at ERROR, and so does a failure anywhere else in the server's
+ * pipeline, the security layer and the application callbacks behind it included (see [CoapServer]); an error
+ * while producing a notification, thrown or returned, ends the observation (RFC 7641 §3.2) and removes its
+ * observer. To map an application's own exceptions to responses in one place, override [handle] in a base class
+ * of its resources. Children can be added and removed at any time, for example to create resources on PUT or
+ * POST.
  *
  * @property name the Uri-Path segment of this resource; the root has the empty name.
  */
