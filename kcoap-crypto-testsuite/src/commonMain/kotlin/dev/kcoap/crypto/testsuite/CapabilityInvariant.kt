@@ -107,9 +107,8 @@ public object CapabilityInvariant {
     }
 
     private suspend fun aead(backend: CryptoBackend, algorithm: AeadAlgorithm) {
-        val known = KnownAnswers.sealings[algorithm]
-        val key = known?.key ?: ByteArray(algorithm.keyLength) { (it + 1).toByte() }
-        val aead = step("aead") { backend.aead(algorithm, key) }
+        val known = KnownAnswers.sealings.getValue(algorithm)
+        val aead = step("aead") { backend.aead(algorithm, known.key) }
         val tagLength = step("tagLength") { aead.tagLength }
         val nonceLength = step("nonceLength") { aead.nonceLength }
         expect(tagLength == algorithm.tagLength && nonceLength == algorithm.nonceLength) {
@@ -131,12 +130,10 @@ public object CapabilityInvariant {
             rejects("a changed tag") { aead.decrypt(nonce, sealed.flipped(sealed.lastIndex), associatedData) }
             rejects("changed associated data") { aead.decrypt(nonce, sealed, associatedData.flipped(0)) }
         }
-        if (known != null) {
-            val sealed = step("encrypt") { aead.encrypt(known.nonce, known.plaintext, known.associatedData) }
-            expect(sealed.contentEquals(known.sealed)) { "encrypt does not reproduce ${known.source}" }
-            val opened = step("decrypt") { aead.decrypt(known.nonce, known.sealed, known.associatedData) }
-            expect(opened.contentEquals(known.plaintext)) { "decrypt does not reproduce ${known.source}" }
-        }
+        val sealed = step("encrypt") { aead.encrypt(known.nonce, known.plaintext, known.associatedData) }
+        expect(sealed.contentEquals(known.sealed)) { "encrypt does not reproduce ${known.source}" }
+        val opened = step("decrypt") { aead.decrypt(known.nonce, known.sealed, known.associatedData) }
+        expect(opened.contentEquals(known.plaintext)) { "decrypt does not reproduce ${known.source}" }
     }
 
     private suspend fun keyType(backend: CryptoBackend, type: KeyType) {
@@ -150,7 +147,7 @@ public object CapabilityInvariant {
                     "keyAgreement returned ${mine.size} bytes, not ${curve.keyLength}"
                 }
             }
-            val known = KnownAnswers.agreements[type] ?: return@withKeyPair
+            val known = KnownAnswers.agreements.getValue(type)
             withImportedKeyPair(backend, type, known.privateKey, known.publicKey) { imported ->
                 val secret = step("keyAgreement") { backend.keyAgreement(imported.privateKey, known.peerPublicKey) }
                 expect(secret.contentEquals(known.sharedSecret)) { "keyAgreement does not reproduce ${known.source}" }
