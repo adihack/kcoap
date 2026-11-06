@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="kcoap">
+  <!-- kcoap mark: a lowercase k built from message blocks, one of them in flight. -->
+  <rect width="128" height="128" rx="28" fill="#0B6E79"/>
+  <g fill="#FFFFFF">
+    <rect x="32" y="20" width="19" height="19" rx="5"/>
+    <rect x="32" y="43" width="19" height="19" rx="5"/>
+    <rect x="32" y="66" width="19" height="19" rx="5"/>
+    <rect x="32" y="89" width="19" height="19" rx="5"/>
+    <rect x="55" y="66" width="19" height="19" rx="5"/>
+    <rect x="78" y="89" width="19" height="19" rx="5"/>
+  </g>
+  <rect x="78" y="43" width="19" height="19" rx="5" fill="#FFC145"/>
+</svg>
