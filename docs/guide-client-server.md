@@ -128,6 +128,12 @@ A call after `close()` fails with `CLOSED` at once, before its host is looked up
 races `close()`, a ping on any transport included. `Reason` may gain constants in any minor release, DTLS
 for one, so a `when` over it keeps an `else` branch for the reasons it does not know.
 
+`CoapException` extends `KcoapException`, like the exceptions of OSCORE, EDHOC and CBOR, so code that runs EDHOC
+and then requests can catch `KcoapException` once. From Swift, the requests, `ping` and `discover` throw an
+`NSError` whose `userInfo["KotlinException"]` is the `CoapException`, and `CoapUri.parse` throws one for a
+malformed URI; a mistake of the caller ends the process, as a failed precondition does in Swift, so parse a URI
+that is typed in before passing it.
+
 ## Client and server on one port
 
 ```kotlin

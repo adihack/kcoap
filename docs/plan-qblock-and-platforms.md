@@ -379,7 +379,9 @@ public class QBlockServerConfig(
 ### iPhone
 - **Done.** `iosArm64` and `iosSimulatorArm64` targets for every module except `kcoap-crypto-bc`. CryptoKit and CommonCrypto. 490 common tests on the iOS simulator in CI. ktor-network UDP and TCP.
 - **Missing, by priority:**
-  1. `@Throws` everywhere: a Kotlin exception crashes a Swift caller (D2).
+  1. `@Throws` everywhere: a Kotlin exception crashes a Swift caller. Done in D2, which took over PL-3: the
+     public suspend entry points list `KcoapException` and `CancellationException`, `CoapUri.parse` lists
+     `IllegalArgumentException`, and a Swift smoke test runs in the macOS CI job.
   2. XCFramework and SwiftPM, with Flow bridging (E4).
   3. WebSocket on the Darwin engine; CIO bypasses URLSession policy (W1).
   4. Lifecycle and background (E9).
@@ -387,7 +389,7 @@ public class QBlockServerConfig(
   6. Secure Enclave and Keychain keys (E7).
   7. Runs on a real device, and a guide.
 - **Work packages:**
-  - **D2** (recommend pulling its `@Throws` and Swift-smoke part earlier as **PL-3**, right after QB-7, with `@Throws(CoapException::class, CancellationException::class)`; D2 reparents the exceptions later);
+  - **D2** (recommend pulling its `@Throws` and Swift-smoke part earlier as **PL-3**, right after QB-7, with `@Throws(CoapException::class, CancellationException::class)`; D2 reparents the exceptions later). PL-3 did not run on its own: D2 did both at once, with `KcoapException` in `@Throws` from the start (Amendment (PL-3) in §3);
   - **W1**, **E4**, **E9**, **E10**, **E7**.
 - **Verification.** Only on macOS: the CI `apple` job (`scripts/test apple`) runs every new Q-Block commonTest on the simulator.
 
@@ -444,7 +446,7 @@ public class QBlockServerConfig(
 | 13 | A2 | EDHOC capability-aware negotiation | WP-0 | QB-* | Linux, plus the macOS job |
 | 14 | W1 | RFC 8323 follow-ups (Darwin engine, headless Chrome) | C1 | QB-* | macOS CI, Chrome in CI |
 | 15 | PL-1 | Android consumer sample and API-level check | C1 | QB-*, A* | Android SDK (CI) |
-| 16 | PL-3 | `@Throws` and Swift smoke test (early part of D2) | QB-7, A2 | W1 | macOS CI |
+| 16 | PL-3 | `@Throws` and Swift smoke test (early part of D2). **Done, folded into D2** | QB-7, A2 | W1 | macOS CI |
 | 17 | B1 | PeerLink seam, amended | C1, S1, QB-7 | A3, A4 | Linux, plus the macOS job |
 | 18–21 | A3 → A4 → A5 → C2 | Crypto and glue chain (target-architecture §4.3) | as written there | B1 (A3/A4 against B2) | Linux, plus the macOS job |
 | 22–23 | B2 → B3 | Split out the message module, API cleanup | B1 | A4, A5, C2, T1 | Linux |
@@ -851,6 +853,25 @@ public class QBlockServerConfig(
 - `@Throws` on the public suspend entry points.
 - An unpublished `kcoap-swift-smoke` module and a Swift script in the macOS job.
 - Accept: Swift catches a timeout and a malformed URI as `NSError`.
+
+**Amendment (PL-3).**
+- **Status: done, folded into WP-D2** (target-architecture.md §4.3), which ran after D1 instead of right after
+  QB-7, so the annotation lists `KcoapException`, the root D2 introduced, rather than `CoapException` and a
+  reparenting later.
+- `@Throws(KcoapException::class, CancellationException::class)` on the requests, `ping` and `discover` of
+  `CoapClient`, `CoapEndpoint.ping`, the EDHOC steps, `EdhocClientHandshake.run`/`runCombined`,
+  `EdhocServer.completeCombined`, `PeerSecurity.install(client, uri, protection)`, `SecurityContext.derive` and
+  `EdhocSession.oscoreContext`; `@Throws(IllegalArgumentException::class)` on `CoapUri.parse`; the
+  message-security SPI's four operations list `MessageSecurityException` instead, which its overrides, OSCORE's
+  protect and verify among them, must keep on Kotlin/Native.
+- `kcoap-swift-smoke` (`kcoap.unpublished`, macosArm64, iosArm64, iosSimulatorArm64) links a `KcoapSmoke` framework
+  exporting kcoap-coap, kcoap-coap-message and kcoap-common; `src/swift/SwiftSmoke.swift` builds a
+  `CoapClientConfig` with explicit values through its builder and catches a request timeout
+  (`CoapException`, `RESPONSE_TIMEOUT`) and a malformed URI (`IllegalArgumentException`) as `NSError`, checking the
+  Kotlin exception in `userInfo`. The macOS CI job runs it after the Apple tests (`scripts/test swift`).
+- Verified on Linux: the Apple klibs cross-compile and `SmokeFixtureTest`'s scenario passes on linuxX64 and the
+  JVM (run with those targets added locally). The framework link and the Swift script run only on macOS, so they
+  are verified by the CI job alone.
 
 ---
 

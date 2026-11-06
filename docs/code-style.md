@@ -69,7 +69,12 @@ who knows the RFC can follow the code without guessing.
 
 - `require(...)` for caller mistakes (invalid arguments), which throw `IllegalArgumentException`.
 - One exception type per protocol for peer or wire problems (`CborException`, `OscoreException`,
-  `EdhocException`), carrying what the protocol needs to answer: an error code, a CoAP response code.
+  `EdhocException`), carrying what the protocol needs to answer: an error code, a CoAP response code. It
+  extends `KcoapException` (kcoap-common); the signals of SPIs between the layers do not, and are translated
+  at the layer's boundary ([architecture.md](architecture.md#the-coap-endpoint-as-built), "Errors").
+- A public suspend entry point that can fail lists `@Throws(KcoapException::class, CancellationException::class)`,
+  so Swift gets an `NSError` instead of a crash; an override keeps the `@Throws` of what it overrides, which
+  Kotlin/Native requires.
 - Never leak secret-dependent information through exception messages or timing; compare MACs and tags
   with `constantTimeEquals`.
 

@@ -291,6 +291,7 @@ scripts/test unit       # unit tests on every target this machine builds, then t
 scripts/test interop    # libcoap and libedhoc cross-tests in both roles; builds Docker images
 scripts/test coverage   # unit and interop tests with the coverage report and the 90% floor
 scripts/test apple      # the common tests against CryptoKit and CommonCrypto (macOS only)
+scripts/test swift      # the Swift smoke test against the KcoapSmoke framework (macOS only)
 scripts/test all        # unit, interop and coverage
 ```
 

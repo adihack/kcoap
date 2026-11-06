@@ -46,8 +46,9 @@ Before tagging 0.1.0:
 Every module whose build applies a tier plugin (`kcoap.kmp-library`, `kcoap.kmp-jvm-native-library`,
 `kcoap.kmp-jvm-library`), except the modules that apply `kcoap.unpublished` first. Today that is
 kcoap-dtls, whose SPIs have no engine yet; it joins the published set, with its ABI dumps, when the
-engine lands (roadmap E1). An unpublished module is still built and tested, but has no Maven
-publication, no API reference page and no ABI dumps.
+engine lands (roadmap E1). kcoap-swift-smoke, the Swift smoke test of the macOS CI job, is never published:
+it applies `kcoap.unpublished` and the Kotlin plugin, not a tier plugin. An unpublished module is still built
+and tested, but has no Maven publication, no API reference page and no ABI dumps.
 
 ## ABI dumps
 

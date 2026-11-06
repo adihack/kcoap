@@ -370,6 +370,39 @@ than a peer that did not answer. URIs, request options and link-format documents
 `CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and `LinkFormat.parseOrNull`, which return null instead of
 the `IllegalArgumentException` that `parse` and `fromOptions` keep for the caller's own input.
 
+The exception of every protocol facade extends `KcoapException` (kcoap-common), so one `catch` handles the
+runtime failures of any kcoap call, and the subtype says which protocol failed
+([target-architecture.md](target-architecture.md) §3.6):
+
+| Facade | Peer, network, security and lifecycle failures | Caller mistakes |
+|---|---|---|
+| `CoapClient`, `CoapEndpoint`, `CoapServer` | `CoapException` with its `Reason` | `IllegalArgumentException`, `IllegalStateException` |
+| OSCORE | `OscoreException` with its `OscoreError` | the same |
+| EDHOC | `EdhocException`; `EdhocPeerErrorException` (with `retryWith`) and `EdhocTransferException` are subtypes | the same |
+| CBOR, COSE | `CborException` | the same |
+| X.509 | `CertificateFormatException` | the same |
+| URIs | none: `CoapUri.parse` throws `IllegalArgumentException` for text the caller supplies, peer input goes through `parseOrNull` | `IllegalArgumentException` |
+
+The signals of the SPIs between the layers stay outside the root, since each layer translates them at its
+boundary: `MessageSecurityException` (the table above, and the server's error response), `CoapFormatException`,
+`SessionEndedException`, `AeadAuthenticationException` (to `OscoreException` or `EdhocException`),
+`UnsupportedAlgorithmException` (to a local `EdhocException` during a handshake, a configuration mistake at
+setup) and `CertificateValidationException` (to `EdhocException`).
+
+**Swift.** Kotlin/Native turns an exception into an `NSError` only for a function that lists the exception's
+type in `@Throws`, and ends the process for any other. The public suspend entry points list `KcoapException` and
+`CancellationException`: the requests, `ping` and `discover` of `CoapClient`, `CoapEndpoint.ping`, the eight
+EDHOC steps of `EdhocInitiator` and `EdhocResponder`, `EdhocClientHandshake.run` and `runCombined`,
+`EdhocServer.completeCombined`, `PeerSecurity.install(client, uri, protection)`, `SecurityContext.derive` and
+`EdhocSession.oscoreContext`. `CoapUri.parse` lists `IllegalArgumentException`, since URIs are often typed in.
+The four operations of the message-security SPI, OSCORE's protection and verification among them, list
+`MessageSecurityException` and `CancellationException`: Kotlin/Native requires an override to keep the
+`@Throws` of what it overrides, and that SPI's signal is not a `KcoapException`. Mistakes of the caller are not
+listed, so they end a Swift process as a failed precondition does. A Swift caller catches the failure as an
+`NSError` of domain `KotlinException` and finds the Kotlin exception in its `userInfo` under
+`"KotlinException"`; kcoap-swift-smoke's script, run by the macOS CI job, checks a request timeout and a
+malformed URI this way. On the JVM the same annotation adds a `throws` clause, which only Java callers see.
+
 **Tests.** `kcoap-testkit`'s `InMemoryNetwork` simulates loss, duplication, latency and reordering on
 virtual time; its `Stress` helper runs the concurrency stress tests on real threads; the JVM tests also
 run against libcoap over real UDP (`interop/README.md`). `ExchangeConformanceTest` runs one suite over a
@@ -792,6 +825,7 @@ browser ──coaps+ws / HTTPS──► proxy ──coap / coaps──► device
 | `kcoap-testkit` | In-memory datagram network and in-memory TCP/WebSocket connections with fault injection, for tests | done |
 | `kcoap-crypto-testsuite` | Conformance suite for crypto backends, for tests: the `supports` contract, NIST's ACVP ML-KEM and ML-DSA vectors, the capability report per target | done |
 | `kcoap-dtls` | DTLS 1.2 engine (and TLS 1.2 stream mode for PSK/RPK over TCP) | placeholders, not published; engine last |
+| `kcoap-swift-smoke` | The Swift smoke test: a `KcoapSmoke` framework of kcoap-coap for the Apple targets and a Swift script against it, run by the macOS CI job | test only, not published |
 | `kcoap-transport-ktor` | UDP and TCP on ktor-network; JVM, Apple and Linux (no web targets: ktor-network) | UDP and TCP done; TLS for `coaps+tcp` planned |
 | `kcoap-transport-ktor-websocket` | WebSocket client on the ktor client, any engine; every target, browsers included (UNIVERSAL tier) | done |
 | `kcoap-transport-ktor-websocket-server` | WebSocket server on the ktor server: standalone on the engine the application passes (no engine dependency) or mounted in an application; JVM, Apple and Linux (SOCKETS tier, no web targets: a browser cannot accept connections) | done |

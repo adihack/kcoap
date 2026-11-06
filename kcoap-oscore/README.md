@@ -77,6 +77,11 @@ Through kcoap-coap's client and server, both fail closed
   `SecurityContext.identity`: the `OscoreIdentity` (Recipient ID, ID Context) unless the context was derived
   with an `identity` of its own, or by EDHOC (an `EdhocIdentity` with the peer credential).
 
+`OscoreException`, with its `OscoreError`, is a `KcoapException` (kcoap-common), the root of every protocol's
+exception in kcoap; `OscoreClient` and `OscoreServer` convert it to the `MessageSecurityException` of the
+message-security SPI, which lists that exception and `CancellationException` in `@Throws` for every override.
+`SecurityContext.derive` lists `KcoapException` and `CancellationException`, so Swift calls it with `try`.
+
 `SecurityContext` never exposes its keys, its Common IV or the Master Secret. `toString()` shows only
 the identifiers. `SecurityContextParameters.masterSecret()` returns a copy for provisioning code.
 

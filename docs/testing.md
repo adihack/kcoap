@@ -63,6 +63,7 @@ same time, from several worktrees too, do not collide ([ADR 0009](adr/0009-brows
 | `scripts/test interop` | level 4 | Docker |
 | `scripts/test coverage` | every JVM test, the Kover HTML and XML reports, and the coverage floor | Docker for the interop share |
 | `scripts/test apple` | the common tests on `macosArm64` and `iosSimulatorArm64`, and `checkKotlinAbi` with natively built Apple klibs | macOS with Xcode |
+| `scripts/test swift` | the Swift smoke test ([kcoap-swift-smoke](../kcoap-swift-smoke/README.md)): links the `KcoapSmoke` framework for macOS, compiles `SwiftSmoke.swift` against it with `xcrun swiftc` and runs it | macOS with Xcode |
 | `scripts/test images` | only builds the libcoap and libedhoc images | Docker |
 | `scripts/test all` | unit, interop, coverage | Docker |
 
@@ -161,7 +162,7 @@ Both Android checks write everything they find to `<module>/build/reports/androi
 |---|---|---|
 | Unit tests, build checks and coverage | Linux | `scripts/test unit` (with `checkKotlinAbi`, `verifyCommonOnly`, `verifyNoServerEngine`, `checkAndroidApi`, `checkAndroidApiDependencies` and the build-logic tests), then the coverage floor; the coverage table goes to the job summary |
 | Interop | Linux | `scripts/test interop` with freshly built images |
-| Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included |
+| Native tests | macOS | `scripts/test apple`, `checkKotlinAbi` included, then `scripts/test swift`: Swift builds a `CoapClientConfig` and catches a request timeout and a malformed URI as `NSError` |
 | WebSocket client in headless Chrome | Linux | `scripts/test browser google-chrome`: the js tests of `kcoap-transport-ktor-websocket` in the runner's Chrome against a JVM `KtorWebSocketListener` (`BrowserAgainstJvmListenerTest`) |
 | API reference | Linux | `dokkaGenerate` |
 | Android consumer | Linux, with the runner's Android SDK | `publishToMavenLocal`, then [samples/android-consumer](../samples/android-consumer/README.md), a build of its own: `assembleRelease lint test` with AGP 9.4.1 at minSdk 26, R8 on the release variants of both flavors (classical, post-quantum) with no app rules, lint on the default variant, and the unit tests, which run the sample's tour on the JVM (PL-1) |

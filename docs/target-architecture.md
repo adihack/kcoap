@@ -871,6 +871,35 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low.
 - **Accept:** the Swift script catches a timeout and a malformed URI as `NSError` and builds a config with explicit arguments.
 
+> **Amendment (D2).** Done as listed, and PL-3 of [plan-qblock-and-platforms.md](plan-qblock-and-platforms.md)
+> with it. Where the tree or the toolchain asked for more:
+> - **The root.** `KcoapException` (kcoap-common) is `open` with a `protected` constructor, so only kcoap's modules
+>   create subtypes. `CoapException`, `OscoreException`, `EdhocException` (and with it `EdhocPeerErrorException`
+>   and `EdhocTransferException`), `CborException`, which COSE throws too, and `CertificateFormatException` extend
+>   it, with their reasons, fields and messages unchanged. `ErrorModelTest` (kcoap-edhoc-oscore, which sees every
+>   module of the table) asserts each §3.6 type is a `KcoapException` and each SPI signal is not.
+> - **OSCORE protect/verify** are overrides of kcoap-coap-message's message-security SPI, and Kotlin/Native refuses
+>   an override whose `@Throws` differs from the overridden member's ("Member overrides different '@Throws'
+>   filter"). The annotation therefore sits on the SPI's four operations, and lists the SPI's documented signal,
+>   `MessageSecurityException`, with `CancellationException`; that signal stays outside the root as §3.6 says.
+> - **The other public suspend entry points** with `@Throws(KcoapException::class, CancellationException::class)`:
+>   `CoapEndpoint.ping`, `EdhocServer.completeCombined`, `PeerSecurity.install(client, uri, protection)` and
+>   `EdhocSession.oscoreContext` (the EDHOC form of `derive`). Not annotated: the `close()` functions and
+>   `EdhocServer.handle`, which throw only a cancellation, and `observe`, which returns a `Flow`.
+>   `SecurityContext.derive` lists the root as planned, but what it documents (an `IllegalArgumentException`, the
+>   store's and the backend's exceptions) is not a `KcoapException`, so from Swift those still end the process.
+> - **Caller mistakes** stay unlisted everywhere but `CoapUri.parse`, as §3.6 has it: the `String` overloads of
+>   `CoapClient` end a Swift process on a malformed URI, so the KDoc tells Swift callers to parse first.
+> - **The smoke module** applies `kcoap.unpublished` with the Kotlin plugin directly, since no tier covers the
+>   Apple targets alone, and Kover, which the root report needs in every module. `swiftSmoke` (an `Exec` task)
+>   compiles the script against the link task's output directory and runs it; `scripts/test swift` and a step of
+>   the CI `apple` job call it. Linux cross-compiles the Apple klibs but skips the link and the script, so the Swift
+>   side is verified by CI only.
+> - Ownership deviations: kcoap-common, kcoap-cbor, kcoap-crypto (`x509`), kcoap-coap-message (`CoapUri`, the
+>   security SPI), `scripts/test` and one bullet of docs/code-style.md, besides the files listed for D2. The
+>   website (`web/`) did not exist on `feat/protocol-core` when D2 was done; its Apple setup page gets the
+>   `@Throws` story when it does.
+
 **WP-C3: Assembly and documentation**
 
 - **Findings:** MB-9 (1–2); MB-10 (1, 2, 4, 5); U7 (3–4); U8 (4); U5 (1); U10 (docs); API-11 (7); MB-4 (docs); U4 (4); API-03 (7); MB-8 (6).
