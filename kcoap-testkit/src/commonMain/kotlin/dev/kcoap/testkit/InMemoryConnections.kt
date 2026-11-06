@@ -35,7 +35,8 @@ import kotlinx.coroutines.sync.withLock
  */
 public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
     private val lock = Mutex()
-    private val listeners = HashMap<Pair<CoapScheme, String>, InMemoryConnectionListener>()
+    /** By the address clients reach them at, so that a listener is found by endpoint equality (RFC 7252 §6.6). */
+    private val listeners = HashMap<Endpoint, InMemoryConnectionListener>()
     private val opened = mutableListOf<InMemoryConnection>()
     private var nextClientPort = FIRST_CLIENT_PORT
 
@@ -51,10 +52,13 @@ public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
 
     /**
      * A listener for [scheme] at [host] and [port]. Clients reach it at `Endpoint.Tcp(host, port)` or
-     * `Endpoint.WebSocket.of(host, port)`; it sees each of them at a port of its own. Accepted connections
-     * report [clientIdentity] as the client's identity, the client's side reports [serverIdentity].
+     * `Endpoint.WebSocket.of(host, port)`, which is its [InMemoryConnectionListener.localEndpoint], and at every
+     * endpoint equal to that, however its host is written (RFC 7252 §6.6: `Server` as `server`, `[2001:DB8::1]` as
+     * `2001:db8::1`, a `ws` URI without a port at port 80); a WebSocket client reaches it at any path. It sees each
+     * client at a port of its own. Accepted connections report [clientIdentity] as the client's identity, the
+     * client's side reports [serverIdentity].
      *
-     * @throws IllegalArgumentException if the address is taken or [scheme] is not a reliable one.
+     * @throws IllegalArgumentException if a listener has an equal address already, or [scheme] is not a reliable one.
      */
     public suspend fun listen(
         port: Int,
@@ -64,10 +68,10 @@ public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
         serverIdentity: PeerIdentity = PeerIdentity.None,
     ): InMemoryConnectionListener = lock.withLock {
         require(scheme.kind != TransportKind.DATAGRAM) { "$scheme is not a reliable transport; use InMemoryNetwork" }
-        val key = scheme to authority(host, port)
-        require(key !in listeners) { "Address in use: ${scheme.scheme} $host:$port" }
-        InMemoryConnectionListener(this, scheme, endpointOf(scheme, host, port), clientIdentity, serverIdentity)
-            .also { listeners[key] = it }
+        val address = endpointOf(scheme, host, port)
+        require(address !in listeners) { "Address in use: ${scheme.scheme} $host:$port" }
+        InMemoryConnectionListener(this, scheme, address, clientIdentity, serverIdentity)
+            .also { listeners[address] = it }
     }
 
     /** Opens connections to the listeners, for every reliable scheme. */
@@ -85,13 +89,10 @@ public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
     }
 
     private suspend fun connect(peer: Endpoint): Connection {
-        val (scheme, authority) = when (peer) {
-            is Endpoint.Tcp -> peer.scheme to authority(peer.host, peer.port)
-            is Endpoint.WebSocket -> peer.scheme to peer.uri.substringAfter("://").substringBefore("/")
-            else -> throw IllegalArgumentException("$peer is not reached over a reliable transport")
-        }
+        val address = listenerAddress(peer)
         val (client, accepted, listener) = lock.withLock {
-            val listener = listeners[scheme to authority] ?: throw InMemoryConnectionRefused(peer)
+            val listener = listeners[address] ?: throw InMemoryConnectionRefused(peer)
+            val scheme = listener.scheme
             val clientAddress = endpointOf(scheme, LOOPBACK, nextClientPort++)
             val client = Pipe(this, remote = peer, identity = listener.serverIdentity, isAccepted = false)
             val accepted = Pipe(this, remote = clientAddress, identity = listener.clientIdentity, isAccepted = true)
@@ -113,7 +114,22 @@ public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
     internal fun chunks(bytes: ByteArray): List<ByteArray> =
         if (bytes.size <= chunkSize) listOf(bytes) else bytes.toList().chunked(chunkSize).map { it.toByteArray() }
 
-    private fun authority(host: String, port: Int): String = "${if (':' in host) "[$host]" else host}:$port"
+    /**
+     * The address of the listener [peer] reaches: a TCP peer itself, a WebSocket the `/.well-known/coap` endpoint of
+     * its URI's scheme and authority, whatever its path. Equality then compares them as RFC 7252 §6.6 compares URIs.
+     */
+    private fun listenerAddress(peer: Endpoint): Endpoint {
+        when (peer) {
+            is Endpoint.Tcp -> return peer
+            is Endpoint.WebSocket -> {
+                val uri = peer.uri
+                val authorityStart = uri.indexOf("://").takeIf { it >= 0 }?.plus(3) ?: return peer
+                val authorityEnd = uri.indexOfAny(charArrayOf('/', '?', '#'), authorityStart).takeIf { it >= 0 } ?: uri.length
+                return Endpoint.WebSocket(uri.substring(0, authorityEnd) + CoapScheme.WEBSOCKET_PATH)
+            }
+            else -> throw IllegalArgumentException("$peer is not reached over a reliable transport")
+        }
+    }
 
     private fun endpointOf(scheme: CoapScheme, host: String, port: Int): Endpoint = when (scheme.kind) {
         TransportKind.MESSAGE_STREAM -> Endpoint.WebSocket.of(host, port, usesTls = scheme == CoapScheme.COAPS_WS)

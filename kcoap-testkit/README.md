@@ -15,8 +15,9 @@ applications built on it.
   a chosen datagram and from a second one after that, so the peer sees the source address change in the
   middle of a conversation; it receives on both, or only on the new one when the old binding expired.
 - `InMemoryConnections`: listeners and a `Connector` for `coap+tcp`, `coaps+tcp`, `coap+ws` and
-  `coaps+ws` (RFC 8323). Byte streams deliver writes in pieces of `chunkSize` bytes, so stream
-  reassembly is exercised; message streams keep frames whole. `InMemoryConnection.inject` hands raw
+  `coaps+ws` (RFC 8323); a client reaches a listener at every endpoint equal to its address. Byte
+  streams deliver writes in pieces of `chunkSize` bytes, so stream reassembly is exercised; message
+  streams keep frames whole. `InMemoryConnection.inject` hands raw
   bytes to one side, `reset` breaks a connection, `tap` sees every write. TLS is not simulated; a
   listener reports the identities it is given.
 - `InMemorySessions`: a stand-in for a DTLS layer on an `InMemoryTransport`. Every peer appears as an

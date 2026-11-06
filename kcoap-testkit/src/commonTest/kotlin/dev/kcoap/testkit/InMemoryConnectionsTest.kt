@@ -98,6 +98,69 @@ class InMemoryConnectionsTest {
         assertFalse(listOf(client, accepted, other).any { !it.isClosed })
     }
 
+    /** RFC 7252 §6.6 (RFC 8323 §8.1, §8.2): a listener is reached at every endpoint equal to its own address. */
+    @Test
+    fun rfc7252Section6_6TcpListenersAreReachedAtEveryEqualEndpoint() = runTest {
+        val connections = InMemoryConnections()
+        val named = connections.listen(5683, host = "Server")
+        assertEquals(Endpoint.Tcp("server", 5683), named.localEndpoint)
+        for (peer in listOf(named.localEndpoint, Endpoint.Tcp("Server", 5683), Endpoint.Tcp("SERVER", 5683))) {
+            assertEquals(peer, connections.connector.connect(peer).remote)
+            assertIs<InMemoryByteStream>(named.accept())
+        }
+
+        val literal = connections.listen(5684, CoapScheme.COAPS_TCP, host = "[2001:DB8::1]")
+        assertEquals(Endpoint.Tcp("2001:db8::1", 5684, usesTls = true), literal.localEndpoint)
+        for (peer in listOf(literal.localEndpoint, Endpoint.Tcp("2001:db8:0::1", 5684, usesTls = true))) {
+            connections.connector.connect(peer)
+            assertIs<InMemoryByteStream>(literal.accept())
+        }
+        assertFailsWith<IllegalArgumentException> { connections.listen(5684, CoapScheme.COAPS_TCP, host = "2001:db8::1") }
+        assertFailsWith<IllegalArgumentException> { connections.listen(5683, host = "server") }
+        assertFailsWith<InMemoryConnectionRefused> { connections.connector.connect(Endpoint.Tcp("2001:db8::1", 5684)) }
+
+        val bracketedLoopback = connections.listen(7000, host = "[::1]")
+        connections.connector.connect(bracketedLoopback.localEndpoint)
+        assertIs<InMemoryByteStream>(bracketedLoopback.accept())
+    }
+
+    /** RFC 8323 §8.3, §8.4 with RFC 6455 §3: a WebSocket URI without a port reaches the listener at 80 or 443. */
+    @Test
+    fun rfc8323Section8_3WebSocketListenersAreReachedAtEveryEqualUri() = runTest {
+        val connections = InMemoryConnections()
+        val plain = connections.listen(80, CoapScheme.COAP_WS)
+        val reaching = listOf(
+            plain.localEndpoint,
+            Endpoint.WebSocket("ws://127.0.0.1/.well-known/coap"),
+            Endpoint.WebSocket("WS://127.0.0.1:80/.well-known/coap"),
+            Endpoint.WebSocket("ws://127.0.0.1"),
+            Endpoint.WebSocket("ws://127.0.0.1/another/path?x=1"),
+        )
+        for (peer in reaching) {
+            assertEquals(peer, connections.connector.connect(peer).remote)
+            assertIs<InMemoryMessageStream>(plain.accept())
+        }
+
+        val named = connections.listen(80, CoapScheme.COAP_WS, host = "Server")
+        connections.connector.connect(Endpoint.WebSocket("ws://SERVER/.well-known/coap"))
+        assertIs<InMemoryMessageStream>(named.accept())
+
+        val secure = connections.listen(443, CoapScheme.COAPS_WS, host = "[2001:DB8::1]")
+        assertEquals("wss://[2001:DB8::1]:443/.well-known/coap", (secure.localEndpoint as Endpoint.WebSocket).uri)
+        for (peer in listOf(secure.localEndpoint, Endpoint.WebSocket("wss://[2001:db8:0::1]/.well-known/coap"))) {
+            connections.connector.connect(peer)
+            assertIs<InMemoryMessageStream>(secure.accept())
+        }
+
+        val refused = listOf(
+            Endpoint.WebSocket("ws://127.0.0.1:8080/.well-known/coap"),
+            Endpoint.WebSocket("wss://127.0.0.1:80/.well-known/coap"),
+            Endpoint.WebSocket("ws://[2001:db8::1]:443/.well-known/coap"),
+            Endpoint.WebSocket("127.0.0.1:80"),
+        )
+        for (peer in refused) assertFailsWith<InMemoryConnectionRefused>(peer.toString()) { connections.connector.connect(peer) }
+    }
+
     @Test
     fun connectingNeedsAListener() = runTest {
         val connections = InMemoryConnections()
