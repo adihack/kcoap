@@ -6,7 +6,15 @@ API; every breaking change is listed here with a migration note.
 
 ## Unreleased
 
-Nothing has changed since 0.1.0 yet.
+### Fixed
+
+- A Confirmable separate response, such as the last block of a Confirmable Q-Block2 body, could stay
+  unacknowledged when the application closed the endpoint as soon as its request returned, and the server then
+  sent it again until MAX_RETRANSMIT (RFC 7252 §4.2). The client acknowledged it only after handing it on, so the
+  caller could close the transport ahead of the ACK; against libcoap's `coap-server` that happened to 1 of 80
+  Confirmable GETs on two CPUs beside three busy loops. It is now acknowledged before it is handed on, once its
+  exchange is sure to take it: the room in a Q-Block body's inbox is still reserved first, and a response that
+  does not fit still stays unacknowledged.
 
 ## 0.1.0 - 2026-11-06
 
