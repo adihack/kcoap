@@ -7,6 +7,7 @@ import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.server.AccessPolicy
 import dev.kcoap.coap.server.CoapServer
 import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.edhoc.AuthenticationCredential
 import dev.kcoap.edhoc.EdhocResponderConfig
@@ -22,6 +23,7 @@ import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorUdpTransport
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 
@@ -39,6 +41,8 @@ import kotlinx.coroutines.CoroutineScope
  * - `/firmware`, a [firmware] body larger than one block, for any OSCORE client to GET; a PUT body goes to
  *   [uploads].
  * - `/hello`, public, answering the device's greeting; [helloRequests] keeps the options of each request.
+ * - `/state`, observable (RFC 7641) by any OSCORE client: `state <n>`, where [changeState] counts n up and
+ *   notifies the observers.
  *
  * [security] records every request as it arrived, before verification.
  */
@@ -53,9 +57,17 @@ internal class UdpDevice private constructor(
     val helloRequests: List<OptionSet>,
     /** The bodies PUT to `/firmware`, whole. */
     val uploads: List<ByteArray>,
+    private val state: ObservableResource,
+    private val stateChanges: AtomicInteger,
 ) {
     /** A request `/lights` answered: who OSCORE verified, and the peer it came from. */
     class Visit(val identity: SecurityIdentity?, val peer: Endpoint)
+
+    /** Counts `/state` up and notifies its observers. */
+    fun changeState() {
+        stateChanges.incrementAndGet()
+        state.notifyObservers()
+    }
 
     suspend fun close() {
         server.close()
@@ -112,6 +124,8 @@ internal class UdpDevice private constructor(
             val visits = Collections.synchronizedList(mutableListOf<Visit>())
             val hellos = Collections.synchronizedList(mutableListOf<OptionSet>())
             val uploads = Collections.synchronizedList(mutableListOf<ByteArray>())
+            val stateChanges = AtomicInteger()
+            lateinit var state: ObservableResource
             val server = CoapServer(transport, scope, CoapServerConfig(security = security)) {
                 resource(".well-known") { add(EdhocResource(edhoc)) }
                 resource("lights") {
@@ -141,8 +155,12 @@ internal class UdpDevice private constructor(
                         CoapResponse.content(greeting)
                     }
                 }
+                state = resource("state") {
+                    observable()
+                    get { CoapResponse.content("state ${stateChanges.get()}") }
+                }
             }
-            return UdpDevice(server, security, visits, sessions, hellos, uploads)
+            return UdpDevice(server, security, visits, sessions, hellos, uploads, state, stateChanges)
         }
     }
 }

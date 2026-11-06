@@ -1,7 +1,9 @@
 package dev.kcoap.edhoc.oscore.interop
 
 import dev.kcoap.coap.CoapCode
+import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapRequest
+import dev.kcoap.coap.CoapResponse
 import dev.kcoap.coap.CoapUri
 import dev.kcoap.coap.ContentFormat
 import dev.kcoap.coap.client.CoapClient
@@ -45,11 +47,16 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -234,6 +241,99 @@ class BrowserTopologyInteropTest {
         }
     }
 
+    /**
+     * The device authorizes on the [EdhocIdentity], not on EDHOC having completed: a client that EDHOC
+     * authenticated but whose credential `/lights` does not admit gets a 4.03, protected with the context EDHOC
+     * derived (ADR 0008), back through the proxy.
+     */
+    @Test
+    fun edhocAuthenticatedClientWhoseCredentialIsNotAdmittedGetsAProtected403ThroughTheProxy() = runBlocking {
+        assumeProxy()
+        val peers = Peers.create(crypto)
+        // The responder trusts the client's credential, so EDHOC completes; /lights admits no credential.
+        val start = startDevice(peers, admittedCredentials = emptySet())
+        val proxy = startProxy()
+        val route = ProxyRoute(proxy.webSocketUri)
+        val security = PeerSecurity()
+        val browser = webSocketClient(CoapClientConfig(security = security))
+
+        withTimeout(60.seconds) {
+            awaitProxy(browser, proxy)
+            val session = handshakeThrough(route, browser, peers.initiatorConfig()).run()
+            assertEquals(peers.client.credential, start.established.single().peerCredential)
+            val recording = RecordingClientSecurity(OscoreClient(session.oscore))
+            security.install(browser, proxy.webSocketUri, recording)
+
+            assertEquals(CoapCode.FORBIDDEN, browser.request(route.viaProxyScheme(get("lights"))).code)
+            // Protected: an outer 2.04 with the OSCORE option crossed the proxy (RFC 8613 §4.2), and the 4.03 is
+            // what verification found inside.
+            val exchange = recording.exchanges.single()
+            val arrived = assertNotNull(exchange.arrived)
+            assertEquals(CoapCode.CHANGED, arrived.code)
+            assertNotNull(arrived.options.oscore)
+            assertEquals(CoapCode.FORBIDDEN, assertIs<ResponseVerification.Verified>(exchange.response).message.code)
+            // The device verified the request as the EDHOC peer, and the policy refused it before the handler ran.
+            val verified = assertNotNull(start.security.arrivals.last().verified)
+            assertEquals(peers.client.credential, assertIs<EdhocIdentity>(verified.identity).peerCredential)
+            assertTrue(start.lights.isEmpty(), "the handler did not run")
+        }
+    }
+
+    /**
+     * An OSCORE observation through an OSCORE-unaware proxy (RFC 8613 §10, §4.1.3.5): Observe goes outside as well
+     * as inside, so the proxy sees an outer FETCH with Observe, keeps the registration's token for the
+     * notifications and passes each on as an outer 2.05 (§4.2), which the client verifies against the
+     * registration.
+     */
+    @Test
+    fun oscoreObservationThroughTheProxyDeliversVerifiedNotifications() = runBlocking {
+        assumeProxy()
+        val peers = Peers.create(crypto)
+        val start = startDevice(
+            peers,
+            provisioned = listOf(deviceContext(sender = DEVICE_ID, recipient = BROWSER_ID)),
+            admitted = setOf(identity(BROWSER_ID)),
+        )
+        val proxy = startProxy()
+        val route = ProxyRoute(proxy.webSocketUri)
+        val recording = RecordingClientSecurity(OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID)))
+        val browser = webSocketClient(CoapClientConfig(security = recording))
+
+        withTimeout(60.seconds) {
+            awaitProxy(browser, proxy)
+            val states = Channel<CoapResponse>(Channel.UNLIMITED)
+            val observing = launch { browser.observe(route.viaProxyScheme(get("state"))).collect { states.send(it) } }
+            for (expected in 0..2) {
+                val notification = states.receive()
+                assertEquals(CoapCode.CONTENT, notification.code)
+                assertEquals("state $expected", notification.payloadAsText())
+                assertNotNull(notification.options.observe, "a notification, not the end of the observation")
+                if (expected < 2) start.changeState()
+            }
+            observing.cancelAndJoin()
+
+            val registration = recording.exchanges.first()
+            assertEquals(0L, registration.request.options.observe)
+            assertEquals(CoapCode.FETCH, registration.sent.code, "an Observe request's outer code (RFC 8613 §4.2)")
+            assertEquals(0L, registration.sent.options.observe, "Observe goes outside too (RFC 8613 §4.1.3.5.1)")
+            // What the proxy saw: the registration in and out with Observe and the target in Class U options; the
+            // registration's response and two notifications in, and on to the browser, as outer 2.05 with Observe.
+            val messages = proxy.awaitMessages { all -> all.count { it.isWebSocket && it.code == "2.05" } >= 3 }
+            val received = messages.filter { it.isWebSocket && it.code == "FETCH" }
+            assertTrue(received.isNotEmpty(), "$messages")
+            val register = received.first()
+            assertTrue(register.has("Observe") && register.has("Proxy-Scheme") && register.has("Oscore"), "$register")
+            assertFalse(register.has("Uri-Path"), "the path stays encrypted: $register")
+            val forwarded = messages.first { !it.isWebSocket && it.code == "FETCH" }
+            assertTrue(forwarded.has("Observe") && forwarded.has("Oscore"), "$forwarded")
+            assertFalse(forwarded.has("Proxy-Scheme"), "$forwarded")
+            val fromDevice = messages.filter { !it.isWebSocket && it.code == "2.05" }
+            val toBrowser = messages.filter { it.isWebSocket && it.code == "2.05" }
+            assertTrue(fromDevice.size >= 3 && fromDevice.all { it.has("Observe") }, "$messages")
+            assertTrue(toBrowser.size >= 3 && toBrowser.all { it.has("Observe") && it.has("Oscore") }, "$messages")
+        }
+    }
+
     @Test
     fun combinedRequestOfRfc9668ThroughTheProxy() = runBlocking {
         assumeProxy()
@@ -406,7 +506,59 @@ class BrowserTopologyInteropTest {
         }
     }
 
+    /**
+     * libcoap 4.3.5b's proxy gives every request it forwards a new token of its own (`coap_proxy_forward_request`,
+     * `src/coap_proxy.c:590`), a deregistration too. RFC 7641 §3.6 deregisters with Observe 1 on the registration's
+     * token, so the device does not match it to the observation, answers it as a plain request and keeps
+     * notifying; the proxy, which keeps the registration's entry for as long as notifications come
+     * (`coap_proxy_forward_response`), acknowledges them and passes them on to a client that has forgotten the
+     * token. Pinned: this fails once libcoap deregisters upstream.
+     */
+    @Test
+    fun upstreamLibcoapProxyForwardsADeregistrationOnANewTokenSoTheDeviceKeepsNotifying() = runBlocking {
+        assumeProxy()
+        val peers = Peers.create(crypto)
+        val start = startDevice(
+            peers,
+            provisioned = listOf(deviceContext(sender = DEVICE_ID, recipient = BROWSER_ID)),
+            admitted = setOf(identity(BROWSER_ID)),
+        )
+        val proxy = startProxy()
+        val route = ProxyRoute(proxy.webSocketUri)
+        val browser = webSocketClient(
+            CoapClientConfig(security = OscoreClient(clientContext(sender = BROWSER_ID, recipient = DEVICE_ID))),
+        )
+
+        withTimeout(60.seconds) {
+            awaitProxy(browser, proxy)
+            // The first notification, then the collector stops and the client deregisters (the default).
+            assertEquals("state 0", browser.observe(route.viaProxyScheme(get("state"))).first().payloadAsText())
+            val observeRequests = awaitArrivals(start) { all -> all.count { it.options.observe != null } == 2 }
+                .filter { it.options.observe != null }
+            val (registration, deregistration) = observeRequests
+            assertEquals(listOf(0L, 1L), observeRequests.map { it.options.observe }, "$observeRequests")
+            assertFalse(registration.token.contentEquals(deregistration.token), "the deregistration's token is new")
+
+            // The device still notifies, and the proxy passes the notification on to the browser.
+            start.changeState()
+            val messages = proxy.awaitMessages { all -> all.count { it.isWebSocket && it.code == "2.05" } == 2 }
+            val notifications = messages.filter { it.isWebSocket && it.code == "2.05" }
+            assertEquals(2, notifications.size, "the registration's response and a notification after it: $messages")
+            assertTrue(notifications.all { it.has("Observe") }, "$notifications")
+        }
+    }
+
     // ------------------------------------------------------------------------------------------- fixtures
+
+    /** The requests that reached the device as they arrived, once [condition] holds for them or 5 s passed. */
+    private suspend fun awaitArrivals(device: UdpDevice, condition: (List<CoapMessage>) -> Boolean): List<CoapMessage> {
+        val deadline = TimeSource.Monotonic.markNow() + 5.seconds
+        while (true) {
+            val arrived = device.security.arrivals.toList().map { it.arrived }
+            if (condition(arrived) || deadline.hasPassedNow()) return arrived
+            delay(50.milliseconds)
+        }
+    }
 
     /** A GET of [path] on the device, as the browser states it before [ProxyRoute] sends it to the proxy. */
     private fun get(path: String): CoapRequest {
