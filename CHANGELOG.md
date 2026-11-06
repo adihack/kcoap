@@ -995,18 +995,29 @@ Build governance (WP-C1):
     entry RFC 7252 §4.5 lets the endpoint process again (an idempotent request once answered, a message answered
     with a Reset, a request the server refused before anything acted on it, such as a message-security failure,
     an access refusal or a 4.04), keeps a quarter of its places for such entries, so a flood of POSTs never keeps
-    a GET out, and gives each peer at most `maxDeduplicationEntriesPerPeer`. A late duplicate of a forgotten
-    request is processed again, which §4.5 allows for such requests.
+    a GET out, nor the responses to the endpoint's own requests (a response that matches no exchange, all a
+    forged source can send, is reset at once), and gives each peer at most `maxDeduplicationEntriesPerPeer`. A
+    late duplicate of a forgotten request is processed again, which §4.5 allows for such requests. A request
+    message security verified is never forgotten, an OSCORE GET or FETCH included, since its Partial IV is in
+    the replay window (RFC 8613 §7.4) and a retransmission processed again would get a replay error instead of
+    the answer it lost.
   - Message IDs were reserved without a bound: a flood of Non-confirmable requests from forged sources made the
     endpoint reserve one for every response, for EXCHANGE_LIFETIME. Beyond `maxReservedMessageIds`, or
     `maxReservedMessageIdsPerPeer` towards one peer, the message that needs a new ID is refused instead; §4.4
-    forbids reusing one early. Piggybacked responses need none.
+    forbids reusing one early. Responses to Non-confirmable requests, which such a flood draws and a client may
+    lose anyway (§5.2.3), are refused already at three quarters of each bound, so the endpoint's own requests,
+    notifications and separate responses to Confirmable requests keep a quarter. A notification a bound refuses
+    does not remove its observer: it goes later with the latest state (RFC 7641 §4.5), after a back-off from
+    ACK_TIMEOUT doubling up to about a minute, and is logged at debug. Piggybacked responses need none.
   - Separate responses and notifications to forged addresses were kept and retransmitted without a total bound.
     Beyond `maxExchanges` the endpoint forgets the oldest Non-confirmable message kept only for a Reset, then
     gives up the oldest Confirmable one that a retransmission did not get acknowledged either, and only then
     refuses; the client exchanges count against it too.
   - `SpoofedFloodTest` floods each bound from up to 2 000 forged sources and checks that a client at a real
-    address is still served.
+    address is still served: piggybacked and separate responses, notifications, and the endpoint's own
+    requests. It also floods every refusal that lets a request be processed again (a message-security failure,
+    an access refusal, an overload 5.03 or drop), and checks that an OSCORE request whose ACK was lost gets that
+    ACK again under that pressure.
 - CoAP client (WP-T1): a `coaps+tcp` or `coaps+ws` request went out on whatever peer the `EndpointResolver`
   returned, so a resolver that mapped such a URI to a plain `Endpoint.Tcp` or `Endpoint.WebSocket` sent it in
   plaintext (RFC 8323 §9). `CoapClient` now sends a `coaps+tcp` or `coaps+ws` request only when a connector or

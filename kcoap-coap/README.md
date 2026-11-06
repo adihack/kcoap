@@ -154,7 +154,8 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   `CoapEndpointConfig.maxDeduplicationEntries` and `maxDeduplicationEntriesPerPeer` (50 000 and 10 000; the
   oldest entry §4.5 lets the endpoint process again makes room, else the new message is dropped silently,
   and three quarters at most hold entries that must be kept), `maxReservedMessageIds` and
-  `maxReservedMessageIdsPerPeer` (262 144 and 65 536; a message needing a new Message ID is refused, §4.4),
+  `maxReservedMessageIdsPerPeer` (262 144 and 65 536; a message needing a new Message ID is refused, §4.4,
+  a response to a Non-confirmable request at three quarters, and a refused notification goes later),
   `maxConcurrentRequests` (256; piggybacked 5.03 with Max-Age), `maxExchangesPerPeer` and `maxExchanges`
   (256 and 16 384; `IDENTIFIERS_EXHAUSTED`, and in total first forgetting Non-confirmable messages kept for a
   Reset, then giving up Confirmable ones unacknowledged after a retransmission), `CoapServerConfig.maxObservers`,
