@@ -398,7 +398,9 @@ class EdgeCaseTest {
             EndpointEvent.Retransmitted(peer, 1, 2), EndpointEvent.TransmissionTimedOut(peer, 1),
             EndpointEvent.ResetReceived(peer, 1), EndpointEvent.DuplicateReceived(peer, 1),
             EndpointEvent.MalformedMessage(peer, "bad"), EndpointEvent.MessageRejected(peer, 1, "why"),
-            EndpointEvent.SessionEnded(peer), EndpointEvent.ObserverAdded(peer, "/a"), EndpointEvent.ObserverRemoved(peer, "/a", "rst"),
+            EndpointEvent.SessionEnded(peer), EndpointEvent.ObserverAdded(peer, "/a"),
+            EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.RESET),
+            EndpointEvent.ObserverRemoved(peer, "/a", EndpointEvent.ObserverRemoved.Reason.FAILED, "why"),
         )
         events.forEach { assertTrue(it.toString().contains("192.0.2.1"), "$it") }
         assertTrue(CoapOptions.URI_PATH.toString() == "Uri-Path(11)")

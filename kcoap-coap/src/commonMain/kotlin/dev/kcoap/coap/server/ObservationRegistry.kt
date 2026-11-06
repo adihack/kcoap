@@ -4,10 +4,12 @@ import dev.kcoap.coap.CoapMessage
 import dev.kcoap.coap.CoapMessageType
 import dev.kcoap.coap.security.SecurityIdentity
 import dev.kcoap.coap.security.UnprotectedRequest
+import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.Delivery
 import dev.kcoap.coap.stack.DeliveryOutcome
 import dev.kcoap.coap.stack.DeliveryOwner
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEvent.ObserverRemoved
 import dev.kcoap.coap.stack.ExchangeKey
 import dev.kcoap.coap.stack.NotificationPolicy
 import dev.kcoap.coap.stack.OperationKey
@@ -109,14 +111,15 @@ internal class ObservationRegistry(private val server: CoapServer) {
      * RFC 7641 §3.6 deregistration, by a request of the registration's [identity] only: a GET with Observe 1
      * from another identity, or none, cancels nothing (ADR 0008).
      */
-    suspend fun remove(peer: Endpoint, token: ByteArray, identity: SecurityIdentity?, reason: String) {
+    suspend fun remove(peer: Endpoint, token: ByteArray, identity: SecurityIdentity?, reason: ObserverRemoved.Reason) {
         val observation = lock.withLock {
             byKey[ExchangeKey(peer, token.toHex())]?.takeIf { it.identity == identity }
         } ?: return
         remove(observation, reason)
     }
 
-    suspend fun remove(observation: ServerObservation, reason: String) {
+    /** Removes [observation], once, and reports it as [EndpointEvent.ObserverRemoved] with [reason] and [detail]. */
+    suspend fun remove(observation: ServerObservation, reason: ObserverRemoved.Reason, detail: String? = null) {
         val removed = lock.withLock {
             val registered = byKey[observation.key] === observation
             if (registered) {
@@ -131,7 +134,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
         // RFC 9177 §4.5: the rest of a Q-Block2 notification body would only be answered with Resets. After
         // deactivate, so that a body the server installs meanwhile is either stopped here or never installed.
         server.qBlock.stop(observation)
-        if (removed) server.endpoint.report(EndpointEvent.ObserverRemoved(observation.peer, observation.resource.path, reason))
+        if (!removed) return
+        server.endpoint.report(ObserverRemoved(observation.peer, observation.resource.path, reason, detail))
     }
 
     fun changed(resource: ObservableResource) {
@@ -150,7 +154,8 @@ internal class ObservationRegistry(private val server: CoapServer) {
 
     /** RFC 7252 §9.1.1, RFC 8323 §7.4: observations bound to an ended DTLS session or closed connection end with it. */
     suspend fun sessionEnded(peer: Endpoint) {
-        lock.withLock { byKey.values.filter { it.peer == peer } }.forEach { remove(it, "session ended") }
+        val bound = lock.withLock { byKey.values.filter { it.peer == peer } }
+        bound.forEach { remove(it, ObserverRemoved.Reason.SESSION_ENDED) }
     }
 
     /** The server stopped: every observer is dropped silently, and no new one is taken. */
@@ -177,6 +182,25 @@ internal class ObservationRegistry(private val server: CoapServer) {
         val current = byResource.load()
         val remaining = current[observation.resource].orEmpty().filter { it !== observation }
         byResource.store(if (remaining.isEmpty()) current - observation.resource else current + (observation.resource to remaining))
+    }
+
+    companion object {
+        /**
+         * Why a notification whose delivery ended with [outcome] removes its observer (RFC 7641 §4.5), with a
+         * detail for a failure; null for an outcome that removes nothing.
+         */
+        fun removalFor(outcome: DeliveryOutcome): Pair<ObserverRemoved.Reason, String?>? = when (outcome) {
+            DeliveryOutcome.Rejected -> ObserverRemoved.Reason.RESET to null
+            DeliveryOutcome.TimedOut -> ObserverRemoved.Reason.NOT_ACKNOWLEDGED to null
+            is DeliveryOutcome.Failed -> {
+                val ended = outcome.cause.reason.let {
+                    it == CoapException.Reason.SESSION_ENDED || it == CoapException.Reason.CONNECTION_CLOSED
+                }
+                val reason = if (ended) ObserverRemoved.Reason.SESSION_ENDED else ObserverRemoved.Reason.FAILED
+                reason to outcome.cause.message
+            }
+            is DeliveryOutcome.Delivered, DeliveryOutcome.Released -> null
+        }
     }
 }
 
@@ -303,19 +327,16 @@ internal class ServerObservation(
     }
 
     override suspend fun onOutcome(delivery: Delivery, outcome: DeliveryOutcome) {
-        when (outcome) {
-            is DeliveryOutcome.Delivered, DeliveryOutcome.Released -> {
-                if (outstanding !== delivery) return
-                outstanding = null
-                // A replacement that never went out, or a change while a NON held the slot: send the latest.
-                if (delivery.isSuperseded) resendDue = true
-                if (hasNews()) schedule()
-            }
-            // §4.5: a Reset or a timed-out Confirmable notification removes the observer.
-            DeliveryOutcome.Rejected -> server.observations.remove(this, "reset by client")
-            DeliveryOutcome.TimedOut -> server.observations.remove(this, "notification not acknowledged")
-            is DeliveryOutcome.Failed -> server.observations.remove(this, outcome.cause.message ?: "failed")
+        // §4.5: a Reset or a timed-out Confirmable notification removes the observer, and so does a failure.
+        ObservationRegistry.removalFor(outcome)?.let { (reason, detail) ->
+            server.observations.remove(this, reason, detail)
+            return
         }
+        if (outstanding !== delivery) return
+        outstanding = null
+        // A replacement that never went out, or a change while a NON held the slot: send the latest.
+        if (delivery.isSuperseded) resendDue = true
+        if (hasNews()) schedule()
     }
 
     /**
@@ -335,7 +356,7 @@ internal class ServerObservation(
         server.endpoint.launchGuarded("send the removal notice of ${resource.path}", onFailure = ::failed) {
             mutex.withLock {
                 if (!isActive) return@withLock
-                server.observations.remove(this@ServerObservation, "resource removed")
+                server.observations.remove(this@ServerObservation, ObserverRemoved.Reason.RESOURCE_REMOVED)
                 server.sendRemovalNotice(this@ServerObservation)
             }
         }
@@ -343,7 +364,7 @@ internal class ServerObservation(
 
     private suspend fun failed(error: Exception) {
         scheduled = false
-        server.observations.remove(this, "notification failed: ${error.message}")
+        server.observations.remove(this, ObserverRemoved.Reason.FAILED, "notification failed: ${error.message}")
     }
 
     fun deactivate() {

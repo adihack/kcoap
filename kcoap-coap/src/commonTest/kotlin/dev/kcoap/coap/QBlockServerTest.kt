@@ -836,7 +836,8 @@ class QBlockServerTest {
         val copies = 1 + TransmissionParameters.Default.maxRetransmit
         assertEquals(List(copies) { 0L }, unanswered.numbers(), "RFC 7641 §4.5")
         assertEquals(0, counter.observerCount)
-        assertTrue(f.events.any { it is EndpointEvent.ObserverRemoved && it.reason == "notification not acknowledged" })
+        val removals = f.events.filterIsInstance<EndpointEvent.ObserverRemoved>().map { it.reason }
+        assertTrue(EndpointEvent.ObserverRemoved.Reason.NOT_ACKNOWLEDGED in removals, "$removals")
     }
 
     @Test
