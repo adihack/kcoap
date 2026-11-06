@@ -94,7 +94,10 @@ internal suspend fun EdhocSession.oscoreParametersFrom(
  * The context's [SecurityContext.identity] is an [EdhocIdentity]: the peer's authenticated credential and the
  * context's Recipient ID, which the requests it verifies carry to access policies and handlers (ADR 0008).
  *
- * `@Throws` lists [KcoapException] and `CancellationException`, as for [SecurityContext.derive].
+ * `@Throws` lists [KcoapException] and `CancellationException`, as for [SecurityContext.derive], and as there the
+ * exceptions of [sequenceStore] and [crypto] pass unchanged and are not in that list, so from Swift they end the
+ * process. [EdhocClientHandshake] and [EdhocServer], which call this, turn them into an
+ * [dev.kcoap.edhoc.EdhocException] with the failure as cause.
  */
 @Throws(KcoapException::class, CancellationException::class)
 public suspend fun EdhocSession.oscoreContext(

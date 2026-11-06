@@ -20,6 +20,8 @@ import dev.kcoap.oscore.OscoreClient
 import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.oscore.SequenceNumberStore
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 
 /**
  * The client (EDHOC Initiator) side of EDHOC over CoAP, forward message flow (RFC 9528 Appendix A.2.1).
@@ -46,7 +48,9 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * Every run fails with an [dev.kcoap.edhoc.EdhocException]: an [EdhocPeerErrorException] when the server
  * answered with an EDHOC error, an [EdhocTransferException] when it answered with something that is not
- * EDHOC, and the exception itself when a step of this side failed. Whatever [exchange] throws, such as
+ * EDHOC, and the exception itself when a step of this side failed. When the OSCORE context cannot be derived
+ * at the end (RFC 9528 Appendix A.1) because [sequenceStore] or [crypto] threw, the run fails with an
+ * `EdhocException` of error code 1 whose cause is that exception. Whatever [exchange] throws, such as
  * kcoap-coap's `CoapException` for a request that got no response, passes through as it is. A run that fails or
  * is cancelled at any step wipes what it holds (RFC 9528 §9.8): the Initiator's ephemeral key X while it waits
  * for message_2, PRK_4e3m and the session's PRK_out and PRK_exporter once message_3 is out.
@@ -132,8 +136,22 @@ public class EdhocClientHandshake(
         }
     }
 
+    /**
+     * The session's OSCORE context. A failure that is not kcoap's, of [sequenceStore] or of [crypto], becomes an
+     * [EdhocClientFailure] with it as cause, as the server's becomes an [EdhocServerFailure]; so does a
+     * cancellation of their own, such as a store's `withTimeout` expiring, while the caller is still active. The
+     * caller's cancellation passes unchanged.
+     */
     private suspend fun deriveContext(session: EdhocSession): SecurityContext =
-        session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
+        try {
+            session.oscoreContext(crypto, sequenceStore ?: EphemeralSequenceNumberStore())
+        } catch (e: KcoapException) {
+            throw e
+        } catch (e: Exception) {
+            if (e is CancellationException && !currentCoroutineContext().isActive) throw e
+            log.warn(e) { "The OSCORE context of session ${session.ownConnectionIdentifier} was not derived" }
+            throw EdhocClientFailure("${EdhocClientFailure.DIAGNOSTIC}: ${e.message}", e)
+        }
 
     private suspend fun exchangeMessages1And2(initiator: EdhocInitiator) {
         repeat(MAX_NEGOTIATION_ROUNDS) {
