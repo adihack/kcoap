@@ -635,7 +635,8 @@ public class CoapServer private constructor(
                 Answer.NONE
             }
             is Reply.Body -> {
-                val challenge = qBlock.send(QBlockRequest(inbound, request, unprotected), reply)
+                val sent = qBlock.send(QBlockRequest(inbound, request, unprotected), reply)
+                val challenge = sent.challenge
                 if (challenge != null) {
                     send(inbound, request, unprotected, challenge)
                 } else {
@@ -643,7 +644,8 @@ public class CoapServer private constructor(
                         // RFC 9177 §4.5: the registration response is a body; notifications follow once it went out.
                         reply.body.observation?.onRegistrationSent(null, inbound.message.type == CoapMessageType.CON, endpoint.now())
                     }
-                    Answer(reply.body.response.code)
+                    // What went out on this request: a block, a refused follow-up's 4.00, or nothing for a Continue.
+                    Answer(sent.code)
                 }
             }
         }

@@ -657,12 +657,21 @@ internal class QBlockServer(
     }
 
     /**
+     * What [send] did for the request that triggered a reply: [challenge], the 4.01 with Echo to send in place of
+     * the body (RFC 9175 §2.4 item 3), or else [code], the inner code of the response that went out on that request
+     * itself, for [EndpointEvent.RequestCompleted]. That is the body's code for a block, the 4.00 of a refused
+     * follow-up (RFC 9177 §4.4), and null when the request got no response of its own: a Continue whose set went
+     * on the original request, or one repeated within NON_TIMEOUT_RANDOM.
+     */
+    class Sent(val challenge: Reply.Single?, val code: CoapCode?)
+
+    /**
      * Sends the blocks of [reply], the answer to [trigger], unless they are a burst that must wait for the
      * client's address to be verified (RFC 9175 §2.4 item 3): then nothing goes out, a new body is forgotten,
-     * and the returned 4.01 with Echo goes instead. A burst counts against [trigger] alone, also a Continue's,
+     * and the returned [Sent.challenge] goes instead. A burst counts against [trigger] alone, also a Continue's,
      * which is a request of its own; blocks on [trigger]'s own request are recorded there for its later sets.
      */
-    suspend fun send(trigger: QBlockRequest, reply: Reply.Body): Reply? {
+    suspend fun send(trigger: QBlockRequest, reply: Reply.Body): Sent {
         val body = reply.body
         val blocks = reply.actions.filterIsInstance<QBlockAction.SendBlock<QBlockTarget>>()
         var bytes = 0L
@@ -686,36 +695,52 @@ internal class QBlockServer(
             } else {
                 null
             }
-            return server.challenge(trigger.inbound.peer, endpoint.now(), kept)
+            return Sent(server.challenge(trigger.inbound.peer, endpoint.now(), kept), null)
         }
         // One reply's blocks all go on one request: the trigger's own, or the original one of a Continue.
         val own = (blocks.firstOrNull()?.ref as? QBlockRequest)?.takeIf { it.inbound === trigger.inbound }
         if (own != null && bytes > 0) locked { own.sentBytes += bytes }
-        execute(body, reply.actions)
+        val code = execute(body, reply.actions, trigger.inbound)
         // A request the body did not answer, such as a Continue whose set went out before, gets no response.
         if (!trigger.inbound.isAnswered) trigger.inbound.finishWithoutResponse()
         settleIfDone(body)
-        return null
+        return Sent(null, code)
     }
 
-    private suspend fun execute(body: ServedBody, actions: List<QBlockAction<QBlockTarget>>) {
+    /**
+     * Carries out [actions] for [body]. Returns the inner code of the first response that went out on [answering],
+     * or null when none did.
+     */
+    private suspend fun execute(body: ServedBody, actions: List<QBlockAction<QBlockTarget>>, answering: InboundRequest? = null): CoapCode? {
+        var answered: CoapCode? = null
         for (action in actions) {
-            when (action) {
+            val sent: Pair<QBlockRequest, CoapCode>? = when (action) {
                 is QBlockAction.SendBlock -> when (val target = action.ref) {
-                    is QBlockRequest -> respond(
-                        target,
-                        body.block(action.num, action.more, target.token, body.observeFor(target)),
-                        blockOwner(body, action.num, target),
-                    )
-                    is NotificationBody -> notifyBlock(body, target, action.num, action.more)
+                    is QBlockRequest -> {
+                        val block = body.block(action.num, action.more, target.token, body.observeFor(target))
+                        if (respond(target, block, blockOwner(body, action.num, target))) target to block.code else null
+                    }
+                    is NotificationBody -> {
+                        notifyBlock(body, target, action.num, action.more)
+                        null
+                    }
                 }
-                is QBlockAction.NoResponse -> (action.ref as? QBlockRequest)?.inbound?.finishWithoutResponse()
+                is QBlockAction.NoResponse -> {
+                    (action.ref as? QBlockRequest)?.inbound?.finishWithoutResponse()
+                    null
+                }
                 is QBlockAction.Reject -> (action.ref as? QBlockRequest)?.let { ref ->
-                    respond(ref, CoapResponse.error(action.code, action.diagnostic).toMessage(ref.token))
+                    val refusal = CoapResponse.error(action.code, action.diagnostic).toMessage(ref.token)
+                    if (respond(ref, refusal)) ref to refusal.code else null
                 }
-                else -> log.debug { "Ignored $action of $body" }
+                else -> {
+                    log.debug { "Ignored $action of $body" }
+                    null
+                }
             }
+            if (answered == null && sent != null && answering != null && sent.first.inbound === answering) answered = sent.second
         }
+        return answered
     }
 
     /**
@@ -1098,13 +1123,16 @@ internal class QBlockServer(
         )
     }
 
-    private suspend fun respond(ref: QBlockRequest, message: CoapMessage, owner: DeliveryOwner? = null) {
+    /** Sends [message] in answer to [ref]; false, logged, when protecting or sending it failed. */
+    private suspend fun respond(ref: QBlockRequest, message: CoapMessage, owner: DeliveryOwner? = null): Boolean {
         try {
             ref.inbound.respond(ref.unprotected?.protectResponse(message) ?: message, owner)
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.warn { "Could not send ${message.code} to ${ref.inbound.peer}: ${e.message}" }
+            return false
         }
     }
 
