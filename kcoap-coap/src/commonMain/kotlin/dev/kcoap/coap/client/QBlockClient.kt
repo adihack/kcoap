@@ -667,7 +667,7 @@ internal class QBlockClient(private val client: CoapClient) {
          */
         private fun onUnverified(message: CoapMessage) {
             if (isObserving) {
-                logger.warn { "Dropped an unverified ${message.code} to a protected observation" }
+                logger.debug { "Dropped an unverified ${message.code} to a protected observation" }
                 return
             }
             logger.debug { "Q-Block transfer ended with an unverified ${message.code}" }
@@ -999,6 +999,8 @@ internal class QBlockClient(private val client: CoapClient) {
                 support.invalidate(peer)
             }
             logger.debug { "Q-Block transfer failed: $diagnostic" }
+            // A body that got only responses failing verification says so, with the last of them as cause.
+            if (reason == CoapException.Reason.RESPONSE_TIMEOUT) throw ClientExchange.responseTimeout(diagnostic, sent.values.map { it.exchange })
             throw CoapException(diagnostic, reason)
         }
     }

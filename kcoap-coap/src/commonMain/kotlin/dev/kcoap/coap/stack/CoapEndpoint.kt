@@ -451,11 +451,14 @@ public class CoapEndpoint private constructor(
         return answered
     }
 
-    /** Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation. */
+    /**
+     * Waits for the exchange's next response, at most [timeout]; cancels the exchange on timeout or cancellation.
+     * A timeout is [ClientExchange.responseTimeout], whose cause is the last response that failed verification.
+     */
     internal suspend fun awaitResponse(exchange: ClientExchange, timeout: Duration): CoapMessage {
         try {
             return withTimeoutOrNull(timeout) { exchange.awaitResponse() }
-                ?: throw CoapException("No response from ${exchange.peer} within $timeout", CoapException.Reason.RESPONSE_TIMEOUT)
+                ?: throw exchange.responseTimeout(timeout)
         } catch (e: Throwable) {
             withContext(NonCancellable) { exchange.cancel() }
             throw e

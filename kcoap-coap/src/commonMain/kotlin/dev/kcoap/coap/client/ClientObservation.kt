@@ -197,7 +197,7 @@ internal class ClientObservation(
         client.blockwise.complete(peer, registration, notification, confirmable)
     } catch (e: CoapException) {
         if (e.reason != CoapException.Reason.UNVERIFIED_RESPONSE) throw e
-        log.warn { "Dropped a notification whose Block2 request got an unverified ${e.response?.code}" }
+        log.debug { "Dropped a notification whose Block2 request got an unverified ${e.response?.code}" }
         null
     }
 

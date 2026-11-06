@@ -129,6 +129,39 @@ public sealed interface EndpointEvent {
             "MessageRejected(peer=$peer, mid=$messageId, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
     }
 
+    /**
+     * A response from [peer] to a request message security protected, which the client did not act on because it
+     * was not verified. Nothing else shows it to an observation, whose collectors a failure would end, which
+     * RFC 8613 §8.4.2 forbids for one bad notification. [reason] is a bounded set fit for counting; [detail] is what
+     * the security layer said, for a log.
+     */
+    public class ResponseRejected(
+        override val peer: Endpoint,
+        public val reason: Reason,
+        public val detail: String? = null,
+    ) : EndpointEvent {
+        /** Why a response was rejected. New reasons may be added before 1.0; use an `else` branch. */
+        public enum class Reason {
+            /**
+             * It failed verification and was dropped (RFC 8613 §8.4): a protected response that did not verify, a
+             * replay, or an unprotected response that is not an error. Its exchange goes on: a request waits for a
+             * response that verifies, and fails with [CoapException.Reason.RESPONSE_TIMEOUT] when none comes, with
+             * the last such failure as cause and their count in its message; an observation keeps its collectors.
+             */
+            VERIFICATION_FAILED,
+
+            /**
+             * An error that came without message security (RFC 8613 §8.2), which nothing acts on (ADR 0008): a
+             * request that has no verified response yet fails with [CoapException.Reason.UNVERIFIED_RESPONSE], which
+             * carries it, and an established observation drops it.
+             */
+            UNVERIFIED,
+        }
+
+        override fun toString(): String =
+            "ResponseRejected(peer=$peer, reason=$reason" + (detail?.let { ", detail=$it" } ?: "") + ")"
+    }
+
     /** The DTLS session to [peer] ended; its exchanges and observations were failed (RFC 7252 §9.1.1). */
     public class SessionEnded(override val peer: Endpoint) : EndpointEvent {
         override fun toString(): String = "SessionEnded(peer=$peer)"
