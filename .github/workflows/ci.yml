@@ -4,10 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  jvm:
-    name: JVM tests (Linux)
+  unit:
+    name: Unit tests (JVM, Linux native, JS, Wasm), build checks and coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,10 +21,50 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew jvmTest
+      # Every common test on the JVM, as Kotlin/Native (the runtime iOS also uses) and on Node.js as
+      # JavaScript and as Wasm, with WebCrypto underneath as in browsers. Then the build checks:
+      # checkKotlinAbi compares the public API with the committed dumps (run ./gradlew updateKotlinAbi
+      # and commit the diff when an API change is intended), verifyCommonOnly keeps the core modules'
+      # main code in commonMain, verifyNoServerEngine keeps ktor-server-cio out of the WebSocket server's
+      # published dependencies, checkAndroidApi and checkAndroidApiDependencies check the jvm jars and
+      # their libraries against Android API level 26, and the build-logic TestKit tests check the
+      # convention plugins.
+      - name: Unit tests, ABI, common-only, server-engine and Android API checks, build-logic tests
+        run: scripts/test unit
+      - run: ./gradlew --console=plain koverXmlReport koverVerify -Pkcoap.tests=unit
+      - name: Coverage summary
+        if: always()
+        run: scripts/coverage-summary >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unit-reports
+          path: |
+            **/build/reports/tests/
+            build/reports/kover/
+
+  interop:
+    name: Interop with libcoap and libedhoc (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # Builds the pinned libcoap and libedhoc images, then runs every cross-test in both roles.
+      - run: scripts/test interop
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: interop-logs
+          path: |
+            **/build/interop-logs/
+            **/build/reports/tests/
 
   apple:
-    name: Native tests (macOS + iOS simulator)
+    name: Native tests (macOS and iOS simulator)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,5 +73,150 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      # Runs the same RFC vectors against CryptoKit + CommonCrypto.
-      - run: ./gradlew macosArm64Test iosSimulatorArm64Test
+      # The same common tests against CryptoKit and CommonCrypto, and checkKotlinAbi with the Apple
+      # klibs built by the macOS toolchain rather than cross-compiled on Linux.
+      - run: scripts/test apple
+      # kcoap from Swift (kcoap-swift-smoke): links the KcoapSmoke framework for macOS, compiles
+      # src/swift/SwiftSmoke.swift against it with xcrun swiftc (-F and -rpath from the link task's output
+      # directory) and runs it. It builds a CoapClientConfig with explicit values and catches a request timeout
+      # and a malformed URI as NSError, checking the Kotlin exception in userInfo; any mismatch exits non-zero.
+      - name: Swift smoke test
+        # The Swift side runs only here (Linux cannot link the framework): a hang must fail within minutes, not
+        # at GitHub's 360-minute job limit. The script also has a 60 s watchdog of its own that says so.
+        timeout-minutes: 15
+        run: |
+          xcrun swiftc --version
+          scripts/test swift
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: apple-reports
+          path: '**/build/reports/tests/'
+
+  browser:
+    name: WebSocket client in headless Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # kcoap-transport-ktor-websocket's js tests in the runner's Chrome, against a KtorWebSocketListener
+      # on the JVM (BrowserAgainstJvmListenerTest): the browser's WebSocket requests the subprotocol coap,
+      # and the connector reads it back from the negotiated protocol (RFC 8323 §4.1).
+      - run: google-chrome --version
+      - run: scripts/test browser google-chrome
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-reports
+          path: |
+            kcoap-transport-ktor-websocket/build/reports/tests/
+            kcoap-transport-ktor-websocket/build/browser/*.txt
+            kcoap-transport-ktor-websocket/build/browser/*.log
+
+  js-consumer:
+    name: Browser consumer (production bundle, size budget, headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: google-chrome --version
+      # kcoap from this commit into ~/.m2, where samples/js-consumer, a build of its own, finds it through kcoap-bom.
+      # Its build compiles the page to a production webpack bundle and fails when the bundle exceeds the budget in
+      # samples/js-consumer/bundle-budget.properties (checkBundleSize); its JVM tests run the page's code against
+      # the sample server, the minified bundle on Node.js, and, with -Pkcoap.browser, the bundle in the runner's
+      # Chrome, where the page reads lights with OSCORE over the browser's WebSocket (BrowserSmokeTest).
+      - run: ./gradlew --console=plain publishToMavenLocal
+      - run: ./gradlew --console=plain -p samples/js-consumer build -Pkcoap.browser=google-chrome
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: js-consumer
+          path: |
+            samples/js-consumer/build/reports/
+            samples/js-consumer/build/dist/js/productionExecutable/
+            samples/js-consumer/build/browser/*.txt
+            samples/js-consumer/build/browser/*.log
+
+  docs:
+    name: API reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew --console=plain dokkaGenerate
+      - uses: actions/upload-artifact@v7
+        with:
+          name: api-reference
+          path: build/dokka/html/
+
+  android:
+    name: Android consumer (AGP, minSdk 26, R8, lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # The runner's preinstalled Android SDK; AGP downloads a platform or build tools it lacks.
+      - name: Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+      # kcoap from this commit into ~/.m2, where samples/android-consumer, a build of its own, finds it. The
+      # unit job's checkAndroidApi already checks the jvm jars against API level 26 without the SDK; this
+      # checks what only the Android toolchain sees: resolution for Android, compilation, D8, R8 on both
+      # release variants with no rules of the app's own, and lint. The sample's unit tests run its tour on
+      # the JVM in both flavors (AGP 9 tests the debug build type).
+      - run: ./gradlew --console=plain publishToMavenLocal
+      - run: ./gradlew --console=plain -p samples/android-consumer assembleRelease lint test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-consumer
+          path: |
+            samples/android-consumer/app/build/reports/
+            samples/android-consumer/app/build/outputs/apk/
+            samples/android-consumer/app/build/outputs/mapping/
+
+  jvm-consumer:
+    name: JVM consumer (kcoap-bom from Maven Local, CoAP, OSCORE and EDHOC on loopback)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # kcoap from this commit into ~/.m2, where samples/jvm-consumer, a build of its own, takes it through
+      # kcoap-bom alone. build fails when a module it names is missing from the BOM (resolution) and when any kcoap
+      # module on its runtime classpath has a version the BOM does not set (verifyKcoapFromBom); run compiles and
+      # runs getting-started's tour, a CoAP GET, an OSCORE GET and EDHOC then OSCORE over UDP on loopback, with
+      # Java 17 bytecode, and fails on a wrong answer or a dependency in the Gradle module metadata that is missing
+      # or wrong. samples/jvm-consumer/pom-only builds and runs the same program as Maven sees kcoap, from the POMs
+      # alone with the -jvm artifacts named: it fails on a POM dependency that is missing, has the wrong scope or
+      # names a multiplatform root artifact (verifyJvmArtifactsOnly).
+      - run: ./gradlew --console=plain publishToMavenLocal
+      - run: ./gradlew --console=plain -p samples/jvm-consumer build run
+      - run: ./gradlew --console=plain -p samples/jvm-consumer/pom-only build run
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: jvm-consumer
+          path: |
+            samples/jvm-consumer/build/reports/
+            samples/jvm-consumer/pom-only/build/reports/

@@ -1,0 +1,44 @@
+name: Question
+description: Ask how to use kcoap.
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [documentation hub](https://github.com/adihack/kcoap/blob/main/docs/README.md), the [client and server guide](https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md) and the module READMEs answer many questions. [SUPPORT.md](https://github.com/adihack/kcoap/blob/main/SUPPORT.md) lists where to look.
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Before you ask
+      options:
+        - label: I read the documentation and searched the existing issues.
+          required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What you tried
+      description: The code you have, what you expected it to do, and what it did.
+  - type: input
+    id: version
+    attributes:
+      label: kcoap version
+      placeholder: 0.1.0, or main at 1a2b3c4
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - JVM
+        - Android
+        - iOS
+        - macOS
+        - Linux native
+        - Browser
+        - Node.js

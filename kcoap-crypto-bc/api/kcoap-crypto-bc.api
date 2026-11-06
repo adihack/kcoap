@@ -1,0 +1,22 @@
+public final class dev/kcoap/crypto/bc/BouncyCastleCryptoBackend : dev/kcoap/crypto/CryptoBackend {
+	public fun <init> (Ldev/kcoap/crypto/CryptoBackend;Z)V
+	public synthetic fun <init> (Ldev/kcoap/crypto/CryptoBackend;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun aead (Ldev/kcoap/crypto/AeadAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun aesBlockCipher ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun decapsulate (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun digest (Ldev/kcoap/crypto/HashAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun encapsulate (Ldev/kcoap/crypto/KemAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun generateKeyPair (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun hmac (Ldev/kcoap/crypto/HashAlgorithm;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun importKeyPair (Ldev/kcoap/crypto/KeyType;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun keyAgreement (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun randomBytes (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun sign (Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun verify (Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+

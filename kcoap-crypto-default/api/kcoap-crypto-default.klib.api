@@ -1,0 +1,26 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-crypto-default>
+final class dev.kcoap.crypto.backend/DefaultCryptoBackend : dev.kcoap.crypto/CryptoBackend { // dev.kcoap.crypto.backend/DefaultCryptoBackend|null[0]
+    constructor <init>() // dev.kcoap.crypto.backend/DefaultCryptoBackend.<init>|<init>(){}[0]
+
+    final suspend fun aead(dev.kcoap.crypto/AeadAlgorithm, kotlin/ByteArray): dev.kcoap.crypto/Aead // dev.kcoap.crypto.backend/DefaultCryptoBackend.aead|aead(dev.kcoap.crypto.AeadAlgorithm;kotlin.ByteArray){}[0]
+    final suspend fun aesBlockCipher(kotlin/ByteArray): dev.kcoap.crypto/AesBlockCipher // dev.kcoap.crypto.backend/DefaultCryptoBackend.aesBlockCipher|aesBlockCipher(kotlin.ByteArray){}[0]
+    final suspend fun digest(dev.kcoap.crypto/HashAlgorithm, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.digest|digest(dev.kcoap.crypto.HashAlgorithm;kotlin.ByteArray){}[0]
+    final suspend fun generateKeyPair(dev.kcoap.crypto/KeyType): dev.kcoap.crypto/KeyPair // dev.kcoap.crypto.backend/DefaultCryptoBackend.generateKeyPair|generateKeyPair(dev.kcoap.crypto.KeyType){}[0]
+    final suspend fun hmac(dev.kcoap.crypto/HashAlgorithm, kotlin/ByteArray, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.hmac|hmac(dev.kcoap.crypto.HashAlgorithm;kotlin.ByteArray;kotlin.ByteArray){}[0]
+    final suspend fun keyAgreement(dev.kcoap.crypto/PrivateKey, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.keyAgreement|keyAgreement(dev.kcoap.crypto.PrivateKey;kotlin.ByteArray){}[0]
+    final suspend fun randomBytes(kotlin/Int): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.randomBytes|randomBytes(kotlin.Int){}[0]
+    final suspend fun sign(dev.kcoap.crypto/SignatureAlgorithm, dev.kcoap.crypto/PrivateKey, kotlin/ByteArray): kotlin/ByteArray // dev.kcoap.crypto.backend/DefaultCryptoBackend.sign|sign(dev.kcoap.crypto.SignatureAlgorithm;dev.kcoap.crypto.PrivateKey;kotlin.ByteArray){}[0]
+    final suspend fun supports(dev.kcoap.crypto/AeadAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.AeadAlgorithm){}[0]
+    final suspend fun supports(dev.kcoap.crypto/HashAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.HashAlgorithm){}[0]
+    final suspend fun supports(dev.kcoap.crypto/KemAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.KemAlgorithm){}[0]
+    final suspend fun supports(dev.kcoap.crypto/KeyType): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.KeyType){}[0]
+    final suspend fun supports(dev.kcoap.crypto/SignatureAlgorithm): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.supports|supports(dev.kcoap.crypto.SignatureAlgorithm){}[0]
+    final suspend fun verify(dev.kcoap.crypto/SignatureAlgorithm, kotlin/ByteArray, kotlin/ByteArray, kotlin/ByteArray): kotlin/Boolean // dev.kcoap.crypto.backend/DefaultCryptoBackend.verify|verify(dev.kcoap.crypto.SignatureAlgorithm;kotlin.ByteArray;kotlin.ByteArray;kotlin.ByteArray){}[0]
+}

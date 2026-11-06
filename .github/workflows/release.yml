@@ -1,0 +1,167 @@
+name: Release
+
+# Push a tag such as v0.1.0 to release that version: every test runs first, and the version's summary is
+# taken from CHANGELOG.md, which fails the run before anything is published when CHANGELOG.md has no
+# section for the version; then the artifacts are published (GitHub Packages always, Maven Central when
+# its secrets are configured), a GitHub Release is created with that summary followed by generated notes,
+# and the API reference is deployed to GitHub Pages. See docs/releasing.md.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading v (e.g. 0.1.0-rc1)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  notes:
+    name: Release notes from CHANGELOG.md
+    runs-on: ubuntu-latest
+    # It only reads the repository and uploads an artifact.
+    permissions:
+      contents: read
+    env:
+      # The tag the release job creates or finds, so the link below points where the release does.
+      TAG: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: The version's summary
+        run: |
+          version="${TAG#v}"
+          if [ "${version#v}" != "$version" ]; then
+              echo "::error::Give the version without its leading v: run the workflow again with ${version#v}."
+              exit 1
+          fi
+          # The entry's heading is "## <version>", alone or followed by " - <date>"; its summary runs to the
+          # first "### " heading (or to the next "## " one), without the blank lines around it.
+          if ! awk -v heading="## $version" '
+              found && /^###? / { exit }
+              found { lines[++n] = $0; next }
+              $0 == heading || index($0, heading " ") == 1 { found = 1 }
+              END {
+                  if (!found) exit 1
+                  first = 1
+                  while (first <= n && lines[first] ~ /^[ \t]*$/) first++
+                  last = n
+                  while (last >= first && lines[last] ~ /^[ \t]*$/) last--
+                  for (i = first; i <= last; i++) print lines[i]
+              }
+          ' CHANGELOG.md > release-notes.md; then
+              echo "::error file=CHANGELOG.md::CHANGELOG.md has no section for $version, so nothing is published. Add one headed \"## $version - <date>\", with its summary above the first ### heading (docs/releasing.md), and release a commit that has it."
+              exit 1
+          fi
+          # GitHub shows a newline inside a release body's paragraph as a line break: join each paragraph and list
+          # item into one line, and leave code fences as they are.
+          awk '
+              function flush() { if (buf != "") print buf; buf = "" }
+              /^```/ { flush(); fence = !fence; print; next }
+              fence { print; next }
+              /^[ \t]*$/ { flush(); print; next }
+              /^(#|[ \t]*([-*+] |[0-9]+[.)] )|\||>)/ { flush(); buf = $0; next }
+              { line = $0; sub(/^[ \t]+/, "", line); buf = (buf == "" ? line : buf " " line) }
+              END { flush() }
+          ' release-notes.md > release-notes.tmp && mv release-notes.tmp release-notes.md
+          repo="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          # Links relative to the repository root would resolve against the release page: point them at the tag.
+          sed -E -i "s|\]\(([^)#:/][^):]*)\)|](${repo}/blob/${TAG}/\1)|g" release-notes.md
+          if [ -s release-notes.md ]; then
+              echo >> release-notes.md
+          else
+              echo "::warning file=CHANGELOG.md::The $version entry has no summary above its first ### heading, so the release body is only the link to it."
+          fi
+          echo "The full $version entry is in [CHANGELOG.md]($repo/blob/$TAG/CHANGELOG.md)." >> release-notes.md
+          cat release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  publish:
+    name: Publish artifacts
+    needs: [test, notes]
+    # Apple artifacts (iOS, macOS klibs) can only be built on macOS; the same host builds the rest.
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      # Secrets cannot appear in a step condition, so the job records whether Maven Central is set up.
+      HAS_MAVEN_CENTRAL: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Version
+        run: echo "KCOAP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      - name: GitHub Packages
+        env:
+          ORG_GRADLE_PROJECT_GitHubPackagesUsername: ${{ github.actor }}
+          ORG_GRADLE_PROJECT_GitHubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository -Pkcoap.version="$KCOAP_VERSION"
+      - name: Maven Central
+        if: env.HAS_MAVEN_CENTRAL == 'true'
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishToMavenCentral -Pkcoap.version="$KCOAP_VERSION"
+
+  release:
+    name: GitHub Release
+    needs: [notes, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          # The body is the version's summary from CHANGELOG.md; the notes generated from the merged pull
+          # requests follow it.
+          body_path: release-notes.md
+          generate_release_notes: true
+          prerelease: ${{ contains(inputs.version || github.ref_name, '-') }}
+
+  docs:
+    name: API reference on GitHub Pages
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew dokkaGenerate
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/dokka/html
+      - id: deploy
+        uses: actions/deploy-pages@v5

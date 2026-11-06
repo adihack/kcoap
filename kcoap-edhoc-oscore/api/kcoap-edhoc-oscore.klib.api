@@ -1,0 +1,215 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-edhoc-oscore>
+abstract fun interface dev.kcoap.edhoc.oscore/EdhocServerEventListener { // dev.kcoap.edhoc.oscore/EdhocServerEventListener|null[0]
+    abstract fun onEvent(dev.kcoap.edhoc.oscore/EdhocServerEvent) // dev.kcoap.edhoc.oscore/EdhocServerEventListener.onEvent|onEvent(dev.kcoap.edhoc.oscore.EdhocServerEvent){}[0]
+
+    final object Companion { // dev.kcoap.edhoc.oscore/EdhocServerEventListener.Companion|null[0]
+        final val None // dev.kcoap.edhoc.oscore/EdhocServerEventListener.Companion.None|{}None[0]
+            final fun <get-None>(): dev.kcoap.edhoc.oscore/EdhocServerEventListener // dev.kcoap.edhoc.oscore/EdhocServerEventListener.Companion.None.<get-None>|<get-None>(){}[0]
+    }
+}
+
+abstract fun interface dev.kcoap.edhoc.oscore/EdhocSessionListener { // dev.kcoap.edhoc.oscore/EdhocSessionListener|null[0]
+    abstract suspend fun onEstablished(dev.kcoap.edhoc/EdhocSession, dev.kcoap.oscore/SecurityContext) // dev.kcoap.edhoc.oscore/EdhocSessionListener.onEstablished|onEstablished(dev.kcoap.edhoc.EdhocSession;dev.kcoap.oscore.SecurityContext){}[0]
+}
+
+sealed interface dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent|null[0]
+    abstract val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.peer|{}peer[0]
+        abstract fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.peer.<get-peer>|<get-peer>(){}[0]
+
+    final class ContinuationFromAnotherPeer : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc/ConnectionIdentifier) // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.ConnectionIdentifier){}[0]
+
+        final val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.peer.<get-peer>|<get-peer>(){}[0]
+        final val responderId // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.responderId|{}responderId[0]
+            final fun <get-responderId>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.responderId.<get-responderId>|<get-responderId>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocServerEvent.ContinuationFromAnotherPeer.toString|toString(){}[0]
+    }
+
+    final class LimitReached : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit) // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.oscore.EdhocServerEvent.LimitReached.Limit){}[0]
+
+        final val limit // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.limit|{}limit[0]
+            final fun <get-limit>(): dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.limit.<get-limit>|<get-limit>(){}[0]
+        final val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.peer.<get-peer>|<get-peer>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.toString|toString(){}[0]
+
+        final enum class Limit : kotlin/Enum<dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit> { // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit|null[0]
+            enum entry PENDING_SESSIONS // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.PENDING_SESSIONS|null[0]
+            enum entry PENDING_SESSIONS_PER_PEER // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.PENDING_SESSIONS_PER_PEER|null[0]
+
+            final val entries // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.entries|#static{}entries[0]
+                final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit> // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.entries.<get-entries>|<get-entries>#static(){}[0]
+
+            final fun valueOf(kotlin/String): dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.valueOf|valueOf#static(kotlin.String){}[0]
+            final fun values(): kotlin/Array<dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit> // dev.kcoap.edhoc.oscore/EdhocServerEvent.LimitReached.Limit.values|values#static(){}[0]
+        }
+    }
+
+    final class SessionEvicted : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc/ConnectionIdentifier) // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.ConnectionIdentifier){}[0]
+
+        final val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.peer.<get-peer>|<get-peer>(){}[0]
+        final val responderId // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.responderId|{}responderId[0]
+            final fun <get-responderId>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.responderId.<get-responderId>|<get-responderId>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionEvicted.toString|toString(){}[0]
+    }
+
+    final class SessionExpired : dev.kcoap.edhoc.oscore/EdhocServerEvent { // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired|null[0]
+        constructor <init>(dev.kcoap.transport/Endpoint, dev.kcoap.edhoc/ConnectionIdentifier) // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.<init>|<init>(dev.kcoap.transport.Endpoint;dev.kcoap.edhoc.ConnectionIdentifier){}[0]
+
+        final val peer // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.peer|{}peer[0]
+            final fun <get-peer>(): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.peer.<get-peer>|<get-peer>(){}[0]
+        final val responderId // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.responderId|{}responderId[0]
+            final fun <get-responderId>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.responderId.<get-responderId>|<get-responderId>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocServerEvent.SessionExpired.toString|toString(){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc.oscore/CombinedHandshake { // dev.kcoap.edhoc.oscore/CombinedHandshake|null[0]
+    constructor <init>(dev.kcoap.edhoc.oscore/EdhocOscoreSession, dev.kcoap.edhoc.oscore/CombinedRequestSecurity) // dev.kcoap.edhoc.oscore/CombinedHandshake.<init>|<init>(dev.kcoap.edhoc.oscore.EdhocOscoreSession;dev.kcoap.edhoc.oscore.CombinedRequestSecurity){}[0]
+
+    final val security // dev.kcoap.edhoc.oscore/CombinedHandshake.security|{}security[0]
+        final fun <get-security>(): dev.kcoap.edhoc.oscore/CombinedRequestSecurity // dev.kcoap.edhoc.oscore/CombinedHandshake.security.<get-security>|<get-security>(){}[0]
+    final val session // dev.kcoap.edhoc.oscore/CombinedHandshake.session|{}session[0]
+        final fun <get-session>(): dev.kcoap.edhoc.oscore/EdhocOscoreSession // dev.kcoap.edhoc.oscore/CombinedHandshake.session.<get-session>|<get-session>(){}[0]
+
+    final fun component1(): dev.kcoap.edhoc.oscore/EdhocOscoreSession // dev.kcoap.edhoc.oscore/CombinedHandshake.component1|component1(){}[0]
+    final fun component2(): dev.kcoap.edhoc.oscore/CombinedRequestSecurity // dev.kcoap.edhoc.oscore/CombinedHandshake.component2|component2(){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/CombinedRequestSecurity : dev.kcoap.coap.security/ClientMessageSecurity { // dev.kcoap.edhoc.oscore/CombinedRequestSecurity|null[0]
+    constructor <init>(dev.kcoap.coap.security/ClientMessageSecurity, kotlin/ByteArray) // dev.kcoap.edhoc.oscore/CombinedRequestSecurity.<init>|<init>(dev.kcoap.coap.security.ClientMessageSecurity;kotlin.ByteArray){}[0]
+
+    final suspend fun isMessage3Pending(): kotlin/Boolean // dev.kcoap.edhoc.oscore/CombinedRequestSecurity.isMessage3Pending|isMessage3Pending(){}[0]
+    final suspend fun protectRequest(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap.security/ProtectedRequest? // dev.kcoap.edhoc.oscore/CombinedRequestSecurity.protectRequest|protectRequest(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/CombinedRequestServer : dev.kcoap.coap.security/ServerMessageSecurity { // dev.kcoap.edhoc.oscore/CombinedRequestServer|null[0]
+    constructor <init>(dev.kcoap.edhoc.oscore/EdhocServer, dev.kcoap.coap.security/ServerMessageSecurity) // dev.kcoap.edhoc.oscore/CombinedRequestServer.<init>|<init>(dev.kcoap.edhoc.oscore.EdhocServer;dev.kcoap.coap.security.ServerMessageSecurity){}[0]
+
+    final suspend fun unprotectRequest(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap.security/UnprotectedRequest? // dev.kcoap.edhoc.oscore/CombinedRequestServer.unprotectRequest|unprotectRequest(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocClientHandshake { // dev.kcoap.edhoc.oscore/EdhocClientHandshake|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.coap/CoapUri, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore? = ..., kotlin.coroutines/SuspendFunction1<dev.kcoap.coap/CoapRequest, dev.kcoap.coap/CoapResponse>) // dev.kcoap.edhoc.oscore/EdhocClientHandshake.<init>|<init>(dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.coap.CoapUri;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore?;kotlin.coroutines.SuspendFunction1<dev.kcoap.coap.CoapRequest,dev.kcoap.coap.CoapResponse>){}[0]
+
+    final suspend fun run(kotlin/Boolean = ...): dev.kcoap.edhoc.oscore/EdhocOscoreSession // dev.kcoap.edhoc.oscore/EdhocClientHandshake.run|run(kotlin.Boolean){}[0]
+    final suspend fun runCombined(): dev.kcoap.edhoc.oscore/CombinedHandshake // dev.kcoap.edhoc.oscore/EdhocClientHandshake.runCombined|runCombined(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc.oscore/EdhocClientHandshake.Companion|null[0]
+        final fun over(dev.kcoap.coap.client/CoapClient, dev.kcoap.coap/CoapUri, dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, kotlin/String = ..., dev.kcoap.log/LoggerFactory = ..., dev.kcoap.oscore/SequenceNumberStore? = ...): dev.kcoap.edhoc.oscore/EdhocClientHandshake // dev.kcoap.edhoc.oscore/EdhocClientHandshake.Companion.over|over(dev.kcoap.coap.client.CoapClient;dev.kcoap.coap.CoapUri;dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;kotlin.String;dev.kcoap.log.LoggerFactory;dev.kcoap.oscore.SequenceNumberStore?){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocIdentity : dev.kcoap.coap.security/SecurityIdentity { // dev.kcoap.edhoc.oscore/EdhocIdentity|null[0]
+    constructor <init>(dev.kcoap.oscore/OscoreIdentity, dev.kcoap.edhoc/AuthenticationCredential, dev.kcoap.edhoc/CredentialIdentifier) // dev.kcoap.edhoc.oscore/EdhocIdentity.<init>|<init>(dev.kcoap.oscore.OscoreIdentity;dev.kcoap.edhoc.AuthenticationCredential;dev.kcoap.edhoc.CredentialIdentifier){}[0]
+
+    final val description // dev.kcoap.edhoc.oscore/EdhocIdentity.description|{}description[0]
+        final fun <get-description>(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocIdentity.description.<get-description>|<get-description>(){}[0]
+    final val oscore // dev.kcoap.edhoc.oscore/EdhocIdentity.oscore|{}oscore[0]
+        final fun <get-oscore>(): dev.kcoap.oscore/OscoreIdentity // dev.kcoap.edhoc.oscore/EdhocIdentity.oscore.<get-oscore>|<get-oscore>(){}[0]
+    final val peerCredential // dev.kcoap.edhoc.oscore/EdhocIdentity.peerCredential|{}peerCredential[0]
+        final fun <get-peerCredential>(): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc.oscore/EdhocIdentity.peerCredential.<get-peerCredential>|<get-peerCredential>(){}[0]
+    final val peerCredentialIdentifier // dev.kcoap.edhoc.oscore/EdhocIdentity.peerCredentialIdentifier|{}peerCredentialIdentifier[0]
+        final fun <get-peerCredentialIdentifier>(): dev.kcoap.edhoc/CredentialIdentifier // dev.kcoap.edhoc.oscore/EdhocIdentity.peerCredentialIdentifier.<get-peerCredentialIdentifier>|<get-peerCredentialIdentifier>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc.oscore/EdhocIdentity.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc.oscore/EdhocIdentity.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocIdentity.toString|toString(){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocOscoreSession { // dev.kcoap.edhoc.oscore/EdhocOscoreSession|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocSession, dev.kcoap.oscore/SecurityContext) // dev.kcoap.edhoc.oscore/EdhocOscoreSession.<init>|<init>(dev.kcoap.edhoc.EdhocSession;dev.kcoap.oscore.SecurityContext){}[0]
+
+    final val edhoc // dev.kcoap.edhoc.oscore/EdhocOscoreSession.edhoc|{}edhoc[0]
+        final fun <get-edhoc>(): dev.kcoap.edhoc/EdhocSession // dev.kcoap.edhoc.oscore/EdhocOscoreSession.edhoc.<get-edhoc>|<get-edhoc>(){}[0]
+    final val oscore // dev.kcoap.edhoc.oscore/EdhocOscoreSession.oscore|{}oscore[0]
+        final fun <get-oscore>(): dev.kcoap.oscore/SecurityContext // dev.kcoap.edhoc.oscore/EdhocOscoreSession.oscore.<get-oscore>|<get-oscore>(){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocResource : dev.kcoap.coap.server/CoapResource { // dev.kcoap.edhoc.oscore/EdhocResource|null[0]
+    constructor <init>(dev.kcoap.edhoc.oscore/EdhocServer, kotlin/String = ...) // dev.kcoap.edhoc.oscore/EdhocResource.<init>|<init>(dev.kcoap.edhoc.oscore.EdhocServer;kotlin.String){}[0]
+
+    final val access // dev.kcoap.edhoc.oscore/EdhocResource.access|{}access[0]
+        final fun <get-access>(): dev.kcoap.coap.server/AccessPolicy // dev.kcoap.edhoc.oscore/EdhocResource.access.<get-access>|<get-access>(){}[0]
+    final val attributes // dev.kcoap.edhoc.oscore/EdhocResource.attributes|{}attributes[0]
+        final fun <get-attributes>(): dev.kcoap.coap.server/ResourceAttributes // dev.kcoap.edhoc.oscore/EdhocResource.attributes.<get-attributes>|<get-attributes>(){}[0]
+
+    final suspend fun handlePost(dev.kcoap.coap.server/RequestContext): dev.kcoap.coap/CoapResponse // dev.kcoap.edhoc.oscore/EdhocResource.handlePost|handlePost(dev.kcoap.coap.server.RequestContext){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocServer { // dev.kcoap.edhoc.oscore/EdhocServer|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocResponderConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/MutableSecurityContextRepository, kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., dev.kcoap.oscore/SequenceNumberStore? = ..., kotlin.time/TimeSource = ..., dev.kcoap.edhoc.oscore/EdhocSessionListener = ..., dev.kcoap.edhoc.oscore/EdhocServerEventListener = ..., dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.edhoc.oscore/EdhocServer.<init>|<init>(dev.kcoap.edhoc.EdhocResponderConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.MutableSecurityContextRepository;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;dev.kcoap.oscore.SequenceNumberStore?;kotlin.time.TimeSource;dev.kcoap.edhoc.oscore.EdhocSessionListener;dev.kcoap.edhoc.oscore.EdhocServerEventListener;dev.kcoap.log.LoggerFactory){}[0]
+
+    final suspend fun completeCombined(dev.kcoap.edhoc/ConnectionIdentifier, kotlin/ByteArray, dev.kcoap.transport/Endpoint): dev.kcoap.oscore/SecurityContext // dev.kcoap.edhoc.oscore/EdhocServer.completeCombined|completeCombined(dev.kcoap.edhoc.ConnectionIdentifier;kotlin.ByteArray;dev.kcoap.transport.Endpoint){}[0]
+    final suspend fun handle(kotlin/ByteArray, dev.kcoap.transport/Endpoint): dev.kcoap.coap/CoapResponse // dev.kcoap.edhoc.oscore/EdhocServer.handle|handle(kotlin.ByteArray;dev.kcoap.transport.Endpoint){}[0]
+    final suspend fun pendingSessions(): kotlin/Int // dev.kcoap.edhoc.oscore/EdhocServer.pendingSessions|pendingSessions(){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/EdhocTransferException : dev.kcoap.edhoc/EdhocException { // dev.kcoap.edhoc.oscore/EdhocTransferException|null[0]
+    constructor <init>(kotlin/String, dev.kcoap.coap/CoapResponse? = ...) // dev.kcoap.edhoc.oscore/EdhocTransferException.<init>|<init>(kotlin.String;dev.kcoap.coap.CoapResponse?){}[0]
+
+    final val errorMessage // dev.kcoap.edhoc.oscore/EdhocTransferException.errorMessage|{}errorMessage[0]
+        final fun <get-errorMessage>(): kotlin/ByteArray? // dev.kcoap.edhoc.oscore/EdhocTransferException.errorMessage.<get-errorMessage>|<get-errorMessage>(){}[0]
+    final val response // dev.kcoap.edhoc.oscore/EdhocTransferException.response|{}response[0]
+        final fun <get-response>(): dev.kcoap.coap/CoapResponse? // dev.kcoap.edhoc.oscore/EdhocTransferException.response.<get-response>|<get-response>(){}[0]
+}
+
+final class dev.kcoap.edhoc.oscore/PeerSecurity : dev.kcoap.coap.security/ClientMessageSecurity { // dev.kcoap.edhoc.oscore/PeerSecurity|null[0]
+    constructor <init>(kotlin.collections/Set<kotlin/String> = ..., kotlin/Boolean = ...) // dev.kcoap.edhoc.oscore/PeerSecurity.<init>|<init>(kotlin.collections.Set<kotlin.String>;kotlin.Boolean){}[0]
+
+    final suspend fun install(dev.kcoap.coap.client/CoapClient, dev.kcoap.coap/CoapUri, dev.kcoap.coap.security/ClientMessageSecurity): dev.kcoap.transport/Endpoint // dev.kcoap.edhoc.oscore/PeerSecurity.install|install(dev.kcoap.coap.client.CoapClient;dev.kcoap.coap.CoapUri;dev.kcoap.coap.security.ClientMessageSecurity){}[0]
+    final suspend fun install(dev.kcoap.transport/Endpoint, dev.kcoap.coap.security/ClientMessageSecurity) // dev.kcoap.edhoc.oscore/PeerSecurity.install|install(dev.kcoap.transport.Endpoint;dev.kcoap.coap.security.ClientMessageSecurity){}[0]
+    final suspend fun isProtected(dev.kcoap.transport/Endpoint): kotlin/Boolean // dev.kcoap.edhoc.oscore/PeerSecurity.isProtected|isProtected(dev.kcoap.transport.Endpoint){}[0]
+    final suspend fun protectRequest(dev.kcoap.coap/CoapMessage, dev.kcoap.transport/Endpoint): dev.kcoap.coap.security/ProtectedRequest? // dev.kcoap.edhoc.oscore/PeerSecurity.protectRequest|protectRequest(dev.kcoap.coap.CoapMessage;dev.kcoap.transport.Endpoint){}[0]
+    final suspend fun remove(dev.kcoap.transport/Endpoint) // dev.kcoap.edhoc.oscore/PeerSecurity.remove|remove(dev.kcoap.transport.Endpoint){}[0]
+}
+
+final object dev.kcoap.edhoc.oscore/EdhocOverCoap { // dev.kcoap.edhoc.oscore/EdhocOverCoap|null[0]
+    final const val RESOURCE_TYPE // dev.kcoap.edhoc.oscore/EdhocOverCoap.RESOURCE_TYPE|{}RESOURCE_TYPE[0]
+        final fun <get-RESOURCE_TYPE>(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocOverCoap.RESOURCE_TYPE.<get-RESOURCE_TYPE>|<get-RESOURCE_TYPE>(){}[0]
+    final const val WELL_KNOWN_PATH // dev.kcoap.edhoc.oscore/EdhocOverCoap.WELL_KNOWN_PATH|{}WELL_KNOWN_PATH[0]
+        final fun <get-WELL_KNOWN_PATH>(): kotlin/String // dev.kcoap.edhoc.oscore/EdhocOverCoap.WELL_KNOWN_PATH.<get-WELL_KNOWN_PATH>|<get-WELL_KNOWN_PATH>(){}[0]
+
+    final fun completedResponse(): dev.kcoap.coap/CoapResponse // dev.kcoap.edhoc.oscore/EdhocOverCoap.completedResponse|completedResponse(){}[0]
+    final fun continuationRequest(dev.kcoap.coap/CoapUri, dev.kcoap.edhoc/ConnectionIdentifier, kotlin/ByteArray): dev.kcoap.coap/CoapRequest // dev.kcoap.edhoc.oscore/EdhocOverCoap.continuationRequest|continuationRequest(dev.kcoap.coap.CoapUri;dev.kcoap.edhoc.ConnectionIdentifier;kotlin.ByteArray){}[0]
+    final fun errorResponse(kotlin/ByteArray, kotlin/Boolean = ...): dev.kcoap.coap/CoapResponse // dev.kcoap.edhoc.oscore/EdhocOverCoap.errorResponse|errorResponse(kotlin.ByteArray;kotlin.Boolean){}[0]
+    final fun message1Request(dev.kcoap.coap/CoapUri, kotlin/ByteArray): dev.kcoap.coap/CoapRequest // dev.kcoap.edhoc.oscore/EdhocOverCoap.message1Request|message1Request(dev.kcoap.coap.CoapUri;kotlin.ByteArray){}[0]
+    final fun messageResponse(kotlin/ByteArray): dev.kcoap.coap/CoapResponse // dev.kcoap.edhoc.oscore/EdhocOverCoap.messageResponse|messageResponse(kotlin.ByteArray){}[0]
+    final fun parseRequest(kotlin/ByteArray): dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest // dev.kcoap.edhoc.oscore/EdhocOverCoap.parseRequest|parseRequest(kotlin.ByteArray){}[0]
+
+    sealed interface ServerRequest { // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest|null[0]
+        final class Continuation : dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest { // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation|null[0]
+            constructor <init>(dev.kcoap.edhoc/ConnectionIdentifier, kotlin/ByteArray) // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation.<init>|<init>(dev.kcoap.edhoc.ConnectionIdentifier;kotlin.ByteArray){}[0]
+
+            final val message // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation.message|{}message[0]
+                final fun <get-message>(): kotlin/ByteArray // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation.message.<get-message>|<get-message>(){}[0]
+            final val responderId // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation.responderId|{}responderId[0]
+                final fun <get-responderId>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.Continuation.responderId.<get-responderId>|<get-responderId>(){}[0]
+        }
+
+        final class NewSession : dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest { // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.NewSession|null[0]
+            constructor <init>(kotlin/ByteArray) // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.NewSession.<init>|<init>(kotlin.ByteArray){}[0]
+
+            final val message1 // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.NewSession.message1|{}message1[0]
+                final fun <get-message1>(): kotlin/ByteArray // dev.kcoap.edhoc.oscore/EdhocOverCoap.ServerRequest.NewSession.message1.<get-message1>|<get-message1>(){}[0]
+        }
+    }
+}
+
+final suspend fun (dev.kcoap.edhoc/EdhocSession).dev.kcoap.edhoc.oscore/oscoreContext(dev.kcoap.crypto/CryptoBackend, dev.kcoap.oscore/SequenceNumberStore = ..., kotlin/Int = ..., kotlin/Int = ...): dev.kcoap.oscore/SecurityContext // dev.kcoap.edhoc.oscore/oscoreContext|oscoreContext@dev.kcoap.edhoc.EdhocSession(dev.kcoap.crypto.CryptoBackend;dev.kcoap.oscore.SequenceNumberStore;kotlin.Int;kotlin.Int){}[0]
+final suspend fun (dev.kcoap.edhoc/EdhocSession).dev.kcoap.edhoc.oscore/oscoreParameters(kotlin/Int = ..., kotlin/Int = ...): dev.kcoap.oscore/SecurityContextParameters // dev.kcoap.edhoc.oscore/oscoreParameters|oscoreParameters@dev.kcoap.edhoc.EdhocSession(kotlin.Int;kotlin.Int){}[0]

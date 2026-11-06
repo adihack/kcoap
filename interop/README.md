@@ -7,6 +7,239 @@ implementation, already verified against RFC 9529). Everything else fills gaps t
 Protocol logic is common Kotlin code, so all of this runs on the `jvm` target. Platform crypto
 differences are caught separately by running the RFC vectors on every target in CI.
 
+## CoAP against libcoap (running)
+
+The CoAP endpoint is cross-tested with libcoap v4.3.5b over real UDP, TCP and WebSockets on the host
+network, in both directions. The tests live in `kcoap-coap/src/jvmTest/kotlin/dev/kcoap/coap/interop/`, are tagged
+`interop`, and skip (JUnit assumption) when `docker info` fails or the image is missing.
+
+```bash
+docker build -t kcoap/libcoap:v4.3.5b interop/libcoap     # once
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*'
+```
+
+| Test class | Peer | What runs |
+|---|---|---|
+| `KcoapClientAgainstLibcoapTest` | `coap-server -p <port> -d 10 -v 4` | `/.well-known/core` discovery and `?rt=ticks` filtering; GET of `/` as CON and NON; PUT/GET/POST (4.05) on `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte Block1 upload and Block2 download; early negotiation of 64-byte blocks; Observe of `/time` with deregistration (GET with Observe 1, same token); the separate response of `/async?1`; CoAP ping |
+| `LibcoapClientAgainstKcoapTest` | `coap-client -B 10 -v 6 -w ...` | GET (`-N` too); PUT with `-e`, POST, DELETE; a Block1 upload with `-b 64 -f` (46 × 2.31 Continue, then 2.04); Block2 downloads with `-b 128` and with the server's 1024-byte blocks; Observe with `-s 3` of a resource notifying every 500 ms; `/.well-known/core` with and without `?rt=` filtering; 4.04 and 4.05; the Q-Block fallback with `-L 7 -v 7` (below) |
+| `KcoapClientAgainstLibcoapQBlockTest` | `coap-server -p <port> -L 7 -v 7` (also `-N`, `-l`, `-e`, `-w`, and without `-L`) | the kcoap client with Q-Block (RFC 9177), K1–K10, K12 and the K soak (below) |
+| `LibcoapClientAgainstKcoapAddressVerificationTest` | `coap-client -B 10 -v 7 -o ...` (also `-N`, and `-L 7`) | a kcoap server with `AmplificationPolicy.ALL_RESPONSES` (RFC 9175 §2.4 item 3): a piggybacked 4.01 with Echo, then the whole 3000-byte body in Block2 after libcoap's repeat; a NON 4.01 for `-N`; libcoap's Q-Block probe of `/.well-known/core` answered 4.02 at once, never challenged |
+| `LibcoapClientAgainstKcoapQBlockTest` | `coap-client -L 7 -v 7 ...` (also `-L 15`, `-N`, `-l`) | a kcoap server with Q-Block on, over UDP, TCP and WebSockets (below) |
+
+### Q-Block (RFC 9177)
+
+libcoap 4.3.5 has no `-Q` flag. Q-Block is turned on with `-L`, the sum of libcoap's `COAP_BLOCK_*` flags:
+1 lets libcoap do block-wise transfers, 2 delivers a single body, 4 tries Q-Block, 8 (client) sets the M bit
+in missing-block requests; 16 and 32 (client) and 64 and 128 (server) change other block-wise behaviour.
+The Q-Block runs use `-L 7` (and `-L 15` for the M bit) on both `coap-client` and `coap-server`.
+
+kcoap implements Q-Block in its server (QB-3) and its client (QB-4; see
+[docs/plan-qblock-and-platforms.md](../docs/plan-qblock-and-platforms.md)), with Observe (QB-6), off by
+default on both sides, and under OSCORE only where both sides opt in (QB-5, QB-7; its libcoap runs are listed
+with `StackOscoreInteropTest` below).
+While the server's is off, the fallback of RFC 9177 §4.1 is pinned: `coap-client -L 7` first sends a
+Confirmable `GET /.well-known/core` with `Q-Block2: 0/_/16`, kcoap answers 4.02 "Unrecognized critical
+option 31", libcoap logs "Q-Block support not available" and sends its real request at once with RFC 7959
+options (`LibcoapClientAgainstKcoapTest.fallsBackFromQBlockWhileItIsOff`).
+
+kcoap's client (`QBlockClientConfig(QBlockMode.PROBE)`) runs against `coap-server -L 7 -v 7` in
+`KcoapClientAgainstLibcoapQBlockTest`, one server per case since `-l` counts every datagram the server
+sends, the probe's answer first. Cases K1–K10 and K12 of the plan: the probe and two Continues of a
+NON GET of `/example_data` in 64-byte blocks, under 1.5 s; missing blocks asked for at once (`-l 4,9`),
+block 0 asked for as `0/M` (`-l 2`) and a missing tail as `3/M` (`-l 5-25`, M bit); a NON PUT of 3000 bytes
+with 2.31 at 9, 19, 29 and 39; blocks 2 and 7 lost on the kcoap side and asked for by libcoap's 4.08 `02 07`
+about 4 s after block 39, where the client waits with four sets unconfirmed, and a 300-block upload with
+block 2 lost that never holds more than about four sets of tokens; `coap-server` without `-L`; an
+observation of `/example_data` with `-N` whose notification bodies (1500 and 3000 bytes, the second from
+libcoap's own PUT) arrive whole, once each, and that deregisters on its token (K6); Confirmable bodies; a FETCH
+answered in Q-Block2 on the last Q-Block1 token; 20 KiB (320 blocks) over TCP and WebSockets (`-X 1152`) back
+to back; and a lost probe answer. The **K soak** (`kSoakBodiesBothWaysAt10PercentLoss`) puts 3000 bytes and
+gets them back with 10 % loss on both sides (`-l 10%` and a lossy transport on kcoap's side), 3 runs here and
+20 with `-Pkcoap.soak=true` (not yet scheduled in CI; [docs/testing.md](../docs/testing.md#nightly-soak)): every
+run ends with the right body, a clean `CoapException` or libcoap's plain 4.08 below, and leaves no exchange.
+Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` test named:
+
+- three separate gaps in an upload get a plain 4.08 ("Too many missing blocks"), and the body is given up
+  (`upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4`);
+- a block asked for once its cache expired, 8 s (4 × NON_TIMEOUT) after it last sent the body's last block,
+  comes without ETag and Size2, from the handler run again; kcoap's client then asks for the whole body again
+  (`upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8`, which loses the last block until
+  then);
+- only block 0 of a 2.01 or 2.04 body is sent (`-e`); the rest comes when the client asks for it
+  (`upstreamLibcoapSendsOnlyBlock0OfAnEchoedPutBodyAndTheRestIsFetchedK9`);
+- without `-L`, its 4.02 to the probe repeats the Q-Block2 option it rejects
+  (`upstreamLibcoapRepeatsTheQBlock2OptionItRejectsInIts402K5`);
+- the blocks of a notification body that it sends for a Continue carry no Observe, where RFC 9177 §4.5 wants
+  the body's value on every payload; kcoap's client takes them by their ETag
+  (`upstreamLibcoapLeavesObserveOutOfTheBlocksItSendsForAContinueK6`);
+- Q-Block sticks to a session: once a request from an address and port carried Q-Block1 or Q-Block2, every
+  later body its block-wise layer sends there goes in Q-Block2, also to a request that asks for Block2, where RFC 9177 §4.1
+  sends Q-Block2 only to a request that carries Q-Block. All of a kcoap endpoint's clients share its socket,
+  so after one Q-Block body a request that kcoap's client sends with RFC 7959 (one with block options of its
+  own, with No-Response, or protected without `withMessageSecurity`) gets a Q-Block2 answer, rejects it as an
+  unrecognized critical option and fails with `BAD_RESPONSE`
+  (`upstreamLibcoapAnswersABlock2RequestInQBlock2OnceItsSessionUsedQBlock`);
+- a request with both Block2 and Q-Block2 gets 4.00 "Both Block2 and Q-Block2 invalid" instead of the 4.02 of
+  RFC 9177 §4.1 (`upstreamLibcoapAnswersBlock2MixedWithQBlock2With400`, a raw datagram, since kcoap never sends
+  the mix).
+
+One more was seen in a run and is not pinned, since it shows only when two random Message IDs come close:
+
+- **Message IDs reused** (server). `handle_request` in `src/coap_net.c` gives a Non-confirmable response the
+  Message ID of the request it answers, while the blocks a body sends on its own take IDs from the session's
+  counter. When the client's IDs run into the range that counter used shortly before, a response repeats an ID
+  libcoap sent within NON_LIFETIME, which RFC 7252 §4.4 forbids, and kcoap drops it as a duplicate (§4.5). In
+  one local run of K8 (kcoap's IDs from 0xeb6c, libcoap's from 0xeb6f) the answers for blocks 2 and 23 were
+  dropped that way until the test timed out at 90 s. Any Non-confirmable case against `coap-server` can meet
+  it, with odds of roughly one in a thousand per case. A failed case of `KcoapClientAgainstLibcoapQBlockTest`
+  prints, after its wire, the IDs libcoap sent on more than one token and which of them kcoap dropped; a run
+  that failed that way met this deviation, not a fault of kcoap, and can be run again.
+
+Two more deviations named in the plan (§1.6) are known from libcoap's source but not pinned:
+
+- **A descending list of missing blocks** (server). `add_block_send` in `src/coap_block.c` keeps the requested
+  numbers sorted, but when a lower number comes after a higher one it overwrites the slot instead of moving it
+  (its `memmove` also counts bytes, not entries), so a request listing `7` then `2` leaves the second slot
+  uninitialized and the server sends a block whose number is whatever that memory held. That is undefined
+  behaviour, so no test can expect a stable outcome, and it may take the container down. kcoap's client always
+  lists missing blocks in ascending order (RFC 9177 §4.4), and kcoap's server answers a descending list 4.00 (L8).
+- **An upload truncated after a 2.31 without Q-Block1** (client). libcoap's client cuts an upload short when a
+  2.31 comes without Q-Block1 (plan §1.1, row 14). kcoap's server always puts Q-Block1 in a 2.31 for that reason
+  (ADR 0006), so pinning this needs a server that leaves it out, which kcoap does not have.
+
+With `CoapServerConfig(qBlock = QBlockServerConfig(isEnabled = true))`, `LibcoapClientAgainstKcoapQBlockTest`
+runs the plan's cases against `coap-client -L 7 -v 7` (`-L` goes before `-f`), reads every message from
+libcoap's log (`Libcoap.wire`: the `v:1` line after each `netif: sent|recv` line) and compares the body
+bytes each time, since libcoap's client can exit 0 with a truncated body:
+
+| Case | libcoap side | What it shows |
+|---|---|---|
+| L1 | `-L 7 coap://…/` | the probe gets block 0 piggybacked with Q-Block2, ETag and Size2; libcoap logs "Q-Block support available" |
+| L2 | `-L 7 -N -b 64 -o … /big` (3000 B), also `-L 15`, and no `-b` | sets of 10 blocks with one ETag and Size2; libcoap's Continues 10, 20, 30, 40 answered on the original token, all in well under 1.5 s |
+| L3 | as L2, kcoap loses blocks 2 and 7 (`DroppingTransport`); `-L 15` with 3 to 9 lost | one missing-block request [2, 7] when block 10 arrives, answered on its own token; with the M bit `3/M`, answered with 3 to 9 only |
+| L4 | `-L 7 -N -b 64 -m put -f /data/big3000.txt` | nothing for blocks in the middle, 2.31 with Q-Block1 9, 19, 29, 39, then 2.04; one Request-Tag and Size1 throughout |
+| L5 | L4 with `-l 4,9`, and with `-l 48` | a Non-confirmable 4.08 `02 07` (Content-Format 272) at once on a block of the later set; `18 2e` NON_RECEIVE_TIMEOUT (4 s) after the last block that came |
+| L6 | `-L 7 -N -b 64 -s 10 /obs` (1500 B, changing every 3 s) | Observe on every block of every notification body, one ETag per body, Continues continuing on the registration's token, nothing on a Continue's own token; libcoap's deregistration with Observe 1 removes the observer |
+| L6 + Echo | L6 against a server with the default `AmplificationPolicy.Q_BLOCK_BURSTS` | the registration gets a Non-confirmable 4.01 with Echo whatever the size of its first response (its bodies are bursts no request asks for); libcoap repeats the registration with the Echo value and Q-Block2, and every notification body then arrives whole |
+| L7 | L2 and L4 without `-N` | an Empty ACK per Q-Block1 block and the final response piggybacked, no 2.31; block 0 piggybacked, then Confirmable blocks one per ACK |
+| L8 | raw datagrams | a descending Q-Block2 list and Q-Block1 without Request-Tag or Size1 get 4.00, Block mixed with Q-Block 4.02 |
+| L9 | L4 and L2 with `-l 10%`, and 10 % loss on kcoap's side; 3 runs here, 20 with `-Pkcoap.soak=true` (not yet scheduled in CI) | every upload stores the whole body or nothing; every download ends with the body, with libcoap giving up (an error, or exit 0 with nothing written), or with one block written for it, which counts as the client deviation below only when every block reached libcoap and kcoap served one body (one ETag and Size2 on every block, each block on the token of a request that asked for it); kcoap holds no partial body afterwards; at 20 runs most runs reach the end (the first: 14 of 20 uploads, 10 of 20 downloads, 8 meeting the deviation) |
+| L10 | `-L 7 -b 64` over `coap+tcp` and `coap+ws` | blocks back to back, only the final response, no Continue |
+| L12 | L2 against a server with the default `AmplificationPolicy.Q_BLOCK_BURSTS` | the first burst request gets a Non-confirmable 4.01 with Echo; libcoap repeats it with the Echo value and gets the body |
+
+What the runs showed about libcoap 4.3.5b's client:
+
+- Its first Q-Block2 request has an empty token and a Request-Tag, and carries `Q-Block2 0/M/<size>`; its
+  Continues repeat the Request-Tag on tokens of their own.
+- Without `-b` it asks without Q-Block2, so kcoap, which keeps no per-client Q-Block state (ADR 0006),
+  answers with RFC 7959 Block2, which libcoap follows to the end.
+- It repeats an Observe registration with the Echo value of a 4.01 (L6 + Echo), as it repeats other requests.
+- It writes no `-o` file for an observation, and when it gives a download up it may exit 0 with nothing
+  written (L9), so every case compares the bytes it wrote.
+
+Deviations of libcoap 4.3.5b's client, each pinned by the `upstreamLibcoap…` test named:
+
+- **Continue after an upload**
+  (`upstreamLibcoapRepeatsQBlock1WithoutPayloadInFollowUpsOfAnUploadAndGets400`): when a Q-Block1 POST gets
+  a Q-Block2 body back, libcoap's Continue repeats `Q-Block1 0/M` and Size1 without a payload. RFC 9177 §4.7
+  wants neither, and a Q-Block1 block with M set must fill its block (RFC 7959 §2.3), so kcoap answers
+  4.00; libcoap then gives the body up after its first set.
+- **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9):
+  libcoap's client keeps the blocks it received as at most three ranges (`COAP_RBLOCK_CNT` − 1 in
+  `coap_block_internal.h`); a block that would start a fourth fails the body (`update_received_blocks`), and
+  coap-client is handed that block alone as the body. With blocks 3, 11 and 14 lost on kcoap's side, libcoap
+  asks for block 3 alone when block 10 arrives, and block 15 needs a fourth range unless block 3 came first.
+  kcoap sends set 1 back to back, so alone the request for block 3 arrives after the whole set; under load it
+  can arrive, and be answered, before block 15 goes out, and libcoap then gets the body whole (a CI run of
+  1a35ced, and 1 of 2 runs of the class on two CPUs beside two busy loops). So the test holds that request back
+  on kcoap's side until kcoap sent set 1, as a slower network would. libcoap then fails the body at block 15,
+  usually sends Resets to the blocks after it on the original token, asks for the rest of set 1 with `11/M` once
+  block 3 came and for the later sets, gets every block, and exits 0 having written one 64-byte block instead of
+  the 3000-byte body.
+  The test also checks kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks
+  answered on its own token from the cached body, and the Continues' sets on the original token, so it holds
+  only while the fault is libcoap's. It does not assert the Resets, which are how libcoap's client answers
+  blocks of a body it gave up.
+
+```bash
+interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello
+interop/libcoap/coap.sh coap-client -L 7 -N -b 64 -v 7 -B 30 -m put -f /data/big3000.txt coap://127.0.0.1:5683/store
+interop/libcoap/coap.sh coap-server -p 5683 -L 7 -v 7
+```
+
+### Over TCP and WebSockets (RFC 8323)
+
+The same image (built with `--enable-tcp --enable-websockets`) serves `coap+tcp` on the `-p` port and
+`coap+ws` on the `-w` port. kcoap's side runs `KtorTcpConnector`/`KtorTcpListener` and
+`KtorWebSocketConnector`/`KtorWebSocketListener` on real loopback sockets.
+
+```bash
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*Reliable*'
+```
+
+| Test class | Peer | What runs, over `coap+tcp` and `coap+ws` each |
+|---|---|---|
+| `KcoapClientAgainstLibcoapReliableTest` | `coap-server -p <port> -w <ws port> -d 10 -X 1152 -v 4` | CSM exchange (kcoap's first; libcoap's Max-Message-Size 1152 and Block-Wise-Transfer); GET of `/`; PUT/GET of `/example_data`; PUT/GET/DELETE of a dynamic resource; a 3000-byte upload in 1024-byte Block1 blocks and its download in one message (kcoap announces 8704); Observe of `/time` with deregistration (GET with Observe 1, same token); Ping and Ping with Custody |
+| | `coap-server -p <port> -d 10 -X 4352 -v 4` (TCP) | a 20000-byte BERT upload in 4 KiB blocks (numbers 0, 4, 8, 12, 16, 19) answered with BERT 2.31s, and the download in BERT blocks |
+| `LibcoapClientAgainstKcoapReliableTest` | `coap-client -B 10 -v 6 -w ...` | GET of `/hello`; PUT with `-e`, GET, DELETE; `-m put -f` of 20000 bytes, which libcoap sends in BERT blocks to kcoap's 8704 (the last one several KiB); a 20000-byte download with `-X 4352` in BERT blocks, and with `-X 1152` over WebSockets in 1024-byte blocks; Observe with `-s 3` |
+
+Commands as the tests run them, for manual checks:
+
+```bash
+interop/libcoap/coap.sh coap-server -p 5683 -w 8080 -d 10 -X 1152 -v 7
+interop/libcoap/coap.sh coap-client -v 6 -w coap+tcp://127.0.0.1:5683/time
+interop/libcoap/coap.sh coap-client -v 6 -w -X 1152 -s 3 coap+ws://127.0.0.1:8080/time
+interop/libcoap/coap.sh coap-client -v 6 -m put -f /data/large.txt coap+tcp://127.0.0.1:5683/store
+```
+
+What the runs showed about libcoap v4.3.5b (kcoap follows RFC 8323 and works around the first two):
+
+- **Pong without the token.** libcoap answers every Ping with an empty token (and always with Custody),
+  although §5.4 requires the identical token. kcoap matches a Pong with an empty token to its oldest
+  outstanding Ping; Pongs come in order on a reliable transport.
+- **Final BERT blocks of more than 1024 bytes are rejected** with 4.08 "Too many missing blocks":
+  libcoap records the total at the first 1024-byte block of a final BERT block, then refuses the rest.
+  §6 allows "a multiple (possibly 0) of 1024 bytes plus a partial block". kcoap therefore cuts the block
+  before the last 1024-byte boundary, so its final BERT block carries at most 1024 bytes. That costs
+  one message at most, and both blocks are valid BERT.
+- **WebSocket frames above 1472 bytes kill the server.** libcoap reads WebSocket frames into a 1472-byte
+  buffer whatever Max-Message-Size its CSM announces, logs "packet size bigger than provided data space",
+  and then aborts with "stack smashing detected". The WebSocket tests therefore run libcoap with
+  `-X 1152`. kcoap sends what the peer's CSM allows, as RFC 8323 §5.3.1 says, so a default libcoap
+  WebSocket peer (8 MiB announced) should be given a smaller `-X` until this is fixed upstream.
+
+### Over TLS (RFC 8323 §9)
+
+The image's libcoap is built with OpenSSL (`--with-openssl`, OpenSSL 3.0 from Ubuntu 24.04): given a certificate,
+`coap-server -p <port>` also serves `coaps+tcp` (and DTLS) on `<port>+1`, and `-w ,<port>` serves `coaps+ws`.
+`Libcoap.startTlsServer` has openssl in the container make a throwaway EC P-256 certificate authority and a server
+certificate for `DNS:localhost`, both valid for a day, before `coap-server` starts; the keys never leave the
+container, and the test reads the two certificates back with `docker exec`. Nothing is downloaded or rebuilt.
+
+```bash
+./gradlew :kcoap-coap:jvmTest --tests 'dev.kcoap.coap.interop.*Tls*'
+```
+
+| Test class | Peer | What runs |
+|---|---|---|
+| `KcoapClientAgainstLibcoapTlsTest` | `coap-server -p <port> -c server.pem -j server.key -w ,<wss port> -v 4` | `coaps+tcp` through `KtorTlsConnector` trusting the test CA (`TlsTrust.Anchors`): GET of `/`, a 3000-byte PUT and GET of `/example_data`, Ping, discovery; the pinning hook with the server's key (accepted) and another (refused); the platform trust store (refused); `coaps+tcp://127.0.0.1` against a certificate for `localhost` (refused, RFC 9525 §6.4); a plain TCP connector, which does not serve `coaps+tcp`; `coaps+ws` through `KtorWebSocketConnector` on a CIO client that trusts the test CA, on one with the platform trust store (refused in the handshake), and on the default client, which serves no `coaps+ws` on the JVM (refused before connecting); a second server whose certificate names only `coap.example.org`, reached as `localhost` (refused over `coaps+tcp` and `coaps+ws`, RFC 9525 §6.3) |
+
+What the runs showed about libcoap v4.3.5b over TLS: it negotiates TLS 1.2 with ktor-network-tls
+(`ECDHE-ECDSA` with AES-GCM) and TLS 1.3 with clients that offer it; it selects ALPN `coap` when a client offers
+it, and accepts a client that offers no ALPN on any port. kcoap's TLS connector cannot offer ALPN, so for the
+test's ports, which are not 5684, it is allowed past RFC 8323 §8.2's rule with `allowsAnyPortWithoutAlpn`. kcoap has no TLS listener ([ADR 0010](../docs/adr/0010-server-side-tls.md)), so
+libcoap's client runs against kcoap over TLS only once a proxy or a listener is in place.
+
+`interop/libcoap/coap.sh` runs any libcoap example program the way the tests do, for manual checks:
+
+```bash
+interop/libcoap/coap.sh coap-server -p 5683 -d 10 -v 7
+interop/libcoap/coap.sh coap-client -v 6 -s 10 coap://127.0.0.1:5683/time
+```
+
+`KCOAP_LIBCOAP_IMAGE` points both at another libcoap build. The JVM test task is never served from the
+Gradle build cache, because whether docker is there is invisible to Gradle.
+
 ## Layer 1: byte-exact differential tests (deterministic)
 
 Interop only proves that a handshake completes. Comparing bytes proves both sides compute the same
@@ -14,10 +247,10 @@ thing, message by message, and pinpoints the first field that differs.
 
 ### EDHOC against libedhoc
 
-A small C program (`interop/libedhoc-oracle/`, to be written) links libedhoc and replaces the ephemeral
-key generation in its crypto table with keys read from the test case. libedhoc's own RFC 9529 tests use
-the same technique (`tests/host/rfc9529/test_rfc9529_chapter2.c`). For each case it prints, as hex:
-message_1 to message_4, PRK_out, and the EDHOC_Exporter output for the OSCORE Master Secret and Salt.
+Planned as an option of `edhoc_peer` (the live peer below): replace the ephemeral key generation in
+libedhoc's crypto table with keys read from the test case, as libedhoc's own RFC 9529 tests do
+(`tests/host/rfc9529/test_rfc9529_chapter2.c`), and inject the same keys on the kcoap side through
+`EphemeralKeySource`. Every message then has to match byte for byte, not just the derived secrets.
 
 The Kotlin JVM test generates the cases, runs the program as a subprocess, and compares byte for byte:
 
@@ -38,13 +271,215 @@ deterministic. libcoap protects a fixed set of requests and responses (Observe, 
 Proxy-Uri, unknown options, Appendix B.2 re-derivation) and the bytes are captured on loopback. The
 Kotlin side protects the same messages and must produce identical bytes, and must verify libcoap's output.
 
-### DTLS against Bouncy Castle
+### DTLS against Bouncy Castle (planned, with the DTLS engine)
 
-On the JVM, Bouncy Castle `bctls` (PSK, raw public keys, AES-128-CCM-8, Connection ID) runs in the
+kcoap has no DTLS engine yet; it comes last (roadmap E1). Once it exists: on the JVM, Bouncy Castle `bctls` (PSK, raw public keys, AES-128-CCM-8, Connection ID) runs in the
 same process. With fixed randoms and ephemeral keys on both sides, the handshake flights and records
 are compared byte for byte, for both roles.
 
 ## Layer 2: live interop over UDP
+
+### Running now
+
+`kcoap-oscore/src/jvmTest/.../LibcoapOscoreInteropTest.kt` runs with every `./gradlew jvmTest` when
+Docker and the `kcoap/libcoap:v4.3.5b` image (built from `interop/libcoap/Dockerfile`) are present,
+and is skipped otherwise:
+
+- kcoap OSCORE client → libcoap `coap-server -E`: GET `/time`, including libcoap's RFC 8613 B.1.2
+  replay-window challenge (protected 4.01 with Echo, answered by repeating the request with Echo).
+- libcoap `coap-client -E` (with a sequence-number file) → a minimal kcoap OSCORE responder: GET and
+  PUT, and the RFC 8613 §8.2 unprotected error response on replay.
+
+libcoap's own debug log is written to `kcoap-oscore/build/interop-logs/` when an exchange fails.
+
+`kcoap-oscore/src/jvmTest/.../StackOscoreInteropTest.kt` does the same through kcoap's CoAP client and
+server over real UDP (ktor-network):
+
+- `CoapClient` with `OscoreClient` → `coap-server -E -d 5`: GET `/time` (the stack repeats the request
+  with Echo after the B.1.2 challenge), PUT and GET of a dynamic resource, Observe of `/time`.
+- `coap-client -E` → `CoapServer` with `OscoreServer` (requiring freshness): GET, Block2 download in
+  64-byte blocks, Block1 upload, Observe with `-s 3`; every block and notification is protected on its own.
+- Q-Block under OSCORE (QB-5, cases K11 and L11 of the plan), both sides with Q-Block on (`-L 7`): with the
+  defaults, kcoap's client keeps protected bodies on Inner Block1 and Block2 against `coap-server -L 7 -E`
+  and never probes, and kcoap's server answers `coap-client -L 7 -N -b 64 -E`'s protected probe with an inner
+  4.02, after which libcoap falls back to Block2 and gets the body (after about 5 s, libcoap's own wait while
+  it tests for Q-Block). With `withMessageSecurity` on, libcoap 4.3.5b protects, or verifies, only the first
+  response to a request, pinned as `upstream…` tests: its server logs "OSCORE: PDU could not be encrypted"
+  for every block of a Q-Block2 set after the first, so a download gets one block per request (Q-Block1
+  uploads complete, since each block's request gets one response, and a client on the defaults reads the
+  stored body back with Inner Block2), and its client drops a request's OSCORE
+  association with the first response ("Security Context association not found") and gives up at block 1.
+  kcoap against kcoap takes these bodies (`OscoreQBlockEndToEndTest`), also the notification bodies of a
+  protected observation, which no libcoap run can cover for the same reason.
+
+`kcoap-oscore/src/jvmTest/.../ReliableOscoreInteropTest.kt` runs the same exchanges on connections (RFC
+8323), since OSCORE sits above the link the endpoint picks for the scheme (ADR 0005), both ways over
+`coap+tcp` and `coap+ws`:
+
+- `CoapClient` with `OscoreClient`, `KtorTcpConnector` and `KtorWebSocketConnector` →
+  `coap-server -p <port> -w <ws port> -E -d 5 -X 1152`, a fresh server per transport: GET `/time`, PUT and
+  GET of a dynamic resource, Observe of `/time`, on each transport. The test asserts the B.1.2 challenge each
+  time: libcoap answers the first GET with a protected 4.01 carrying Echo, and kcoap repeats it with that Echo.
+- `coap-client -E` (with `-X 1152` over WebSockets) → `CoapServer` with `OscoreServer` on `KtorTcpListener`,
+  then on `KtorWebSocketListener`, each a server whose context requires freshness as after a restart: GET,
+  Block2 download and Block1 upload in 64-byte inner blocks, Observe with `-s 3`. The test asserts that the
+  server challenged libcoap's first GET with a protected 4.01 carrying Echo, and that libcoap repeated it with
+  that Echo before it got "hello over OSCORE".
+- The challenge and its Echo travel encrypted, so the tests record them inside OSCORE
+  (`RecordingClientSecurity`, `RecordingServerSecurity`), not with a message interceptor on the wire.
+
+```bash
+docker build -t kcoap/libcoap:v4.3.5b interop/libcoap
+./gradlew :kcoap-oscore:jvmTest --tests '*LibcoapOscoreInteropTest*'
+./gradlew :kcoap-oscore:jvmTest --tests '*ReliableOscoreInteropTest*'
+```
+
+### EDHOC against libedhoc
+
+`kcoap-edhoc/src/jvmTest/.../LibedhocInteropTest.kt` runs with every `./gradlew jvmTest` when Docker and
+the `kcoap/libedhoc:0363bd3` image are present, and is skipped otherwise. The image builds libedhoc at the
+pinned commit `0363bd3af02265e919e888b60ccffb4606b68f16` with its vendored mbedTLS, liboqs, XKCP and
+zcbor and its own test suite, and adds `edhoc_peer` (`interop/libedhoc/peer/`), built in libedhoc's build
+tree against its reference cipher suites.
+
+```bash
+docker build -t kcoap/libedhoc:0363bd3 interop/libedhoc
+docker run --rm kcoap/libedhoc:0363bd3 ctest --test-dir /build --output-on-failure   # libedhoc's own tests
+./gradlew :kcoap-edhoc:jvmTest --tests '*LibedhocInteropTest*'
+```
+
+`edhoc_peer` runs one EDHOC session per process, as Initiator or Responder, and talks a line protocol on
+stdin and stdout (`docker run -i --rm kcoap/libedhoc:0363bd3 edhoc_peer --role responder --method 3
+--suite 2 --cid 18 --key p256-dh:… --own-kid 32 --own-cred … --peer-kid 2b --peer-cred … --peer-key …`).
+The options and the protocol are documented in the source header; in short:
+
+| Direction | Line | Meaning |
+|---|---|---|
+| in | `msg <hex>` | the next message from kcoap: an EDHOC message or an error message |
+| out | `msg <hex>` | a message for kcoap: message_1..4, or an error message |
+| out | `peer_error <code> [<s>,<s>…]` | an error message arrived (SUITES_R for code 2) |
+| out | `retry <suite>` | the Initiator got error code 2 and sends a new message_1 with this suite selected |
+| out | `failed <ret> <code>` | processing failed (libedhoc return value); the error message follows as `msg` |
+| out | `result <name> <hex>` | after completion: `suite`, `c_i`, `c_r`, `oscore_secret`, `oscore_salt`, `sender_id`, `recipient_id`, `exporter`, `prk_out_check`, `exporter_updated`, `prk_out_check_updated` |
+| out | `done` | the session completed |
+
+The test hands the peer its private key, its credential, and the credential and public key it must accept,
+all generated fresh per session; ephemeral keys are random on both sides. The peer moves libedhoc's log
+(which libedhoc writes to stdout) to stderr; the protocol transcript and that log are written to
+`kcoap-edhoc/build/interop-logs/` when a session fails. A session passes when libedhoc and kcoap agree on
+the selected suite, C_I and C_R, the OSCORE Master Secret and Salt, the Sender and Recipient IDs of RFC 9528
+Appendix A.1, EDHOC_Exporter(32768, "kcoap", 32), EDHOC_Expand(PRK_out, "kcoap-prk-out-check", 32) (PRK_out
+itself stays in libedhoc's non-exportable key slot), and the last two again after EDHOC_KeyUpdate.
+
+What interoperates (every row in both roles: kcoap Initiator with libedhoc Responder, and the reverse):
+
+| Suite | Methods | Credentials | Also covered |
+|---|---|---|---|
+| 0 (Ed25519/X25519, AES-CCM-16-64-128) | 0, 1, 2, 3 | CCS by `kid`; Ed25519 `x5chain` (kcoap Initiator) | EAD padding and non-critical items to libedhoc |
+| 2 (P-256, AES-CCM-16-64-128) | 0, 1, 2, 3 | CCS by `kid` | negotiation with error code 2 both ways; tampered message_2/3 and error code 1 both ways |
+| 4 (X25519/Ed25519, ChaCha20-Poly1305) | 0, 1, 2, 3 | CCS by `kid`; Ed25519 `x5chain` (libedhoc Initiator) | |
+| 24 (P-384, A256GCM, SHA-384) | 0, 1, 2, 3 | CCS by `kid` | negotiation from 24 down to 2 |
+| -24 (ML-KEM-512, ML-DSA-44, SHAKE256) | 0 | CCS with an AKP `COSE_Key`; ML-DSA-44 `x5chain` | Bouncy Castle on kcoap's side, liboqs on libedhoc's |
+
+For each suite and method, message_4 is on in one role and off in the other, and integer and byte-string
+connection identifiers and kids alternate across the matrix. Method 3 on suite -24 ends in error code 1
+in both directions (static-DH methods need DH, draft-ietf-lake-pqsuites §6.3). libedhoc does not
+implement suites 1, 3, 5, 6 or 25, ML-KEM-768/1024 or ML-DSA-65/87.
+
+Deviations found, all on libedhoc's side, each pinned by an `upstream…` test that asserts libedhoc's
+current behaviour (so it fails, and gets flipped, once libedhoc is fixed):
+
+1. **The Responder supports only its last configured suite and skips the prior-suite check.**
+   `edhoc_message_1_process` (`library/core/classic/edhoc_classic_message_1.c`, steps 2 and 3b) compares
+   the selected suite with the last entry of `edhoc_set_cipher_suites` only. Configured with [0, 2], it
+   accepts SUITES_I = [0, 2] (2 selected) although RFC 9528 §5.2.3 step 2 and §6.3.1 require error code 2
+   because suite 0, listed earlier, is supported; and it refuses SUITES_I = 0 although 0 is configured,
+   contrary to its own API documentation ("the Responder checks the selected suite against those it
+   supports"). Single-suite Responders, the common configuration, are unaffected.
+   Test: `upstreamLibedhocResponderSupportsOnlyItsLastSuiteAndSkipsThePriorSuiteCheck`.
+2. **Unknown critical EAD items are accepted when no EAD callback is bound.** Without `edhoc_bind_ead`,
+   message processing skips EAD entirely (`edhoc_classic_message_1.c` step 4 runs only when
+   `ead.process` is set), so a message_1 carrying EAD_1 with label -5 completes. RFC 9528 §3.8: an
+   endpoint receiving a critical EAD item it does not recognize "MUST send an EDHOC error message back"
+   and abort. With a callback bound, `include/edhoc/ead.h` leaves the criticality rule to the callback.
+   Test: `upstreamLibedhocIgnoresUnknownCriticalEadWithoutAnEadInterface`.
+3. Robustness, not an interop failure: methods 1–3 with the KEM suite -24 are not refused up front (the
+   suites' `supports_dh_nike` flag is never read by libedhoc's core). Its Initiator sends such a
+   message_1, and its Responder accepts it and fails only while composing message_2 ("ML-KEM suite does
+   not support static Diffie-Hellman"). Test: `staticDiffieHellmanMethodsOnTheKemSuiteAreRefused`.
+
+No deviation from RFC 9528 or draft-ietf-lake-pqsuites-02 was found on kcoap's side.
+
+### The browser topology through libcoap's proxy
+
+A browser has only WebSockets, so it reaches devices on UDP through a gateway. `BrowserTopologyInteropTest`
+(`kcoap-edhoc-oscore/src/jvmTest/.../interop/`, WP-I1, [ADR 0009](../docs/adr/0009-browser-topology-interop.md))
+puts libcoap v4.3.5b in that place, between two kcoap endpoints: a kcoap client with only
+`KtorWebSocketConnector`, then `coap-server -A 127.0.0.1 -p <port> -w <ws port> -X 1152 -v 7 -P ,kcoap-proxy`
+as a forward-proxy (RFC 7252 §5.7.2) that takes `coap+ws` in and sends `coap` out, then a kcoap `CoapServer` on
+UDP port 5683 of a loopback address of the test's own (127.a.b.c, chosen at random; Linux routes all of
+127.0.0.0/8 to the loopback interface). Each request names the device with Proxy-Scheme `coap` and that address
+as Uri-Host (RFC 7252 §5.10.2); under OSCORE those stay outside as Class U options and the path goes inside
+(RFC 8613 §4.1.3.3). Uri-Port is left out, although RFC 7252 §6.4 step 7 calls for Uri-Port 5683 in a request
+sent to a proxy on another port (§6.5 reads a missing one as the proxy's own): libcoap 4.3.5b would repeat it
+(below), and it reads a missing Uri-Port as the Proxy-Scheme's default port. OSCORE and EDHOC run end to end
+between the two kcoap sides, and the device authorizes on who the client is, never on the peer address, which
+is the proxy's for every client. The proxy's log is kept in
+`kcoap-edhoc-oscore/build/interop-logs/<test>-proxy.log`.
+
+Runs at the same time do not collide: each test has its own loopback address, which the proxy's `localhost`
+names. Nothing may hold UDP port 5683 on the wildcard address, though, which the manual `coap-server -p 5683`
+recipes above do while they run. Every proxy container goes when its test ends, also when its log cannot be
+written, and stops by itself after ten minutes (`timeout`), for a test JVM that was killed
+(`LibcoapProxyTest`).
+
+```bash
+./gradlew :kcoap-edhoc-oscore:jvmTest --tests '*BrowserTopologyInteropTest*'
+interop/libcoap/coap.sh coap-server -A 127.0.0.1 -p 5690 -w 8080 -X 1152 -v 7 -P ,kcoap-proxy
+```
+
+| Test | What crosses the proxy |
+|---|---|
+| `oscoreGetThroughTheProxyIsAuthorizedByTheClientsOscoreIdentity` | A protected GET on provisioned contexts: the Appendix B.1.2 challenge and the repeat with its Echo; the device admits the client by its `OscoreIdentity`, while a second client that OSCORE authenticates gets a protected 4.03 and one without OSCORE a 4.01. A 3000-byte download and upload in inner Block2 and Block1, with Q-Block off over WebSockets and under OSCORE although the client is set to `QBlockMode.PROBE` (plan, "Web browser"). The proxy's log shows the target in Proxy-Scheme and Uri-Host, no Uri-Path and no outer block option |
+| `edhocHandshakeThroughTheProxyThenOscoreWithTheDerivedContext` | EDHOC method 0, suite 0: message_1 and message_3 in the clear (Content-Format 65, message_2 as 64), then OSCORE on the derived context; the device sees an `EdhocIdentity` with the client's credential, whose `oscore` is the C_R |
+| `combinedRequestOfRfc9668ThroughTheProxy` | Method 3: message_3 rides on the first OSCORE request with the EDHOC option, which libcoap prints as `21` and passes on, Safe-to-Forward (RFC 9668 §3.1); only message_1 reaches the EDHOC resource |
+| `edhocAuthenticatedClientWhoseCredentialIsNotAdmittedGetsAProtected403ThroughTheProxy` | EDHOC completes, but `/lights` admits no credential: a 4.03 protected with the derived context comes back as an outer 2.04, and the handler does not run |
+| `oscoreObservationThroughTheProxyDeliversVerifiedNotifications` | An OSCORE observation (RFC 8613 §4.1.3.5): outer FETCH with Observe in and out, the registration's response and two notifications back as outer 2.05 with Observe, each verified |
+| `edhocErrorOfTheDeviceReachesTheBrowserThroughTheProxy` | A device that trusts no client credential: its 4.00 with the EDHOC error message (Content-Format 64) reaches the client as `EdhocPeerErrorException` |
+
+What the runs showed about libcoap 4.3.5b's proxy (details and source lines in ADR 0009), each pinned by the
+`upstream…` test named unless said otherwise:
+
+- **The direct proxy ignores the target.** With `-P ,<names>` it opens `coap://localhost:5683` for every request,
+  so the device listens on port 5683 of the address the requests name, and the proxy's `/etc/hosts` maps
+  `localhost` to that address alone. It also puts the zeroed target's empty Uri-Port (0) into the forwarded request;
+  a request that names a port of its own then has two, and libcoap drops the second and every option after it
+  (`upstreamLibcoapDirectProxyForwardsToPort5683WhateverTheRequestNames`). With a next hop (`-P <uri>,<names>`)
+  it opens the target instead of the next hop and passes Proxy-Scheme or Proxy-Uri on, which the device answers
+  with 5.05 (not pinned).
+- **An OSCORE request that names its target in Proxy-Uri**, the form of RFC 8613 §4.1.3.3 that kcoap-oscore
+  sends for a Proxy-Uri, is not forwarded: the proxy tries to decrypt it, logs "OSCORE: Not enabled" and drops
+  it. It forwards one with Proxy-Scheme and Uri-Host
+  (`upstreamLibcoapProxyDropsAnOscoreRequestThatNamesItsTargetInProxyUri`).
+- **A Content-Format is added** to a forwarded response that has a payload and none, text/plain; outside a
+  protected response OSCORE discards it as a Class E option (`upstreamLibcoapProxyAddsContentFormatToAProtectedResponse`).
+- **A deregistration goes on a new token.** The proxy gives every request it forwards a token of its own, so
+  the Observe 1 that deregisters on the registration's token (RFC 7641 §3.6) reaches the device on another one;
+  the device keeps notifying and the proxy passes the notifications on
+  (`upstreamLibcoapProxyForwardsADeregistrationOnANewTokenSoTheDeviceKeepsNotifying`).
+- **Request bodies of several blocks are corrupted** (not pinned): the proxy reads the blocks after the first
+  from the incoming request after freeing it, so 40 bytes of a 2445-byte body arrived changed in every run. That
+  is undefined behaviour, so no test can expect a stable outcome. The tests keep request bodies within one
+  message on each side of the proxy, as OSCORE's inner blocks do. It stops post-quantum EDHOC (suite -24), whose
+  2.4 KB message_3 the device then fails to decrypt. Response bodies cross intact.
+- Through the proxy every client reaches the device from the proxy's address, so `EdhocServer`'s per-peer bound
+  on pending sessions, and the binding of a pending session to the peer that sent message_1, cover the whole
+  gateway (checklist edhoc-oscore-x2), and on the client `PeerSecurity` keys protections by the proxy's
+  endpoint.
+- libcoap logs a message after handling it, block-buffered when its output is not a terminal; the proxy runs
+  with `docker run -t` so its log has each message at once.
+
+### Planned
 
 1. **OSCORE interop spec** (core-wg test-spec5) using libcoap's `examples/oscore_testcases.sh`: kcoap
    server against the libcoap client, kcoap client against the libcoap server.
@@ -53,9 +488,10 @@ are compared byte for byte, for both roles.
 3. Loss, duplication and reordering injected between the peers (CoAP retransmission, EDHOC
    deduplication per RFC 9528 §7, OSCORE replay window, DTLS flight retransmission and record replay).
 
-### DTLS and TLS against libcoap
+### DTLS and TLS against libcoap (planned, with the DTLS engine)
 
-libcoap builds against several DTLS libraries, so one oracle gives a matrix of independent DTLS
+kcoap has no DTLS yet and no TLS listener ([ADR 0010](../docs/adr/0010-server-side-tls.md)); today only kcoap's TLS
+clients run against libcoap (above, "Over TLS"). libcoap builds against several DTLS libraries, so one oracle gives a matrix of independent DTLS
 stacks. Feature support per libcoap's README:
 
 | libcoap backend | PSK | RPK | Certificates | DTLS 1.3 |
@@ -69,10 +505,12 @@ stacks. Feature support per libcoap's README:
 Each runs `coap-client` and `coap-server` against kcoap in both roles: PSK and RPK with the CCM-8
 suites, certificates with SubjectAltName and CN matching, session resumption, and Connection ID where
 the build reports it (`coap_dtls_cid_is_supported()`). The TLS-capable builds (all but TinyDTLS) also
-cover `coaps+tcp` and `coaps+ws`. TinyDTLS is the closest match to what constrained devices run.
+cover `coaps+tcp` and `coaps+ws`, with kcoap as the server once it has a TLS listener. TinyDTLS is the closest match to what constrained devices run.
 
 Browser path: browser → libcoap `coap-server` as proxy (`coaps+ws` in, `coap`/`coaps` out) → device,
-with OSCORE + EDHOC end to end.
+with OSCORE + EDHOC end to end. Without TLS, `coap+ws` in and `coap` out, it runs now (above, "The browser
+topology through libcoap's proxy"); the `coaps+ws` and `coaps` legs need a certificate on the proxy, trust
+configuration in kcoap's connectors (WP-T1) and, for `coaps`, kcoap's DTLS.
 
 ## Layer 3: other partners, for what the oracles do not cover
 
@@ -82,7 +520,7 @@ with OSCORE + EDHOC end to end.
 | aiocoap (Python) | A second opinion on the RFC 9668 combined flow |
 | lakers (Rust) | A second EDHOC opinion (method 3, suite 2 only) |
 | EDHOC-Fuzzer (Java) | Protocol state fuzzing of the kcoap Initiator and Responder |
-| DTLS-Fuzzer, TLS-Attacker (Java) | State-machine learning and malformed-message tests of the kcoap DTLS client and server |
+| DTLS-Fuzzer, TLS-Attacker (Java) | State-machine learning and malformed-message tests of the kcoap DTLS client and server, once the engine exists |
 
 Nobody implements suites 5, 6 or 25.
 
@@ -91,11 +529,17 @@ Nobody implements suites 5, 6 or 25.
 - **libedhoc lacks suite 3**, which RFC 9528 §8 makes mandatory, and suite 1. Both differ from suites 2
   and 0 only in EDHOC MAC length and EDHOC AEAD tag length (AES-CCM-16-128-128). Adding them to libedhoc
   makes it compliant and removes the need for uoscore here.
+- **libedhoc deviations** from RFC 9528 (Responder suite selection, critical EAD without a callback):
+  see "EDHOC against libedhoc" above.
 - **libcoap has no EDHOC**; our application glue provides `/.well-known/edhoc` and the combined request.
+- **libcoap's forward-proxy** reaches only the default port of its own host, drops OSCORE requests that use
+  Proxy-Uri, forwards a deregistration on a new token and corrupts request bodies of several blocks: see "The
+  browser topology through libcoap's proxy" and ADR 0009.
 - **Hop-Limit**: libcoap processes it as Outer (Class U), as draft-ietf-core-oscore-capable-proxies
   specifies; the published RFCs still make it Class E. See `docs/rfc-compliance.md`.
 
-## Layout (planned)
+## Layout
 
-`interop/libedhoc-oracle/` (C harness), `interop/libcoap-oracle/` (scripts and configs), and one
-container image per peer, pinned to a commit.
+One container image per peer, pinned to a release or commit: `interop/libcoap/` (libcoap v4.3.5b) and
+`interop/libedhoc/` (libedhoc 0363bd3, with the `edhoc_peer` line-protocol peer in `peer/`). Planned:
+`interop/libcoap-oracle/` (scripts and configs for the byte-exact OSCORE runs).

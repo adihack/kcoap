@@ -1,0 +1,380 @@
+/*
+ * kcoap.dev: figures and diagrams.
+ *
+ * Linked after site.css by the pages that draw diagrams: /, /features/, /releases/ and the 404 page.
+ * site.css explains how the stylesheets are split and in which order a page links them.
+ *
+ * Contents
+ *   1. Figures and diagrams (inline SVG), their text alternatives
+ *   2. The 404 page
+ */
+
+/* 1. Figures and diagrams ---------------------------------------------------------------------------- */
+
+/*
+ * Inline SVGs with class="diagram", role="img" and aria-labelledby on their <title> and <desc>. Every fill
+ * and stroke comes from the classes below, so a diagram follows the theme. Text sizes are in viewBox units.
+ */
+.figure {
+  margin: 0;
+  padding: clamp(16px, 2.5vw, 32px);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2);
+}
+
+@media (max-width: 599px) {
+  .figure {
+    margin-inline: calc(-1 * var(--gutter));
+    padding: 20px 8px 18px;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    box-shadow: none;
+  }
+
+  .figure figcaption,
+  .figure .diagram-text {
+    padding-inline: 8px;
+  }
+}
+
+.figure figcaption {
+  margin-top: 1rem;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--c-text-3);
+}
+
+.diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-inline: auto;
+  font-family: var(--font-sans);
+  overflow: visible;
+}
+
+.diagram-narrow {
+  max-width: 520px;
+}
+
+.diagram text {
+  fill: var(--d-text);
+  font-size: 15px;
+}
+
+.diagram .d-title {
+  font-weight: 700;
+  font-size: 15.5px;
+}
+
+.diagram .d-big {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.diagram .d-sub {
+  fill: var(--d-muted);
+  font-size: 13px;
+}
+
+.diagram .d-small {
+  fill: var(--d-muted);
+  font-size: 12px;
+}
+
+.diagram .d-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.diagram .d-on-accent {
+  fill: var(--c-accent-ink);
+}
+
+.diagram .d-on-accent-2 {
+  fill: var(--c-accent-ink);
+  opacity: 0.86;
+}
+
+.diagram .d-on-amber {
+  fill: var(--c-on-amber);
+}
+
+.diagram .d-accent-text {
+  fill: var(--c-accent);
+}
+
+.diagram .d-lost-text {
+  fill: var(--d-lost);
+  font-weight: 700;
+}
+
+.diagram .d-box {
+  fill: var(--d-surface);
+  stroke: var(--d-stroke);
+  stroke-width: 1.5;
+}
+
+.diagram .d-box-2 {
+  fill: var(--d-surface-2);
+  stroke: var(--d-stroke);
+  stroke-width: 1.5;
+}
+
+.diagram .d-box-soft {
+  fill: var(--d-accent-soft);
+  stroke: var(--c-accent-line);
+  stroke-width: 1.5;
+}
+
+.diagram .d-box-accent {
+  fill: var(--c-accent);
+}
+
+.diagram .d-box-amber {
+  fill: var(--c-amber);
+}
+
+.diagram .d-box-amber-soft {
+  fill: var(--c-amber-soft);
+  stroke: var(--c-amber-line);
+  stroke-width: 1.5;
+}
+
+.diagram .d-box-dashed {
+  fill: none;
+  stroke: var(--c-border-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+
+.diagram .d-line {
+  fill: none;
+  stroke: var(--d-line);
+  stroke-width: 1.5;
+}
+
+.diagram .d-line-soft {
+  fill: none;
+  stroke: var(--d-stroke);
+  stroke-width: 1.25;
+}
+
+.diagram .d-lifeline {
+  fill: none;
+  stroke: var(--d-lifeline);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+}
+
+.diagram .d-arrow {
+  fill: none;
+  stroke: var(--d-line);
+  stroke-width: 2;
+}
+
+.diagram .d-arrow-accent {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 2.5;
+}
+
+.diagram .d-arrow-amber {
+  fill: none;
+  stroke: var(--c-amber-line);
+  stroke-width: 2.5;
+}
+
+.diagram .d-arrow-lost {
+  fill: none;
+  stroke: var(--d-lost);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.diagram .d-head {
+  fill: var(--d-line);
+}
+
+.diagram .d-head-accent {
+  fill: var(--c-accent);
+}
+
+.diagram .d-head-amber {
+  fill: var(--c-amber-line);
+}
+
+.diagram .d-fill-accent {
+  fill: var(--c-accent);
+}
+
+.diagram .d-fill-amber {
+  fill: var(--c-amber);
+}
+
+.diagram .d-stroke-lost {
+  fill: none;
+  stroke: var(--d-lost);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.diagram .d-icon-accent {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram .d-icon-on-accent {
+  fill: none;
+  stroke: var(--c-accent-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram .d-check {
+  fill: none;
+  stroke: var(--c-accent-ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram .d-caps {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.diagram .d-block-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.diagram .d-mono-small {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.diagram .d-box-lost {
+  fill: var(--d-surface);
+  stroke: var(--d-lost);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.diagram .d-fill-on-accent {
+  fill: var(--c-accent-ink);
+}
+
+.diagram .d-row-alt {
+  fill: var(--c-bg-soft);
+}
+
+/* Text alternative under a figure. */
+.diagram-text {
+  margin-top: 1rem;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.diagram-text summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--c-accent);
+}
+
+.diagram-text[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.diagram-text table {
+  margin-top: 0.25rem;
+}
+
+.diagram-text th small {
+  display: block;
+  font-weight: 400;
+  color: var(--c-text-3);
+}
+
+.diagram-text .table-wrap {
+  margin-bottom: 0;
+}
+
+/*
+ * On phones a diagram is drawn at about 0.8 of its viewBox, so the smaller labels grow to stay at 11 px
+ * or more; the boxes leave room for these sizes. The text version above the caption has the same content.
+ */
+@media (max-width: 599px) {
+  .diagram .d-sub,
+  .diagram .d-mono {
+    font-size: 14px;
+  }
+
+  .diagram .d-small {
+    font-size: 13.5px;
+  }
+
+  .diagram .d-mono-small {
+    font-size: 13px;
+  }
+
+  .diagram .d-block-num {
+    font-size: 13.5px;
+  }
+
+  .diagram .d-caps {
+    font-size: 12.5px;
+  }
+}
+
+/* 2. The 404 page ------------------------------------------------------------------------------------ */
+
+.notfound {
+  max-width: calc(820px + 2 * var(--gutter));
+  text-align: center;
+}
+
+.notfound .lede {
+  max-width: 36rem;
+  margin-inline: auto;
+}
+
+.notfound .btn-row {
+  justify-content: center;
+}
+
+.notfound-code {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.diagram-lost {
+  max-width: 420px;
+  margin: 0 auto 2rem;
+}
+
+/* An arrow head in the lost red, for the diagrams on /features/. */
+.diagram .d-head-lost {
+  fill: var(--d-lost);
+}

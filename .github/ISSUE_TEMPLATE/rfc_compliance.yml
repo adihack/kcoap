@@ -1,0 +1,74 @@
+name: RFC compliance gap
+description: kcoap does not do what an RFC requires.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The [RFC compliance](https://github.com/adihack/kcoap/blob/main/docs/rfc-compliance.md) page lists what kcoap implements, section by section, with its known gaps and deliberate deviations. Please check it first.
+
+        If the deviation weakens security, do not report it here: follow [SECURITY.md](https://github.com/adihack/kcoap/blob/main/SECURITY.md).
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before you report
+      options:
+        - label: I searched the existing issues, and this gap is not reported yet.
+          required: true
+        - label: I checked docs/rfc-compliance.md, and it does not list this gap or deviation.
+          required: true
+  - type: input
+    id: rfc
+    attributes:
+      label: RFC and section
+      placeholder: RFC 7252 §5.4.1
+    validations:
+      required: true
+  - type: textarea
+    id: requirement
+    attributes:
+      label: What the RFC requires
+      description: Quote the requirement (MUST, SHOULD, ...) or describe it, and say which role it applies to.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What kcoap does
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A test, message bytes in hex, logs, a capture or the line of code. Remove secrets first.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: kcoap version
+      description: The released version, or the commit of `main` you read or built.
+      placeholder: 0.1.0, or main at 1a2b3c4
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      options:
+        - kcoap-coap-message
+        - kcoap-coap
+        - kcoap-oscore
+        - kcoap-edhoc
+        - kcoap-edhoc-oscore
+        - kcoap-cbor
+        - kcoap-cose
+        - kcoap-crypto or a crypto backend
+        - a transport module
+        - I do not know
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What breaks because of the gap, for example interop with a particular implementation.

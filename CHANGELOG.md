@@ -1,0 +1,1317 @@
+# Changelog
+
+All notable changes to kcoap. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and versions follow [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may break the
+API; every breaking change is listed here with a migration note.
+
+## Unreleased
+
+Nothing has changed since 0.1.0 yet.
+
+## 0.1.0 - 2026-11-06
+
+The first release. kcoap implements CoAP, OSCORE and EDHOC once, in common Kotlin, for the JVM, Android, iOS,
+Apple-silicon Macs, Linux x64, browsers and Node.js. [docs/checklist.md](docs/checklist.md) tracks every
+requirement: of 125, 27 are Done (met and verified), 60 Partial (the row names what is missing), 32 To do and 6
+Deferred.
+
+- **CoAP** (9 of 30 Done, 11 Partial): RFC 7252 over UDP and RFC 8323 over TCP and WebSockets, client and server;
+  the link format (RFC 6690), Observe (RFC 7641), Block-wise (RFC 7959), Q-Block (RFC 9177, off by default), FETCH,
+  PATCH and iPATCH (RFC 8132), No-Response (RFC 7967), Echo and Request-Tag (RFC 9175), Too Many Requests (RFC 8516).
+- **OSCORE**, RFC 8613 (7 of 17 Done, 5 Partial): every Appendix C vector byte for byte, the replay window, Observe,
+  Appendix B.1.1 and B.1.2. It fails closed: by default a server with OSCORE refuses unprotected requests.
+- **EDHOC**, RFC 9528 (5 of 12 Done, 3 Partial): methods 0–3 in both roles, suites 0–6 and 24, EAD, the exporter,
+  key update; both RFC 9529 traces byte for byte. `js` and `wasmJs` have no ChaCha20-Poly1305, so suites 4 and 5
+  are never offered there ([suites per target](docs/platforms.md#algorithms-and-edhoc-suites-per-target)).
+  **Post-quantum EDHOC**: the KEM-based exchange of draft-ietf-lake-pqsuites-02 §3 as libedhoc's private suite -24
+  (ML-KEM-512, ML-DSA-44), with `kcoap-crypto-bc`, JVM and Android only.
+- **EDHOC over CoAP into OSCORE** (0 of 12 Done, 8 Partial): the forward flow of RFC 9528 Appendix A.2.1 and the
+  combined request of RFC 9668, whose Figure 4 it reproduces byte for byte.
+
+**Where it runs.** A consuming build needs Kotlin 2.3 or newer, and the jvm artifacts need Java 17 or newer
+([docs/platforms.md](docs/platforms.md#targets-and-minimum-versions)); Android uses them from API level 26. CI runs
+the same common tests on the JVM, on `linuxX64`, on `js` and `wasmJs` under Node.js, on `macosArm64` and on the iOS
+simulator, and a Swift smoke test; Apple results come from CI only, and nothing has run on an iPhone yet. CI builds
+an Android sample app at minSdk 26 with R8 and lint; nothing has run on an emulator or a device yet. Browsers and
+Node.js use WebSockets only (`coap+ws`, `coaps+ws`), through a proxy to the devices; CI runs the WebSocket client's
+tests and a sample page's bundle in headless Chrome.
+
+**Interop**, in both roles ([interop/README.md](interop/README.md)): 84 tests against libcoap 4.3.5b over UDP, TCP,
+WebSockets and TLS, Q-Block included (over TLS kcoap is the client only); 10 with OSCORE against libcoap; 11 against
+libedhoc, suites 0, 2, 4 and 24 with methods 0–3, and suite -24 with method 0; 10 through libcoap's forward-proxy
+from WebSockets to UDP, with kcoap at both ends. The interop job skips, rather than fails, a test whose Docker image
+did not build ([checklist](docs/checklist.md) testing-cicd-5), and the OSCORE test spec of libcoap's
+`oscore_testcases.sh` has not run yet.
+
+**Add it** from Maven Central through `kcoap-bom`, which gives every kcoap module one version;
+[docs/getting-started.md](docs/getting-started.md) says which modules each use case needs. The
+[release key](docs/releasing.md#the-release-signing-key) `58337699D9CB8E6F5EB1BDFB4A7E491069FAEAB3` signs every
+artifact.
+
+```kotlin
+// build.gradle.kts of a JVM or Android project; Kotlin Multiplatform: docs/getting-started.md
+implementation(platform("dev.kcoap:kcoap-bom:0.1.0"))
+implementation("dev.kcoap:kcoap-edhoc-oscore")   // EDHOC and OSCORE over CoAP; brings the CoAP stack
+implementation("dev.kcoap:kcoap-crypto-default") // the platform's cryptography
+implementation("dev.kcoap:kcoap-transport-ktor") // UDP and TCP sockets
+```
+
+**Not in 0.1.0** (the [checklist](docs/checklist.md) names every other gap; its
+[biggest gaps](docs/checklist.md#biggest-gaps) put them in order):
+
+- No DTLS, so no `coaps://` and no RawPublicKey mode, which RFC 7252 makes mandatory; a `coaps` request fails before
+  anything is sent. DTLS comes last; until then OSCORE and EDHOC protect `coap` end to end.
+- No durable state ships. OSCORE with a pre-shared Master Secret needs a `SequenceNumberStore` of the application's
+  own ([recipes per runtime](kcoap-oscore/README.md#writing-a-durable-store)), and an `EdhocServer` needs a bounded
+  `MutableSecurityContextRepository`, since `InMemoryContextRepository` never evicts. Replay windows and pending
+  EDHOC sessions are not persisted.
+- TLS only as a client, and with certificates for the server only (no client certificates, PSK or RPK):
+  `coaps+tcp` on the JVM (TLS 1.2, no ALPN, no extended master secret or renegotiation indication); `coaps+ws` by
+  default on Apple, `js` and `wasmJs`, and on the JVM and Android only through an `HttpClient` that the application
+  passes and whose engine checks host names. No TLS server of its own: servers terminate TLS at a reverse proxy.
+- CoAP: no caching, proxying or multicast. OSCORE: no Appendix B.2, no Outer Block-wise, no protected signaling over
+  TCP and WebSockets, no OSCORE over HTTP, and after sequence-number exhaustion responses still reuse the request's
+  nonce (RFC 8613 §7.2.1).
+- CBOR and COSE decoding is not strict: non-shortest heads, duplicate or unsorted map keys and inconsistent COSE keys
+  are accepted.
+- EDHOC: no suite 25, no CWT or C509 credentials, no X.509 path validator (pin certificates or supply one), no
+  reverse flow, no fallback from the combined request to the sequential flow, no EDHOC error from the client when
+  message_2 or message_4 fails; EDHOC_KeyUpdate does not yet rekey OSCORE; behind a forward-proxy `EdhocServer` sees
+  every client as one peer, so one client can take all 8 places for pending sessions. No independent peer yet for
+  EDHOC over CoAP or for suites 1, 3, 5 and 6.
+- Swift: no XCFramework or SwiftPM package (an app exports kcoap's types from its own Kotlin framework), no Flow
+  bridge; `Duration` and `CoapCode` reach Swift as raw values; no minimum iOS version yet. No JS facade or npm
+  package.
+- No native artifacts for `linuxArm64`, Windows or Intel Macs (`macosX64`, `iosX64`).
+
+**0.x: a minor release may break the API**; the "Changed (breaking)" section of each entry lists every breaking
+change with a migration note ([docs/versioning.md](docs/versioning.md)). The rest of this entry records the changes
+made while building toward 0.1.0, including breaking changes between development snapshots, which matter only to
+someone who built kcoap from source before this release.
+
+### Added
+
+- Errors and observability for CoAP (WP-B4), all in kcoap-coap:
+  - **`CoapResponseException`** (`dev.kcoap.coap.server`): a resource handler, or code several calls below it, throws
+    it with a 4.xx or 5.xx `CoapResponse`, and the server sends that response as if the handler had returned it,
+    logged at DEBUG only. Thrown while a notification is produced, it ends the observation like any error
+    notification (RFC 7641 §3.2). Any other exception is still a bare 5.00, logged at ERROR.
+  - **A `RESPONSE_TIMEOUT` after responses that failed verification** (RFC 8613 §8.4, which drops them and waits
+    on) has the last of them, the security layer's `MessageSecurityException`, as `cause`, and its message says how
+    many came; so does that of a Q-Block body. A stale OSCORE context no longer looks like a silent peer.
+  - **New `EndpointEvent`s**: `ResponseRejected` (a response the client did not act on: `VERIFICATION_FAILED` or
+    `UNVERIFIED`, the only signal an observation gets of a bad notification); `RequestCompleted`, once per request a
+    server finished, with the inner method and response code, the resource's path in the tree (never the client's
+    Uri-Path), whether No-Response suppressed the answer, the message-security identity and the duration;
+    `SecurityRejected` (`VERIFICATION_FAILED`, answered unprotected, with the security layer's exception, or
+    `FRESHNESS_CHALLENGE`, RFC 8613 Appendix B.1.2). The three inputs the datagram messaging layer ignored with only
+    a log line, an ACK carrying a request, a piggybacked response with a foreign token and a non-empty Reset, are
+    `MessageRejected` events now. See "Changed (breaking)" for what new subtypes mean for a `when`.
+  - **`CoapEndpoint.stats()` and `CoapServer.stats()`**: what is held now, as `EndpointStats` (exchanges, running
+    handlers, transmissions, deduplication entries, reserved Message IDs, connections) and `ServerStats` (observers,
+    Block1 and Block2 transfers, Q-Block1 and Q-Block2 bodies), each named after the bound that limits it. Reading
+    takes no lock, so a metrics library may poll it from any thread.
+  - **`EndpointEventListener.plus`**: listeners combine as `LogSink`s do; one that throws keeps the event from none
+    of the others.
+  - Documentation: [the guide](docs/guide-client-server.md#monitoring) has a Monitoring section and the
+    `CoapResponseException` example, compiled by `GuideExamplesTest`; [docs/logging.md](docs/logging.md) explains the
+    levels and why rejected input is DEBUG; [docs/code-style.md](docs/code-style.md#logging) adds "log or throw,
+    never both".
+- Sample consumers and a browser bundle budget (WP-P1), no API change. Each sample is a Gradle build of its own that
+  takes kcoap from Maven Local through `kcoap-bom` alone, as an application would, and has a CI job that runs
+  `publishToMavenLocal` from the commit first:
+  - [samples/jvm-consumer](samples/jvm-consumer/README.md) runs getting started's tour, a CoAP GET, an OSCORE GET and
+    EDHOC then OSCORE over UDP on loopback, compiled to Java 17 bytecode; its `verifyKcoapFromBom` fails when any
+    kcoap module on the runtime classpath, also one that arrives as a dependency, has a version the BOM does not set.
+    Its `pom-only` build runs the same program from the POMs alone, as a Maven build reads kcoap, and fails on a POM
+    dependency that is missing, has the wrong scope or names a multiplatform root artifact.
+  - [samples/js-consumer](samples/js-consumer/README.md) is a browser page (Kotlin/JS IR, a production webpack
+    bundle) that reads a resource with OSCORE over CoAP over WebSockets, with keys its server makes for each page
+    load and keeps for the newest 1,000 (in production that endpoint sits behind the application's user
+    authentication); its tests run the page's code on the JVM, the minified bundle on Node.js and, in CI, the bundle
+    in headless Chrome. `checkBundleSize` fails when the bundle exceeds the budget in `bundle-budget.properties`:
+    1 149 569 bytes minified and 316 415 bytes with gzip measured, plus 5 %
+    ([docs/platforms.md](docs/platforms.md#bundle-size)).
+  [samples/android-consumer](samples/android-consumer/README.md) takes its versions from `kcoap-bom` now too.
+  getting-started.md, platforms.md, testing.md and the README link the samples.
+- `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):
+  `implementation(platform("dev.kcoap:kcoap-bom:<version>"))` sets one version for every kcoap module of a build,
+  also those that arrive as dependencies, and Maven builds import it with `<scope>import</scope>`. Every published
+  module depends on the BOM of its own version as a platform, so in Gradle a library built on a newer kcoap moves
+  every kcoap module to that version together (version alignment). It constrains the multiplatform module and the
+  JVM artifact of every published module; the constraints are generated from the
+  modules the build publishes, never written by hand, and `verifyBomConstraints` (part of `check` and
+  `scripts/test unit`) checks the published POM and module metadata against the build's publications. It is
+  published with the modules, to the same repositories.
+- Documentation (WP-C3): [docs/getting-started.md](docs/getting-started.md), which modules each use case needs (by
+  protocol, transport and platform), adding them through the BOM, and a first client and server, OSCORE, EDHOC and
+  the post-quantum backend, compiled and run by `GettingStartedExamplesTest`;
+  [docs/platforms.md](docs/platforms.md) completed with the minimum versions, the algorithms and EDHOC suites per
+  target from the conformance suite's capability report, the ways to terminate TLS in front of kcoap, and the
+  mobile lifecycle; a README for kcoap-common and for kcoap-bom; ADRs 0011 to 0015 for decisions earlier work
+  packages settled (the error model, the configuration shapes, durable state, the shared crypto blocks, randomness
+  by layer); and a full pass over docs/architecture.md, docs/roadmap.md and docs/code-style.md (ownership of arrays
+  and keys, the API vocabulary, errors, final implementations). The README installs through the BOM and says that
+  before 1.0 a minor release may break the API.
+- Bounds in total and per peer on what a flood can fill (SRV-2, RFC 7252 §11.3), each in
+  `CoapEndpointConfig.Builder`: `maxDeduplicationEntriesPerPeer` (10 000), `maxReservedMessageIds` (262 144),
+  `maxReservedMessageIdsPerPeer` (65 536, the Message ID space) and `maxExchanges` (16 384), with the
+  `EndpointEvent.LimitReached.Limit` values `DEDUPLICATION_ENTRIES_PER_PEER`, `MESSAGE_IDS`, `MESSAGE_IDS_PER_PEER`
+  and `EXCHANGES`; what each does at its bound is under "Security". Defaults in
+  [the guide](docs/guide-client-server.md#limits-under-load).
+- 4.29 Too Many Requests (SRV-2, RFC 8516): `CoapResponse.tooManyRequests(retryAfter, diagnostic)` sets Max-Age to
+  the wait in whole seconds, rounded up; `CoapResponse.retryAfter` reads the wait a 4.29 or a 5.03 asks for (its
+  Max-Age, 60 seconds without one); and the client helper `RetryAfter(maxWait, maxAttempts)` sends a request again
+  once that wait has passed, never sooner, returns a refusal whose wait is above `maxWait` at once, and ends the
+  wait when the caller is cancelled. libcoap 4.3.5b's `coap-client` receives the 4.29 with its Max-Age and prints
+  the code. kcoap has no rate limiter of its own: which client asks too often is the application's decision.
+- `kcoap-testkit`: `InMemoryNetwork.spoof(from, to, bytes)` sends a datagram from a forged source address, with
+  nothing attached there, for flood tests (SRV-2).
+- `KcoapException` (kcoap-common), the root of the exception of every protocol facade (WP-D2); see "Changed
+  (breaking)". A Swift smoke test (WP-D2, which took over PL-3): the unpublished module kcoap-swift-smoke links a
+  `KcoapSmoke` framework of kcoap-coap for the Apple targets, and its Swift script, which the macOS CI job compiles
+  with `xcrun swiftc` and runs (`scripts/test swift`, `./gradlew :kcoap-swift-smoke:swiftSmoke`), builds a
+  `CoapClientConfig` with explicit values and catches a request timeout and a malformed URI as `NSError`.
+- A `coaps+tcp` client on the JVM (WP-T1, RFC 8323 §8.2, §9.1), in kcoap-transport-ktor: `KtorTlsConnector` on
+  ktor-network-tls, configured by `TlsClientConfig` (`trust`, `pinner`, `allowsAnyPortWithoutAlpn`) with
+  `TlsTrust.Platform` (the platform trust store, the default) or `TlsTrust.Anchors`, and the certificate-pinning
+  hook `CertificatePinner` with RFC 7469 SPKI pins (`CertificatePinner.publicKeySha256`). It validates the server's
+  chain, checks that the certificate names the host (RFC 9525 §6) and reports the validated path as the
+  connection's `PeerIdentity.Certificate`; on Android `TlsTrust.Platform` checks the chain with the host through
+  `X509TrustManagerExtensions`, so a network security configuration's `<domain-config>` applies (not run on
+  Android yet). ktor-network-tls limits it to TLS 1.2 without ALPN, so ports other than 5684 need
+  `allowsAnyPortWithoutAlpn` (RFC 8323 §8.2), without the extended master secret (RFC 7627) or the renegotiation
+  indication (RFC 5746), which RFC 9325 §3.5 requires (low risk without renegotiation, resumption or client
+  certificates), and to the JVM: Linux native and Apple builds have no TLS there. Cross-tested with libcoap 4.3.5b
+  on OpenSSL, as is `coaps+ws` through the WebSocket connector on a CIO client that trusts the test authority
+  (`KcoapClientAgainstLibcoapTlsTest`). Servers terminate TLS at a reverse proxy for now
+  ([ADR 0010](docs/adr/0010-server-side-tls.md)); what each runtime has is in [docs/platforms.md](docs/platforms.md).
+- Builders for the two configurations certain to grow (WP-D1): `CoapEndpointConfig { ... }` and
+  `CoapClientConfig { ... }`, their `Builder`, `toBuilder()` and `Default`; see "Changed (breaking)" for what
+  they replace.
+- Tests only, no API change: the browser topology cross-tested end to end (WP-I1,
+  [ADR 0009](docs/adr/0009-browser-topology-interop.md)). In `BrowserTopologyInteropTest` (kcoap-edhoc-oscore,
+  run by `scripts/test interop`) a WebSocket-only kcoap client reaches a kcoap UDP device through libcoap
+  v4.3.5b's `coap-server -P` as a forward-proxy: OSCORE with the freshness challenge and inner block-wise bodies,
+  EDHOC, the RFC 9668 combined request and an EDHOC error, an OSCORE observation, the device authorizing on the
+  client's `OscoreIdentity` or `EdhocIdentity` (a protected 4.03 for an EDHOC peer it does not admit). Four
+  deviations of libcoap's proxy are pinned by `upstream…` tests; a fifth, request bodies of several blocks
+  corrupted, is documented, and keeps post-quantum EDHOC off that path for now. The device listens on UDP port
+  5683 of a loopback address of its own (127.a.b.c), so concurrent runs do not collide, but nothing may hold UDP
+  5683 on the host's wildcard address; each proxy container is removed when its test ends and stops by itself
+  after ten minutes.
+- The CoAP client's error contract (WP-B3): every runtime failure of a `CoapClient`, `CoapEndpoint` or
+  `CoapServer` call is a `CoapException`, with two new reasons, `SECURITY` (message security could not protect
+  the request; nothing was sent) and `UNRESOLVED_HOST` (the `EndpointResolver` failed at runtime), each with the
+  lower layer's exception as cause. `CoapUri.parseOrNull`, `CoapUri.fromOptionsOrNull` and
+  `LinkFormat.parseOrNull` read what a peer sent and return null instead of throwing; `fromOptionsOrNull` takes
+  the options of a received request, whose empty Uri-Port (the port 0) makes `fromOptions` throw. Also new:
+  `RequestContext.path`, and `EndpointEvent.ObserverRemoved.Reason` with `ObserverRemoved.detail`, which say why
+  an observer was removed. `CoapRequest` is equal by its parts, like `CoapResponse`.
+- kcoap is licensed under the [Apache License 2.0](LICENSE), with a [NOTICE](NOTICE) and the third-party
+  material listed in [third-party material](docs/third-party.md). Copyright 2026 Adrian Sołtys and the
+  kcoap contributors.
+- Contributions follow the [Developer Certificate of Origin 1.1](DCO), with no CLA: every commit carries a
+  `Signed-off-by` line matching its author, which a check verifies on every pull request.
+- A [trademark policy](TRADEMARKS.md) for kcoap and kcoap.dev, and the community files
+  [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [SECURITY.md](SECURITY.md),
+  [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md) and [SPONSORS.md](SPONSORS.md).
+- Every POM names the license (`kcoap.license.name`, `kcoap.license.url`), the website https://kcoap.dev,
+  the maintainer, GitHub Issues and the SCM; the API reference carries the copyright and trademark footer.
+- A [documentation hub](docs/README.md), the [versioning and API stability policy](docs/versioning.md), and
+  a redesigned README with the kcoap logo.
+- Storage and routing for EDHOC-derived contexts (WP-A3): `MutableSecurityContextRepository` (kcoap-oscore), a
+  `SecurityContextRepository` with `add`, `addIfAbsent` and `remove` (of that very context only), which
+  `InMemoryContextRepository` implements and `EdhocServer` takes, so a server can keep its contexts in a bounded
+  or shared store;
+  `PeerSecurity.install(client, uri, security)`, which resolves the server's URI with the client's own
+  resolver and returns the endpoint it installed for; `CombinedHandshake`, the result of `runCombined()`.
+- Access control on the server (WP-SEC2): `AccessPolicy` with `Public`, `MessageSecurityRequired` and
+  `Authenticated`, `AccessRequest`, `CoapResource.access`, `ResourceBuilder.access`,
+  `CoapServerConfig.defaultAccess`, `LinkFormat.OSCORE` (`osc`, RFC 8613 §9). Verification on the client:
+  `ResponseVerification`, `CoapException.Reason.UNVERIFIED_RESPONSE` and `CoapException.response`. Who a
+  request comes from: `SecurityContext.identity` and the `identity` parameter of `SecurityContext.derive`,
+  `EdhocIdentity`. Plaintext by choice: `allowUnprotected` on `OscoreClient` and `PeerSecurity`.
+
+- CoAP over UDP (RFC 7252) with Observe (RFC 7641), Block-wise (RFC 7959), FETCH/PATCH/iPATCH (RFC 8132),
+  Echo and Request-Tag (RFC 9175), No-Response (RFC 7967), Hop-Limit (RFC 8768) and link format (RFC 6690).
+- CoAP over TCP and WebSockets (RFC 8323): CSM, Ping/Pong, Release, Abort, BERT.
+- OSCORE (RFC 8613) with Appendix B.1 sequence-number persistence and Echo-based replay-window recovery.
+- EDHOC (RFC 9528, RFC 9529 traces), including the post-quantum suite -24 of draft-ietf-lake-pqsuites.
+- EDHOC over CoAP and the combined EDHOC + OSCORE request (RFC 9528 Appendix A, RFC 9668).
+- Targets: JVM, iOS, macOS, Linux native, JS and Wasm, with capability-based crypto selection.
+- Live interop tests against libcoap (CoAP, OSCORE, TCP, WebSockets) and libedhoc (both roles, PQ).
+- One-command test suites (`scripts/test`) and CI/CD (tests on Linux and macOS, tag-driven releases).
+- `CoapEndpoint.closeCause` and `awaitClosed()`, and `CoapException.Reason.TRANSPORT_FAILED`: an endpoint
+  ends in one terminal transition, whichever way (`close()`, its scope cancelled, its datagram transport's
+  `receive` failing), and says why (WP-S1).
+- Resource bounds for what unauthenticated peers can make an endpoint keep or do (RFC 7252 §11.3), each
+  reported as the new `EndpointEvent.LimitReached` with its `Limit`: `CoapEndpointConfig.maxDeduplicationEntries`
+  (50 000), `maxConcurrentRequests` (256), `maxExchangesPerPeer` (256); `CoapServerConfig.maxObservers`
+  (10 000), `maxObserversPerPeer` (32), `maxObserversPerResource` (1 000);
+  `ReliableTransportConfig.maxPendingConnections` (128) and `maxConnections` (1 024) (WP-S1).
+- `kcoap-testkit`: `Stress.run` and `Stress.race`, bounded concurrency stress tests on the real
+  `Dispatchers.Default` for common tests (WP-S1).
+- `kcoap-testkit`: `InMemoryLink` runs one test over datagrams and over connections (`Datagrams`,
+  `Connections`, each with a server and client `Side`, the server's `uri` and `cut`), and `InMemorySessions`
+  stands in for a DTLS layer whose sessions can end (WP-B1). kcoap's own conformance suites run on them:
+  `ExchangeConformanceTest` (kcoap-coap) and `OscoreOverLinksTest` (kcoap-oscore), on every target.
+- Groundwork for Q-Block (RFC 9177), which stays off: a Q-Block request still gets 4.02 (Confirmable) or a
+  Reset (Non-confirmable), and the client still rejects a response carrying Q-Block, now pinned by tests
+  (QB-0). The Q-Block state machines (QB-1, ADR 0006) drive the server (QB-3, below), not yet the client.
+  The endpoint can carry several responses to one request into a per-body inbox, and holds one NSTART
+  slot per Non-confirmable body, released at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (QB-2; internal,
+  no API change). New public API:
+  - `TransmissionParameters.maxPayloads` (10), `nonTimeout` (ACK_TIMEOUT), `nonReceiveTimeout`
+    (2 × NON_TIMEOUT, at least NON_TIMEOUT × ACK_RANDOM_FACTOR + 1 s, which `init` enforces),
+    `nonMaxRetransmit` (MAX_RETRANSMIT) and the derived `nonPartialTimeout` (247 s), RFC 9177 §7.2. They are
+    new trailing constructor parameters with defaults, so source stays compatible; compiled callers of the
+    constructor recompile.
+  - `ContentFormat.MISSING_BLOCKS_CBOR_SEQ` (272, RFC 9177 §5).
+  - `OptionSet.qBlock1`, `qBlock2` and `qBlock2List`, and `OptionSet.Builder.qBlock1()`, `qBlock2()` and
+    `addQBlock2()`.
+- Amplification mitigation by address verification (RFC 9175 §2.4 item 3, §2.6; SRV-1). A response larger
+  than `CoapServerConfig.amplificationFactor` (3) times its request, to a client that neither OSCORE nor
+  DTLS authenticated on a datagram transport, waits until the client's address is verified: the server
+  sends a 4.01 Unauthorized with an 8-byte Echo value instead, piggybacked or Non-confirmable, never as a
+  separate Confirmable response, and a request that returns the value verifies the address for
+  `verifiedAddressLifetime` (1 hour). `CoapServerConfig.amplification` chooses what is checked:
+  `AmplificationPolicy.Q_BLOCK_BURSTS` (the default; it acts only on a server with Q-Block on, QB-3),
+  `ALL_RESPONSES` (also every Observe registration; a separate response to an address
+  not yet verified goes Non-confirmable, so it is never retransmitted there; and each POST or PATCH keeps
+  its own response for the repeat of that request, so it does not run twice, up to `maxConcurrentTransfers`
+  of them) or `OFF`. `maxVerifiedAddresses` (10 000) bounds the verified addresses and, separately, the
+  outstanding challenges. New `EndpointEvent.LimitReached.Limit` values: `AMPLIFICATION_FACTOR` (a
+  response was held back), `VERIFIED_ADDRESSES`, `ADDRESS_CHALLENGES` and `HELD_BACK_RESPONSES` (an entry
+  was evicted for room; for the last, that POST or PATCH runs again when it is repeated); an exhaustive
+  `when` over `Limit` needs the four new branches. The
+  configuration properties are new trailing constructor parameters with defaults, so source stays
+  compatible; compiled callers of the constructor recompile. libcoap's `coap-client` repeats its request
+  with the Echo value and completes, and its Q-Block probe of `/.well-known/core` is never challenged.
+- Q-Block on the server (RFC 9177; QB-3), off by default: `CoapServerConfig.qBlock` takes a
+  `QBlockServerConfig` with `isEnabled` (false), `withMessageSecurity` (false: OSCORE-protected requests keep
+  getting 4.02 for Q-Block), `onReliableTransports` (true), `maxPartialBodies` (64), `maxCachedBodies` (64)
+  and `maxBodiesPerPeer` (4). With it on, Q-Block1 uploads are assembled from Non-confirmable bursts with a
+  2.31 per complete set and 4.08 lists of missing blocks (Content-Format 272) at once and on the
+  NON_RECEIVE_TIMEOUT ladder, Confirmable ones block by block, and responses to requests carrying Q-Block1
+  or Q-Block2 go out as Q-Block2 bodies: sets of MAX_PAYLOADS blocks NON_TIMEOUT_RANDOM apart, Continues and
+  requests of missing blocks served from a cache, every block with an ETag of its own body (which replaces
+  the resource's ETag) and Size2. A request of another method than GET or FETCH that carries a payload is
+  always a new request whose handler runs, also with Q-Block2 `0/M=1`; only payload-less Continues, requests
+  of missing blocks, and `0/M=1` with the cached body's Request-Tag are served from the cache. A body that
+  gives way in the cache while it still sends finishes its sets, bodies done sending give way first, and a
+  GET or FETCH body of one block is not cached. An upload holds only the blocks that arrived, whatever its
+  Size1 claims, and any request body of one message beyond `maxRequestBodySize` gets 4.13, Q-Block2 or
+  not. On TCP and WebSockets blocks go back to back and the requests in between count as answered, so a
+  Ping with Custody is not held up. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`, everything
+  sent in answer to one request to an address not yet verified counts against the factor, later sets and the
+  retransmissions of a Confirmable block included: a first burst beyond it gets a 4.01 with Echo instead,
+  later sets beyond it stop, and a Continue is a request of its own. The server warns at start when Q-Block
+  is on (RFC 9177 §11): without `security`, or for the requests without OSCORE that a server with `security`
+  still answers unprotected. It serves an Observe registration that carries Q-Block2 without adding an
+  observer until QB-6. libcoap's `coap-client -L 7` completes uploads and
+  downloads against it over UDP, TCP and WebSockets. New public API besides the configuration:
+  `EndpointEvent.QBlockRecovery` (missing blocks asked for, by either side), `EndpointEvent.QBlockFallback`
+  (reported by the client, below), `EndpointEvent.PartialBodyDropped`, and the `EndpointEvent.LimitReached.Limit`
+  values `PARTIAL_BODIES` and `BODIES_PER_PEER` (an upload refused with 5.03 and Max-Age, or a peer's oldest
+  body dropped) and `CACHED_BODIES`; an exhaustive `when` over `EndpointEvent` or `Limit` needs the new
+  branches. `qBlock` is a new trailing constructor parameter with a default, so source stays compatible;
+  compiled callers of the `CoapServerConfig` constructor recompile.
+- The Q-Block client (RFC 9177; QB-4), off by default: `CoapClientConfig.qBlock` takes a
+  `QBlockClientConfig` whose `mode` is `QBlockMode.OFF` (the default; nothing changes), `PROBE` (each server
+  is asked once, with the Confirmable `GET /.well-known/core` carrying Q-Block2 0/0/16 that libcoap sends,
+  and the endpoint keeps the answer for `capabilityLifetime`, 1 hour, for all its clients) or
+  `ASSUME_SUPPORTED`. With a server that
+  supports it, bodies that need blocks go in Q-Block1 and responses come in Q-Block2, with 2.31, Continue,
+  4.08 lists and requests for missing blocks recovering lost blocks without a round trip per block. A
+  body follows its request's message type: use `nonConfirmable()` for the bursts of §7.2; Confirmable
+  bodies go in lock-step. `CoapClientConfig.preferredBlockSize` and `maxResponseBodySize` apply. A NON
+  upload holds at most four sets of unconfirmed requests (40 by default) and waits for the server's 2.31
+  or 4.08 beyond that, so a long body stays well below `maxExchangesPerPeer`. Requests with No-Response,
+  Observe or block options of their own, observations, requests under message security and requests over TCP
+  or WebSockets (unless `onReliableTransports`) keep RFC 7959; so does a request a server rejects with 4.02
+  or a Reset before answering anything else, which is sent again with RFC 7959. Requests under message
+  security keep it unless `withMessageSecurity` (QB-5, below).
+  `missingBlockMBit` asks for the missing tail of a set with one option. The client reports the Q-Block
+  events of the server's entry above: `EndpointEvent.QBlockFallback` once per finding that a server does
+  not take Q-Block, `EndpointEvent.QBlockRecovery` and `EndpointEvent.PartialBodyDropped` for its bodies.
+  `qBlock` is a new trailing constructor parameter with a default, so source stays compatible; compiled
+  callers of the constructor recompile. Tested against
+  libcoap's `coap-server -L 7` (K1–K5, K7–K10, K12, with 300-block uploads over UDP and TCP) and soaked at
+  10 % and 30 % loss.
+- Observe with Q-Block (RFC 9177 §4.5; QB-6), where both sides have Q-Block on: an observation registers
+  with Q-Block2, or uploads a FETCH body that needs blocks in Q-Block1, and every notification is a Q-Block2
+  body with an ETag of its own and the Observe value on every block, on the registration's token (for a
+  Q-Block1 registration the token of the block that completed it, Figure 14). `CoapClient.observe` emits each
+  body once, whole; bodies are ordered by their Observe value (RFC 7641 §3.4), and late blocks of a body
+  that was delivered, given up or superseded are ignored. The server keeps a body the one outstanding
+  notification until every block went out (and, Non-confirmable, for at least
+  `nonConfirmableNotificationInterval`, with one NSTART slot towards the client), folds changes meanwhile
+  into the next body, so a resource that changes faster than its bodies go out still delivers whole ones,
+  and removes the observer on a Reset to any block that carries Observe or an unacknowledged Confirmable
+  one; a Reset to an answer for missing blocks only stops that answer. A FETCH registration uploaded in
+  Q-Block1 whose 2.05 was lost gets it again on the token its notifications use when the client sends the
+  last block again (§4.3). The client releases the tokens of a body's Continues and requests for missing
+  blocks with the body, and a fresher notification of one message supersedes a body still being assembled.
+  A cancelled observation registered with Q-Block1 forgets its token instead of deregistering, since its body
+  sent again would need a new Request-Tag. Behaviour changes for those who turned Q-Block on: a server with
+  `QBlockServerConfig.isEnabled` now adds an observer for a registration carrying Q-Block2, which QB-3
+  served as a plain request, and a client with `QBlockClientConfig.mode` other than `OFF` now observes with
+  Q-Block, where QB-4 kept observations on RFC 7959. Under the default `AmplificationPolicy.Q_BLOCK_BURSTS`
+  (and `ALL_RESPONSES`), such a registration from a client that neither OSCORE nor DTLS authenticated now
+  gets a 4.01 with Echo first, whatever the size of its first response, since its notification bodies are
+  bursts no request asks for (RFC 7641 §7, RFC 9175 §2.4); a FETCH uploaded in Q-Block1 gets it for each
+  block until one carries the Echo value. Once the verification lapses (`verifiedAddressLifetime`), its
+  notification bodies go Confirmable. An observation under message security takes Q-Block only with
+  `QBlockClientConfig.withMessageSecurity` on, like other protected requests (QB-5 and QB-7, below). No API
+  change. Tested end to end on Figures 7 to 15
+  (`QBlockObserveTest`) and against libcoap both ways (K6, L6). The kcoap-to-kcoap soak of the plan
+  (`QBlockTest`: 20 seeds, 10 % and 30 % loss, 3000 B and 20 KiB, PUT, GET and POST) and bodies of 320 blocks
+  and notifications over connections (`QBlockReliableTest`) came with it.
+- `kcoap-testkit`: `RebindingTransport`, a client whose source address changes at a chosen datagram, as
+  behind a NAT that rebinds (QB-4).
+- Q-Block under OSCORE (RFC 9177 with RFC 8613; QB-5), opt-in on both sides: with
+  `QBlockClientConfig.withMessageSecurity` (it had no effect before) and `QBlockServerConfig.withMessageSecurity`
+  on, protected bodies go in Q-Block1 and Q-Block2 with the options inside OSCORE (RFC 9177 Table 2), and the
+  probe and the capability it finds are kept apart from unprotected requests. Off, the default on both sides,
+  protected bodies keep Inner Block1 and Block2, and a client that opts in against a server that does not gets
+  an inner 4.02 (or a Reset to a Non-confirmable request) and falls back to RFC 7959. `OscoreClient` takes the
+  several responses of a body to a request that carries an Inner Q-Block1 or Q-Block2 option: at most one
+  with the request's nonce, every other with a Partial IV new in a replay window of that request, of the
+  context's `replayWindowSize` (32 by default); a replayed block is dropped and asked for again. To such a
+  request it passes on only the unprotected errors that end the body (4.00, 4.01 and 5.xx, without Echo or a
+  block option) and drops every other unprotected response, so a 4.08, 4.13, 4.02, Echo challenge or block
+  from outside OSCORE cannot steer a protected body or turn Q-Block off for the peer (RFC 9177 §11); a server
+  without OSCORE answers with such a 4.02, so the request ends as a timeout. Other requests still get every
+  unprotected 4.xx and 5.xx. (This rule for unprotected responses is superseded by WP-SEC2, ADR 0008, below:
+  `OscoreClient` hands every unprotected 4.xx and 5.xx on as unverified, the stack acts on none of them, and
+  such a 4.02 ends the request at once with `UNVERIFIED_RESPONSE`.) This falls outside RFC 8613's
+  single-response model (§7.4), which is why it is opt-in; it is tested kcoap against kcoap, at 10 % loss
+  too. libcoap 4.3.5b protects, or verifies, only the first response to a request, so with
+  `withMessageSecurity` its Q-Block2 bodies break in both roles (pinned as `upstream…` tests); Q-Block1
+  uploads to its server work. No API change.
+- Protected observations with Q-Block notification bodies (RFC 9177 §4.5 under RFC 8613; QB-7): with
+  `withMessageSecurity` on both sides an observation now registers with Inner Q-Block2 and takes its
+  notifications as Q-Block2 bodies inside OSCORE, where before it kept Inner Block2. Every block of such a body
+  is a notification with a Partial IV of its own, so `OscoreClient` checks the notifications of a registration
+  that carries Inner Q-Block against a replay window of that registration (the context's `replayWindowSize`)
+  instead of taking only Partial IVs above the Notification Number: RFC 8613 §7.4.1 requires only that a
+  Partial IV received before is refused. Freshness stays by Partial IV (§4.1.3.5.2), per body: a notification
+  below the Notification Number passes only as a block of the body (its ETag) that holds the highest Partial
+  IV, so replayed blocks, blocks of an older body and older notifications of one message are still dropped.
+  A notification that verifies counts as received even when it is dropped as stale, so it is refused if it
+  comes again after its body became the freshest (§7.4.1). Registrations without Inner Q-Block keep the
+  strict order. A client with message security whose resolver
+  leaves a Q-Block registration unprotected orders its bodies by Observe value, as it does other unprotected
+  observations. At 10 % loss with 20 to 50 ms of latency every body arrives whole, where the strict rule
+  dropped about 130 blocks per run. No API change.
+- Opt-in markers in kcoap-common: `@InternalKcoapApi` for plumbing shared between kcoap's modules, and
+  `@ExperimentalKcoapApi` for published SPIs that nothing implements yet (WP-C1).
+- ABI dumps of every published module's public API in `<module>/api` (JVM and klib), checked by
+  `checkKotlinAbi` in CI, so every API change shows up in review (WP-C1).
+- Capability questions on the crypto seam ([ADR 0001](docs/adr/0001-crypto-capabilities.md), WP-A2):
+  `CryptoBackend.supports(AeadAlgorithm | KeyType | SignatureAlgorithm | KemAlgorithm | HashAlgorithm)`,
+  false exactly when the operations would throw `UnsupportedAlgorithmException`, which now names its
+  `algorithm`. The defaults probe; `DefaultCryptoBackend` probes once per instance and memoizes the answer,
+  `BouncyCastleCryptoBackend` answers ML-KEM and ML-DSA without probing.
+- EDHOC negotiates only suites the crypto backend runs (WP-A2): `CipherSuite.isSupportedBy(crypto, method)`;
+  `EdhocInitiatorConfig.supportedBy(crypto)` and `EdhocResponderConfig.supportedBy(crypto)`, which narrow a
+  configuration once and fail fast; `EdhocPeerErrorException.retryWith`; `Message3`, which
+  `EdhocInitiator.createMessage3()` returns. A configuration asks the backend once and remembers the answers,
+  so sessions do not probe it again, also when the backend keeps the probing defaults; the copies that
+  `supportedBy` and the new `EdhocResponderConfig.withConnectionIdentifiers(provider)` make keep them.
+- EDHOC server session bounds and events (WP-SEC1): `EdhocServer` takes `maxPendingSessionsPerPeer` (8),
+  `pendingSessionLifetime` (MAX_TRANSMIT_WAIT, 93 s), `pendingSessionGracePeriod` (10 s), `timeSource`
+  (`TimeSource.Monotonic`) and `eventListener`, which receives the new `EdhocServerEvent`s: `LimitReached`
+  (with `Limit.PENDING_SESSIONS` or `PENDING_SESSIONS_PER_PEER`), `SessionEvicted`, `SessionExpired` and
+  `ContinuationFromAnotherPeer`, through the new `EdhocServerEventListener`.
+- `EdhocServer`, `EdhocClientHandshake` and `EdhocClientHandshake.over` take a `sequenceStore` and derive
+  their OSCORE contexts with it, so a durable store can make those contexts resumable (WP-SEC1, a WP-A1
+  follow-up). It is null by default, which gives each context its own `EphemeralSequenceNumberStore` as
+  before. Context names repeat across servers: give each server its own durable store.
+- `InMemoryContextRepository.addIfAbsent(context)` adds a context only when no context has its Recipient ID
+  and ID Context, and says whether it did (WP-SEC1).
+- The WebSocket client's tests run against real servers on every runtime it serves (WP-W1): on Node.js
+  against an npm `ws` server that records the subprotocols offered, natively against the listener (on
+  macOS and the iOS simulator through the Darwin engine), and in headless Chrome against a JVM listener,
+  a new CI job (`scripts/test browser`). Each checks that `coap` is requested and read back from the
+  negotiated protocol (RFC 8323 §4.1).
+- Android from API level 26 (Android 8.0) on, through the jvm artifacts (PL-1). `checkAndroidApi`, part of
+  `check` and `scripts/test unit`, runs animal-sniffer over every jvm jar against the API 26 signature and
+  found nothing in kcoap's code. `checkAndroidApiDependencies`, also part of both, runs it over the
+  libraries behind them and fails on any use that `gradle/android-api-dependencies.baseline` does not
+  list; the listed ones are triaged in `samples/android-consumer`. That sample, an app at minSdk 26 that
+  takes kcoap from Maven, is built by a new CI job with AGP, R8 on its release variants, lint and its unit
+  tests. Apps need Kotlin 2.3 or newer and Java 17 bytecode, but no R8 rules of their own and no core
+  library desugaring.
+- `kcoap-crypto-default`'s jvm jar carries R8 and ProGuard rules (`META-INF/proguard`), which AGP applies
+  on its own: without them R8 stops on missing classes when it shrinks an app that does not use
+  `kcoap-crypto-bc`, the Bouncy Castle classes that cryptography-kotlin's JDK provider names and loads
+  only when present (PL-1).
+- Shared crypto building blocks in kcoap-crypto (WP-A4), with a [README](kcoap-crypto/README.md): `Sec1`
+  expands compressed P-256 and P-384 points (SEC 1 v2 §2.3.4) in common code on every target;
+  `EcdsaSignatureCodec` converts ECDSA signatures between raw `r || s` and DER (`toDer`, and `fromDer`,
+  which returns null for anything but a strict DER signature); `x509.SubjectPublicKeyInfo.decode` reads a DER
+  SubjectPublicKeyInfo (RFC 7250 §3) into its `KeyType` and raw key; `PrivateKey.destroy()` releases any key
+  handle; `KemEncapsulation.destroy()`. `CoseKey.fromCbor` accepts an EC2 y given as a sign bit (RFC 9053
+  §7.1.1), which it expands to the coordinate. kcoap-dtls has `DtlsLocalCredential` (below).
+- `kcoap-crypto-testsuite`, the conformance suite for crypto backends (WP-C2), a published test library for
+  every target, with a [README](kcoap-crypto-testsuite/README.md). A backend's tests extend
+  `CryptoBackendConformanceTest`, which checks the capability contract of ADR 0001 (`supports(x)` is false
+  exactly when the operations on `x` throw `UnsupportedAlgorithmException`, and what is supported runs and
+  reproduces a published known answer: one for every AEAD, curve, signature algorithm, KEM and hash, from the
+  RFCs, NIST, the GCM specification and the COSE Working Group's AES-CCM examples) and prints a
+  `CapabilityReport` line per kind of question; `CapabilityInvariant` offers the same checks as functions.
+  `MlKemConformanceTest` and `MlDsaConformanceTest` replay NIST's ACVP vectors through any ML-KEM or ML-DSA
+  backend, with `ScriptedRandom` supplying the randomness FIPS 203 and 204 draw; the vectors moved here from
+  kcoap-crypto-bc's tests. kcoap-crypto-default runs the suite on every target and kcoap-crypto-bc on the JVM,
+  and both copy the capability report into the build log, so CI shows what each target runs; their test tasks
+  are never restored from the build cache or up to date, so the report is in the log of every build that asks
+  for them.
+
+### Changed
+
+- **The default log threshold is WARN** (WP-B4), not INFO: `LogConfig.Default` still prints to the console, so a
+  failure shows, but an app that never configures logging no longer writes endpoint and server lifecycle lines to
+  its standard output. To get them back, `KcoapLogging.configure { level = LogLevel.INFO }`.
+- **Rejected input from a peer is logged once, at DEBUG and without a stack trace** in kcoap-coap (WP-B4): malformed
+  datagrams, ignored ACKs and Resets, Non-confirmable messages dropped, responses that failed verification or came
+  unverified, requests message security rejected or an access policy refused, and the Aborts this side sends, which
+  were WARN, some with a stack trace, and could flood a log at network rate. Each is an `EndpointEvent` to count by
+  instead. An Abort received is INFO, like a Release. kcoap-oscore and kcoap-edhoc-oscore still log some of the same
+  input at WARN.
+- Tokens on TLS connections (SRV-2): `TokenGenerator.sessionSequence`, every endpoint's default, numbers the
+  requests on a `coaps+tcp` or `coaps+ws` connection from zero, as it did on DTLS sessions (RFC 9175 §4.2), and
+  starts again on the next connection; the first request on a connection has the empty token. Plain UDP, TCP
+  and WebSockets keep 8 random bytes (RFC 7252 §5.3.1). TLS does not bind a response to its request, so a count,
+  which never repeats while the keys last, does that better than chance, and inside TLS its predictability gives
+  nothing away.
+- A response that a bound of the endpoint refused (`IDENTIFIERS_EXHAUSTED`) is no longer followed by a 5.00
+  Internal Server Error, which needed the same room, and is logged at debug instead of error (SRV-2).
+- The post-quantum key encodings are part of kcoap-crypto's algorithm types (WP-C2): `KeyType.seedLength` and
+  `KeyType.expandedPrivateKeyLength` give the two private-key encodings of the ML-KEM and ML-DSA types (FIPS
+  203, FIPS 204), and `SignatureAlgorithm.trLength` the length of ML-DSA's `tr`; they are null for the other
+  types and algorithms. kcoap-crypto-bc reads them instead of its own constants. Additions only.
+
+### Changed (breaking)
+
+Bounded reasons, and new events (WP-B4):
+
+- **`EndpointEvent.MessageRejected.reason` and `EndpointEvent.MalformedMessage.reason` are enums**,
+  `MessageRejected.Reason` (`PING`, `EMPTY_NON_CONFIRMABLE`, `RESERVED_CODE`, `UNKNOWN_SIGNAL`, `NO_SERVER`,
+  `UNKNOWN_TOKEN`, `UNRECOGNIZED_CRITICAL_OPTION`, `INVALID_ACKNOWLEDGEMENT`, `FOREIGN_TOKEN`, `INVALID_RESET`,
+  `INVALID_SOURCE`) and
+  `MalformedMessage.Reason` (`UNKNOWN_VERSION`, `FORMAT_ERROR`), instead of free text that carried sizes and tokens and
+  so could not label a metric. The text is the new nullable `detail`, for a log. *Migration:* compare `reason` with
+  the constants instead of strings, and log `detail`; code that built these events passes a constant. Keep an `else`
+  branch, since constants may be added before 1.0:
+
+  ```kotlin
+  // Before
+  if (event is EndpointEvent.MessageRejected && event.reason.startsWith("unrecognized")) badOptions++
+  // After
+  if (event is EndpointEvent.MessageRejected && event.reason == EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION) badOptions++
+  ```
+- **`EndpointEvent` has three new subtypes**, `ResponseRejected`, `RequestCompleted` and `SecurityRejected`
+  (see "Added"). A `when` over `EndpointEvent` without an `else` branch no longer compiles. *Migration:* add an
+  `else` branch, which the KDoc of `EndpointEvent` has asked for since WP-B3, or branches for the new events.
+
+No deprecated API in the first release (WP-P1):
+
+- **The constructors of `CoapEndpointConfig` and `CoapClientConfig` are removed.** WP-D1 deprecated them for the
+  builders (below); [releasing.md](docs/releasing.md#release-freeze) asks that 0.1.0 ship nothing that is already
+  on its way out, so the two configurations are now made only by `CoapEndpointConfig { ... }` /
+  `CoapClientConfig { ... }`, their `Builder` and `toBuilder()`, and `Default`. They were the last `@Deprecated`
+  declarations of the published modules. The ABI dumps lose the two constructors (the klib dumps) and their
+  synthetic default-argument constructors (the JVM dumps), nothing else. *Migration:* code that still calls a
+  constructor no longer compiles; turn its named arguments into assignments in the block, as the WP-D1 entry
+  below shows, and use `Default` where it called `CoapEndpointConfig()` or `CoapClientConfig()` with no
+  arguments:
+
+  ```kotlin
+  // Before (deprecated since WP-D1, now an error)
+  val config = CoapClientConfig(security = OscoreClient(contexts), requestTimeout = 5.seconds)
+  val defaults = CoapEndpointConfig()
+
+  // After
+  val config = CoapClientConfig {
+      security = OscoreClient(contexts)
+      requestTimeout = 5.seconds
+  }
+  val defaults = CoapEndpointConfig.Default
+  ```
+
+One exception root, and `@Throws` for Swift (WP-D2):
+
+- **Every protocol exception extends `KcoapException`** (kcoap-common) instead of `Exception`: `CoapException`,
+  `OscoreException`, `EdhocException` with `EdhocPeerErrorException` and `EdhocTransferException`, `CborException`
+  and `CertificateFormatException`. Their reasons, fields and messages are unchanged, and `KcoapException` extends
+  `Exception`, so every existing `catch` still matches and compiled code keeps linking; the ABI dumps record the new
+  supertype. The signals of the SPIs between the layers (`MessageSecurityException`, `CoapFormatException`,
+  `SessionEndedException`, `AeadAuthenticationException`, `UnsupportedAlgorithmException`,
+  `CertificateValidationException`) stay outside the root, as each layer translates them at its boundary.
+  *Migration:* nothing is required. Code that catches several of these types, or `Exception` to get them all, can
+  catch the one root instead:
+
+  ```kotlin
+  // Before
+  try { handshake.run() } catch (e: EdhocException) { retryLater(e) } catch (e: CoapException) { retryLater(e) }
+
+  // After
+  try { handshake.run() } catch (e: KcoapException) { retryLater(e) }
+  ```
+
+- **`@Throws` on the public suspend entry points and on `CoapUri.parse`, so Swift callers get an `NSError`
+  instead of a crash.** Kotlin/Native ends the process when an exception leaves a function that does not list
+  its type in `@Throws`, and before this change only `CancellationException` was listed, implicitly. Now
+  `KcoapException` and `CancellationException` are listed on the requests, `ping` and `discover` of `CoapClient`,
+  `CoapEndpoint.ping`, the eight steps of `EdhocInitiator` and `EdhocResponder`, `EdhocClientHandshake.run` and
+  `runCombined`, `EdhocServer.completeCombined`, `PeerSecurity.install(client, uri, protection)`,
+  `SecurityContext.derive` and `EdhocSession.oscoreContext`; `IllegalArgumentException` on `CoapUri.parse`; and
+  `MessageSecurityException` and `CancellationException` on the four operations of the message-security SPI
+  (`protectRequest`, `unprotectResponse`, `unprotectRequest`, `protectResponse`), which every implementation,
+  kcoap-oscore's included, inherits. Mistakes of the caller (`IllegalArgumentException`,
+  `IllegalStateException`) are not listed and still end a Swift process, as a failed precondition does.
+  *Migration:* in Swift, `CoapUri.parse` now throws, so it needs `try`; the suspend functions were `async throws`
+  already, and their `catch` now receives the failure:
+
+  ```swift
+  let uri = try CoapUri.Companion.shared.parse(text: "coap://192.0.2.1/sensors/temp")
+  do {
+      let response = try await client.request(request: request)
+  } catch {
+      let kotlin = (error as NSError).userInfo["KotlinException"]   // a CoapException, a KcoapException
+  }
+  ```
+
+  An implementation of the message-security SPI that declares no `@Throws`, as kcoap's own do, inherits the
+  SPI's list; Kotlin/Native accepts an override with a `@Throws` of its own only when it names the same
+  exceptions, `MessageSecurityException` and `CancellationException`. On the JVM the annotation adds `throws`
+  clauses to these methods, which only Java code sees, and which `ThrowsDeclarationsTest` (kcoap-edhoc-oscore)
+  reads back to check every list.
+- **`EdhocClientHandshake.run` and `runCombined` fail with an `EdhocException` when the OSCORE context cannot be
+  derived** (WP-D2): an exception of the `sequenceStore` or of the crypto backend in that last step, or a
+  cancellation of their own while the caller is still active, used to pass through unchanged, which `@Throws` does
+  not list, so a Swift caller crashed. It is now an `EdhocException` with error code 1, no error message to send and
+  that exception as `cause`, as `EdhocServer` already reported such a failure on its side; the session is still
+  wiped. `SecurityContext.derive` and `EdhocSession.oscoreContext`, called directly, still pass these exceptions
+  unchanged. `PeerSecurity.install(client, uri, protection)` likewise reports a resolver's runtime failure, such as a
+  platform's DNS exception or the resolver's own timeout, as `CoapException(UNRESOLVED_HOST)` with it as cause, as the
+  client's requests do, instead of passing it through. *Migration:* code that caught the store's own exception from
+  a handshake catches `EdhocException` and reads its `cause`:
+
+  ```kotlin
+  // Before
+  try { handshake.run() } catch (e: IOException) { storeUnavailable(e) }
+
+  // After
+  try { handshake.run() } catch (e: EdhocException) { (e.cause as? IOException)?.let(::storeUnavailable) ?: throw e }
+  ```
+
+Two configuration builders and explicit `Endpoint` classes (WP-D1):
+
+- **`CoapEndpointConfig` and `CoapClientConfig` are built with a builder, and their constructors are
+  deprecated.** `CoapEndpointConfig { ... }` and `CoapClientConfig { ... }` set options on a `Builder` and keep
+  the default of every option they leave out; `Default` has every default, `toBuilder()` starts a changed copy,
+  and `CoapEndpointConfig.Builder()` / `CoapClientConfig.Builder()` build step by step, which is how Swift sets
+  options, since it does not see Kotlin's default arguments. Values are checked by `build()`, with the same
+  `IllegalArgumentException`s as before. New options will go into the builders, so adding one breaks neither
+  source nor compiled callers, which a constructor with default arguments cannot promise. *Migration:* turn
+  the named arguments into assignments in the block; a listener or resolver names its interface, since a lambda
+  becomes a `fun interface` only as a function argument; and a local variable named like an option hides the
+  option inside the block, so assign it as `this.security = security`:
+
+  ```kotlin
+  // Before
+  val endpointConfig = CoapEndpointConfig(
+      timeSource = testScheduler.timeSource,
+      eventListener = { event -> println(event) },
+  )
+  val clientConfig = CoapClientConfig(security = OscoreClient(contexts), requestTimeout = 5.seconds)
+  val client = CoapClient(transport, scope, CoapClientConfig(security = security))
+  val defaults = CoapClientConfig()
+
+  // After
+  val endpointConfig = CoapEndpointConfig {
+      timeSource = testScheduler.timeSource
+      eventListener = EndpointEventListener { event -> println(event) }
+  }
+  val clientConfig = CoapClientConfig {
+      security = OscoreClient(contexts)
+      requestTimeout = 5.seconds
+  }
+  val client = CoapClient(transport, scope, CoapClientConfig { this.security = security })
+  val defaults = CoapClientConfig.Default
+  ```
+
+  The constructors are deprecated (a warning), not removed. [versioning.md](docs/versioning.md#deprecation-from-10)
+  lets a release before 1.0 remove API at once with a migration note, and nothing is released yet, so a removal
+  would have been allowed; deprecating them instead lets code written against the snapshots, and work still in
+  flight on other branches, keep compiling while it moves over. WP-P1 removed them before 0.1.0 (above;
+  [releasing.md](docs/releasing.md#release-freeze)), so no release ships them. Compiled callers: the deprecated
+  constructors keep their signatures, but on the JVM the no-argument constructor `CoapEndpointConfig()` /
+  `CoapClientConfig()` (`<init>()V`) is gone, since Kotlin generates it only for a primary constructor; JVM
+  code compiled against it recompiles, or uses `Default`.
+- **`Endpoint.Udp`, `Endpoint.Tcp`, `Endpoint.WebSocket` and `Endpoint.Opaque` are final classes, not data
+  classes**, like `Endpoint.Secure`: their equality is the RFC matching rule, written out, and they have no
+  `copy` or `componentN`. What compares equal:
+  - `Udp` and `Tcp` keep `host` normalized, as RFC 7252 §6.6 compares URI hosts: an IP literal in `IpLiteral`
+    form (`Endpoint.Udp("2001:DB8::1", 5683).host` is `2001:db8::1`, `::ffff:192.0.2.1` is `192.0.2.1`, brackets
+    are dropped), any other host in lower case. Endpoints written differently for the same address are now
+    equal; `host` and `toString()` show the normalized form.
+  - `Tcp` still includes `usesTls` (RFC 8323 §8.2: `coaps+tcp` and `coap+tcp` are different peers on one host
+    and port).
+  - `WebSocket` keeps `uri` as given and compares it in normal form: scheme and host case-insensitively, IP
+    literals in RFC 5952 form, no port as 80 for `ws` and 443 for `wss` (RFC 6455 §3), an empty path as `/`,
+    percent-encodings normalized (RFC 3986 §6.2.2); `ws` and `wss` stay different peers (RFC 8323 §8.4). So
+    `Endpoint.WebSocket("ws://h/.well-known/coap")` equals `Endpoint.WebSocket.of("h", 80)`, and both reach one
+    connection. Text that is no `ws` or `wss` URI compares exactly, as before.
+  - `Opaque` compares link and address exactly, as before.
+
+  *Migration:* replace `copy` and destructuring with the constructor and the properties:
+
+  ```kotlin
+  // Before
+  val tls = plain.copy(usesTls = true)
+  val (host, port) = udp
+
+  // After
+  val tls = Endpoint.Tcp(plain.host, plain.port, usesTls = true)
+  val host = udp.host
+  val port = udp.port
+  ```
+
+  Construction stays as it was: `Endpoint.Udp("192.0.2.1", 5683)`,
+  `Endpoint.Tcp("example.com", 5684, usesTls = true)`, `Endpoint.WebSocket.of("example.com", 443, usesTls = true)`,
+  `Endpoint.WebSocket(uri)`, `Endpoint.Opaque("ble", address)`. The `host` of a `Udp` or `Tcp` built from an IP
+  literal that was not in canonical form is `IpLiteral.canonical(text)`, not the text: compare endpoints, or
+  that, instead of the text. `Endpoint.WebSocket.of` takes an IPv6 literal with or without brackets, as `Tcp`
+  does, and brackets it once in `uri` (it bracketed a bracketed one twice). `InMemoryConnections` (kcoap-testkit)
+  finds a listener by this equality: a client reaches it at every endpoint equal to its `localEndpoint`, such as
+  `Endpoint.Tcp("SERVER", 5683)` for a listener on `"Server"` or `Endpoint.WebSocket("ws://127.0.0.1/.well-known/coap")`
+  for one on port 80, and `listen` refuses an address equal to one in use.
+- **`IpLiteral.parse` and `IpLiteral.canonical` take only what RFC 3986 §3.2.2 calls an IP literal**: a decimal
+  octet without a leading zero and hex groups without a sign. `010.0.0.1`, which a resolver may read as octal
+  (RFC 3986 §7.4), and `::-1` used to be read as `10.0.0.1` and `::ffff`; now they are names, so an endpoint keeps
+  them in lower case, unequal to the address, and `EndpointResolver.Default` refuses them in a datagram URI as it
+  refuses other names. *Migration:* write IP literals without leading zeros in octets.
+- **`CoapException.Reason` and `OscoreError` may gain constants in any minor release, also after 1.0**, as their
+  KDoc and [versioning.md](docs/versioning.md#how-the-build-enforces-it) now say, so a new constant is an
+  addition. *Migration:* keep an `else` branch in every `when` over them.
+
+The kcoap-coap and kcoap-coap-message API cleanup (WP-B3):
+
+- **A client request that message security cannot protect fails with `CoapException(SECURITY)`**, whose `cause`
+  is the security layer's exception, instead of letting that exception through: kcoap-oscore's
+  `MessageSecurityException` for a peer without a context, kcoap-edhoc-oscore's `PeerSecurity` before
+  `install`, and any other failure of `protectRequest`, such as a sequence-number store that throws. Nothing is
+  sent, as before. *Migration:* catch `CoapException` and test `reason == CoapException.Reason.SECURITY`
+  where you caught `MessageSecurityException` around a `CoapClient` call; the original is `exception.cause`.
+  Calls of the SPI itself (`ClientMessageSecurity.protectRequest`) still throw `MessageSecurityException`.
+- **`EndpointResolver` reports a lookup that fails at runtime as `CoapException(UNRESOLVED_HOST)`**, and the
+  client reports any exception of a resolver other than `CoapException` and `IllegalArgumentException` that
+  way, with it as cause. `IllegalArgumentException` stays for a host the resolver cannot resolve by design,
+  such as a host name given to `EndpointResolver.Default`. *Migration:* a resolver of your own throws
+  `CoapException("...", CoapException.Reason.UNRESOLVED_HOST, cause)` when a DNS lookup fails, or lets the
+  platform's exception through; catch `CoapException` around client calls for both.
+- **Calls on a closed endpoint fail with `CoapException(CLOSED)` before the host is resolved**, so a client
+  call after `close()` never reaches the resolver or throws its `IllegalArgumentException`. *Migration:* none.
+- **A ping that races `close()` on a TCP or WebSocket connection throws `CoapException`** like the endpoint's
+  `closeCause`, where it returned false, as a ping over UDP already did: while its connection is being opened
+  and while it waits for the Pong. *Migration:* catch `CoapException` around `ping` on every transport.
+- **A resolver or security layer that cancels itself fails the call with `CoapException`**: a lookup whose own
+  `withTimeout` expires while the caller is active is `UNRESOLVED_HOST`, a `protectRequest` that does the same
+  is `SECURITY`, each with the `TimeoutCancellationException` as cause. It used to reach the caller as a
+  `CancellationException`, which ended the caller's coroutine as if it had been cancelled, without a word.
+  `CancellationException` now means only that the calling coroutine was cancelled. *Migration:* none; a
+  `catch (e: CoapException)` around the call now sees such a timeout.
+- **`CoapClient.discover` keeps the reason for a malformed `/.well-known/core`**: its `BAD_RESPONSE` says where
+  the document broke, and the parser's `IllegalArgumentException` is its `cause`. *Migration:* none.
+- **`RequestContext.request` is `RequestContext.message`, and `@InternalKcoapApi`**: the wire message with its
+  type, Message ID and token, which differ by transport, is plumbing between kcoap's modules. The context is the
+  server's application model, with the new `path` next to `method`, `query`, `options` and `payload`.
+  *Migration:* in a handler, read `method`, `path`, `query`, `options`, `payload` or `payloadAsText()`
+  instead of `request.code`, `request.options` and so on; code that needs the token keeps the message with
+  `@OptIn(InternalKcoapApi::class)`, which may change in any release.
+- **`CoapClientConfig.blockSize` is `preferredBlockSize`**, which says what it is: the block size the client
+  prefers, whose setting turns on early negotiation (RFC 7959 §2.4), next to the server's upper bound
+  `CoapServerConfig.maxBlockSize`. *Migration:* rename the named argument.
+- **`CoapServerConfig.maxBodySize` is `maxRequestBodySize`**, the counterpart of the client's
+  `maxResponseBodySize`. *Migration:* rename the named argument.
+- **`EndpointEvent.ObserverRemoved.reason` is the enum `ObserverRemoved.Reason`** (`DEREGISTERED`, `RESET`,
+  `NOT_ACKNOWLEDGED`, `RESOURCE_REMOVED`, `ERROR_RESPONSE`, `SESSION_ENDED`, `FAILED`), a bounded set to count
+  by, and the free text, such as the exception of a failed notification or the code of an error response, is
+  the new nullable `detail`. *Migration:* compare `reason` with the enum constants instead of strings, and log
+  `detail`; keep an `else` branch, since constants may be added before 1.0.
+- **`CoapResponse.of(message)` is `CoapResponse.from(message)`**, and `CoapResponse.toMessage(token)` is
+  `@InternalKcoapApi`, a message the messaging layer completes. *Migration:* rename the call; code that builds
+  wire messages from responses uses `CoapMessage.response(...)` or opts in.
+- **`CoapMessageType.fromValue` returns null for a value no type has** (`CoapMessageType?`), where it threw
+  `IndexOutOfBoundsException`. *Migration:* handle null, or use `CoapMessageType.entries`.
+- **`CoapUri.parse` refuses ports outside 1..65535 and percent-encodings that are not two hex digits** with
+  `IllegalArgumentException`; `%+F` and `%-1` used to decode, and a port of 0 or above 65535 failed in the
+  constructor. *Migration:* none for valid URIs.
+- **`CoapUri`, `WebLink`, `ResourceAttributes` and `CoapEndpointConfig` copy the lists they are given**, so a
+  list changed after the call no longer changes them, or what their `init` checked. *Migration:* none, unless
+  code relied on changing a list after passing it: pass the final list.
+
+`DefaultCryptoBackend` as a final adapter (WP-A5, [ADR 0002](docs/adr/0002-delegation-not-subclassing.md)):
+
+- **`DefaultCryptoBackend` is final, and its only public constructor takes no argument.** The constructor
+  that took a cryptography-kotlin `CryptographyProvider` is internal, the protected `softwareKey()` is
+  private, and `kcoap-crypto-default` declares cryptography-kotlin as an `implementation` dependency, so no
+  cryptography-kotlin type is part of kcoap's API and its 0.x releases no longer change it. The backend uses
+  the platform's default provider, as `DefaultCryptoBackend()` always did. *Migration:* replace
+  `DefaultCryptoBackend(CryptographyProvider.Default)` with `DefaultCryptoBackend()`; code that uses
+  cryptography-kotlin itself declares it. A subclass becomes a decorator that delegates the rest:
+  `class MyBackend(private val inner: CryptoBackend = DefaultCryptoBackend()) : CryptoBackend by inner`, calling
+  `inner.sign(...)` where it called `super.sign(...)` ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
+  Code that passed another provider (`CryptographyProvider.JDK` on a FIPS `java.security.Provider`, say, or a
+  specific Apple or OpenSSL provider) has no replacement in this release: implement `CryptoBackend` on that
+  provider, on cryptography-kotlin, which the application then declares itself, or wrap
+  `DefaultCryptoBackend()` in a decorator that overrides the affected operations. Choosing a provider may come
+  back later as a feature of its own ([kcoap-crypto-default README](kcoap-crypto-default/README.md#public-api-and-extending-it)).
+  The decorator's `supports` members ask the delegate, which probes its own operations and never the
+  decorator's overrides: a decorator that adds or takes away an algorithm overrides the matching `supports`
+  members, as `BouncyCastleCryptoBackend` does.
+- **`BouncyCastleCryptoBackend` requires its classical backend**, and `kcoap-crypto-bc` no longer depends on
+  `kcoap-crypto-default` (it exports `kcoap-crypto` instead), so an application that wants Bouncy Castle only
+  for ML-KEM and ML-DSA chooses the classical algorithms itself. *Migration:* write
+  `BouncyCastleCryptoBackend(DefaultCryptoBackend())` for `BouncyCastleCryptoBackend()`, and
+  `BouncyCastleCryptoBackend(DefaultCryptoBackend(), isSigningDeterministic = true)` for
+  `BouncyCastleCryptoBackend(isSigningDeterministic = true)`, and declare `dev.kcoap:kcoap-crypto-default` next
+  to `dev.kcoap:kcoap-crypto-bc`. An application with a classical backend of its own (a secure element, the
+  Android KeyStore) passes that one and can leave out kcoap-crypto-default and cryptography-kotlin.
+
+kcoap-crypto as the home of shared crypto blocks (WP-A4):
+
+- **`X509Certificate` moved from `dev.kcoap.edhoc` (kcoap-edhoc) to `dev.kcoap.crypto.x509` (kcoap-crypto)**,
+  next to `CertificateValidator`, with no typealias left behind; DTLS uses the same parser. It throws the new
+  `CertificateFormatException` (same package) instead of `IllegalArgumentException` for any input it cannot
+  use, so DER from a peer never surfaces as an `IllegalArgumentException`, and so does
+  `AuthenticationCredential.x509`. Its `publicKey` for P-256 and P-384 is always the uncompressed point,
+  also when the certificate carries a compressed one, and a SubjectPublicKeyInfo with fields after the key or
+  a 65-byte point that does not start with `04` is refused. *Migration:* import
+  `dev.kcoap.crypto.x509.X509Certificate`, and catch `CertificateFormatException` where you caught
+  `IllegalArgumentException` from `X509Certificate.parse` or `AuthenticationCredential.x509`.
+- **`KemEncapsulation.sharedSecret` is the function `sharedSecret()`**, which returns a copy on every call
+  (API-10: secrets are functions); `destroy()` overwrites the secret, after which `sharedSecret()` throws
+  `IllegalStateException`. The constructor takes over both arrays without copying them. *Migration:* call
+  `sharedSecret()`, and `destroy()` the encapsulation once you have the secret; backends construct it as
+  before.
+- **`CryptoBackend.keyAgreement` and `verify` take P-256 and P-384 public keys uncompressed**, `04 || x || y`,
+  as `KeyType` documents. EDHOC now expands the x-only shares of its peers with `Sec1` before it calls the
+  backend, so a share whose x is not on the curve fails the same way on every platform, and before the
+  Responder generates Y for it. `DefaultCryptoBackend` still accepts compressed points. *Migration:* a backend
+  of your own no longer needs to decode compressed points; code that passed compressed points to a backend
+  expands them with `Sec1.decompress` first.
+- **EDHOC destroys every ephemeral private key it is done with by calling `PrivateKey.destroy()`**, where it
+  destroyed only `SoftwarePrivateKey`s; `SoftwarePrivateKey.destroy()` now overrides it. It also destroys a
+  key pair from an `EphemeralKeySource` that it cannot use, such as one with a public key of the wrong size.
+  `destroy()` releases on a best-effort basis and must not throw; EDHOC logs one that throws anyway at WARN,
+  still wipes its secrets, and completes the handshake or aborts it with an `EdhocException`. *Migration:* a
+  `PrivateKey` subclass of your own that an `EphemeralKeySource` or a backend hands to EDHOC gets `destroy()`
+  called: override it to release the key, catching what the platform throws (Android's
+  `KeyStore.deleteEntry` can), or keep the default, which does nothing.
+- **`CoseKey.fromCbor` throws `CborException`, not `IllegalArgumentException`, for an EC2 map without crv or
+  y and an OKP map without crv or with a y** (RFC 9053 §7.1.1, §7.2), as its documentation says for every
+  map that is not a COSE_Key kcoap supports. *Migration:* catch `CborException` only.
+- **`DtlsSigner` is removed, and `DtlsCredentials.signer` is `localCredential: DtlsLocalCredential?`**
+  (kcoap-dtls, which is not published yet). `DtlsLocalCredential(privateKey, subjectPublicKeyInfo,
+  certificateChain)` takes a P-256 `PrivateKey` handle, the same kind EDHOC's `LocalCredential` takes, and
+  checks that the SubjectPublicKeyInfo and the end-entity certificate hold its public key; the engine will
+  sign through `CryptoBackend.sign` and `EcdsaSignatureCodec.toDer`. *Migration:* make the stored key a
+  `PrivateKey` subclass that a `CryptoBackend` decorator signs with ([kcoap-crypto README](kcoap-crypto/README.md)),
+  and pass its SubjectPublicKeyInfo and chain.
+
+The CoAP wire vocabulary is its own module, `kcoap-coap-message` (WP-B2, finding MB-2):
+
+- **New artifact `dev.kcoap:kcoap-coap-message`** holds the packages `dev.kcoap.coap` (the message model,
+  options, `CoapUri`, `CoapRequest`, `CoapResponse`, link format, signaling options), `dev.kcoap.coap.codec`
+  and `dev.kcoap.coap.security` (the message-security SPI), which moved out of `kcoap-coap` unchanged and
+  under the same package names. It depends on `kcoap-common` and `kcoap-transport` only, with no coroutines.
+  `kcoap-coap` keeps the endpoint, the client and the server, and depends on it with `api`. *Migration:*
+  none for consumers of `kcoap-coap`, which get `kcoap-coap-message` transitively; imports of the moved
+  types do not change.
+- **`CoapException` moved from `dev.kcoap.coap` to `dev.kcoap.coap.stack`** and stays in `kcoap-coap`: it
+  reports how an exchange failed, which only the stack, the client and the server do. The class, its
+  `Reason` values and its constructor are the same. *Migration:* replace `import dev.kcoap.coap.CoapException`
+  with `import dev.kcoap.coap.stack.CoapException`; code in the package `dev.kcoap.coap` that used it
+  without an import adds that import. Compiled callers recompile, since the JVM class name changed.
+- **`kcoap-oscore` depends on `kcoap-coap-message` instead of `kcoap-coap`**, so OSCORE's API no longer
+  brings `CoapEndpoint`, `CoapClient` or `CoapServer` along, and kotlinx-coroutines is no longer an `api`
+  dependency of it. *Migration:* an application that runs OSCORE through kcoap's client and server and
+  declared only `kcoap-oscore` adds `dev.kcoap:kcoap-coap`. `kcoap-edhoc-oscore` still brings both.
+  Without kcoap-coap, `OscoreClient` and `OscoreServer` only verify and report; ADR 0008's fail-closed rules
+  and the Appendix B.1.2 freshness check are kcoap-coap's. A proxy, gateway or other stack that calls them
+  takes over those duties (a challenged request, an unprotected request, an unverified response, tokens),
+  which [kcoap-oscore's README](kcoap-oscore/README.md) lists, or OSCORE fails open.
+
+One endpoint over an internal per-peer link (WP-B1, [ADR 0005](docs/adr/0005-peer-link-seam.md)). Block-wise,
+Observe, Q-Block, Echo/Request-Tag, the access policy and message security now run on the same exchange layer
+over datagrams and connections; what a link can do (Resets, message types, ordering) decides the few places
+where RFC 7252 and RFC 8323 differ:
+
+- **`CoapEndpoint.transport` and `CoapEndpoint.maxDatagramSize` are gone, and so is the placeholder transport
+  of an endpoint without a datagram transport.** The endpoint keeps the transports it was given to itself;
+  block sizes already followed the peer's limits. *Migration:* keep a reference to the `DatagramTransport` you
+  pass in, for example to read `KtorUdpTransport.localEndpoint`; read `DatagramTransport.maxDatagramSize` on
+  it if you need the datagram size.
+- **A peer the endpoint has no transport for fails with `CoapException(Reason.TRANSPORT_UNAVAILABLE)`**, a new
+  reason, instead of `IllegalArgumentException`: a `coap` request or ping on an endpoint without a datagram
+  transport, or a request or ping to an RFC 8323 scheme that no connector serves (a peer whose connection a
+  listener accepted is still reached on that connection). The message names the scheme. *Migration:* catch
+  `CoapException` and check `reason`, or configure the transport. A `ping` of such a peer now throws
+  `CoapException(TRANSPORT_UNAVAILABLE)` where it threw `IllegalArgumentException`; other connection failures
+  still make it return false.
+- **`EndpointResolver.IpLiterals` is renamed `EndpointResolver.Default`**, which it is, and still takes IP
+  literals for every scheme and passes host names to the connectors of RFC 8323 schemes. *Migration:* rename
+  the reference; the default `CoapClientConfig` needs nothing.
+- `CoapException.Reason` wording no longer assumes datagrams: `SESSION_ENDED` is a secure session that ended,
+  `MESSAGE_TOO_LARGE` names the datagram size or the peer's Max-Message-Size, and `TRANSMISSION_TIMEOUT` and
+  `RESET` say they come from datagram transports only. `ObservableResource.notificationType` and
+  `CoapRequest.isConfirmable` are documented as hints that reliable transports ignore. No behaviour changes.
+
+The EDHOC-OSCORE glue on SPIs and the application model (WP-A3):
+
+- **`EdhocServer.handle(payload, peer)` takes the request body and returns a `CoapResponse`** instead of
+  taking and returning a `CoapMessage`; `EdhocResource` passes `RequestContext.payload`. The `EdhocOverCoap`
+  builders speak the same model: `message1Request(resource, message1)` and
+  `continuationRequest(resource, responderId, message)` return a `CoapRequest` to the EDHOC resource's URI,
+  `messageResponse(message)`, `completedResponse()` and `errorResponse(errorMessage, isServerError)` a
+  `CoapResponse`, none of them taking a request any more. *Migration:* call `edhoc.handle(context.payload,
+  context.peer)` in a resource of your own, and `edhoc.handle(request.payload, peer)` in a test double.
+- **`EdhocClientHandshake` sends through `suspend (CoapRequest) -> CoapResponse`** and takes the `server`
+  URI as its third parameter: `EdhocClientHandshake(config, crypto, server, path, loggerFactory,
+  sequenceStore, exchange)`. The handshake posts to `path` at the scheme, host and port of `server`.
+  `over(client, server, ...)` passes `client::request`. *Migration:* pass the server's URI, and for a carrier
+  of your own return `CoapResponse` for a `CoapRequest`: `{ client.request(it) }`, or in tests
+  `{ edhocServer.handle(it.payload, peer) }`.
+- **`EdhocServer` takes `contexts: MutableSecurityContextRepository`** instead of the final
+  `InMemoryContextRepository`. Contexts from EDHOC accumulate there, one per handshake. *Migration:* none for
+  `InMemoryContextRepository`; a production server supplies a repository with a bound, since an evicted client
+  only runs EDHOC again, on OSCORE's 4.01 "Security context not found" or, once its old C_R went to another
+  client, 4.00 "Decryption failed".
+- **`CombinedRequestServer(edhoc, oscore)` takes any `ServerMessageSecurity`** as `oscore`, not only
+  `OscoreServer`, and answers a rebuilt combined request that layer does not take as protected (null) with
+  4.00. *Migration:* none; compiled callers recompile.
+- **`runCombined()` returns `CombinedHandshake(session, security)`** instead of
+  `Pair<EdhocOscoreSession, CombinedRequestSecurity>`. *Migration:* destructuring (`val (session, security) =`)
+  is unchanged; replace `.first` and `.second` with `.session` and `.security`.
+- **`EdhocTransferException` is an `EdhocException`** (error code 1, `errorMessage` null: nothing to send
+  back), and its `response` is a `CoapResponse`. *Migration:* a `catch (e: EdhocException)` now also catches
+  it, so catch `EdhocTransferException` first where you handle it apart.
+- **`EdhocOverCoap.parseRequest` throws `EdhocException`** for a malformed payload instead of
+  `IllegalArgumentException`: what the peer sent is an EDHOC failure (code 1, "Malformed EDHOC request" on the
+  wire, the detail in the exception message), and `EdhocServer.handle` no longer catches
+  `IllegalArgumentException`. The detail names the type of an offending CBOR item instead of quoting it, so
+  the peer's text never reaches a log, and the server logs the payload as its length (docs/logging.md).
+  *Migration:* catch `EdhocException`, and answer with its `errorMessage`.
+- **`InMemoryContextRepository.remove(context)` removes that very context only, and returns whether it did**
+  (`MutableSecurityContextRepository.remove`). It removed whatever context was held under the Recipient ID and
+  ID Context of `context`, so a late removal, such as an expiry timer, could take out the context of another
+  client that had the same Recipient ID since. *Migration:* remove the context you added or found; to clear a
+  pair whatever it holds, `find` its context first and remove that.
+- **`LoggerFactory` parameters are named `loggerFactory`** in `EdhocServer`, `EdhocClientHandshake` and
+  `EdhocClientHandshake.over`. *Migration:* rename the named argument `loggers =` to `loggerFactory =`.
+- `EdhocOscoreSession`, `EdhocSessionListener` and `EdhocTransferException` moved to files of their own, and
+  `SecurityContextRepository` and `InMemoryContextRepository` out of `OscoreEndpoints.kt`, in the same
+  packages. *Migration:* none: they are classes, so their names stay the same from Kotlin and Java.
+
+Fail-closed message security (WP-SEC2, [ADR 0008](docs/adr/0008-fail-closed-message-security.md)):
+
+- **A server with message security refuses unprotected requests by default.** Resources have an
+  `AccessPolicy` (`CoapResource.access`, `access = ...` in the DSL; null inherits from the parent), and
+  `CoapServerConfig.defaultAccess` governs the rest: `AccessPolicy.MessageSecurityRequired` when `security`
+  is set, `AccessPolicy.Public` otherwise. The server asks the policy right after the resource lookup: a
+  refused request gets 4.01, or 4.03 when message security authenticated it, and reaches no handler, buffers
+  no Block1 or Q-Block1 body, registers or cancels no observation and gets no burst. A path that does not
+  exist is refused like its nearest existing ancestor instead of getting 4.04. `/.well-known/core` and
+  `EdhocResource` are `Public`; `/.well-known/core` lists only what the caller may use, with `osc` on
+  OSCORE-only resources (RFC 8613 §9). *Migration:* mark resources meant for everyone
+  `access = AccessPolicy.Public`, or set `defaultAccess = AccessPolicy.Public` to keep the old behaviour, or
+  `AccessPolicy.Authenticated` to also take DTLS-authenticated clients; replace hand-written
+  `if (securityIdentity is OscoreIdentity)` checks with the policy. Compiled callers of the
+  `CoapServerConfig` constructor recompile.
+- **Observe registrations belong to the message-security identity that made them**: a request of another
+  identity, or of none, neither replaces nor cancels a registration (RFC 7641 §3.6, §4.1), and a registration
+  of another identity on the same endpoint and token is answered as a plain GET, without Observe, since §4.1
+  allows one entry per endpoint and token. *Migration:* none for clients that deregister the way they
+  registered.
+- **`ProtectedRequest.unprotectResponse` returns `ResponseVerification`** (`Verified(message)` or
+  `Unverified(message, reason)`) instead of a `CoapMessage`, and still throws `MessageSecurityException` for a
+  response to drop. *Migration:* only implementations of the SPI change: wrap a verified response in
+  `ResponseVerification.Verified`, and return an unprotected error you used to pass on as `Unverified`.
+- **The client acts only on verified responses to protected requests.** An unprotected error to a protected
+  request (`ResponseVerification.Unverified`) is no longer returned as a response: the request fails with
+  `CoapException(Reason.UNVERIFIED_RESPONSE)`, whose new `response` property holds it, and it is never
+  repeated for an Echo option, continued block-wise or taken as a Q-Block answer; an established observation
+  ignores it, and drops a notification whose Block2 or Q-Block2 follow-up got only such an answer instead of
+  ending. On TCP and WebSockets a registration that ends this way is followed by a deregistration
+  (RFC 8323 §7.4), as after a rejected registration response. `OscoreClient` hands every unprotected 4.xx
+  and 5.xx on that way, also to requests carrying Inner Q-Block, so an unprotected 4.02 from a server without
+  OSCORE ends such a request at once instead of in a timeout. *Migration:* where you read an unprotected 4.01
+  such as "Security context not found" from `response.code`, catch `CoapException` with
+  `UNVERIFIED_RESPONSE` and read `e.response`; run EDHOC again rather than repeating a request that is not
+  idempotent, which may already have run.
+- **`OscoreClient` and `PeerSecurity` never send plaintext silently.** A request whose `ClientContextResolver`
+  returns null, or to a server for which `PeerSecurity` has no protection installed (also after `remove`),
+  fails with `MessageSecurityException` before anything is sent; `PeerSecurity`'s `unprotectedPaths` (the
+  EDHOC resource) still go unprotected. A Q-Block probe (`QBlockMode.PROBE` with `withMessageSecurity`) that
+  the security layer refuses to send leaves Q-Block unknown for that request only, so EDHOC runs on such a
+  client and the first request after `install` probes. *Migration:* pass `allowUnprotected = true` to
+  `OscoreClient` or `PeerSecurity` where plain CoAP to some servers is intended, and install protections
+  before requesting; discover the EDHOC resource before the handshake with a plain client, or add
+  `/.well-known/core` to `PeerSecurity`'s `unprotectedPaths`.
+- **Requests of a context that EDHOC established carry an `EdhocIdentity`**, with the peer credential EDHOC
+  authenticated and the context's `OscoreIdentity`, instead of the bare `OscoreIdentity`
+  (`SecurityContext.identity`, which `OscoreServer` reports). *Migration:* authorize on
+  `(securityIdentity as? EdhocIdentity)?.peerCredential`, or on `.oscore` where the Recipient ID is what you
+  used; a provisioned context may name its peer with `SecurityContext.derive(..., identity = ...)`.
+- **Binary signatures changed**, so compiled callers recompile: the `CoapException` constructor (a fourth
+  parameter, `response`), `OscoreClient(ClientContextResolver, LoggerFactory)` and `PeerSecurity(Set)` (a new
+  `allowUnprotected` parameter each), `SecurityContext.Companion.derive` (a new `identity` parameter) and the
+  `CoapServerConfig` constructor (`defaultAccess`). Source stays compatible for all of them, as the new
+  parameters have defaults, except that an exhaustive `when` over `CoapException.Reason` needs a branch for
+  `UNVERIFIED_RESPONSE`.
+
+WebSocket transports (WP-W1):
+
+- **`KtorWebSocketListener.start` takes the ktor server engine first, with no default**, and
+  `kcoap-transport-ktor-websocket-server` no longer depends on `ktor-server-cio`, so an application gets
+  only the engine it chooses. *Migration:* add `io.ktor:ktor-server-cio` (or your engine) to your
+  dependencies and write `KtorWebSocketListener.start(CIO, host, port)` for `start(host, port)`, with
+  `io.ktor.server.cio.CIO`. Mounting with `coapOverWebSockets(listener)` is unchanged.
+- **The WebSocket client runs on the Darwin engine on iOS and macOS**: `KtorWebSocketConnector()`'s
+  default client uses URLSession, which brings up the cellular radio and honours VPN On Demand; CIO's BSD
+  sockets did neither. `kcoap-transport-ktor-websocket` depends on `ktor-client-darwin` on Apple, and on
+  `ktor-client-cio` only on the JVM and Linux. The default client names its engine on every platform
+  (Darwin, CIO, or Js on the web), so a second ktor engine in the application no longer decides it.
+  *Migration:* none for the connector; an Apple app that used ktor-client-cio through this module adds
+  it itself, and passes its own `HttpClient` to keep CIO.
+
+EDHOC server session safety (WP-SEC1):
+
+- **`EdhocServer.handle(request, peer)` and `completeCombined(responderId, message3, peer)` take the peer.**
+  A session now continues only for the peer that sent its message_1 (for DTLS, the same session in any
+  epoch); a message_3, an error message or a combined request from another peer gets the answer for an
+  unknown C_R and leaves the session waiting. `EdhocResource` and `CombinedRequestServer` pass the peer
+  themselves. *Migration:* pass `RequestContext.peer`, or the `peer` of `unprotectRequest`, where you call
+  these directly. A client whose address changes between message_1 and message_3 has to start again.
+- **Beyond `maxPendingSessions`, the oldest session is evicted only once it has waited for message_3
+  longer than `pendingSessionGracePeriod`** (10 s), and wiped (`EdhocServerEvent.SessionEvicted`). While
+  every session is within its grace period, a new message_1 is refused, and so is one beyond the new
+  per-peer bound: an EDHOC error ("Too many pending EDHOC sessions") in a 5.00 response, before any
+  cryptography, reported as `EdhocServerEvent.LimitReached`. Pending sessions now also expire after
+  `pendingSessionLifetime`. With the defaults, a flood of 64 message_1 per 10 s from spoofed addresses
+  still keeps new clients out while it lasts, until an Echo check before message_2 lands.
+  *Migration:* raise the bounds for gateways that start many handshakes from one address, give clients
+  that answer message_2 slowly a longer grace period, and count `LimitReached` and `SessionEvicted` in
+  production.
+- **The `EdhocServer` constructor has new parameters between `maxPendingSessions` and `loggers`**
+  (`maxPendingSessionsPerPeer`, `pendingSessionLifetime`, `pendingSessionGracePeriod`, `sequenceStore`,
+  `timeSource`, before `listener`; `eventListener` after it). *Migration:* pass `listener` and `loggers` by
+  name. `EdhocClientHandshake` has `sequenceStore` after `loggers`, so its trailing `exchange` lambda is
+  unchanged.
+- **A destroyed `EdhocSession` or `SoftwarePrivateKey` throws `IllegalStateException`** from `prkOut`,
+  `prkExporter`, `exporter`, `oscoreMasterSecret`, `oscoreMasterSalt`, `keyUpdate` and `encoded` instead of
+  returning, or deriving from, zeroed bytes, which are valid, publicly known keys. *Migration:* do not use a
+  session or key after `destroy()`; tests that asserted the zeros assert the exception.
+- **Every peer-authentication failure sends the same EDHOC error**, code 1 "Authentication failed": an
+  untrusted credential sent by value, one that does not fit the cipher suite, a certificate chain the
+  `CertificateValidator` rejects, and a Signature_or_MAC_2 or _3 that does not verify. The reason stays in
+  `EdhocException.message` and the log; `EdhocException.error.diagnostic` is the generic text. Error code 3
+  for an unknown 'kid' or 'x5t' is unchanged (RFC 9528 §6.4). *Migration:* read `message`, not
+  `error.diagnostic`, for the local reason.
+
+EDHOC capability-aware negotiation, typed retry and returned sessions (WP-A2):
+
+- **EDHOC offers and accepts only the cipher suites its crypto backend runs.** The Initiator's SUITES_I and
+  retries draw only on them; the Responder names only them in SUITES_R and answers a selected suite it is
+  configured with but cannot run with error code 2 (RFC 9528 §6.3), where it used to fail later with error
+  code 1. An Initiator that runs none of its suites with a credential, or not its `initialCipherSuite`, fails
+  in `createMessage1()` with an `EdhocException` naming what is missing. *Migration:* none for working
+  configurations; call `config.supportedBy(crypto)` at startup to find a configuration the backend cannot run.
+- **`EdhocInitiator.createMessage3()` returns `Message3(bytes, session)`** instead of the message bytes, and
+  **`EdhocResponder.processMessage3()` returns the `EdhocSession`**. *Migration:* send `message3.bytes`, or
+  write `val (message3, session) = initiator.createMessage3()`; drop `session!!` after these calls.
+- **`CipherSuite.isSupportedBy(backend)` is now `isSupportedBy(crypto, method)`**: what a suite needs depends
+  on the method (method 3 signs nothing), and the check now covers the hashes, HMAC and KEMs too.
+  *Migration:* pass the method.
+- **The `supports(...)` extension functions of kcoap-crypto are `CryptoBackend` members.** *Migration:* drop
+  `import dev.kcoap.crypto.supports`; calls stay the same. A decorator (`CryptoBackend by delegate`) that adds
+  algorithms must override the matching `supports` members, or its delegate answers for it.
+- **`CryptoBackend` parameters are called `crypto`** in `EdhocInitiator`, `EdhocResponder`,
+  `TrustedCredentials`, `ConnectionIdentifierProvider.choose`, `EphemeralKeySource.keyPair`,
+  `CredentialIdentifier.X509Thumbprint.matches`, `CredentialIdentifier.x509Thumbprint` and `Hkdf`.
+  *Migration:* rename the named argument `backend =` to `crypto =`.
+- After error code 2, `EdhocPeerErrorException.retryWith` tells a retry from an abort. *Migration:* replace
+  `if (initiator.phase != EdhocPhase.START) throw e` with `if (e.retryWith == null) throw e`; the old check
+  still works.
+- kcoap-crypto-default depends on kotlinx-coroutines-core (`implementation`) for the capability memo.
+
+OSCORE safe persistence and secret hygiene (WP-A1):
+
+- `SecurityContext.derive` has no default `sequenceStore`. Pass a durable `SequenceNumberStore` for a
+  provisioned Master Secret (recipes per runtime in `kcoap-oscore/README.md`), or
+  `EphemeralSequenceNumberStore()` only for keys that are new in this process run.
+- `InMemorySequenceNumberStore` is renamed `EphemeralSequenceNumberStore`, which is now thread safe.
+- `derive(requireFreshnessProof: Boolean = false)` is replaced by `freshness: FreshnessPolicy = AUTO`.
+  For a restored context, drop `requireFreshnessProof = true`: `AUTO` requires the Echo proof for it.
+  Use `REQUIRE_PROOF` to require it always. Under `AUTO`, a context with a store other than the
+  ephemeral one challenges its first request after every start; pass `ASSUME_FRESH`, the old default,
+  only when no request under these keys can have been accepted before.
+- `SecurityContext.parameters` is internal. Read `context.name` and `context.aeadAlgorithm` instead of
+  `context.parameters.name` and `context.parameters.aeadAlgorithm`.
+- `SecurityContextParameters.masterSecret` and `masterSalt` are functions that return copies: change
+  `parameters.masterSecret` to `parameters.masterSecret()`, and wipe the copy when done with it.
+- `OscoreClient` and `OscoreServer` name their `LoggerFactory` parameter `loggerFactory`: change the
+  named argument `loggers =` to `loggerFactory =`.
+
+CoAP stack concurrency, resource bounds and crash safety (WP-S1):
+
+- **Calls after close throw `CoapException`.** Requests, pings and `observe` on a closed endpoint throw
+  `CoapException` with the reason of `closeCause` (`CLOSED`, or `TRANSPORT_FAILED` after the datagram
+  transport failed) instead of `IllegalStateException`, and an endpoint whose scope was cancelled or whose
+  transport failed is closed like one closed by `close()`. *Migration:* catch `CoapException` (and check
+  `reason`) where you caught `IllegalStateException`; to recover from a failed transport, create a new
+  endpoint.
+- **An endpoint receives only once a server attaches or the first request or ping goes out.** A bare
+  `CoapEndpoint`, or one with only a `CoapClient` that has not sent anything, leaves datagrams and
+  connections waiting in the transports. A server's resources are therefore in place before the first
+  request, whichever of a server and a client on a shared endpoint is created first. *Migration:* none for
+  servers and clients; code that used a bare endpoint as a Reset-only peer must start it by sending.
+- **`CoapEndpointConfig.tokenGenerator` is nullable and defaults to null**, which gives every endpoint its
+  own `TokenGenerator.sessionSequence()`, so one configuration can serve several endpoints. *Migration:*
+  code that read the property must handle null; a generator passed explicitly that keeps state must not
+  be shared between endpoints.
+- **`CoapServer.close()` on a shared endpoint cancels the server's running handlers** and takes no new
+  observers; a request on a connection whose handler was cancelled, or never started, gets 5.03 (RFC 8323
+  §3.3). *Migration:* handlers that must finish their work should do it under `NonCancellable`, and
+  should not rely on running after `close()`.
+- **Security-layer and pipeline failures are answered.** Any exception in the server pipeline (the
+  security layer, an application callback behind it such as a context repository or sequence-number
+  store, protecting or sending the response) is answered with an unprotected 5.00 with Max-Age 0 instead
+  of leaving the client to time out; a failing notification removes its observer; nothing escapes to the
+  application's exception handler. *Migration:* clients that treated a timeout as "security failure"
+  get a 5.00 response instead.
+- **A send the transport refuses with `IllegalArgumentException` fails at once** with
+  `TRANSPORT_FAILED` instead of as a peer timeout after MAX_TRANSMIT_WAIT. *Migration:* handle
+  `TRANSPORT_FAILED` next to the timeout reasons.
+- **The new default bounds refuse work beyond them:** more than 256 concurrent handlers get a piggybacked
+  5.03 with Max-Age 2 (a NON is dropped); more than 256 exchanges in progress with one peer fail with
+  `IDENTIFIERS_EXHAUSTED`; registrations beyond the observer bounds are served without Observe (RFC 7641
+  §4.1); new messages beyond the deduplication bound are dropped silently; accepted connections beyond
+  the connection bounds are closed. *Migration:* raise the bounds in `CoapEndpointConfig`,
+  `CoapServerConfig` and `ReliableTransportConfig` for gateways or load tests that need more, and count
+  `EndpointEvent.LimitReached` in production.
+- **Observers that no security authenticated get a Confirmable notification at least every ninth
+  notification** (RFC 7641 §7), not only after `confirmableNotificationInterval`. *Migration:* none; a
+  client that does not acknowledge them is removed as an observer.
+- **`CoapEndpointConfig.timeSource` must advance with the clock of the endpoint scope's dispatcher**, and
+  the endpoint warns once when it does not. *Migration:* under `runTest`, pass
+  `testScheduler.timeSource`.
+
+Build governance (WP-C1):
+
+- **`StreamSecurity` is removed** from kcoap-transport. It had no implementation and no users; TLS for
+  `coaps+tcp` and `coaps+ws` belongs to each runtime's connector and listener
+  (docs/adr/0003-tls-in-connectors.md). *Migration:* none.
+- **`DatagramSecurity` requires `@OptIn(ExperimentalKcoapApi::class)`**: it has no implementation yet and
+  may change when the DTLS engine implements it. *Migration:* opt in where you implement or use it.
+- **`ByteArrayBuilder`, `minimalUnsignedBytes` and `ByteArray.readUnsigned` (kcoap-common) and
+  `OptionCodec` (kcoap-coap) are `@InternalKcoapApi`**, plumbing between kcoap's modules that may change
+  in any release and is not in the ABI dumps. Code outside kcoap no longer compiles against them without
+  `@OptIn(InternalKcoapApi::class)`. *Migration:* keep a copy of the helper in your code; `constantTimeEquals`,
+  `wipe` and `toHex` stay public API.
+- **kcoap-dtls is no longer published** until its engine exists (it held interfaces only). *Migration:*
+  drop the dependency; nothing could use it without an implementation.
+- **kcoap-transport depends on kcoap-common (`api`)**, for the opt-in markers (`ExperimentalKcoapApi` on
+  `DatagramSecurity`); it still has no third-party dependencies. A custom transport that depends on
+  kcoap-transport alone now has kcoap-common on its compile classpath. *Migration:* none.
+
+### Fixed
+
+- A datagram from UDP source port 0 is dropped before it is parsed (WP-B4): that port names none to answer to
+  (RFC 768), so every answer failed to send, and each such datagram, a 4-byte CoAP ping included, wrote a WARN line
+  with a stack trace. It is a `MessageRejected` with the new reason `INVALID_SOURCE`, logged at DEBUG. A datagram
+  that fails to send for any other reason is still a WARN line, now with the error's message and no stack trace,
+  since retransmission covers it.
+- `EndpointEvent.ConnectionOpened` is reported after the connections' lock is released, before the connection
+  starts reading, so its events still come first (WP-B4). A slow event listener held up every accept, connect and
+  connection teardown of the endpoint.
+- A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at all.
+  The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind the
+  receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block again
+  (RFC 7252 §4.2). A Confirmable response that the body cannot take now stays unacknowledged, and its
+  retransmission is delivered, also under OSCORE: the client decides whether the block fits before it verifies
+  it, so the Partial IV of the retransmission is not refused as a replay (RFC 8613 §7.4). A response whose
+  handling fails unexpectedly is still acknowledged. A Confirmable body also asks for its next missing blocks
+  as soon as the last request for them is answered, rather than once per MAX_TRANSMIT_SPAN (45 s), and a
+  notification body that the client asks for again whole keeps the token the rest of its blocks come on
+  (RFC 9177 §4.4).
+- An Observe server could miss a change made while the handler of a registration ran, so the client kept the
+  older state until the next change, and it could send the same state twice when several threads changed the
+  resource at once. Changes are now counted per resource and read before every run of the handler (RFC 7641
+  §4.5); a change while the handler runs is still sent again, since the server cannot tell whether the
+  handler saw it.
+- A connection that an endpoint accepted or opened while it closed could stay open, and the accept loop
+  could fail with `IllegalStateException: Already started`: a new connection was registered in the
+  connection pool before it started, so a `close()` in between shut it down unstarted. It is now
+  registered and started in one step (coap-core-20; the known flake of
+  `ConcurrencyStressTest.closeRacingConnectionSetupFailsTheWaitingRequestsAndClosesEveryConnection`).
+- The client answers a separate response only after verifying it and checking its critical options (RFC
+  7252 §5.4.1), however long verification takes; the Empty ACK timer for slow requests no longer
+  acknowledges a response first. A Confirmable separate response, or a notification, with a critical
+  option the client does not recognize gets a Reset instead of an ACK; the request still fails with
+  `BAD_RESPONSE`. A Non-confirmable response or notification with one, which got no answer before, now
+  gets a Reset too (RFC 7252 §4.3 MAY). Over UDP that Reset ends an observation on the server (RFC 7641
+  §3.6); over TCP and WebSockets, which have no Reset, the client deregisters with Observe 1 instead
+  (RFC 8323 §7.4), after a rejected registration response as well. A response that fails verification is
+  still acknowledged and dropped, but no longer ends a Confirmable request's retransmission or frees a
+  Non-confirmable request's NSTART slot (QB-2, coap-core-4).
+- A connection's reader delivered every request of a burst before any of their handlers ran on a
+  dispatcher of one thread, so a peer that writes many requests back to back, as kcoap's Q-Block client does
+  with the blocks of a body on TCP (RFC 9177 Appendix B), ran the endpoint into `maxConcurrentRequests` and
+  got 5.03 for a block of a 320-block upload. The reader now yields after each read (QB-6).
+- `OscoreClient` passed on a registration's answer without a Partial IV that arrived after a later
+  notification, and the stack, which leaves the order of protected notifications to OSCORE, emitted the
+  older state last. That notification counts as the oldest (RFC 8613 §4.1.3.5.2) and is now dropped once a
+  notification with a Partial IV was taken (QB-7).
+- Publishing used the default coordinates `kcoap:<module>:unspecified` because they were read before the
+  build set the group and version; artifacts now carry `kcoap.group` and `kcoap.version` from
+  `gradle.properties` (`dev.kcoap:<module>:0.1.0-SNAPSHOT`) (WP-C1).
+- kcoap-transport-ktor and the two WebSocket modules export the dependencies their public signatures use
+  (`api`): kcoap-common for `LoggerFactory`, and in kcoap-transport-ktor also ktor-network for
+  `SelectorManager`, so a caller can pass them without declaring those modules itself (WP-C1).
+- EDHOC: a crypto backend that lacks a curve, KEM or algorithm no longer fails the handshake as if the peer
+  had sent an invalid key or as "Processing message_2 failed"; the diagnostic names what is missing
+  ("P_256 is not available in this crypto backend") (WP-A2).
+- The JVM and Android `SequenceNumberStore` recipe in `kcoap-oscore/README.md` reads its file with
+  `Files.readAllBytes`: it called `Files.readString`, which Android has only from API level 33, so on
+  API 26 to 32 every OSCORE context derived with it failed (PL-1).
+
+### Security
+
+- Spoofed floods (SRV-2, RFC 7252 §11.3, §11.4):
+  - A full deduplication cache dropped every new message, so a flood from forged addresses kept every other
+    client out for EXCHANGE_LIFETIME, and one source could take the whole cache. It now first forgets the oldest
+    entry RFC 7252 §4.5 lets the endpoint process again (an idempotent request once answered, a message answered
+    with a Reset, a request the server refused before anything acted on it, such as a message-security failure,
+    an access refusal or a 4.04), keeps a quarter of its places for such entries, so a flood of POSTs never keeps
+    a GET out, nor the responses to the endpoint's own requests (a response that matches no exchange, all a
+    forged source can send, is reset at once), and gives each peer at most `maxDeduplicationEntriesPerPeer`. A
+    late duplicate of a forgotten request is processed again, which §4.5 allows for such requests. A request
+    message security verified is never forgotten, an OSCORE GET or FETCH included, since its Partial IV is in
+    the replay window (RFC 8613 §7.4) and a retransmission processed again would get a replay error instead of
+    the answer it lost.
+  - Message IDs were reserved without a bound: a flood of Non-confirmable requests from forged sources made the
+    endpoint reserve one for every response, for EXCHANGE_LIFETIME. Beyond `maxReservedMessageIds`, or
+    `maxReservedMessageIdsPerPeer` towards one peer, the message that needs a new ID is refused instead; §4.4
+    forbids reusing one early. Responses to Non-confirmable requests, which such a flood draws and a client may
+    lose anyway (§5.2.3), are refused already at three quarters of each bound, so the endpoint's own requests,
+    notifications and separate responses to Confirmable requests keep a quarter. A notification a bound refuses
+    does not remove its observer: it goes later with the latest state (RFC 7641 §4.5), after a back-off from
+    ACK_TIMEOUT doubling up to about a minute, and is logged at debug. Piggybacked responses need none.
+  - Separate responses and notifications to forged addresses were kept and retransmitted without a total bound.
+    Beyond `maxExchanges` the endpoint forgets the oldest Non-confirmable message kept only for a Reset, then
+    gives up the oldest Confirmable one that a retransmission did not get acknowledged either, and only then
+    refuses; the client exchanges count against it too.
+  - `SpoofedFloodTest` floods each bound from up to 2 000 forged sources and checks that a client at a real
+    address is still served: piggybacked and separate responses, notifications, and the endpoint's own
+    requests. It also floods every refusal that lets a request be processed again (a message-security failure,
+    an access refusal, an overload 5.03 or drop), and checks that an OSCORE request whose ACK was lost gets that
+    ACK again under that pressure.
+- CoAP client (WP-T1): a `coaps+tcp` or `coaps+ws` request went out on whatever peer the `EndpointResolver`
+  returned, so a resolver that mapped such a URI to a plain `Endpoint.Tcp` or `Endpoint.WebSocket` sent it in
+  plaintext (RFC 8323 §9). `CoapClient` now sends a `coaps+tcp` or `coaps+ws` request only when a connector or
+  listener of its endpoint serves the scheme, which a transport does only when it runs TLS (`KtorTlsConnector`;
+  `KtorWebSocketConnector` where its engine authenticates the server, see the next entry), and only to a peer
+  reached over TLS; otherwise the call fails with
+  `CoapException(TRANSPORT_UNAVAILABLE)`, before the host is resolved or before anything is sent. A call without
+  such a transport used to fail with the same reason after resolving, saying "needs a Connector"; it now fails
+  before, saying the scheme "needs TLS". `coaps` stays refused until DTLS. *Migration:* add `KtorTlsConnector` (on
+  the JVM) for `coaps+tcp`; a connector of your own lists `coaps+tcp` or `coaps+ws` only if it runs TLS for them.
+- WebSocket client (WP-T1): `KtorWebSocketConnector()` sent `coaps+ws` on the JVM and Android over its CIO engine,
+  whose TLS, ktor-network-tls 3.6.1, accepts a certificate without DNS names for any host name, and which checks
+  an IP literal by its reverse DNS name. An on-path attacker with a publicly trusted certificate for its own IP
+  address could read and answer the requests. On Linux native the same client has no TLS at all, and a `coaps+ws`
+  request failed only when connecting. The default connector now lists `coaps+ws` only where its engine
+  authenticates the server (RFC 8323 §9.2, RFC 9525 §6): Apple (URLSession), `js` and `wasmJs`. Elsewhere
+  `CoapClient` fails a `coaps+ws` URI with `CoapException(TRANSPORT_UNAVAILABLE)` before resolving it, and
+  `connect` refuses a `wss` endpoint with `IllegalArgumentException`; `coap+ws` is unchanged. Known limitation: a
+  connector on an `HttpClient` the application passes serves `coaps+ws` on every platform, as the application's
+  word that its engine authenticates servers, and a CIO client there has the same name check.
+  *Migration:* for `coaps+ws` on the JVM or Android, pass `KtorWebSocketConnector(httpClient)` with an engine whose
+  TLS checks host names, or with a CIO client whose trust manager trusts only an authority that issues DNS names
+  alone for your servers.
+- WebSocket server (WP-T1): `KtorWebSocketListener(CoapScheme.COAPS_WS)` accepted sessions that reached it on a
+  plain connector and named them `wss://`, so an application that mounted it on an engine with both a plain and a
+  TLS connector reported `coaps+ws` for plaintext connections, which opens the CoAP client's TLS check on that
+  endpoint. Such a listener now closes a session whose request did not arrive over TLS (`request.local.scheme`
+  neither `https` nor `wss`) with 1008, policy violation, and logs a warning. *Migration:* behind a
+  TLS-terminating proxy, create the listener with `coap+ws` ([ADR 0010](docs/adr/0010-server-side-tls.md)).
+- CoAP client (WP-B3): a request to a `coaps` URI went out in plaintext. kcoap has no DTLS yet, and the
+  default resolver mapped `coaps` to a plain UDP endpoint, so the datagram transport sent it unencrypted,
+  against RFC 7252 §6.2. Every call with a `coaps` URI now fails with `CoapException(TRANSPORT_UNAVAILABLE)`
+  before its host is resolved, and nothing is sent. *Migration:* protect `coap` requests with OSCORE until DTLS
+  lands (E1 in [docs/target-architecture.md](docs/target-architecture.md)).
+- EDHOC server (WP-A3): when adding the OSCORE context after message_3, the sequence number store or the
+  `EdhocSessionListener` failed or was cancelled, the context could stay in the repository although the client
+  was told the handshake failed, PRK_4e3m, PRK_out and PRK_exporter were left for the garbage collector, and
+  the client got the CoAP server's plain 5.00. A session is now established all or nothing: the context is
+  removed again, the session wiped (RFC 9528 §9.8), and the client gets "EDHOC failed" in a 5.00 with
+  Content-Format application/edhoc+cbor-seq (RFC 9528 Appendix A.2.3), also for the combined request; message_4
+  is composed before the context is added.
+- EDHOC client (WP-A3): a handshake that failed or was cancelled left its secrets for the garbage collector:
+  the ephemeral key X when the request for message_2 failed or was answered with a 4.04, PRK_4e3m and the
+  session's PRK_out and PRK_exporter when the server rejected message_3 or the context could not be derived.
+  `EdhocClientHandshake` now aborts its Initiator and destroys the session on any failure (RFC 9528 §9.8).
+- CoAP server (WP-SEC2): configuring message security protected no resource by itself. Unprotected
+  requests reached every handler that did not check `securityIdentity`, and before any handler ran they
+  could buffer request bodies, register, replace or cancel observations of authenticated clients, get Q-Block2
+  bursts and list every resource. The default access policy of such a server now refuses them before any
+  work (ADR 0008).
+- CoAP client (WP-SEC2): anyone who saw a token could answer a protected request with an unprotected 4.01
+  and Echo, and the client sent the request again under a fresh Partial IV, so a POST could run twice
+  although OSCORE's replay protection never failed (RFC 8613 §8.2 errors are not authenticated). The client
+  now acts only on verified responses, and reports an unverified one as `UNVERIFIED_RESPONSE`.
+- OSCORE client and `PeerSecurity` (WP-SEC2): a missing context or protection no longer sends a request in
+  plaintext.
+- OSCORE: a `SequenceNumberStore.store()` that throws or is cancelled no longer lets the Sender
+  Sequence Number advance past the durable limit, which could reuse nonces after a restart (RFC 8613
+  Appendix B.1.1).
+- OSCORE: a freshness challenge repeats its Echo value until a request returns it, so a replayed
+  request can no longer revoke the value the client is about to send back (Appendix B.1.2).
+- OSCORE client (QB-5): a request takes one response (RFC 8613 §7.4). A second response, also a replay of
+  the first, was accepted whenever the first carried a Partial IV, and the non-notification responses to an
+  Observe registration were not checked for replay at all; now the second is rejected, also for a
+  registration, which takes its notifications and one response without Observe, verified as a non-Observe
+  response (§4.1.3.5.2).
+- OSCORE and EDHOC: derivation copies of the Master Secret, Salt, PRK and exporter outputs are wiped,
+  also when derivation fails.
+- EDHOC server (WP-SEC1): two concurrent handshakes could get the same C_R (it was checked under the lock
+  but recorded only after message_2), so both failed, and a C_R could equal the Recipient ID of a context
+  being added (RFC 9668 §4.1.2). C_R is now reserved in the step that checks it and held until the context
+  is in the repository.
+- EDHOC server (WP-SEC1): any client could abort or consume another client's pending handshake by sending
+  a message_3, an error message or a combined request with its C_R; such continuations are now ignored
+  unless they come from the peer that sent message_1. Pending sessions expire, and dropped ones (expired,
+  aborted by their client) have their ephemeral key and PRK_3e2m wiped (RFC 9528 §9.7, §9.8).
+- EDHOC (WP-SEC1): the error sent for a failed peer authentication no longer tells a probing Initiator
+  whether a credential it presents by value is trusted.
+- EDHOC and kcoap-crypto (WP-SEC1): a destroyed `EdhocSession` handed out OSCORE secrets derived from
+  zeros, and a destroyed `SoftwarePrivateKey` its zeroed bytes; both now fail closed, the key also when it
+  is destroyed on another thread while `encoded()` copies it.
+- EDHOC server (WP-SEC1): a context could replace another client's context in the repository when two
+  servers shared it (two application profiles, RFC 9668 §5) or the application added one concurrently,
+  because each server reserves C_R only among its own sessions. The context is now added only if its
+  Recipient ID is free; otherwise the handshake fails with "Connection identifier in use".
+- EDHOC (WP-SEC1): when composing message_2 failed or was cancelled (C_R equal to C_I, an EAD handler
+  failing, a server handler cancelled), the Responder's ephemeral key Y and PRK_3e2m were left for the
+  garbage collector; they are wiped now (RFC 9528 §9.8).
+- kcoap-crypto-default (WP-A5): every key generation, key agreement and signature of `DefaultCryptoBackend`
+  left a copy of the raw private key for the garbage collector, the one handed to the platform or taken
+  from it. These copies are now wiped once the platform is done with them, as `BouncyCastleCryptoBackend`
+  already did. The platform's own key objects (JCA keys, say) cannot be wiped, so this narrows the exposure
+  of the key material rather than removing it.

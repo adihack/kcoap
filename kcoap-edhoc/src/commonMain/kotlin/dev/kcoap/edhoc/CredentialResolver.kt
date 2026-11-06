@@ -1,0 +1,93 @@
+package dev.kcoap.edhoc
+
+import dev.kcoap.crypto.CertificateValidationException
+import dev.kcoap.crypto.CertificateValidator
+import dev.kcoap.crypto.CryptoBackend
+
+/**
+ * Turns a received ID_CRED_x into the peer's authentication credential (RFC 9528 §5.3.3 step 5, §5.4.3
+ * step 5). This is where the application decides whom it trusts: return only credentials it is willing
+ * to authenticate (RFC 9528 Appendix D).
+ *
+ * The result is a list because 'kid' values need not be unique: RFC 9528 §3.5.3 says applications MUST
+ * NOT assume they are, so EDHOC tries every candidate until one verifies. An empty list means no trusted
+ * credential: EDHOC answers with error code 3 for a reference it cannot resolve ('kid', 'x5t') and with
+ * error code 1 otherwise, since code 3 must not be used for unsupported identifier types (RFC 9528 §6.4).
+ * Throw an [EdhocException] to answer with a specific error.
+ *
+ * What the peer learns from the answer:
+ * - Error code 3 tells it whether a 'kid' or 'x5t' reference is known here. That is the interoperable
+ *   behaviour of RFC 9528 §6.4, so it stays on. A resolver that considers it sensitive throws
+ *   `EdhocException(EdhocError.unspecified("Authentication failed"), reason)` instead of returning an
+ *   empty list: the answer to every other authentication failure.
+ * - An untrusted credential sent by value, a trusted one that does not fit the cipher suite, a rejected
+ *   certificate chain and a signature or MAC that does not verify all get that same error code 1
+ *   "Authentication failed"; [EdhocException.message] keeps the reason for this side's logs.
+ * - Response timing can still tell a trusted credential from an untrusted one, because only a trusted
+ *   one gets its signature or MAC checked.
+ */
+public fun interface CredentialResolver {
+    /** The trusted credentials [identifier] may refer to, most likely first. */
+    public suspend fun resolve(identifier: CredentialIdentifier): List<AuthenticationCredential>
+}
+
+/**
+ * A [CredentialResolver] over a fixed set of trusted credentials:
+ *
+ * - `kid` matches credentials whose [AuthenticationCredential.kid] equals it;
+ * - `x5t` matches X.509 credentials whose thumbprint equals it;
+ * - `kccs` is accepted when an identical CCS is trusted (raw public keys are their own trust anchors,
+ *   RFC 9528 Appendix D.3);
+ * - `x5chain` is accepted when its end-entity certificate is trusted, or else when [certificateValidator]
+ *   accepts the chain.
+ *
+ * What is trusted with and without a [certificateValidator]:
+ * - Without one, only the pinned credentials are trusted. A chain whose end-entity certificate is not
+ *   pinned fails closed.
+ * - With one, every chain the validator accepts authenticates, whoever its end entity is: the validator
+ *   says the chain leads to a trust anchor, not that this peer may connect. Authorize afterwards, on
+ *   [EdhocSession.peerCredential] (its [AuthenticationCredential.certificate]) and
+ *   [EdhocSession.peerCredentialIdentifier], or in a resolver that wraps this one:
+ *
+ * ```
+ * val resolver = CredentialResolver { id ->
+ *     trusted.resolve(id).filter { it.certificate?.subjectCommonName in allowedNames }
+ * }
+ * ```
+ *
+ * No [CertificateValidator] implementation ships with kcoap yet. A validator that accepts every chain,
+ * such as an empty test stub, makes any certificate authenticate, self-signed ones included.
+ */
+public class TrustedCredentials(
+    private val crypto: CryptoBackend,
+    credentials: List<AuthenticationCredential>,
+    private val certificateValidator: CertificateValidator? = null,
+) : CredentialResolver {
+    private val trusted = credentials.toList()
+
+    override suspend fun resolve(identifier: CredentialIdentifier): List<AuthenticationCredential> =
+        when (identifier) {
+            is CredentialIdentifier.KeyId -> trusted.filter { it.hasKid(identifier.kid) }
+            is CredentialIdentifier.X509Thumbprint -> trusted.filter { credential ->
+                credential.certificate?.let { identifier.matches(crypto, it.encoded) } == true
+            }
+            is CredentialIdentifier.Kccs -> {
+                val offered = identifier.credential()
+                trusted.filter { it.encoded.contentEquals(offered.encoded) }
+            }
+            is CredentialIdentifier.X509Chain -> resolveChain(identifier)
+            is CredentialIdentifier.Other -> emptyList()
+        }
+
+    private suspend fun resolveChain(chain: CredentialIdentifier.X509Chain): List<AuthenticationCredential> {
+        val endEntity = chain.endEntityCredential()
+        val pinned = trusted.filter { it.certificate != null && it.encoded.contentEquals(endEntity.encoded) }
+        if (pinned.isNotEmpty() || certificateValidator == null) return pinned
+        try {
+            certificateValidator.validate(chain.certificates)
+        } catch (e: CertificateValidationException) {
+            throw EdhocException.authenticationFailed("Certificate chain not trusted", e)
+        }
+        return listOf(endEntity)
+    }
+}

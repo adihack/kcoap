@@ -1,0 +1,595 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-edhoc>
+final enum class dev.kcoap.edhoc/AuthenticationKind : kotlin/Enum<dev.kcoap.edhoc/AuthenticationKind> { // dev.kcoap.edhoc/AuthenticationKind|null[0]
+    enum entry SIGNATURE // dev.kcoap.edhoc/AuthenticationKind.SIGNATURE|null[0]
+    enum entry STATIC_DH // dev.kcoap.edhoc/AuthenticationKind.STATIC_DH|null[0]
+
+    final val entries // dev.kcoap.edhoc/AuthenticationKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc/AuthenticationKind> // dev.kcoap.edhoc/AuthenticationKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.edhoc/AuthenticationKind // dev.kcoap.edhoc/AuthenticationKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.edhoc/AuthenticationKind> // dev.kcoap.edhoc/AuthenticationKind.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.edhoc/EdhocMessage : kotlin/Enum<dev.kcoap.edhoc/EdhocMessage> { // dev.kcoap.edhoc/EdhocMessage|null[0]
+    enum entry MESSAGE_1 // dev.kcoap.edhoc/EdhocMessage.MESSAGE_1|null[0]
+    enum entry MESSAGE_2 // dev.kcoap.edhoc/EdhocMessage.MESSAGE_2|null[0]
+    enum entry MESSAGE_3 // dev.kcoap.edhoc/EdhocMessage.MESSAGE_3|null[0]
+    enum entry MESSAGE_4 // dev.kcoap.edhoc/EdhocMessage.MESSAGE_4|null[0]
+
+    final val entries // dev.kcoap.edhoc/EdhocMessage.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc/EdhocMessage> // dev.kcoap.edhoc/EdhocMessage.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.edhoc/EdhocMessage // dev.kcoap.edhoc/EdhocMessage.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.edhoc/EdhocMessage> // dev.kcoap.edhoc/EdhocMessage.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.edhoc/EdhocMethod : kotlin/Enum<dev.kcoap.edhoc/EdhocMethod> { // dev.kcoap.edhoc/EdhocMethod|null[0]
+    enum entry SIGNATURE_SIGNATURE // dev.kcoap.edhoc/EdhocMethod.SIGNATURE_SIGNATURE|null[0]
+    enum entry SIGNATURE_STATIC_DH // dev.kcoap.edhoc/EdhocMethod.SIGNATURE_STATIC_DH|null[0]
+    enum entry STATIC_DH_SIGNATURE // dev.kcoap.edhoc/EdhocMethod.STATIC_DH_SIGNATURE|null[0]
+    enum entry STATIC_DH_STATIC_DH // dev.kcoap.edhoc/EdhocMethod.STATIC_DH_STATIC_DH|null[0]
+
+    final val entries // dev.kcoap.edhoc/EdhocMethod.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc/EdhocMethod> // dev.kcoap.edhoc/EdhocMethod.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val initiatorAuthentication // dev.kcoap.edhoc/EdhocMethod.initiatorAuthentication|{}initiatorAuthentication[0]
+        final fun <get-initiatorAuthentication>(): dev.kcoap.edhoc/AuthenticationKind // dev.kcoap.edhoc/EdhocMethod.initiatorAuthentication.<get-initiatorAuthentication>|<get-initiatorAuthentication>(){}[0]
+    final val requiresDiffieHellman // dev.kcoap.edhoc/EdhocMethod.requiresDiffieHellman|{}requiresDiffieHellman[0]
+        final fun <get-requiresDiffieHellman>(): kotlin/Boolean // dev.kcoap.edhoc/EdhocMethod.requiresDiffieHellman.<get-requiresDiffieHellman>|<get-requiresDiffieHellman>(){}[0]
+    final val responderAuthentication // dev.kcoap.edhoc/EdhocMethod.responderAuthentication|{}responderAuthentication[0]
+        final fun <get-responderAuthentication>(): dev.kcoap.edhoc/AuthenticationKind // dev.kcoap.edhoc/EdhocMethod.responderAuthentication.<get-responderAuthentication>|<get-responderAuthentication>(){}[0]
+    final val value // dev.kcoap.edhoc/EdhocMethod.value|{}value[0]
+        final fun <get-value>(): kotlin/Int // dev.kcoap.edhoc/EdhocMethod.value.<get-value>|<get-value>(){}[0]
+
+    final fun authenticationOf(dev.kcoap.edhoc/EdhocRole): dev.kcoap.edhoc/AuthenticationKind // dev.kcoap.edhoc/EdhocMethod.authenticationOf|authenticationOf(dev.kcoap.edhoc.EdhocRole){}[0]
+    final fun isCompatibleWith(dev.kcoap.edhoc/CipherSuite): kotlin/Boolean // dev.kcoap.edhoc/EdhocMethod.isCompatibleWith|isCompatibleWith(dev.kcoap.edhoc.CipherSuite){}[0]
+    final fun valueOf(kotlin/String): dev.kcoap.edhoc/EdhocMethod // dev.kcoap.edhoc/EdhocMethod.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.edhoc/EdhocMethod> // dev.kcoap.edhoc/EdhocMethod.values|values#static(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EdhocMethod.Companion|null[0]
+        final fun fromValue(kotlin/Int): dev.kcoap.edhoc/EdhocMethod? // dev.kcoap.edhoc/EdhocMethod.Companion.fromValue|fromValue(kotlin.Int){}[0]
+    }
+}
+
+final enum class dev.kcoap.edhoc/EdhocPhase : kotlin/Enum<dev.kcoap.edhoc/EdhocPhase> { // dev.kcoap.edhoc/EdhocPhase|null[0]
+    enum entry ABORTED // dev.kcoap.edhoc/EdhocPhase.ABORTED|null[0]
+    enum entry COMPLETED // dev.kcoap.edhoc/EdhocPhase.COMPLETED|null[0]
+    enum entry PERSISTED // dev.kcoap.edhoc/EdhocPhase.PERSISTED|null[0]
+    enum entry START // dev.kcoap.edhoc/EdhocPhase.START|null[0]
+    enum entry VERIFIED_M1 // dev.kcoap.edhoc/EdhocPhase.VERIFIED_M1|null[0]
+    enum entry VERIFIED_M2 // dev.kcoap.edhoc/EdhocPhase.VERIFIED_M2|null[0]
+    enum entry WAIT_M2 // dev.kcoap.edhoc/EdhocPhase.WAIT_M2|null[0]
+    enum entry WAIT_M3 // dev.kcoap.edhoc/EdhocPhase.WAIT_M3|null[0]
+
+    final val entries // dev.kcoap.edhoc/EdhocPhase.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc/EdhocPhase> // dev.kcoap.edhoc/EdhocPhase.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.edhoc/EdhocPhase // dev.kcoap.edhoc/EdhocPhase.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.edhoc/EdhocPhase> // dev.kcoap.edhoc/EdhocPhase.values|values#static(){}[0]
+}
+
+final enum class dev.kcoap.edhoc/EdhocRole : kotlin/Enum<dev.kcoap.edhoc/EdhocRole> { // dev.kcoap.edhoc/EdhocRole|null[0]
+    enum entry INITIATOR // dev.kcoap.edhoc/EdhocRole.INITIATOR|null[0]
+    enum entry RESPONDER // dev.kcoap.edhoc/EdhocRole.RESPONDER|null[0]
+
+    final val entries // dev.kcoap.edhoc/EdhocRole.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.edhoc/EdhocRole> // dev.kcoap.edhoc/EdhocRole.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): dev.kcoap.edhoc/EdhocRole // dev.kcoap.edhoc/EdhocRole.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<dev.kcoap.edhoc/EdhocRole> // dev.kcoap.edhoc/EdhocRole.values|values#static(){}[0]
+}
+
+abstract fun interface dev.kcoap.edhoc/ConnectionIdentifierProvider { // dev.kcoap.edhoc/ConnectionIdentifierProvider|null[0]
+    abstract suspend fun choose(dev.kcoap.crypto/CryptoBackend, dev.kcoap.edhoc/ConnectionIdentifier?): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/ConnectionIdentifierProvider.choose|choose(dev.kcoap.crypto.CryptoBackend;dev.kcoap.edhoc.ConnectionIdentifier?){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/ConnectionIdentifierProvider.Companion|null[0]
+        final val Random // dev.kcoap.edhoc/ConnectionIdentifierProvider.Companion.Random|{}Random[0]
+            final fun <get-Random>(): dev.kcoap.edhoc/ConnectionIdentifierProvider // dev.kcoap.edhoc/ConnectionIdentifierProvider.Companion.Random.<get-Random>|<get-Random>(){}[0]
+
+        final fun fixed(dev.kcoap.edhoc/ConnectionIdentifier): dev.kcoap.edhoc/ConnectionIdentifierProvider // dev.kcoap.edhoc/ConnectionIdentifierProvider.Companion.fixed|fixed(dev.kcoap.edhoc.ConnectionIdentifier){}[0]
+    }
+}
+
+abstract fun interface dev.kcoap.edhoc/CredentialResolver { // dev.kcoap.edhoc/CredentialResolver|null[0]
+    abstract suspend fun resolve(dev.kcoap.edhoc/CredentialIdentifier): kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential> // dev.kcoap.edhoc/CredentialResolver.resolve|resolve(dev.kcoap.edhoc.CredentialIdentifier){}[0]
+}
+
+abstract fun interface dev.kcoap.edhoc/EphemeralKeySource { // dev.kcoap.edhoc/EphemeralKeySource|null[0]
+    abstract suspend fun keyPair(dev.kcoap.crypto/CryptoBackend, dev.kcoap.crypto/KeyType): dev.kcoap.crypto/KeyPair // dev.kcoap.edhoc/EphemeralKeySource.keyPair|keyPair(dev.kcoap.crypto.CryptoBackend;dev.kcoap.crypto.KeyType){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EphemeralKeySource.Companion|null[0]
+        final val Random // dev.kcoap.edhoc/EphemeralKeySource.Companion.Random|{}Random[0]
+            final fun <get-Random>(): dev.kcoap.edhoc/EphemeralKeySource // dev.kcoap.edhoc/EphemeralKeySource.Companion.Random.<get-Random>|<get-Random>(){}[0]
+    }
+}
+
+abstract interface dev.kcoap.edhoc/EadHandler { // dev.kcoap.edhoc/EadHandler|null[0]
+    open suspend fun consume(dev.kcoap.edhoc/EdhocMessage, dev.kcoap.edhoc/EadItem): kotlin/Boolean // dev.kcoap.edhoc/EadHandler.consume|consume(dev.kcoap.edhoc.EdhocMessage;dev.kcoap.edhoc.EadItem){}[0]
+    open suspend fun produce(dev.kcoap.edhoc/EdhocMessage): kotlin.collections/List<dev.kcoap.edhoc/EadItem> // dev.kcoap.edhoc/EadHandler.produce|produce(dev.kcoap.edhoc.EdhocMessage){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EadHandler.Companion|null[0]
+        final val None // dev.kcoap.edhoc/EadHandler.Companion.None|{}None[0]
+            final fun <get-None>(): dev.kcoap.edhoc/EadHandler // dev.kcoap.edhoc/EadHandler.Companion.None.<get-None>|<get-None>(){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/AuthenticationCredential { // dev.kcoap.edhoc/AuthenticationCredential|null[0]
+    final val certificate // dev.kcoap.edhoc/AuthenticationCredential.certificate|{}certificate[0]
+        final fun <get-certificate>(): dev.kcoap.crypto.x509/X509Certificate? // dev.kcoap.edhoc/AuthenticationCredential.certificate.<get-certificate>|<get-certificate>(){}[0]
+    final val claimsSet // dev.kcoap.edhoc/AuthenticationCredential.claimsSet|{}claimsSet[0]
+        final fun <get-claimsSet>(): dev.kcoap.cose/CwtClaimsSet? // dev.kcoap.edhoc/AuthenticationCredential.claimsSet.<get-claimsSet>|<get-claimsSet>(){}[0]
+    final val encoded // dev.kcoap.edhoc/AuthenticationCredential.encoded|{}encoded[0]
+        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.edhoc/AuthenticationCredential.encoded.<get-encoded>|<get-encoded>(){}[0]
+    final val keyType // dev.kcoap.edhoc/AuthenticationCredential.keyType|{}keyType[0]
+        final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.edhoc/AuthenticationCredential.keyType.<get-keyType>|<get-keyType>(){}[0]
+    final val kid // dev.kcoap.edhoc/AuthenticationCredential.kid|{}kid[0]
+        final fun <get-kid>(): kotlin/ByteArray? // dev.kcoap.edhoc/AuthenticationCredential.kid.<get-kid>|<get-kid>(){}[0]
+    final val publicKey // dev.kcoap.edhoc/AuthenticationCredential.publicKey|{}publicKey[0]
+        final fun <get-publicKey>(): kotlin/ByteArray // dev.kcoap.edhoc/AuthenticationCredential.publicKey.<get-publicKey>|<get-publicKey>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/AuthenticationCredential.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/AuthenticationCredential.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/AuthenticationCredential.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/AuthenticationCredential.Companion|null[0]
+        final fun ccs(dev.kcoap.cose/CwtClaimsSet): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/AuthenticationCredential.Companion.ccs|ccs(dev.kcoap.cose.CwtClaimsSet){}[0]
+        final fun ccs(kotlin/ByteArray): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/AuthenticationCredential.Companion.ccs|ccs(kotlin.ByteArray){}[0]
+        final fun x509(kotlin/ByteArray, kotlin/ByteArray? = ...): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/AuthenticationCredential.Companion.x509|x509(kotlin.ByteArray;kotlin.ByteArray?){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/CipherSuite { // dev.kcoap.edhoc/CipherSuite|null[0]
+    constructor <init>(kotlin/Int, dev.kcoap.crypto/AeadAlgorithm, dev.kcoap.crypto/HashAlgorithm, kotlin/Int, dev.kcoap.edhoc/KeyExchangeAlgorithm, dev.kcoap.crypto/SignatureAlgorithm, dev.kcoap.crypto/AeadAlgorithm, dev.kcoap.crypto/HashAlgorithm) // dev.kcoap.edhoc/CipherSuite.<init>|<init>(kotlin.Int;dev.kcoap.crypto.AeadAlgorithm;dev.kcoap.crypto.HashAlgorithm;kotlin.Int;dev.kcoap.edhoc.KeyExchangeAlgorithm;dev.kcoap.crypto.SignatureAlgorithm;dev.kcoap.crypto.AeadAlgorithm;dev.kcoap.crypto.HashAlgorithm){}[0]
+
+    final val appAead // dev.kcoap.edhoc/CipherSuite.appAead|{}appAead[0]
+        final fun <get-appAead>(): dev.kcoap.crypto/AeadAlgorithm // dev.kcoap.edhoc/CipherSuite.appAead.<get-appAead>|<get-appAead>(){}[0]
+    final val appHash // dev.kcoap.edhoc/CipherSuite.appHash|{}appHash[0]
+        final fun <get-appHash>(): dev.kcoap.crypto/HashAlgorithm // dev.kcoap.edhoc/CipherSuite.appHash.<get-appHash>|<get-appHash>(){}[0]
+    final val edhocAead // dev.kcoap.edhoc/CipherSuite.edhocAead|{}edhocAead[0]
+        final fun <get-edhocAead>(): dev.kcoap.crypto/AeadAlgorithm // dev.kcoap.edhoc/CipherSuite.edhocAead.<get-edhocAead>|<get-edhocAead>(){}[0]
+    final val edhocHash // dev.kcoap.edhoc/CipherSuite.edhocHash|{}edhocHash[0]
+        final fun <get-edhocHash>(): dev.kcoap.crypto/HashAlgorithm // dev.kcoap.edhoc/CipherSuite.edhocHash.<get-edhocHash>|<get-edhocHash>(){}[0]
+    final val isImplemented // dev.kcoap.edhoc/CipherSuite.isImplemented|{}isImplemented[0]
+        final fun <get-isImplemented>(): kotlin/Boolean // dev.kcoap.edhoc/CipherSuite.isImplemented.<get-isImplemented>|<get-isImplemented>(){}[0]
+    final val isMandatoryToImplement // dev.kcoap.edhoc/CipherSuite.isMandatoryToImplement|{}isMandatoryToImplement[0]
+        final fun <get-isMandatoryToImplement>(): kotlin/Boolean // dev.kcoap.edhoc/CipherSuite.isMandatoryToImplement.<get-isMandatoryToImplement>|<get-isMandatoryToImplement>(){}[0]
+    final val isPrivateUse // dev.kcoap.edhoc/CipherSuite.isPrivateUse|{}isPrivateUse[0]
+        final fun <get-isPrivateUse>(): kotlin/Boolean // dev.kcoap.edhoc/CipherSuite.isPrivateUse.<get-isPrivateUse>|<get-isPrivateUse>(){}[0]
+    final val keyExchange // dev.kcoap.edhoc/CipherSuite.keyExchange|{}keyExchange[0]
+        final fun <get-keyExchange>(): dev.kcoap.edhoc/KeyExchangeAlgorithm // dev.kcoap.edhoc/CipherSuite.keyExchange.<get-keyExchange>|<get-keyExchange>(){}[0]
+    final val macLength // dev.kcoap.edhoc/CipherSuite.macLength|{}macLength[0]
+        final fun <get-macLength>(): kotlin/Int // dev.kcoap.edhoc/CipherSuite.macLength.<get-macLength>|<get-macLength>(){}[0]
+    final val signature // dev.kcoap.edhoc/CipherSuite.signature|{}signature[0]
+        final fun <get-signature>(): dev.kcoap.crypto/SignatureAlgorithm // dev.kcoap.edhoc/CipherSuite.signature.<get-signature>|<get-signature>(){}[0]
+    final val value // dev.kcoap.edhoc/CipherSuite.value|{}value[0]
+        final fun <get-value>(): kotlin/Int // dev.kcoap.edhoc/CipherSuite.value.<get-value>|<get-value>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/CipherSuite.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/CipherSuite.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/CipherSuite.toString|toString(){}[0]
+    final suspend fun isSupportedBy(dev.kcoap.crypto/CryptoBackend, dev.kcoap.edhoc/EdhocMethod): kotlin/Boolean // dev.kcoap.edhoc/CipherSuite.isSupportedBy|isSupportedBy(dev.kcoap.crypto.CryptoBackend;dev.kcoap.edhoc.EdhocMethod){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/CipherSuite.Companion|null[0]
+        final val SUITE_0 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_0|{}SUITE_0[0]
+            final fun <get-SUITE_0>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_0.<get-SUITE_0>|<get-SUITE_0>(){}[0]
+        final val SUITE_1 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_1|{}SUITE_1[0]
+            final fun <get-SUITE_1>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_1.<get-SUITE_1>|<get-SUITE_1>(){}[0]
+        final val SUITE_2 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_2|{}SUITE_2[0]
+            final fun <get-SUITE_2>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_2.<get-SUITE_2>|<get-SUITE_2>(){}[0]
+        final val SUITE_24 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_24|{}SUITE_24[0]
+            final fun <get-SUITE_24>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_24.<get-SUITE_24>|<get-SUITE_24>(){}[0]
+        final val SUITE_25 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_25|{}SUITE_25[0]
+            final fun <get-SUITE_25>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_25.<get-SUITE_25>|<get-SUITE_25>(){}[0]
+        final val SUITE_3 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_3|{}SUITE_3[0]
+            final fun <get-SUITE_3>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_3.<get-SUITE_3>|<get-SUITE_3>(){}[0]
+        final val SUITE_4 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_4|{}SUITE_4[0]
+            final fun <get-SUITE_4>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_4.<get-SUITE_4>|<get-SUITE_4>(){}[0]
+        final val SUITE_5 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_5|{}SUITE_5[0]
+            final fun <get-SUITE_5>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_5.<get-SUITE_5>|<get-SUITE_5>(){}[0]
+        final val SUITE_6 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_6|{}SUITE_6[0]
+            final fun <get-SUITE_6>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_6.<get-SUITE_6>|<get-SUITE_6>(){}[0]
+        final val SUITE_PQC_1 // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_PQC_1|{}SUITE_PQC_1[0]
+            final fun <get-SUITE_PQC_1>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/CipherSuite.Companion.SUITE_PQC_1.<get-SUITE_PQC_1>|<get-SUITE_PQC_1>(){}[0]
+        final val registered // dev.kcoap.edhoc/CipherSuite.Companion.registered|{}registered[0]
+            final fun <get-registered>(): kotlin.collections/List<dev.kcoap.edhoc/CipherSuite> // dev.kcoap.edhoc/CipherSuite.Companion.registered.<get-registered>|<get-registered>(){}[0]
+
+        final fun fromValue(kotlin/Int): dev.kcoap.edhoc/CipherSuite? // dev.kcoap.edhoc/CipherSuite.Companion.fromValue|fromValue(kotlin.Int){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/ConnectionIdentifier { // dev.kcoap.edhoc/ConnectionIdentifier|null[0]
+    constructor <init>(kotlin/ByteArray) // dev.kcoap.edhoc/ConnectionIdentifier.<init>|<init>(kotlin.ByteArray){}[0]
+
+    final val bytes // dev.kcoap.edhoc/ConnectionIdentifier.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // dev.kcoap.edhoc/ConnectionIdentifier.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val size // dev.kcoap.edhoc/ConnectionIdentifier.size|{}size[0]
+        final fun <get-size>(): kotlin/Int // dev.kcoap.edhoc/ConnectionIdentifier.size.<get-size>|<get-size>(){}[0]
+
+    final fun encode(): kotlin/ByteArray // dev.kcoap.edhoc/ConnectionIdentifier.encode|encode(){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/ConnectionIdentifier.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/ConnectionIdentifier.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/ConnectionIdentifier.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/ConnectionIdentifier.Companion|null[0]
+        final fun ofInt(kotlin/Int): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/ConnectionIdentifier.Companion.ofInt|ofInt(kotlin.Int){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/EadItem { // dev.kcoap.edhoc/EadItem|null[0]
+    constructor <init>(kotlin/Int, kotlin/ByteArray? = ...) // dev.kcoap.edhoc/EadItem.<init>|<init>(kotlin.Int;kotlin.ByteArray?){}[0]
+
+    final val isCritical // dev.kcoap.edhoc/EadItem.isCritical|{}isCritical[0]
+        final fun <get-isCritical>(): kotlin/Boolean // dev.kcoap.edhoc/EadItem.isCritical.<get-isCritical>|<get-isCritical>(){}[0]
+    final val isPadding // dev.kcoap.edhoc/EadItem.isPadding|{}isPadding[0]
+        final fun <get-isPadding>(): kotlin/Boolean // dev.kcoap.edhoc/EadItem.isPadding.<get-isPadding>|<get-isPadding>(){}[0]
+    final val label // dev.kcoap.edhoc/EadItem.label|{}label[0]
+        final fun <get-label>(): kotlin/Int // dev.kcoap.edhoc/EadItem.label.<get-label>|<get-label>(){}[0]
+    final val value // dev.kcoap.edhoc/EadItem.value|{}value[0]
+        final fun <get-value>(): kotlin/ByteArray? // dev.kcoap.edhoc/EadItem.value.<get-value>|<get-value>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/EadItem.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/EadItem.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/EadItem.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EadItem.Companion|null[0]
+        final fun padding(kotlin/ByteArray? = ...): dev.kcoap.edhoc/EadItem // dev.kcoap.edhoc/EadItem.Companion.padding|padding(kotlin.ByteArray?){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/EdhocError { // dev.kcoap.edhoc/EdhocError|null[0]
+    constructor <init>(kotlin/Int, dev.kcoap.cbor/CborValue) // dev.kcoap.edhoc/EdhocError.<init>|<init>(kotlin.Int;dev.kcoap.cbor.CborValue){}[0]
+
+    final val cipherSuites // dev.kcoap.edhoc/EdhocError.cipherSuites|{}cipherSuites[0]
+        final fun <get-cipherSuites>(): kotlin.collections/List<kotlin/Int>? // dev.kcoap.edhoc/EdhocError.cipherSuites.<get-cipherSuites>|<get-cipherSuites>(){}[0]
+    final val code // dev.kcoap.edhoc/EdhocError.code|{}code[0]
+        final fun <get-code>(): kotlin/Int // dev.kcoap.edhoc/EdhocError.code.<get-code>|<get-code>(){}[0]
+    final val diagnostic // dev.kcoap.edhoc/EdhocError.diagnostic|{}diagnostic[0]
+        final fun <get-diagnostic>(): kotlin/String? // dev.kcoap.edhoc/EdhocError.diagnostic.<get-diagnostic>|<get-diagnostic>(){}[0]
+    final val info // dev.kcoap.edhoc/EdhocError.info|{}info[0]
+        final fun <get-info>(): dev.kcoap.cbor/CborValue // dev.kcoap.edhoc/EdhocError.info.<get-info>|<get-info>(){}[0]
+
+    final fun encode(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocError.encode|encode(){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/EdhocError.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/EdhocError.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/EdhocError.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EdhocError.Companion|null[0]
+        final const val SUCCESS // dev.kcoap.edhoc/EdhocError.Companion.SUCCESS|{}SUCCESS[0]
+            final fun <get-SUCCESS>(): kotlin/Int // dev.kcoap.edhoc/EdhocError.Companion.SUCCESS.<get-SUCCESS>|<get-SUCCESS>(){}[0]
+        final const val UNKNOWN_CREDENTIAL_REFERENCED // dev.kcoap.edhoc/EdhocError.Companion.UNKNOWN_CREDENTIAL_REFERENCED|{}UNKNOWN_CREDENTIAL_REFERENCED[0]
+            final fun <get-UNKNOWN_CREDENTIAL_REFERENCED>(): kotlin/Int // dev.kcoap.edhoc/EdhocError.Companion.UNKNOWN_CREDENTIAL_REFERENCED.<get-UNKNOWN_CREDENTIAL_REFERENCED>|<get-UNKNOWN_CREDENTIAL_REFERENCED>(){}[0]
+        final const val UNSPECIFIED_ERROR // dev.kcoap.edhoc/EdhocError.Companion.UNSPECIFIED_ERROR|{}UNSPECIFIED_ERROR[0]
+            final fun <get-UNSPECIFIED_ERROR>(): kotlin/Int // dev.kcoap.edhoc/EdhocError.Companion.UNSPECIFIED_ERROR.<get-UNSPECIFIED_ERROR>|<get-UNSPECIFIED_ERROR>(){}[0]
+        final const val WRONG_SELECTED_CIPHER_SUITE // dev.kcoap.edhoc/EdhocError.Companion.WRONG_SELECTED_CIPHER_SUITE|{}WRONG_SELECTED_CIPHER_SUITE[0]
+            final fun <get-WRONG_SELECTED_CIPHER_SUITE>(): kotlin/Int // dev.kcoap.edhoc/EdhocError.Companion.WRONG_SELECTED_CIPHER_SUITE.<get-WRONG_SELECTED_CIPHER_SUITE>|<get-WRONG_SELECTED_CIPHER_SUITE>(){}[0]
+
+        final fun decode(kotlin/ByteArray): dev.kcoap.edhoc/EdhocError // dev.kcoap.edhoc/EdhocError.Companion.decode|decode(kotlin.ByteArray){}[0]
+        final fun unknownCredentialReferenced(): dev.kcoap.edhoc/EdhocError // dev.kcoap.edhoc/EdhocError.Companion.unknownCredentialReferenced|unknownCredentialReferenced(){}[0]
+        final fun unspecified(kotlin/String): dev.kcoap.edhoc/EdhocError // dev.kcoap.edhoc/EdhocError.Companion.unspecified|unspecified(kotlin.String){}[0]
+        final fun wrongSelectedCipherSuite(kotlin.collections/List<kotlin/Int>): dev.kcoap.edhoc/EdhocError // dev.kcoap.edhoc/EdhocError.Companion.wrongSelectedCipherSuite|wrongSelectedCipherSuite(kotlin.collections.List<kotlin.Int>){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/EdhocInitiator { // dev.kcoap.edhoc/EdhocInitiator|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocInitiatorConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.edhoc/EdhocInitiator.<init>|<init>(dev.kcoap.edhoc.EdhocInitiatorConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.log.LoggerFactory){}[0]
+
+    final val cipherSuite // dev.kcoap.edhoc/EdhocInitiator.cipherSuite|{}cipherSuite[0]
+        final fun <get-cipherSuite>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/EdhocInitiator.cipherSuite.<get-cipherSuite>|<get-cipherSuite>(){}[0]
+    final val failure // dev.kcoap.edhoc/EdhocInitiator.failure|{}failure[0]
+        final fun <get-failure>(): dev.kcoap.edhoc/EdhocException? // dev.kcoap.edhoc/EdhocInitiator.failure.<get-failure>|<get-failure>(){}[0]
+    final val peerCredential // dev.kcoap.edhoc/EdhocInitiator.peerCredential|{}peerCredential[0]
+        final fun <get-peerCredential>(): dev.kcoap.edhoc/AuthenticationCredential? // dev.kcoap.edhoc/EdhocInitiator.peerCredential.<get-peerCredential>|<get-peerCredential>(){}[0]
+    final val phase // dev.kcoap.edhoc/EdhocInitiator.phase|{}phase[0]
+        final fun <get-phase>(): dev.kcoap.edhoc/EdhocPhase // dev.kcoap.edhoc/EdhocInitiator.phase.<get-phase>|<get-phase>(){}[0]
+    final val session // dev.kcoap.edhoc/EdhocInitiator.session|{}session[0]
+        final fun <get-session>(): dev.kcoap.edhoc/EdhocSession? // dev.kcoap.edhoc/EdhocInitiator.session.<get-session>|<get-session>(){}[0]
+
+    final fun abort(kotlin/String): kotlin/ByteArray? // dev.kcoap.edhoc/EdhocInitiator.abort|abort(kotlin.String){}[0]
+    final suspend fun createMessage1(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocInitiator.createMessage1|createMessage1(){}[0]
+    final suspend fun createMessage3(): dev.kcoap.edhoc/Message3 // dev.kcoap.edhoc/EdhocInitiator.createMessage3|createMessage3(){}[0]
+    final suspend fun processMessage2(kotlin/ByteArray) // dev.kcoap.edhoc/EdhocInitiator.processMessage2|processMessage2(kotlin.ByteArray){}[0]
+    final suspend fun processMessage4(kotlin/ByteArray) // dev.kcoap.edhoc/EdhocInitiator.processMessage4|processMessage4(kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.edhoc/EdhocInitiatorConfig { // dev.kcoap.edhoc/EdhocInitiatorConfig|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocMethod, kotlin.collections/List<dev.kcoap.edhoc/CipherSuite>, kotlin.collections/List<dev.kcoap.edhoc/LocalCredential>, dev.kcoap.edhoc/CredentialResolver, dev.kcoap.edhoc/ConnectionIdentifierProvider = ..., dev.kcoap.edhoc/EadHandler = ..., dev.kcoap.edhoc/EphemeralKeySource = ..., dev.kcoap.edhoc/CipherSuite? = ...) // dev.kcoap.edhoc/EdhocInitiatorConfig.<init>|<init>(dev.kcoap.edhoc.EdhocMethod;kotlin.collections.List<dev.kcoap.edhoc.CipherSuite>;kotlin.collections.List<dev.kcoap.edhoc.LocalCredential>;dev.kcoap.edhoc.CredentialResolver;dev.kcoap.edhoc.ConnectionIdentifierProvider;dev.kcoap.edhoc.EadHandler;dev.kcoap.edhoc.EphemeralKeySource;dev.kcoap.edhoc.CipherSuite?){}[0]
+
+    final val cipherSuites // dev.kcoap.edhoc/EdhocInitiatorConfig.cipherSuites|{}cipherSuites[0]
+        final fun <get-cipherSuites>(): kotlin.collections/List<dev.kcoap.edhoc/CipherSuite> // dev.kcoap.edhoc/EdhocInitiatorConfig.cipherSuites.<get-cipherSuites>|<get-cipherSuites>(){}[0]
+    final val connectionIdentifiers // dev.kcoap.edhoc/EdhocInitiatorConfig.connectionIdentifiers|{}connectionIdentifiers[0]
+        final fun <get-connectionIdentifiers>(): dev.kcoap.edhoc/ConnectionIdentifierProvider // dev.kcoap.edhoc/EdhocInitiatorConfig.connectionIdentifiers.<get-connectionIdentifiers>|<get-connectionIdentifiers>(){}[0]
+    final val credentialResolver // dev.kcoap.edhoc/EdhocInitiatorConfig.credentialResolver|{}credentialResolver[0]
+        final fun <get-credentialResolver>(): dev.kcoap.edhoc/CredentialResolver // dev.kcoap.edhoc/EdhocInitiatorConfig.credentialResolver.<get-credentialResolver>|<get-credentialResolver>(){}[0]
+    final val credentials // dev.kcoap.edhoc/EdhocInitiatorConfig.credentials|{}credentials[0]
+        final fun <get-credentials>(): kotlin.collections/List<dev.kcoap.edhoc/LocalCredential> // dev.kcoap.edhoc/EdhocInitiatorConfig.credentials.<get-credentials>|<get-credentials>(){}[0]
+    final val eadHandler // dev.kcoap.edhoc/EdhocInitiatorConfig.eadHandler|{}eadHandler[0]
+        final fun <get-eadHandler>(): dev.kcoap.edhoc/EadHandler // dev.kcoap.edhoc/EdhocInitiatorConfig.eadHandler.<get-eadHandler>|<get-eadHandler>(){}[0]
+    final val ephemeralKeys // dev.kcoap.edhoc/EdhocInitiatorConfig.ephemeralKeys|{}ephemeralKeys[0]
+        final fun <get-ephemeralKeys>(): dev.kcoap.edhoc/EphemeralKeySource // dev.kcoap.edhoc/EdhocInitiatorConfig.ephemeralKeys.<get-ephemeralKeys>|<get-ephemeralKeys>(){}[0]
+    final val initialCipherSuite // dev.kcoap.edhoc/EdhocInitiatorConfig.initialCipherSuite|{}initialCipherSuite[0]
+        final fun <get-initialCipherSuite>(): dev.kcoap.edhoc/CipherSuite? // dev.kcoap.edhoc/EdhocInitiatorConfig.initialCipherSuite.<get-initialCipherSuite>|<get-initialCipherSuite>(){}[0]
+    final val method // dev.kcoap.edhoc/EdhocInitiatorConfig.method|{}method[0]
+        final fun <get-method>(): dev.kcoap.edhoc/EdhocMethod // dev.kcoap.edhoc/EdhocInitiatorConfig.method.<get-method>|<get-method>(){}[0]
+
+    final suspend fun supportedBy(dev.kcoap.crypto/CryptoBackend): dev.kcoap.edhoc/EdhocInitiatorConfig // dev.kcoap.edhoc/EdhocInitiatorConfig.supportedBy|supportedBy(dev.kcoap.crypto.CryptoBackend){}[0]
+}
+
+final class dev.kcoap.edhoc/EdhocPeerErrorException : dev.kcoap.edhoc/EdhocException { // dev.kcoap.edhoc/EdhocPeerErrorException|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocError, dev.kcoap.edhoc/CipherSuite? = ...) // dev.kcoap.edhoc/EdhocPeerErrorException.<init>|<init>(dev.kcoap.edhoc.EdhocError;dev.kcoap.edhoc.CipherSuite?){}[0]
+
+    final val errorMessage // dev.kcoap.edhoc/EdhocPeerErrorException.errorMessage|{}errorMessage[0]
+        final fun <get-errorMessage>(): kotlin/ByteArray? // dev.kcoap.edhoc/EdhocPeerErrorException.errorMessage.<get-errorMessage>|<get-errorMessage>(){}[0]
+    final val retryWith // dev.kcoap.edhoc/EdhocPeerErrorException.retryWith|{}retryWith[0]
+        final fun <get-retryWith>(): dev.kcoap.edhoc/CipherSuite? // dev.kcoap.edhoc/EdhocPeerErrorException.retryWith.<get-retryWith>|<get-retryWith>(){}[0]
+}
+
+final class dev.kcoap.edhoc/EdhocResponder { // dev.kcoap.edhoc/EdhocResponder|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocResponderConfig, dev.kcoap.crypto/CryptoBackend, dev.kcoap.log/LoggerFactory = ...) // dev.kcoap.edhoc/EdhocResponder.<init>|<init>(dev.kcoap.edhoc.EdhocResponderConfig;dev.kcoap.crypto.CryptoBackend;dev.kcoap.log.LoggerFactory){}[0]
+
+    final val cipherSuite // dev.kcoap.edhoc/EdhocResponder.cipherSuite|{}cipherSuite[0]
+        final fun <get-cipherSuite>(): dev.kcoap.edhoc/CipherSuite? // dev.kcoap.edhoc/EdhocResponder.cipherSuite.<get-cipherSuite>|<get-cipherSuite>(){}[0]
+    final val failure // dev.kcoap.edhoc/EdhocResponder.failure|{}failure[0]
+        final fun <get-failure>(): dev.kcoap.edhoc/EdhocException? // dev.kcoap.edhoc/EdhocResponder.failure.<get-failure>|<get-failure>(){}[0]
+    final val method // dev.kcoap.edhoc/EdhocResponder.method|{}method[0]
+        final fun <get-method>(): dev.kcoap.edhoc/EdhocMethod? // dev.kcoap.edhoc/EdhocResponder.method.<get-method>|<get-method>(){}[0]
+    final val peerConnectionIdentifier // dev.kcoap.edhoc/EdhocResponder.peerConnectionIdentifier|{}peerConnectionIdentifier[0]
+        final fun <get-peerConnectionIdentifier>(): dev.kcoap.edhoc/ConnectionIdentifier? // dev.kcoap.edhoc/EdhocResponder.peerConnectionIdentifier.<get-peerConnectionIdentifier>|<get-peerConnectionIdentifier>(){}[0]
+    final val phase // dev.kcoap.edhoc/EdhocResponder.phase|{}phase[0]
+        final fun <get-phase>(): dev.kcoap.edhoc/EdhocPhase // dev.kcoap.edhoc/EdhocResponder.phase.<get-phase>|<get-phase>(){}[0]
+    final val session // dev.kcoap.edhoc/EdhocResponder.session|{}session[0]
+        final fun <get-session>(): dev.kcoap.edhoc/EdhocSession? // dev.kcoap.edhoc/EdhocResponder.session.<get-session>|<get-session>(){}[0]
+
+    final fun abort(kotlin/String): kotlin/ByteArray? // dev.kcoap.edhoc/EdhocResponder.abort|abort(kotlin.String){}[0]
+    final suspend fun createMessage2(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocResponder.createMessage2|createMessage2(){}[0]
+    final suspend fun createMessage4(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocResponder.createMessage4|createMessage4(){}[0]
+    final suspend fun processMessage1(kotlin/ByteArray) // dev.kcoap.edhoc/EdhocResponder.processMessage1|processMessage1(kotlin.ByteArray){}[0]
+    final suspend fun processMessage3(kotlin/ByteArray): dev.kcoap.edhoc/EdhocSession // dev.kcoap.edhoc/EdhocResponder.processMessage3|processMessage3(kotlin.ByteArray){}[0]
+}
+
+final class dev.kcoap.edhoc/EdhocResponderConfig { // dev.kcoap.edhoc/EdhocResponderConfig|null[0]
+    constructor <init>(kotlin.collections/Set<dev.kcoap.edhoc/EdhocMethod>, kotlin.collections/List<dev.kcoap.edhoc/CipherSuite>, kotlin.collections/List<dev.kcoap.edhoc/LocalCredential>, dev.kcoap.edhoc/CredentialResolver, dev.kcoap.edhoc/ConnectionIdentifierProvider = ..., dev.kcoap.edhoc/EadHandler = ..., dev.kcoap.edhoc/EphemeralKeySource = ...) // dev.kcoap.edhoc/EdhocResponderConfig.<init>|<init>(kotlin.collections.Set<dev.kcoap.edhoc.EdhocMethod>;kotlin.collections.List<dev.kcoap.edhoc.CipherSuite>;kotlin.collections.List<dev.kcoap.edhoc.LocalCredential>;dev.kcoap.edhoc.CredentialResolver;dev.kcoap.edhoc.ConnectionIdentifierProvider;dev.kcoap.edhoc.EadHandler;dev.kcoap.edhoc.EphemeralKeySource){}[0]
+
+    final val cipherSuites // dev.kcoap.edhoc/EdhocResponderConfig.cipherSuites|{}cipherSuites[0]
+        final fun <get-cipherSuites>(): kotlin.collections/List<dev.kcoap.edhoc/CipherSuite> // dev.kcoap.edhoc/EdhocResponderConfig.cipherSuites.<get-cipherSuites>|<get-cipherSuites>(){}[0]
+    final val connectionIdentifiers // dev.kcoap.edhoc/EdhocResponderConfig.connectionIdentifiers|{}connectionIdentifiers[0]
+        final fun <get-connectionIdentifiers>(): dev.kcoap.edhoc/ConnectionIdentifierProvider // dev.kcoap.edhoc/EdhocResponderConfig.connectionIdentifiers.<get-connectionIdentifiers>|<get-connectionIdentifiers>(){}[0]
+    final val credentialResolver // dev.kcoap.edhoc/EdhocResponderConfig.credentialResolver|{}credentialResolver[0]
+        final fun <get-credentialResolver>(): dev.kcoap.edhoc/CredentialResolver // dev.kcoap.edhoc/EdhocResponderConfig.credentialResolver.<get-credentialResolver>|<get-credentialResolver>(){}[0]
+    final val credentials // dev.kcoap.edhoc/EdhocResponderConfig.credentials|{}credentials[0]
+        final fun <get-credentials>(): kotlin.collections/List<dev.kcoap.edhoc/LocalCredential> // dev.kcoap.edhoc/EdhocResponderConfig.credentials.<get-credentials>|<get-credentials>(){}[0]
+    final val eadHandler // dev.kcoap.edhoc/EdhocResponderConfig.eadHandler|{}eadHandler[0]
+        final fun <get-eadHandler>(): dev.kcoap.edhoc/EadHandler // dev.kcoap.edhoc/EdhocResponderConfig.eadHandler.<get-eadHandler>|<get-eadHandler>(){}[0]
+    final val ephemeralKeys // dev.kcoap.edhoc/EdhocResponderConfig.ephemeralKeys|{}ephemeralKeys[0]
+        final fun <get-ephemeralKeys>(): dev.kcoap.edhoc/EphemeralKeySource // dev.kcoap.edhoc/EdhocResponderConfig.ephemeralKeys.<get-ephemeralKeys>|<get-ephemeralKeys>(){}[0]
+    final val methods // dev.kcoap.edhoc/EdhocResponderConfig.methods|{}methods[0]
+        final fun <get-methods>(): kotlin.collections/Set<dev.kcoap.edhoc/EdhocMethod> // dev.kcoap.edhoc/EdhocResponderConfig.methods.<get-methods>|<get-methods>(){}[0]
+
+    final fun withConnectionIdentifiers(dev.kcoap.edhoc/ConnectionIdentifierProvider): dev.kcoap.edhoc/EdhocResponderConfig // dev.kcoap.edhoc/EdhocResponderConfig.withConnectionIdentifiers|withConnectionIdentifiers(dev.kcoap.edhoc.ConnectionIdentifierProvider){}[0]
+    final suspend fun supportedBy(dev.kcoap.crypto/CryptoBackend): dev.kcoap.edhoc/EdhocResponderConfig // dev.kcoap.edhoc/EdhocResponderConfig.supportedBy|supportedBy(dev.kcoap.crypto.CryptoBackend){}[0]
+}
+
+final class dev.kcoap.edhoc/EdhocSession { // dev.kcoap.edhoc/EdhocSession|null[0]
+    final val cipherSuite // dev.kcoap.edhoc/EdhocSession.cipherSuite|{}cipherSuite[0]
+        final fun <get-cipherSuite>(): dev.kcoap.edhoc/CipherSuite // dev.kcoap.edhoc/EdhocSession.cipherSuite.<get-cipherSuite>|<get-cipherSuite>(){}[0]
+    final val initiatorConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.initiatorConnectionIdentifier|{}initiatorConnectionIdentifier[0]
+        final fun <get-initiatorConnectionIdentifier>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.initiatorConnectionIdentifier.<get-initiatorConnectionIdentifier>|<get-initiatorConnectionIdentifier>(){}[0]
+    final val method // dev.kcoap.edhoc/EdhocSession.method|{}method[0]
+        final fun <get-method>(): dev.kcoap.edhoc/EdhocMethod // dev.kcoap.edhoc/EdhocSession.method.<get-method>|<get-method>(){}[0]
+    final val ownConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.ownConnectionIdentifier|{}ownConnectionIdentifier[0]
+        final fun <get-ownConnectionIdentifier>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.ownConnectionIdentifier.<get-ownConnectionIdentifier>|<get-ownConnectionIdentifier>(){}[0]
+    final val peerConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.peerConnectionIdentifier|{}peerConnectionIdentifier[0]
+        final fun <get-peerConnectionIdentifier>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.peerConnectionIdentifier.<get-peerConnectionIdentifier>|<get-peerConnectionIdentifier>(){}[0]
+    final val peerCredential // dev.kcoap.edhoc/EdhocSession.peerCredential|{}peerCredential[0]
+        final fun <get-peerCredential>(): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/EdhocSession.peerCredential.<get-peerCredential>|<get-peerCredential>(){}[0]
+    final val peerCredentialIdentifier // dev.kcoap.edhoc/EdhocSession.peerCredentialIdentifier|{}peerCredentialIdentifier[0]
+        final fun <get-peerCredentialIdentifier>(): dev.kcoap.edhoc/CredentialIdentifier // dev.kcoap.edhoc/EdhocSession.peerCredentialIdentifier.<get-peerCredentialIdentifier>|<get-peerCredentialIdentifier>(){}[0]
+    final val responderConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.responderConnectionIdentifier|{}responderConnectionIdentifier[0]
+        final fun <get-responderConnectionIdentifier>(): dev.kcoap.edhoc/ConnectionIdentifier // dev.kcoap.edhoc/EdhocSession.responderConnectionIdentifier.<get-responderConnectionIdentifier>|<get-responderConnectionIdentifier>(){}[0]
+    final val role // dev.kcoap.edhoc/EdhocSession.role|{}role[0]
+        final fun <get-role>(): dev.kcoap.edhoc/EdhocRole // dev.kcoap.edhoc/EdhocSession.role.<get-role>|<get-role>(){}[0]
+
+    final fun destroy() // dev.kcoap.edhoc/EdhocSession.destroy|destroy(){}[0]
+    final fun prkExporter(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocSession.prkExporter|prkExporter(){}[0]
+    final fun prkOut(): kotlin/ByteArray // dev.kcoap.edhoc/EdhocSession.prkOut|prkOut(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/EdhocSession.toString|toString(){}[0]
+    final suspend fun exporter(kotlin/Int, kotlin/ByteArray, kotlin/Int): kotlin/ByteArray // dev.kcoap.edhoc/EdhocSession.exporter|exporter(kotlin.Int;kotlin.ByteArray;kotlin.Int){}[0]
+    final suspend fun keyUpdate(kotlin/ByteArray) // dev.kcoap.edhoc/EdhocSession.keyUpdate|keyUpdate(kotlin.ByteArray){}[0]
+    final suspend fun oscoreMasterSalt(kotlin/Int = ...): kotlin/ByteArray // dev.kcoap.edhoc/EdhocSession.oscoreMasterSalt|oscoreMasterSalt(kotlin.Int){}[0]
+    final suspend fun oscoreMasterSecret(kotlin/Int = ...): kotlin/ByteArray // dev.kcoap.edhoc/EdhocSession.oscoreMasterSecret|oscoreMasterSecret(kotlin.Int){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/EdhocSession.Companion|null[0]
+        final const val DEFAULT_OSCORE_SALT_LENGTH // dev.kcoap.edhoc/EdhocSession.Companion.DEFAULT_OSCORE_SALT_LENGTH|{}DEFAULT_OSCORE_SALT_LENGTH[0]
+            final fun <get-DEFAULT_OSCORE_SALT_LENGTH>(): kotlin/Int // dev.kcoap.edhoc/EdhocSession.Companion.DEFAULT_OSCORE_SALT_LENGTH.<get-DEFAULT_OSCORE_SALT_LENGTH>|<get-DEFAULT_OSCORE_SALT_LENGTH>(){}[0]
+        final const val EXPORTER_OSCORE_MASTER_SALT // dev.kcoap.edhoc/EdhocSession.Companion.EXPORTER_OSCORE_MASTER_SALT|{}EXPORTER_OSCORE_MASTER_SALT[0]
+            final fun <get-EXPORTER_OSCORE_MASTER_SALT>(): kotlin/Int // dev.kcoap.edhoc/EdhocSession.Companion.EXPORTER_OSCORE_MASTER_SALT.<get-EXPORTER_OSCORE_MASTER_SALT>|<get-EXPORTER_OSCORE_MASTER_SALT>(){}[0]
+        final const val EXPORTER_OSCORE_MASTER_SECRET // dev.kcoap.edhoc/EdhocSession.Companion.EXPORTER_OSCORE_MASTER_SECRET|{}EXPORTER_OSCORE_MASTER_SECRET[0]
+            final fun <get-EXPORTER_OSCORE_MASTER_SECRET>(): kotlin/Int // dev.kcoap.edhoc/EdhocSession.Companion.EXPORTER_OSCORE_MASTER_SECRET.<get-EXPORTER_OSCORE_MASTER_SECRET>|<get-EXPORTER_OSCORE_MASTER_SECRET>(){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/LocalCredential { // dev.kcoap.edhoc/LocalCredential|null[0]
+    constructor <init>(dev.kcoap.edhoc/AuthenticationCredential, dev.kcoap.edhoc/CredentialIdentifier, dev.kcoap.crypto/PrivateKey, dev.kcoap.edhoc/AuthenticationKind) // dev.kcoap.edhoc/LocalCredential.<init>|<init>(dev.kcoap.edhoc.AuthenticationCredential;dev.kcoap.edhoc.CredentialIdentifier;dev.kcoap.crypto.PrivateKey;dev.kcoap.edhoc.AuthenticationKind){}[0]
+
+    final val authentication // dev.kcoap.edhoc/LocalCredential.authentication|{}authentication[0]
+        final fun <get-authentication>(): dev.kcoap.edhoc/AuthenticationKind // dev.kcoap.edhoc/LocalCredential.authentication.<get-authentication>|<get-authentication>(){}[0]
+    final val credential // dev.kcoap.edhoc/LocalCredential.credential|{}credential[0]
+        final fun <get-credential>(): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/LocalCredential.credential.<get-credential>|<get-credential>(){}[0]
+    final val identifier // dev.kcoap.edhoc/LocalCredential.identifier|{}identifier[0]
+        final fun <get-identifier>(): dev.kcoap.edhoc/CredentialIdentifier // dev.kcoap.edhoc/LocalCredential.identifier.<get-identifier>|<get-identifier>(){}[0]
+    final val privateKey // dev.kcoap.edhoc/LocalCredential.privateKey|{}privateKey[0]
+        final fun <get-privateKey>(): dev.kcoap.crypto/PrivateKey // dev.kcoap.edhoc/LocalCredential.privateKey.<get-privateKey>|<get-privateKey>(){}[0]
+
+    final fun isUsableFor(dev.kcoap.edhoc/AuthenticationKind, dev.kcoap.edhoc/CipherSuite): kotlin/Boolean // dev.kcoap.edhoc/LocalCredential.isUsableFor|isUsableFor(dev.kcoap.edhoc.AuthenticationKind;dev.kcoap.edhoc.CipherSuite){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/LocalCredential.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.edhoc/LocalCredential.Companion|null[0]
+        final fun signature(dev.kcoap.edhoc/AuthenticationCredential, dev.kcoap.edhoc/CredentialIdentifier, dev.kcoap.crypto/PrivateKey): dev.kcoap.edhoc/LocalCredential // dev.kcoap.edhoc/LocalCredential.Companion.signature|signature(dev.kcoap.edhoc.AuthenticationCredential;dev.kcoap.edhoc.CredentialIdentifier;dev.kcoap.crypto.PrivateKey){}[0]
+        final fun staticDiffieHellman(dev.kcoap.edhoc/AuthenticationCredential, dev.kcoap.edhoc/CredentialIdentifier, dev.kcoap.crypto/PrivateKey): dev.kcoap.edhoc/LocalCredential // dev.kcoap.edhoc/LocalCredential.Companion.staticDiffieHellman|staticDiffieHellman(dev.kcoap.edhoc.AuthenticationCredential;dev.kcoap.edhoc.CredentialIdentifier;dev.kcoap.crypto.PrivateKey){}[0]
+    }
+}
+
+final class dev.kcoap.edhoc/Message3 { // dev.kcoap.edhoc/Message3|null[0]
+    final val bytes // dev.kcoap.edhoc/Message3.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // dev.kcoap.edhoc/Message3.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val session // dev.kcoap.edhoc/Message3.session|{}session[0]
+        final fun <get-session>(): dev.kcoap.edhoc/EdhocSession // dev.kcoap.edhoc/Message3.session.<get-session>|<get-session>(){}[0]
+
+    final fun component1(): kotlin/ByteArray // dev.kcoap.edhoc/Message3.component1|component1(){}[0]
+    final fun component2(): dev.kcoap.edhoc/EdhocSession // dev.kcoap.edhoc/Message3.component2|component2(){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.edhoc/Message3.toString|toString(){}[0]
+}
+
+final class dev.kcoap.edhoc/TrustedCredentials : dev.kcoap.edhoc/CredentialResolver { // dev.kcoap.edhoc/TrustedCredentials|null[0]
+    constructor <init>(dev.kcoap.crypto/CryptoBackend, kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential>, dev.kcoap.crypto/CertificateValidator? = ...) // dev.kcoap.edhoc/TrustedCredentials.<init>|<init>(dev.kcoap.crypto.CryptoBackend;kotlin.collections.List<dev.kcoap.edhoc.AuthenticationCredential>;dev.kcoap.crypto.CertificateValidator?){}[0]
+
+    final suspend fun resolve(dev.kcoap.edhoc/CredentialIdentifier): kotlin.collections/List<dev.kcoap.edhoc/AuthenticationCredential> // dev.kcoap.edhoc/TrustedCredentials.resolve|resolve(dev.kcoap.edhoc.CredentialIdentifier){}[0]
+}
+
+open class dev.kcoap.edhoc/EdhocException : dev.kcoap.common/KcoapException { // dev.kcoap.edhoc/EdhocException|null[0]
+    constructor <init>(dev.kcoap.edhoc/EdhocError, kotlin/String = ..., kotlin/Throwable? = ...) // dev.kcoap.edhoc/EdhocException.<init>|<init>(dev.kcoap.edhoc.EdhocError;kotlin.String;kotlin.Throwable?){}[0]
+
+    final val error // dev.kcoap.edhoc/EdhocException.error|{}error[0]
+        final fun <get-error>(): dev.kcoap.edhoc/EdhocError // dev.kcoap.edhoc/EdhocException.error.<get-error>|<get-error>(){}[0]
+    final val errorCode // dev.kcoap.edhoc/EdhocException.errorCode|{}errorCode[0]
+        final fun <get-errorCode>(): kotlin/Int // dev.kcoap.edhoc/EdhocException.errorCode.<get-errorCode>|<get-errorCode>(){}[0]
+    open val errorMessage // dev.kcoap.edhoc/EdhocException.errorMessage|{}errorMessage[0]
+        open fun <get-errorMessage>(): kotlin/ByteArray? // dev.kcoap.edhoc/EdhocException.errorMessage.<get-errorMessage>|<get-errorMessage>(){}[0]
+}
+
+sealed class dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier|null[0]
+    abstract val isByValue // dev.kcoap.edhoc/CredentialIdentifier.isByValue|{}isByValue[0]
+        abstract fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+    final val encoded // dev.kcoap.edhoc/CredentialIdentifier.encoded|{}encoded[0]
+        final fun <get-encoded>(): kotlin/ByteArray // dev.kcoap.edhoc/CredentialIdentifier.encoded.<get-encoded>|<get-encoded>(){}[0]
+    final val header // dev.kcoap.edhoc/CredentialIdentifier.header|{}header[0]
+        final fun <get-header>(): dev.kcoap.cbor/CborMap // dev.kcoap.edhoc/CredentialIdentifier.header.<get-header>|<get-header>(){}[0]
+
+    open fun encodeForPlaintext(): kotlin/ByteArray // dev.kcoap.edhoc/CredentialIdentifier.encodeForPlaintext|encodeForPlaintext(){}[0]
+    open fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.equals|equals(kotlin.Any?){}[0]
+    open fun hashCode(): kotlin/Int // dev.kcoap.edhoc/CredentialIdentifier.hashCode|hashCode(){}[0]
+
+    final class Kccs : dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier.Kccs|null[0]
+        constructor <init>(dev.kcoap.cose/CwtClaimsSet) // dev.kcoap.edhoc/CredentialIdentifier.Kccs.<init>|<init>(dev.kcoap.cose.CwtClaimsSet){}[0]
+
+        final val claimsSet // dev.kcoap.edhoc/CredentialIdentifier.Kccs.claimsSet|{}claimsSet[0]
+            final fun <get-claimsSet>(): dev.kcoap.cose/CwtClaimsSet // dev.kcoap.edhoc/CredentialIdentifier.Kccs.claimsSet.<get-claimsSet>|<get-claimsSet>(){}[0]
+        final val isByValue // dev.kcoap.edhoc/CredentialIdentifier.Kccs.isByValue|{}isByValue[0]
+            final fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.Kccs.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+
+        final fun credential(): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/CredentialIdentifier.Kccs.credential|credential(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/CredentialIdentifier.Kccs.toString|toString(){}[0]
+    }
+
+    final class KeyId : dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier.KeyId|null[0]
+        constructor <init>(kotlin/ByteArray) // dev.kcoap.edhoc/CredentialIdentifier.KeyId.<init>|<init>(kotlin.ByteArray){}[0]
+
+        final val isByValue // dev.kcoap.edhoc/CredentialIdentifier.KeyId.isByValue|{}isByValue[0]
+            final fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.KeyId.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+        final val kid // dev.kcoap.edhoc/CredentialIdentifier.KeyId.kid|{}kid[0]
+            final fun <get-kid>(): kotlin/ByteArray // dev.kcoap.edhoc/CredentialIdentifier.KeyId.kid.<get-kid>|<get-kid>(){}[0]
+
+        final fun encodeForPlaintext(): kotlin/ByteArray // dev.kcoap.edhoc/CredentialIdentifier.KeyId.encodeForPlaintext|encodeForPlaintext(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/CredentialIdentifier.KeyId.toString|toString(){}[0]
+    }
+
+    final class Other : dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier.Other|null[0]
+        constructor <init>(dev.kcoap.cbor/CborMap) // dev.kcoap.edhoc/CredentialIdentifier.Other.<init>|<init>(dev.kcoap.cbor.CborMap){}[0]
+
+        final val isByValue // dev.kcoap.edhoc/CredentialIdentifier.Other.isByValue|{}isByValue[0]
+            final fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.Other.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/CredentialIdentifier.Other.toString|toString(){}[0]
+    }
+
+    final class X509Chain : dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier.X509Chain|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/ByteArray>) // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.<init>|<init>(kotlin.collections.List<kotlin.ByteArray>){}[0]
+
+        final val certificates // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.certificates|{}certificates[0]
+            final fun <get-certificates>(): kotlin.collections/List<kotlin/ByteArray> // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.certificates.<get-certificates>|<get-certificates>(){}[0]
+        final val isByValue // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.isByValue|{}isByValue[0]
+            final fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+
+        final fun endEntityCredential(): dev.kcoap.edhoc/AuthenticationCredential // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.endEntityCredential|endEntityCredential(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/CredentialIdentifier.X509Chain.toString|toString(){}[0]
+    }
+
+    final class X509Thumbprint : dev.kcoap.edhoc/CredentialIdentifier { // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint|null[0]
+        constructor <init>(kotlin/Int, kotlin/ByteArray) // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.<init>|<init>(kotlin.Int;kotlin.ByteArray){}[0]
+
+        final val algorithm // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.algorithm|{}algorithm[0]
+            final fun <get-algorithm>(): kotlin/Int // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.algorithm.<get-algorithm>|<get-algorithm>(){}[0]
+        final val hash // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.hash|{}hash[0]
+            final fun <get-hash>(): kotlin/ByteArray // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.hash.<get-hash>|<get-hash>(){}[0]
+        final val isByValue // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.isByValue|{}isByValue[0]
+            final fun <get-isByValue>(): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.isByValue.<get-isByValue>|<get-isByValue>(){}[0]
+
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.toString|toString(){}[0]
+        final suspend fun matches(dev.kcoap.crypto/CryptoBackend, kotlin/ByteArray): kotlin/Boolean // dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint.matches|matches(dev.kcoap.crypto.CryptoBackend;kotlin.ByteArray){}[0]
+    }
+
+    final object Companion { // dev.kcoap.edhoc/CredentialIdentifier.Companion|null[0]
+        final const val SHA_256_64 // dev.kcoap.edhoc/CredentialIdentifier.Companion.SHA_256_64|{}SHA_256_64[0]
+            final fun <get-SHA_256_64>(): kotlin/Int // dev.kcoap.edhoc/CredentialIdentifier.Companion.SHA_256_64.<get-SHA_256_64>|<get-SHA_256_64>(){}[0]
+
+        final suspend fun x509Thumbprint(dev.kcoap.crypto/CryptoBackend, kotlin/ByteArray, kotlin/Int = ...): dev.kcoap.edhoc/CredentialIdentifier.X509Thumbprint // dev.kcoap.edhoc/CredentialIdentifier.Companion.x509Thumbprint|x509Thumbprint(dev.kcoap.crypto.CryptoBackend;kotlin.ByteArray;kotlin.Int){}[0]
+    }
+}
+
+sealed class dev.kcoap.edhoc/KeyExchangeAlgorithm { // dev.kcoap.edhoc/KeyExchangeAlgorithm|null[0]
+    abstract val ephemeralKeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.ephemeralKeyType|{}ephemeralKeyType[0]
+        abstract fun <get-ephemeralKeyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.ephemeralKeyType.<get-ephemeralKeyType>|<get-ephemeralKeyType>(){}[0]
+    abstract val initiatorShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.initiatorShareLength|{}initiatorShareLength[0]
+        abstract fun <get-initiatorShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.initiatorShareLength.<get-initiatorShareLength>|<get-initiatorShareLength>(){}[0]
+    abstract val responderShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.responderShareLength|{}responderShareLength[0]
+        abstract fun <get-responderShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.responderShareLength.<get-responderShareLength>|<get-responderShareLength>(){}[0]
+    abstract val supportsStaticDiffieHellman // dev.kcoap.edhoc/KeyExchangeAlgorithm.supportsStaticDiffieHellman|{}supportsStaticDiffieHellman[0]
+        abstract fun <get-supportsStaticDiffieHellman>(): kotlin/Boolean // dev.kcoap.edhoc/KeyExchangeAlgorithm.supportsStaticDiffieHellman.<get-supportsStaticDiffieHellman>|<get-supportsStaticDiffieHellman>(){}[0]
+
+    final class DiffieHellman : dev.kcoap.edhoc/KeyExchangeAlgorithm { // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman|null[0]
+        constructor <init>(dev.kcoap.crypto/EcdhCurve) // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.<init>|<init>(dev.kcoap.crypto.EcdhCurve){}[0]
+
+        final val curve // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.curve|{}curve[0]
+            final fun <get-curve>(): dev.kcoap.crypto/EcdhCurve // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.curve.<get-curve>|<get-curve>(){}[0]
+        final val ephemeralKeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.ephemeralKeyType|{}ephemeralKeyType[0]
+            final fun <get-ephemeralKeyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.ephemeralKeyType.<get-ephemeralKeyType>|<get-ephemeralKeyType>(){}[0]
+        final val initiatorShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.initiatorShareLength|{}initiatorShareLength[0]
+            final fun <get-initiatorShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.initiatorShareLength.<get-initiatorShareLength>|<get-initiatorShareLength>(){}[0]
+        final val responderShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.responderShareLength|{}responderShareLength[0]
+            final fun <get-responderShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.responderShareLength.<get-responderShareLength>|<get-responderShareLength>(){}[0]
+        final val supportsStaticDiffieHellman // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.supportsStaticDiffieHellman|{}supportsStaticDiffieHellman[0]
+            final fun <get-supportsStaticDiffieHellman>(): kotlin/Boolean // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.supportsStaticDiffieHellman.<get-supportsStaticDiffieHellman>|<get-supportsStaticDiffieHellman>(){}[0]
+
+        final fun component1(): dev.kcoap.crypto/EcdhCurve // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.component1|component1(){}[0]
+        final fun copy(dev.kcoap.crypto/EcdhCurve = ...): dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.copy|copy(dev.kcoap.crypto.EcdhCurve){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/KeyExchangeAlgorithm.DiffieHellman.toString|toString(){}[0]
+    }
+
+    final class Kem : dev.kcoap.edhoc/KeyExchangeAlgorithm { // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem|null[0]
+        constructor <init>(dev.kcoap.crypto/KemAlgorithm) // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.<init>|<init>(dev.kcoap.crypto.KemAlgorithm){}[0]
+
+        final val algorithm // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.algorithm|{}algorithm[0]
+            final fun <get-algorithm>(): dev.kcoap.crypto/KemAlgorithm // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.algorithm.<get-algorithm>|<get-algorithm>(){}[0]
+        final val ephemeralKeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.ephemeralKeyType|{}ephemeralKeyType[0]
+            final fun <get-ephemeralKeyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.ephemeralKeyType.<get-ephemeralKeyType>|<get-ephemeralKeyType>(){}[0]
+        final val initiatorShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.initiatorShareLength|{}initiatorShareLength[0]
+            final fun <get-initiatorShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.initiatorShareLength.<get-initiatorShareLength>|<get-initiatorShareLength>(){}[0]
+        final val responderShareLength // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.responderShareLength|{}responderShareLength[0]
+            final fun <get-responderShareLength>(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.responderShareLength.<get-responderShareLength>|<get-responderShareLength>(){}[0]
+        final val supportsStaticDiffieHellman // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.supportsStaticDiffieHellman|{}supportsStaticDiffieHellman[0]
+            final fun <get-supportsStaticDiffieHellman>(): kotlin/Boolean // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.supportsStaticDiffieHellman.<get-supportsStaticDiffieHellman>|<get-supportsStaticDiffieHellman>(){}[0]
+
+        final fun component1(): dev.kcoap.crypto/KemAlgorithm // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.component1|component1(){}[0]
+        final fun copy(dev.kcoap.crypto/KemAlgorithm = ...): dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.copy|copy(dev.kcoap.crypto.KemAlgorithm){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // dev.kcoap.edhoc/KeyExchangeAlgorithm.Kem.toString|toString(){}[0]
+    }
+}

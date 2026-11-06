@@ -1,0 +1,91 @@
+public abstract interface class dev/kcoap/transport/ktor/CertificatePinner {
+	public static final field Companion Ldev/kcoap/transport/ktor/CertificatePinner$Companion;
+	public abstract fun accepts (Ljava/lang/String;Ljava/util/List;)Z
+}
+
+public final class dev/kcoap/transport/ktor/CertificatePinner$Companion {
+	public final fun publicKeySha256 (Ljava/util/Collection;)Ldev/kcoap/transport/ktor/CertificatePinner;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTcpConnector : dev/kcoap/transport/Connector {
+	public fun <init> ()V
+	public fun <init> (Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun connect (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getSchemes ()Ljava/util/Set;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTcpListener : dev/kcoap/transport/ConnectionListener {
+	public static final field Companion Ldev/kcoap/transport/ktor/KtorTcpListener$Companion;
+	public fun accept (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Tcp;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTcpListener$Companion {
+	public final fun bind (Ljava/lang/String;ILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun bind$default (Ldev/kcoap/transport/ktor/KtorTcpListener$Companion;Ljava/lang/String;ILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/transport/ktor/KtorTlsConnector : dev/kcoap/transport/Connector {
+	public fun <init> ()V
+	public fun <init> (Ldev/kcoap/transport/ktor/TlsClientConfig;Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/ktor/TlsClientConfig;Lio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun connect (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getConfig ()Ldev/kcoap/transport/ktor/TlsClientConfig;
+	public fun getSchemes ()Ljava/util/Set;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorUdpTransport : dev/kcoap/transport/DatagramTransport {
+	public static final field Companion Ldev/kcoap/transport/ktor/KtorUdpTransport$Companion;
+	public static final field DEFAULT_MAX_DATAGRAM_SIZE I
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/KtorUdpTransport$Companion {
+	public final fun bind (Ljava/lang/String;IILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun bind$default (Ldev/kcoap/transport/ktor/KtorUdpTransport$Companion;Ljava/lang/String;IILio/ktor/network/selector/SelectorManager;Ldev/kcoap/log/LoggerFactory;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/transport/ktor/TlsClientConfig {
+	public static final field Companion Ldev/kcoap/transport/ktor/TlsClientConfig$Companion;
+	public fun <init> ()V
+	public fun <init> (Ldev/kcoap/transport/ktor/TlsTrust;Ldev/kcoap/transport/ktor/CertificatePinner;Z)V
+	public synthetic fun <init> (Ldev/kcoap/transport/ktor/TlsTrust;Ldev/kcoap/transport/ktor/CertificatePinner;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAllowsAnyPortWithoutAlpn ()Z
+	public final fun getPinner ()Ldev/kcoap/transport/ktor/CertificatePinner;
+	public final fun getTrust ()Ldev/kcoap/transport/ktor/TlsTrust;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/TlsClientConfig$Companion {
+	public final fun getDefault ()Ldev/kcoap/transport/ktor/TlsClientConfig;
+}
+
+public abstract interface class dev/kcoap/transport/ktor/TlsTrust {
+}
+
+public final class dev/kcoap/transport/ktor/TlsTrust$Anchors : dev/kcoap/transport/ktor/TlsTrust {
+	public fun <init> (Ljava/util/List;)V
+	public final fun getCertificates ()Ljava/util/List;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/transport/ktor/TlsTrust$Platform : dev/kcoap/transport/ktor/TlsTrust {
+	public static final field INSTANCE Ldev/kcoap/transport/ktor/TlsTrust$Platform;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

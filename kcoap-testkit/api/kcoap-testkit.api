@@ -1,0 +1,229 @@
+public final class dev/kcoap/testkit/ByteMutator {
+	public static final field INSTANCE Ldev/kcoap/testkit/ByteMutator;
+	public final fun mutate ([BLkotlin/random/Random;)[B
+}
+
+public final class dev/kcoap/testkit/DatagramFate : java/lang/Enum {
+	public static final field DELIVERED Ldev/kcoap/testkit/DatagramFate;
+	public static final field DUPLICATED Ldev/kcoap/testkit/DatagramFate;
+	public static final field FILTERED Ldev/kcoap/testkit/DatagramFate;
+	public static final field LOST Ldev/kcoap/testkit/DatagramFate;
+	public static final field UNREACHABLE Ldev/kcoap/testkit/DatagramFate;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/testkit/DatagramFate;
+	public static fun values ()[Ldev/kcoap/testkit/DatagramFate;
+}
+
+public final class dev/kcoap/testkit/InMemoryByteStream : dev/kcoap/testkit/InMemoryConnection, dev/kcoap/transport/ByteStreamConnection {
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public fun inject ([B)V
+	public fun isAccepted ()Z
+	public fun isClosed ()Z
+	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun reset ()V
+	public fun toString ()Ljava/lang/String;
+	public fun write ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/testkit/InMemoryConnection {
+	public abstract fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public abstract fun inject ([B)V
+	public abstract fun isAccepted ()Z
+	public abstract fun isClosed ()Z
+	public abstract fun reset ()V
+}
+
+public final class dev/kcoap/testkit/InMemoryConnectionListener : dev/kcoap/transport/ConnectionListener {
+	public fun accept (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryConnectionRefused : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;)V
+	public final fun getPeer ()Ldev/kcoap/transport/Endpoint;
+}
+
+public final class dev/kcoap/testkit/InMemoryConnectionReset : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;)V
+	public final fun getPeer ()Ldev/kcoap/transport/Endpoint;
+}
+
+public final class dev/kcoap/testkit/InMemoryConnections {
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun connections (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getConnector ()Ldev/kcoap/transport/Connector;
+	public final fun getTap ()Lkotlin/jvm/functions/Function3;
+	public final fun listen (ILdev/kcoap/transport/CoapScheme;Ljava/lang/String;Ldev/kcoap/transport/PeerIdentity;Ldev/kcoap/transport/PeerIdentity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun listen$default (Ldev/kcoap/testkit/InMemoryConnections;ILdev/kcoap/transport/CoapScheme;Ljava/lang/String;Ldev/kcoap/transport/PeerIdentity;Ldev/kcoap/transport/PeerIdentity;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun setTap (Lkotlin/jvm/functions/Function3;)V
+}
+
+public final class dev/kcoap/testkit/InMemoryDatagram {
+	public fun <init> (Ldev/kcoap/transport/Endpoint$Udp;Ldev/kcoap/transport/Endpoint;[B)V
+	public final fun getBytes ()[B
+	public final fun getFrom ()Ldev/kcoap/transport/Endpoint$Udp;
+	public final fun getTo ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class dev/kcoap/testkit/InMemoryLink {
+	public abstract fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public abstract fun getUri ()Ljava/lang/String;
+	public abstract fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Connections : dev/kcoap/testkit/InMemoryLink {
+	public static final field Companion Ldev/kcoap/testkit/InMemoryLink$Connections$Companion;
+	public static final field DEFAULT_PORT I
+	public fun <init> (Ldev/kcoap/testkit/InMemoryConnections;Ldev/kcoap/transport/CoapScheme;ILdev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryConnections;Ldev/kcoap/transport/CoapScheme;ILdev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getConnections ()Ldev/kcoap/testkit/InMemoryConnections;
+	public final fun getPort ()I
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun getUri ()Ljava/lang/String;
+	public final fun listen (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Connections$Companion {
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Datagrams : dev/kcoap/testkit/InMemoryLink {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryNetwork;ILdev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryNetwork;ILdev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun client (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun cut (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getNetwork ()Ldev/kcoap/testkit/InMemoryNetwork;
+	public fun getScheme ()Ldev/kcoap/transport/CoapScheme;
+	public fun getUri ()Ljava/lang/String;
+	public fun server (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryLink$Side {
+	public final fun getConnectors ()Ljava/util/List;
+	public final fun getListeners ()Ljava/util/List;
+	public final fun getTransport ()Ldev/kcoap/transport/DatagramTransport;
+	public final fun peer (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/testkit/InMemoryMessageStream : dev/kcoap/testkit/InMemoryConnection, dev/kcoap/transport/MessageConnection {
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public fun getRemote ()Ldev/kcoap/transport/Endpoint;
+	public fun inject ([B)V
+	public fun isAccepted ()Z
+	public fun isClosed ()Z
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun reset ()V
+	public fun send ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryNetwork {
+	public static final field Companion Ldev/kcoap/testkit/InMemoryNetwork$Companion;
+	public static final field DEFAULT_MAX_DATAGRAM_SIZE I
+	public fun <init> ()V
+	public fun <init> (Lkotlinx/coroutines/CoroutineScope;Lkotlin/random/Random;)V
+	public synthetic fun <init> (Lkotlinx/coroutines/CoroutineScope;Lkotlin/random/Random;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun attach (Ldev/kcoap/transport/Endpoint$Udp;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun attach$default (Ldev/kcoap/testkit/InMemoryNetwork;Ldev/kcoap/transport/Endpoint$Udp;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getConditions ()Ldev/kcoap/testkit/LinkConditions;
+	public final fun getFilter ()Lkotlin/jvm/functions/Function1;
+	public final fun getTap ()Lkotlin/jvm/functions/Function2;
+	public final fun setConditions (Ldev/kcoap/testkit/LinkConditions;)V
+	public final fun setFilter (Lkotlin/jvm/functions/Function1;)V
+	public final fun setTap (Lkotlin/jvm/functions/Function2;)V
+	public final fun spoof (Ldev/kcoap/transport/Endpoint$Udp;Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/testkit/InMemoryNetwork$Companion {
+}
+
+public final class dev/kcoap/testkit/InMemorySessions : dev/kcoap/transport/DatagramTransport {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/transport/PeerIdentity;)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/transport/PeerIdentity;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun endAll (Ldev/kcoap/transport/SessionEndReason;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun endAll$default (Ldev/kcoap/testkit/InMemorySessions;Ldev/kcoap/transport/SessionEndReason;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun sessionTo (Ldev/kcoap/transport/Endpoint$Udp;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/InMemoryTransport : dev/kcoap/transport/DatagramTransport {
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public final fun inject (Ldev/kcoap/transport/DatagramEvent;)V
+	public final fun isClosed ()Z
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/LinkConditions {
+	public static final field Companion Ldev/kcoap/testkit/LinkConditions$Companion;
+	public fun <init> ()V
+	public synthetic fun <init> (DDJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (DDJJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDuplicationRate ()D
+	public final fun getJitter-UwyO8pc ()J
+	public final fun getLatency-UwyO8pc ()J
+	public final fun getLossRate ()D
+	public final fun isImmediate ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/LinkConditions$Companion {
+	public final fun getPerfect ()Ldev/kcoap/testkit/LinkConditions;
+}
+
+public final class dev/kcoap/testkit/RebindingTransport : dev/kcoap/transport/DatagramTransport {
+	public fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/testkit/InMemoryTransport;IZ)V
+	public synthetic fun <init> (Ldev/kcoap/testkit/InMemoryTransport;Ldev/kcoap/testkit/InMemoryTransport;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getFirst ()Ldev/kcoap/testkit/InMemoryTransport;
+	public final fun getLocalEndpoint ()Ldev/kcoap/transport/Endpoint$Udp;
+	public fun getMaxDatagramSize ()I
+	public final fun getOldAddressReceives ()Z
+	public final fun getSecond ()Ldev/kcoap/testkit/InMemoryTransport;
+	public final fun getSent ()I
+	public final fun getSwitchAt ()I
+	public final fun isRebound ()Z
+	public fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun send (Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/testkit/Stress {
+	public static final field DEFAULT_ITERATIONS I
+	public static final field DEFAULT_PARALLELISM I
+	public static final field INSTANCE Ldev/kcoap/testkit/Stress;
+	public final fun getDEFAULT_TIMEOUT-UwyO8pc ()J
+	public final fun race ([Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun run-1Y68eR8 (IIJLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun run-1Y68eR8$default (Ldev/kcoap/testkit/Stress;IIJLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/testkit/StressScope : kotlinx/coroutines/CoroutineScope {
+	public final fun getBackground ()Lkotlinx/coroutines/CoroutineScope;
+	public fun getCoroutineContext ()Lkotlin/coroutines/CoroutineContext;
+	public final fun getIteration ()I
+}
+

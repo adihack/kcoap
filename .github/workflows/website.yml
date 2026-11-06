@@ -1,0 +1,37 @@
+# Checks kcoap.dev (web/public) with scripts/check-site: internal links and anchors, the head of every
+# page, no inline code the Content-Security-Policy would block, no resource from another site, the
+# _headers file, page weights and stylesheets, robots.txt and the sitemap. Python 3 and its standard
+# library only, as the runner has them. The log lists every page's weight and gzip size.
+#
+# A workflow of its own, not a job of ci.yml: release.yml reuses ci.yml as its test step, and a broken
+# link on the website should not hold back a release of the library. On a push to main it runs only
+# when the site, the check or this file changes. On a pull request it always runs, because the
+# ruleset on main requires it, and a required check that a path filter skips never reports and blocks
+# the merge; the check takes seconds.
+#
+# Cloudflare's Workers Builds does not wait for this check: it runs the same script as its build command
+# before every deploy, so a commit that fails it is not deployed (web/README.md, "What deploys").
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'scripts/check-site', '.github/workflows/website.yml']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Website
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: scripts/check-site

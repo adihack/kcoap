@@ -1,0 +1,874 @@
+public final class dev/kcoap/coap/client/CoapClient {
+	public fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/client/CoapClientConfig;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/client/CoapClientConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/client/CoapClientConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/client/CoapClientConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/List;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/client/CoapClientConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;)V
+	public synthetic fun <init> (Ljava/util/List;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/client/CoapClientConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun delete (Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun delete (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun delete$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun delete$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun discover (Ldev/kcoap/coap/CoapUri;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun discover (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun discover$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun discover$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun fetch (Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun fetch (Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun fetch$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun fetch$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun get (Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun get (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun get$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun get$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getConfig ()Ldev/kcoap/coap/client/CoapClientConfig;
+	public final fun getEndpoint ()Ldev/kcoap/coap/stack/CoapEndpoint;
+	public final fun ipatch (Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun ipatch (Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun ipatch$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun ipatch$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun observe (Ldev/kcoap/coap/CoapRequest;)Lkotlinx/coroutines/flow/Flow;
+	public final fun observe (Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/flow/Flow;
+	public final fun observe (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun observe$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun observe$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun patch (Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun patch (Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun patch$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun patch$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun ping (Ldev/kcoap/coap/CoapUri;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun ping (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun post (Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun post (Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun post$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun post$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun put (Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun put (Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun put$default (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapUri;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun put$default (Ldev/kcoap/coap/client/CoapClient;Ljava/lang/String;[BLjava/lang/Integer;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun request (Ldev/kcoap/coap/CoapRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun request-vNWM5LQ (ILdev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun request-vNWM5LQ$default (Ldev/kcoap/coap/client/CoapClient;ILdev/kcoap/coap/CoapUri;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfig {
+	public static final field Companion Ldev/kcoap/coap/client/CoapClientConfig$Companion;
+	public final fun getEchoRetry ()Z
+	public final fun getMaxResponseBodySize ()I
+	public final fun getObserveCancellation ()Ldev/kcoap/coap/client/ObserveCancellation;
+	public final fun getPreferredBlockSize ()Ljava/lang/Integer;
+	public final fun getQBlock ()Ldev/kcoap/coap/client/QBlockClientConfig;
+	public final fun getRequestTimeout-FghU774 ()Lkotlin/time/Duration;
+	public final fun getResolver ()Ldev/kcoap/coap/client/EndpointResolver;
+	public final fun getSecurity ()Ldev/kcoap/coap/security/ClientMessageSecurity;
+	public final fun getSecurityReserve ()I
+	public final fun toBuilder ()Ldev/kcoap/coap/client/CoapClientConfig$Builder;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfig$Builder {
+	public fun <init> ()V
+	public final fun build ()Ldev/kcoap/coap/client/CoapClientConfig;
+	public final fun getEchoRetry ()Z
+	public final fun getMaxResponseBodySize ()I
+	public final fun getObserveCancellation ()Ldev/kcoap/coap/client/ObserveCancellation;
+	public final fun getPreferredBlockSize ()Ljava/lang/Integer;
+	public final fun getQBlock ()Ldev/kcoap/coap/client/QBlockClientConfig;
+	public final fun getRequestTimeout-FghU774 ()Lkotlin/time/Duration;
+	public final fun getResolver ()Ldev/kcoap/coap/client/EndpointResolver;
+	public final fun getSecurity ()Ldev/kcoap/coap/security/ClientMessageSecurity;
+	public final fun getSecurityReserve ()I
+	public final fun setEchoRetry (Z)V
+	public final fun setMaxResponseBodySize (I)V
+	public final fun setObserveCancellation (Ldev/kcoap/coap/client/ObserveCancellation;)V
+	public final fun setPreferredBlockSize (Ljava/lang/Integer;)V
+	public final fun setQBlock (Ldev/kcoap/coap/client/QBlockClientConfig;)V
+	public final fun setRequestTimeout-BwNAW2A (Lkotlin/time/Duration;)V
+	public final fun setResolver (Ldev/kcoap/coap/client/EndpointResolver;)V
+	public final fun setSecurity (Ldev/kcoap/coap/security/ClientMessageSecurity;)V
+	public final fun setSecurityReserve (I)V
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfig$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/client/CoapClientConfig;
+}
+
+public final class dev/kcoap/coap/client/CoapClientConfigKt {
+	public static final fun CoapClientConfig (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/client/CoapClientConfig;
+}
+
+public abstract interface class dev/kcoap/coap/client/EndpointResolver {
+	public static final field Companion Ldev/kcoap/coap/client/EndpointResolver$Companion;
+	public abstract fun resolve (Ldev/kcoap/coap/CoapUri;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/coap/client/EndpointResolver$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/client/EndpointResolver;
+}
+
+public final class dev/kcoap/coap/client/ObserveCancellation : java/lang/Enum {
+	public static final field DEREGISTER Ldev/kcoap/coap/client/ObserveCancellation;
+	public static final field FORGET Ldev/kcoap/coap/client/ObserveCancellation;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/client/ObserveCancellation;
+	public static fun values ()[Ldev/kcoap/coap/client/ObserveCancellation;
+}
+
+public final class dev/kcoap/coap/client/QBlockClientConfig {
+	public fun <init> ()V
+	public synthetic fun <init> (Ldev/kcoap/coap/client/QBlockMode;Ljava/lang/String;JZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/client/QBlockMode;Ljava/lang/String;JZZZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCapabilityLifetime-UwyO8pc ()J
+	public final fun getMissingBlockMBit ()Z
+	public final fun getMode ()Ldev/kcoap/coap/client/QBlockMode;
+	public final fun getOnReliableTransports ()Z
+	public final fun getProbePath ()Ljava/lang/String;
+	public final fun getWithMessageSecurity ()Z
+	public final fun isEnabled ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/QBlockMode : java/lang/Enum {
+	public static final field ASSUME_SUPPORTED Ldev/kcoap/coap/client/QBlockMode;
+	public static final field OFF Ldev/kcoap/coap/client/QBlockMode;
+	public static final field PROBE Ldev/kcoap/coap/client/QBlockMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/client/QBlockMode;
+	public static fun values ()[Ldev/kcoap/coap/client/QBlockMode;
+}
+
+public final class dev/kcoap/coap/client/RetryAfter {
+	public static final field Companion Ldev/kcoap/coap/client/RetryAfter$Companion;
+	public static final field DEFAULT_MAX_ATTEMPTS I
+	public fun <init> ()V
+	public synthetic fun <init> (JIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMaxAttempts ()I
+	public final fun getMaxWait-UwyO8pc ()J
+	public final fun request (Ldev/kcoap/coap/client/CoapClient;Ldev/kcoap/coap/CoapRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/client/RetryAfter$Companion {
+	public final fun getDEFAULT_MAX_WAIT-UwyO8pc ()J
+}
+
+public abstract interface class dev/kcoap/coap/server/AccessPolicy {
+	public abstract fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$Authenticated : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$Authenticated;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$MessageSecurityRequired : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$MessageSecurityRequired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessPolicy$Public : dev/kcoap/coap/server/AccessPolicy {
+	public static final field INSTANCE Ldev/kcoap/coap/server/AccessPolicy$Public;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun permits (Ldev/kcoap/coap/server/AccessRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AccessRequest {
+	public synthetic fun <init> (ILjava/util/List;Ldev/kcoap/coap/server/CoapResource;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/security/SecurityIdentity;Ldev/kcoap/transport/PeerIdentity;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMethod-xRAr_a8 ()I
+	public final fun getPath ()Ljava/util/List;
+	public final fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public final fun getResource ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun getSecurityIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/AmplificationPolicy : java/lang/Enum {
+	public static final field ALL_RESPONSES Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static final field OFF Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static final field Q_BLOCK_BURSTS Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/server/AmplificationPolicy;
+	public static fun values ()[Ldev/kcoap/coap/server/AmplificationPolicy;
+}
+
+public abstract class dev/kcoap/coap/server/CoapResource {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun add (Ldev/kcoap/coap/server/CoapResource;)Ldev/kcoap/coap/server/CoapResource;
+	public final fun child (Ljava/lang/String;)Ldev/kcoap/coap/server/CoapResource;
+	public final fun find (Ljava/util/List;)Ldev/kcoap/coap/server/CoapResource;
+	public fun getAccess ()Ldev/kcoap/coap/server/AccessPolicy;
+	public fun getAttributes ()Ldev/kcoap/coap/server/ResourceAttributes;
+	public final fun getChildren ()Ljava/util/Collection;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getParent ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun getPath ()Ljava/lang/String;
+	public fun getRecognizedOptions ()Ljava/util/Set;
+	public fun handle (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handleDelete (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handleFetch (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handleGet (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handleIPatch (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handlePatch (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handlePost (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun handlePut (Ldev/kcoap/coap/server/RequestContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun isDiscoverable ()Z
+	public fun isObservable ()Z
+	protected final fun methodNotAllowed ()Ldev/kcoap/coap/CoapResponse;
+	public final fun remove (Ljava/lang/String;)Ldev/kcoap/coap/server/CoapResource;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/CoapResponseException : java/lang/Exception {
+	public fun <init> (Ldev/kcoap/coap/CoapResponse;)V
+	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
+}
+
+public final class dev/kcoap/coap/server/CoapServer {
+	public fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/server/CoapServerConfig;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/stack/CoapEndpoint;Ldev/kcoap/coap/server/CoapServerConfig;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/server/CoapServerConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/server/CoapServerConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/List;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/server/CoapServerConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/util/List;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/server/CoapServerConfig;Ldev/kcoap/coap/stack/CoapEndpointConfig;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun add (Ldev/kcoap/coap/server/CoapResource;)Ldev/kcoap/coap/server/CoapResource;
+	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getConfig ()Ldev/kcoap/coap/server/CoapServerConfig;
+	public final fun getEndpoint ()Ldev/kcoap/coap/stack/CoapEndpoint;
+	public final fun getRoot ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun stats ()Ldev/kcoap/coap/server/ServerStats;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/CoapServerConfig {
+	public static final field Companion Ldev/kcoap/coap/server/CoapServerConfig$Companion;
+	public static final field DEFAULT_AMPLIFICATION_FACTOR I
+	public static final field DEFAULT_MAX_OBSERVERS I
+	public static final field DEFAULT_MAX_OBSERVERS_PER_PEER I
+	public static final field DEFAULT_MAX_OBSERVERS_PER_RESOURCE I
+	public static final field DEFAULT_MAX_VERIFIED_ADDRESSES I
+	public fun <init> ()V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Ldev/kcoap/coap/server/AccessPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/coap/security/ServerMessageSecurity;IIIJJIZIIILdev/kcoap/coap/server/AmplificationPolicy;IIJLdev/kcoap/coap/server/QBlockServerConfig;Ldev/kcoap/coap/server/AccessPolicy;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAmplification ()Ldev/kcoap/coap/server/AmplificationPolicy;
+	public final fun getAmplificationFactor ()I
+	public final fun getConfirmableNotificationInterval-UwyO8pc ()J
+	public final fun getDefaultAccess ()Ldev/kcoap/coap/server/AccessPolicy;
+	public final fun getMaxBlockSize ()I
+	public final fun getMaxConcurrentTransfers ()I
+	public final fun getMaxObservers ()I
+	public final fun getMaxObserversPerPeer ()I
+	public final fun getMaxObserversPerResource ()I
+	public final fun getMaxRequestBodySize ()I
+	public final fun getMaxVerifiedAddresses ()I
+	public final fun getNonConfirmableNotificationInterval-UwyO8pc ()J
+	public final fun getQBlock ()Ldev/kcoap/coap/server/QBlockServerConfig;
+	public final fun getSecurity ()Ldev/kcoap/coap/security/ServerMessageSecurity;
+	public final fun getSecurityReserve ()I
+	public final fun getVerifiedAddressLifetime-UwyO8pc ()J
+	public final fun getWellKnownCore ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/CoapServerConfig$Companion {
+	public final fun getDEFAULT_VERIFIED_ADDRESS_LIFETIME-UwyO8pc ()J
+}
+
+public abstract interface annotation class dev/kcoap/coap/server/CoapServerDsl : java/lang/annotation/Annotation {
+}
+
+public abstract class dev/kcoap/coap/server/ObservableResource : dev/kcoap/coap/server/CoapResource {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getNotificationType ()Ldev/kcoap/coap/CoapMessageType;
+	public final fun getObserverCount ()I
+	public fun isObservable ()Z
+	public final fun notifyObservers ()V
+}
+
+public final class dev/kcoap/coap/server/QBlockServerConfig {
+	public static final field Companion Ldev/kcoap/coap/server/QBlockServerConfig$Companion;
+	public static final field DEFAULT_MAX_BODIES I
+	public static final field DEFAULT_MAX_BODIES_PER_PEER I
+	public fun <init> ()V
+	public fun <init> (ZZZIII)V
+	public synthetic fun <init> (ZZZIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMaxBodiesPerPeer ()I
+	public final fun getMaxCachedBodies ()I
+	public final fun getMaxPartialBodies ()I
+	public final fun getOnReliableTransports ()Z
+	public final fun getWithMessageSecurity ()Z
+	public final fun isEnabled ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/QBlockServerConfig$Companion {
+}
+
+public final class dev/kcoap/coap/server/RequestContext {
+	public final fun acknowledge (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getMethod-xRAr_a8 ()I
+	public final fun getOptions ()Ldev/kcoap/coap/OptionSet;
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getPayload ()[B
+	public final fun getPayloadSize ()I
+	public final fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getPeerIdentity ()Ldev/kcoap/transport/PeerIdentity;
+	public final fun getQuery ()Ljava/util/List;
+	public final fun getResource ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun getSecurityIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public final fun isNotification ()Z
+	public final fun payloadAsText ()Ljava/lang/String;
+	public final fun preconditionsHold ([BZ)Z
+	public static synthetic fun preconditionsHold$default (Ldev/kcoap/coap/server/RequestContext;[BZILjava/lang/Object;)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/ResourceAttributes {
+	public static final field Companion Ldev/kcoap/coap/server/ResourceAttributes$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getContentFormats ()Ljava/util/List;
+	public final fun getExtra ()Ljava/util/List;
+	public final fun getInterfaces ()Ljava/util/List;
+	public final fun getMaximumSize ()Ljava/lang/Long;
+	public final fun getResourceTypes ()Ljava/util/List;
+	public final fun getTitle ()Ljava/lang/String;
+	public final fun toLink (Ljava/lang/String;Z)Ldev/kcoap/coap/WebLink;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/server/ResourceAttributes$Companion {
+	public final fun getNONE ()Ldev/kcoap/coap/server/ResourceAttributes;
+}
+
+public final class dev/kcoap/coap/server/ResourceBuilder {
+	public final fun add (Ldev/kcoap/coap/server/CoapResource;)Ldev/kcoap/coap/server/CoapResource;
+	public final fun delete (Lkotlin/jvm/functions/Function2;)V
+	public final fun fetch (Lkotlin/jvm/functions/Function2;)V
+	public final fun get (Lkotlin/jvm/functions/Function2;)V
+	public final fun getAccess ()Ldev/kcoap/coap/server/AccessPolicy;
+	public final fun getAttributes ()Ldev/kcoap/coap/server/ResourceAttributes;
+	public final fun getDiscoverable ()Z
+	public final fun ipatch (Lkotlin/jvm/functions/Function2;)V
+	public final fun observable (Ldev/kcoap/coap/CoapMessageType;)V
+	public static synthetic fun observable$default (Ldev/kcoap/coap/server/ResourceBuilder;Ldev/kcoap/coap/CoapMessageType;ILjava/lang/Object;)V
+	public final fun on-va4rc68 (ILkotlin/jvm/functions/Function2;)V
+	public final fun patch (Lkotlin/jvm/functions/Function2;)V
+	public final fun post (Lkotlin/jvm/functions/Function2;)V
+	public final fun put (Lkotlin/jvm/functions/Function2;)V
+	public final fun recognize ([I)V
+	public final fun resource (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/server/ObservableResource;
+	public static synthetic fun resource$default (Ldev/kcoap/coap/server/ResourceBuilder;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ldev/kcoap/coap/server/ObservableResource;
+	public final fun setAccess (Ldev/kcoap/coap/server/AccessPolicy;)V
+	public final fun setAttributes (Ldev/kcoap/coap/server/ResourceAttributes;)V
+	public final fun setDiscoverable (Z)V
+}
+
+public final class dev/kcoap/coap/server/ServerStats {
+	public final fun getBlock1Transfers ()I
+	public final fun getBlock2Transfers ()I
+	public final fun getObservers ()I
+	public final fun getQBlock1Bodies ()I
+	public final fun getQBlock2Bodies ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpoint {
+	public fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;Ldev/kcoap/transport/DatagramTransport;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;Ldev/kcoap/transport/DatagramTransport;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun awaitClosed (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun close (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getCloseCause ()Ldev/kcoap/coap/stack/CoapException;
+	public final fun getConfig ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
+	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
+	public final fun isClosed ()Z
+	public final fun ping (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun ping (Ldev/kcoap/transport/Endpoint;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stats ()Ldev/kcoap/coap/stack/EndpointStats;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpointConfig {
+	public static final field Companion Ldev/kcoap/coap/stack/CoapEndpointConfig$Companion;
+	public static final field DEFAULT_MAX_CONCURRENT_REQUESTS I
+	public static final field DEFAULT_MAX_DEDUPLICATION_ENTRIES I
+	public static final field DEFAULT_MAX_DEDUPLICATION_ENTRIES_PER_PEER I
+	public static final field DEFAULT_MAX_EXCHANGES I
+	public static final field DEFAULT_MAX_EXCHANGES_PER_PEER I
+	public static final field DEFAULT_MAX_RESERVED_MESSAGE_IDS I
+	public static final field DEFAULT_MAX_RESERVED_MESSAGE_IDS_PER_PEER I
+	public final fun getEventListener ()Ldev/kcoap/coap/stack/EndpointEventListener;
+	public final fun getInterceptors ()Ljava/util/List;
+	public final fun getLoggerFactory ()Ldev/kcoap/log/LoggerFactory;
+	public final fun getMaxConcurrentRequests ()I
+	public final fun getMaxDeduplicationEntries ()I
+	public final fun getMaxDeduplicationEntriesPerPeer ()I
+	public final fun getMaxExchanges ()I
+	public final fun getMaxExchangesPerPeer ()I
+	public final fun getMaxReservedMessageIds ()I
+	public final fun getMaxReservedMessageIdsPerPeer ()I
+	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
+	public final fun getRandom ()Lkotlin/random/Random;
+	public final fun getReliable ()Ldev/kcoap/coap/stack/ReliableTransportConfig;
+	public final fun getSeparateResponseDelay-FghU774 ()Lkotlin/time/Duration;
+	public final fun getTimeSource ()Lkotlin/time/TimeSource;
+	public final fun getTokenGenerator ()Ldev/kcoap/coap/stack/TokenGenerator;
+	public final fun toBuilder ()Ldev/kcoap/coap/stack/CoapEndpointConfig$Builder;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpointConfig$Builder {
+	public fun <init> ()V
+	public final fun build ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
+	public final fun getEventListener ()Ldev/kcoap/coap/stack/EndpointEventListener;
+	public final fun getInterceptors ()Ljava/util/List;
+	public final fun getLoggerFactory ()Ldev/kcoap/log/LoggerFactory;
+	public final fun getMaxConcurrentRequests ()I
+	public final fun getMaxDeduplicationEntries ()I
+	public final fun getMaxDeduplicationEntriesPerPeer ()I
+	public final fun getMaxExchanges ()I
+	public final fun getMaxExchangesPerPeer ()I
+	public final fun getMaxReservedMessageIds ()I
+	public final fun getMaxReservedMessageIdsPerPeer ()I
+	public final fun getParameters ()Ldev/kcoap/coap/stack/TransmissionParameters;
+	public final fun getRandom ()Lkotlin/random/Random;
+	public final fun getReliable ()Ldev/kcoap/coap/stack/ReliableTransportConfig;
+	public final fun getSeparateResponseDelay-FghU774 ()Lkotlin/time/Duration;
+	public final fun getTimeSource ()Lkotlin/time/TimeSource;
+	public final fun getTokenGenerator ()Ldev/kcoap/coap/stack/TokenGenerator;
+	public final fun setEventListener (Ldev/kcoap/coap/stack/EndpointEventListener;)V
+	public final fun setInterceptors (Ljava/util/List;)V
+	public final fun setLoggerFactory (Ldev/kcoap/log/LoggerFactory;)V
+	public final fun setMaxConcurrentRequests (I)V
+	public final fun setMaxDeduplicationEntries (I)V
+	public final fun setMaxDeduplicationEntriesPerPeer (I)V
+	public final fun setMaxExchanges (I)V
+	public final fun setMaxExchangesPerPeer (I)V
+	public final fun setMaxReservedMessageIds (I)V
+	public final fun setMaxReservedMessageIdsPerPeer (I)V
+	public final fun setParameters (Ldev/kcoap/coap/stack/TransmissionParameters;)V
+	public final fun setRandom (Lkotlin/random/Random;)V
+	public final fun setReliable (Ldev/kcoap/coap/stack/ReliableTransportConfig;)V
+	public final fun setSeparateResponseDelay-BwNAW2A (Lkotlin/time/Duration;)V
+	public final fun setTimeSource (Lkotlin/time/TimeSource;)V
+	public final fun setTokenGenerator (Ldev/kcoap/coap/stack/TokenGenerator;)V
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpointConfig$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/stack/CoapEndpointConfig;
+}
+
+public final class dev/kcoap/coap/stack/CoapEndpointConfigKt {
+	public static final fun CoapEndpointConfig (Lkotlin/jvm/functions/Function1;)Ldev/kcoap/coap/stack/CoapEndpointConfig;
+}
+
+public final class dev/kcoap/coap/stack/CoapException : dev/kcoap/common/KcoapException {
+	public fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;)V
+	public synthetic fun <init> (Ljava/lang/String;Ldev/kcoap/coap/stack/CoapException$Reason;Ljava/lang/Throwable;Ldev/kcoap/coap/CoapResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getReason ()Ldev/kcoap/coap/stack/CoapException$Reason;
+	public final fun getResponse ()Ldev/kcoap/coap/CoapResponse;
+}
+
+public final class dev/kcoap/coap/stack/CoapException$Reason : java/lang/Enum {
+	public static final field BAD_RESPONSE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field BLOCKWISE_FAILED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field CLOSED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field CONNECTION_CLOSED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field IDENTIFIERS_EXHAUSTED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field MESSAGE_TOO_LARGE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field RESET Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field RESPONSE_TIMEOUT Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field SECURITY Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field SESSION_ENDED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSMISSION_TIMEOUT Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSPORT_FAILED Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field TRANSPORT_UNAVAILABLE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field UNRESOLVED_HOST Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static final field UNVERIFIED_RESPONSE Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/CoapException$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/CoapException$Reason;
+}
+
+public abstract interface class dev/kcoap/coap/stack/EndpointEvent {
+	public abstract fun getPeer ()Ldev/kcoap/transport/Endpoint;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$AbortReceived : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/Integer;Ljava/lang/String;)V
+	public final fun getBadCsmOption ()Ljava/lang/Integer;
+	public final fun getDiagnostic ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$AbortSent : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;Ljava/lang/Integer;)V
+	public final fun getBadCsmOption ()Ljava/lang/Integer;
+	public final fun getDiagnostic ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ConnectionClosed : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ConnectionOpened : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Z)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun isInitiator ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$CsmReceived : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;JZ)V
+	public final fun getBlockWiseTransfer ()Z
+	public final fun getMaxMessageSize ()J
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$DuplicateReceived : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;I)V
+	public final fun getMessageId ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;)V
+	public final fun getLimit ()Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit : java/lang/Enum {
+	public static final field ADDRESS_CHALLENGES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field AMPLIFICATION_FACTOR Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field BODIES_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field CACHED_BODIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field CONCURRENT_REQUESTS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field DEDUPLICATION_ENTRIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field DEDUPLICATION_ENTRIES_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field EXCHANGES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field EXCHANGES_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field HELD_BACK_RESPONSES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field MESSAGE_IDS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field MESSAGE_IDS_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field OBSERVERS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field OBSERVERS_PER_PEER Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field OBSERVERS_PER_RESOURCE Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field PARTIAL_BODIES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field PENDING_CONNECTIONS Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static final field VERIFIED_ADDRESSES Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$LimitReached$Limit;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$MalformedMessage : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason : java/lang/Enum {
+	public static final field FORMAT_ERROR Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static final field UNKNOWN_VERSION Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$MalformedMessage$Reason;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$MessageRejected : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;ILdev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;ILdev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getMessageId ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason : java/lang/Enum {
+	public static final field EMPTY_NON_CONFIRMABLE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field FOREIGN_TOKEN Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_ACKNOWLEDGEMENT Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_RESET Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field INVALID_SOURCE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field NO_SERVER Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field PING Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field RESERVED_CODE Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNKNOWN_SIGNAL Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNKNOWN_TOKEN Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static final field UNRECOGNIZED_CRITICAL_OPTION Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$MessageRejected$Reason;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ObserverAdded : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public final fun getPath ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ObserverRemoved : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason : java/lang/Enum {
+	public static final field DEREGISTERED Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field ERROR_RESPONSE Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field FAILED Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field NOT_ACKNOWLEDGED Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field RESET Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field RESOURCE_REMOVED Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static final field SESSION_ENDED Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$ObserverRemoved$Reason;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$PartialBodyDropped : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$QBlockFallback : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/lang/String;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$QBlockRecovery : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;ZLjava/util/List;)V
+	public final fun getBlocks ()Ljava/util/List;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun isRequestedByPeer ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ReleaseReceived : dev/kcoap/coap/stack/EndpointEvent {
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ljava/util/List;Lkotlin/time/Duration;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAlternativeAddresses ()Ljava/util/List;
+	public final fun getDiagnostic ()Ljava/lang/String;
+	public final fun getHoldOff-FghU774 ()Lkotlin/time/Duration;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$RequestCompleted : dev/kcoap/coap/stack/EndpointEvent {
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;ILjava/lang/String;Ldev/kcoap/coap/CoapCode;ZLdev/kcoap/coap/security/SecurityIdentity;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDuration-UwyO8pc ()J
+	public final fun getMethod-xRAr_a8 ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getResourcePath ()Ljava/lang/String;
+	public final fun getResponseCode-4e_WcJ0 ()Ldev/kcoap/coap/CoapCode;
+	public final fun getSecurityIdentity ()Ldev/kcoap/coap/security/SecurityIdentity;
+	public final fun isSuppressed ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ResetReceived : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;I)V
+	public final fun getMessageId ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ResponseRejected : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason : java/lang/Enum {
+	public static final field UNVERIFIED Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;
+	public static final field VERIFICATION_FAILED Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$ResponseRejected$Reason;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$Retransmitted : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;II)V
+	public final fun getAttempt ()I
+	public final fun getMessageId ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$SecurityRejected : dev/kcoap/coap/stack/EndpointEvent {
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;ILdev/kcoap/coap/security/MessageSecurityException;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;ILdev/kcoap/coap/security/MessageSecurityException;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getError ()Ldev/kcoap/coap/security/MessageSecurityException;
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public final fun getReason ()Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public final fun getResponseCode-xRAr_a8 ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason : java/lang/Enum {
+	public static final field FRESHNESS_CHALLENGE Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static final field VERIFICATION_FAILED Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+	public static fun values ()[Ldev/kcoap/coap/stack/EndpointEvent$SecurityRejected$Reason;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$SessionEnded : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;)V
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEvent$TransmissionTimedOut : dev/kcoap/coap/stack/EndpointEvent {
+	public fun <init> (Ldev/kcoap/transport/Endpoint;I)V
+	public final fun getMessageId ()I
+	public fun getPeer ()Ldev/kcoap/transport/Endpoint;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/coap/stack/EndpointEventListener {
+	public static final field Companion Ldev/kcoap/coap/stack/EndpointEventListener$Companion;
+	public abstract fun onEvent (Ldev/kcoap/coap/stack/EndpointEvent;)V
+}
+
+public final class dev/kcoap/coap/stack/EndpointEventListener$Companion {
+	public final fun getNone ()Ldev/kcoap/coap/stack/EndpointEventListener;
+}
+
+public final class dev/kcoap/coap/stack/EndpointEventListenerKt {
+	public static final fun plus (Ldev/kcoap/coap/stack/EndpointEventListener;Ldev/kcoap/coap/stack/EndpointEventListener;)Ldev/kcoap/coap/stack/EndpointEventListener;
+}
+
+public final class dev/kcoap/coap/stack/EndpointStats {
+	public final fun getConnections ()I
+	public final fun getDeduplicationEntries ()I
+	public final fun getExchanges ()I
+	public final fun getReservedMessageIds ()I
+	public final fun getRunningHandlers ()I
+	public final fun getTransmissions ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/kcoap/coap/stack/MessageInterceptor {
+	public fun onReceive (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
+	public fun onSend (Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
+}
+
+public final class dev/kcoap/coap/stack/MessageInterceptor$DefaultImpls {
+	public static fun onReceive (Ldev/kcoap/coap/stack/MessageInterceptor;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
+	public static fun onSend (Ldev/kcoap/coap/stack/MessageInterceptor;Ldev/kcoap/transport/Endpoint;Ldev/kcoap/coap/CoapMessage;)Ldev/kcoap/coap/CoapMessage;
+}
+
+public final class dev/kcoap/coap/stack/ReliableTransportConfig {
+	public static final field Companion Ldev/kcoap/coap/stack/ReliableTransportConfig$Companion;
+	public static final field DEFAULT_MAX_CONNECTIONS I
+	public static final field DEFAULT_MAX_MESSAGE_SIZE J
+	public static final field DEFAULT_MAX_PENDING_CONNECTIONS I
+	public static final field MAX_MAX_MESSAGE_SIZE J
+	public static final field MIN_MAX_MESSAGE_SIZE J
+	public fun <init> ()V
+	public synthetic fun <init> (JZJJLkotlin/time/Duration;JJLkotlin/time/Duration;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JZJJLkotlin/time/Duration;JJLkotlin/time/Duration;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAnnouncesBert ()Z
+	public final fun getBlockWiseTransfer ()Z
+	public final fun getConnectTimeout-UwyO8pc ()J
+	public final fun getCsmTimeout-UwyO8pc ()J
+	public final fun getIdleTimeout-FghU774 ()Lkotlin/time/Duration;
+	public final fun getKeepAliveInterval-FghU774 ()Lkotlin/time/Duration;
+	public final fun getMaxConnections ()I
+	public final fun getMaxMessageSize ()J
+	public final fun getMaxPendingConnections ()I
+	public final fun getPingTimeout-UwyO8pc ()J
+	public final fun getReleaseTimeout-UwyO8pc ()J
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/ReliableTransportConfig$Companion {
+}
+
+public abstract interface class dev/kcoap/coap/stack/TokenGenerator {
+	public static final field Companion Ldev/kcoap/coap/stack/TokenGenerator$Companion;
+	public fun forget (Ldev/kcoap/transport/Endpoint;)V
+	public abstract fun next (Ldev/kcoap/transport/Endpoint;)[B
+}
+
+public final class dev/kcoap/coap/stack/TokenGenerator$Companion {
+	public final fun random (ILkotlin/random/Random;)Ldev/kcoap/coap/stack/TokenGenerator;
+	public static synthetic fun random$default (Ldev/kcoap/coap/stack/TokenGenerator$Companion;ILkotlin/random/Random;ILjava/lang/Object;)Ldev/kcoap/coap/stack/TokenGenerator;
+	public final fun sessionSequence (ILkotlin/random/Random;)Ldev/kcoap/coap/stack/TokenGenerator;
+	public static synthetic fun sessionSequence$default (Ldev/kcoap/coap/stack/TokenGenerator$Companion;ILkotlin/random/Random;ILjava/lang/Object;)Ldev/kcoap/coap/stack/TokenGenerator;
+}
+
+public final class dev/kcoap/coap/stack/TokenGenerator$DefaultImpls {
+	public static fun forget (Ldev/kcoap/coap/stack/TokenGenerator;Ldev/kcoap/transport/Endpoint;)V
+}
+
+public final class dev/kcoap/coap/stack/TransmissionParameters {
+	public static final field Companion Ldev/kcoap/coap/stack/TransmissionParameters$Companion;
+	public fun <init> ()V
+	public synthetic fun <init> (JDIIJIJIJJIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JDIIJIJIJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAckRandomFactor ()D
+	public final fun getAckTimeout-UwyO8pc ()J
+	public final fun getDefaultLeisure-UwyO8pc ()J
+	public final fun getExchangeLifetime-UwyO8pc ()J
+	public final fun getMaxLatency-UwyO8pc ()J
+	public final fun getMaxPayloads ()I
+	public final fun getMaxRetransmit ()I
+	public final fun getMaxRtt-UwyO8pc ()J
+	public final fun getMaxTransmitSpan-UwyO8pc ()J
+	public final fun getMaxTransmitWait-UwyO8pc ()J
+	public final fun getNonLifetime-UwyO8pc ()J
+	public final fun getNonMaxRetransmit ()I
+	public final fun getNonPartialTimeout-UwyO8pc ()J
+	public final fun getNonReceiveTimeout-UwyO8pc ()J
+	public final fun getNonTimeout-UwyO8pc ()J
+	public final fun getNstart ()I
+	public final fun getProbingRate ()I
+	public final fun getProcessingDelay-UwyO8pc ()J
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/coap/stack/TransmissionParameters$Companion {
+	public final fun getDefault ()Ldev/kcoap/coap/stack/TransmissionParameters;
+}
+

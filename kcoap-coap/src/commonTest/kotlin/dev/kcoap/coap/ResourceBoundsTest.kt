@@ -1,0 +1,360 @@
+package dev.kcoap.coap
+
+import dev.kcoap.coap.codec.UdpMessageCodec
+import dev.kcoap.coap.server.CoapServerConfig
+import dev.kcoap.coap.server.ObservableResource
+import dev.kcoap.coap.server.RequestContext
+import dev.kcoap.coap.stack.CoapEndpointConfig
+import dev.kcoap.coap.stack.CoapException
+import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.coap.stack.EndpointEvent.LimitReached.Limit
+import dev.kcoap.coap.stack.EndpointEventListener
+import dev.kcoap.coap.stack.ReliableTransportConfig
+import dev.kcoap.testkit.InMemoryByteStream
+import dev.kcoap.testkit.InMemoryTransport
+import dev.kcoap.transport.DatagramEvent
+import dev.kcoap.transport.Endpoint
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * Every bound on what a peer can make the endpoint keep or do (RFC 7252 §11.3): reached, it refuses only
+ * the extra work, answers with at most a few bytes more than it received, and reports
+ * [EndpointEvent.LimitReached].
+ */
+class ResourceBoundsTest {
+    private fun StackFixture.limits(limit: Limit): Int = events.count { it is EndpointEvent.LimitReached && it.limit == limit }
+
+    private fun ReliableFixture.limits(limit: Limit): Int = events.count { it is EndpointEvent.LimitReached && it.limit == limit }
+
+    private fun request(type: CoapMessageType, messageId: Int, token: Byte, path: String, observe: Long? = null) =
+        CoapMessage.request(CoapCode.GET) {
+            this.type = type
+            this.messageId = messageId
+            this.token = byteArrayOf(token)
+            options {
+                observe?.let { observe(it) }
+                uriPath(path)
+            }
+        }
+
+    private suspend fun TestScope.answerTo(peer: InMemoryTransport, to: Endpoint, message: CoapMessage): CoapMessage? {
+        peer.send(to, UdpMessageCodec.encode(message))
+        val event = withTimeoutOrNull(1.seconds) { peer.receive() } ?: return null
+        return UdpMessageCodec.decode((event as DatagramEvent.Received).datagram)
+    }
+
+    @Test
+    fun rfc7252Section11_3AServerWithAFullDeduplicationCacheDropsNewRequestsSilently() = runTest {
+        val fixture = StackFixture(this)
+        val config = CoapEndpointConfig {
+            maxDeduplicationEntries = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
+        val server = fixture.server(endpointConfig = config) { resource("r") { post { CoapResponse.changed() } } }
+        val address = fixture.address(server.endpoint)
+        val peer = fixture.transport()
+
+        // A POST must be processed at most once (RFC 7252 §4.5), so its entry cannot make room for another.
+        assertEquals(CoapCode.CHANGED, answerTo(peer, address, post(1, 1))?.code)
+        assertNull(answerTo(peer, address, post(2, 2)), "no answer to a possibly spoofed source")
+        assertEquals(1, fixture.limits(Limit.DEDUPLICATION_ENTRIES))
+        assertEquals(CoapCode.CHANGED, answerTo(peer, address, post(1, 1))?.code, "duplicates are still answered")
+    }
+
+    private fun post(messageId: Int, token: Byte) = CoapMessage.request(CoapCode.POST) {
+        type = CoapMessageType.CON
+        this.messageId = messageId
+        this.token = byteArrayOf(token)
+        options { uriPath("r") }
+    }
+
+    @Test
+    fun rfc7252Section5_9_3_4RequestsBeyondTheHandlerBoundGet5_03WithMaxAge() = runTest {
+        val fixture = StackFixture(this)
+        val gate = CompletableDeferred<Unit>()
+        val config = CoapEndpointConfig {
+            maxConcurrentRequests = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
+        val server = fixture.server(endpointConfig = config) {
+            resource("slow") {
+                get {
+                    gate.await()
+                    CoapResponse.content("done")
+                }
+            }
+        }
+        val client = fixture.client()
+        val first = async { client.get(fixture.uri(server, "/slow")) }
+        delay(100)
+
+        val refused = client.get(fixture.uri(server, "/slow"))
+        assertEquals(CoapCode.SERVICE_UNAVAILABLE, refused.code)
+        assertEquals(2L, refused.options.maxAge)
+        val piggybacked = fixture.sentBy(server.endpoint).single { it.code == CoapCode.SERVICE_UNAVAILABLE }
+        assertEquals(CoapMessageType.ACK, piggybacked.type, "piggybacked, not a separate Confirmable response")
+        val request = fixture.sentBy(client.endpoint).last { it.code == CoapCode.GET }
+        assertTrue(UdpMessageCodec.encode(piggybacked).size <= UdpMessageCodec.encode(request).size + 3, "at most the Max-Age option larger")
+
+        // A Non-confirmable request beyond the bound is dropped.
+        val peer = fixture.transport()
+        assertNull(answerTo(peer, fixture.address(server.endpoint), request(CoapMessageType.NON, 7, 7, "slow")))
+        assertEquals(2, fixture.limits(Limit.CONCURRENT_REQUESTS))
+
+        gate.complete(Unit)
+        assertEquals("done", first.await().payloadAsText())
+        assertEquals("done", client.get(fixture.uri(server, "/slow")).payloadAsText(), "the permit came back")
+    }
+
+    @Test
+    fun rfc8323RequestsOnAConnectionBeyondTheHandlerBoundGet5_03() = runTest {
+        val fixture = ReliableFixture(this)
+        val gate = CompletableDeferred<Unit>()
+        val server = fixture.server(endpointConfig = CoapEndpointConfig {
+            maxConcurrentRequests = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }) {
+            resource("slow") {
+                get {
+                    gate.await()
+                    CoapResponse.content("done")
+                }
+            }
+        }
+        val client = fixture.client()
+        val first = async { client.get(fixture.uri("/slow")) }
+        delay(100)
+
+        assertEquals(CoapCode.SERVICE_UNAVAILABLE, client.get(fixture.uri("/slow")).code)
+        assertEquals(1, fixture.limits(Limit.CONCURRENT_REQUESTS))
+        gate.complete(Unit)
+        assertEquals("done", first.await().payloadAsText())
+        server.close()
+    }
+
+    @Test
+    fun exchangesInProgressWithOnePeerAreBounded() = runTest {
+        val fixture = StackFixture(this)
+        val client = fixture.client(endpointConfig = CoapEndpointConfig {
+            maxExchangesPerPeer = 2
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        })
+        val pending = List(2) { launch { runCatching { client.get("coap://127.0.0.1:9/x") } } }
+        delay(100)
+
+        val error = assertFailsWith<CoapException> { client.get("coap://127.0.0.1:9/x") }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, error.reason)
+        assertTrue("maxExchangesPerPeer" in error.message!!)
+        assertEquals(1, fixture.limits(Limit.EXCHANGES_PER_PEER))
+        val elsewhere = launch { runCatching { client.get("coap://127.0.0.1:10/x") } }
+        delay(100)
+        assertEquals(3, client.endpoint.exchangeCount(), "another peer has its own bound")
+
+        pending.first().cancel()
+        delay(100)
+        val again = launch { runCatching { client.get("coap://127.0.0.1:9/x") } }
+        delay(100)
+        assertEquals(3, client.endpoint.exchangeCount(), "a finished exchange frees its place")
+        (pending + elsewhere + again).forEach { it.cancel() }
+    }
+
+    @Test
+    fun exchangesInProgressOnAConnectionAreBoundedAndFreeTheirConnectionSlot() = runTest {
+        val fixture = ReliableFixture(this)
+        val gate = CompletableDeferred<Unit>()
+        val server = fixture.server {
+            resource("slow") {
+                get {
+                    gate.await()
+                    CoapResponse.content("done")
+                }
+            }
+        }
+        val config = CoapEndpointConfig {
+            maxExchangesPerPeer = 1
+            timeSource = testScheduler.timeSource
+            eventListener = EndpointEventListener { fixture.events += it }
+        }
+        val client = fixture.client(endpointConfig = config)
+        val first = async { client.get(fixture.uri("/slow")) }
+        delay(100)
+
+        val error = assertFailsWith<CoapException> { client.get(fixture.uri("/slow")) }
+        assertEquals(CoapException.Reason.IDENTIFIERS_EXHAUSTED, error.reason)
+        assertEquals(1, fixture.limits(Limit.EXCHANGES_PER_PEER))
+        gate.complete(Unit)
+        assertEquals("done", first.await().payloadAsText())
+        assertEquals("done", client.get(fixture.uri("/slow")).payloadAsText(), "the refused request left no count behind")
+        server.close()
+    }
+
+    private class Gauge(name: String) : ObservableResource(name) {
+        override suspend fun handleGet(context: RequestContext): CoapResponse = CoapResponse.content("1")
+    }
+
+    @Test
+    fun rfc7641Section4_1RegistrationsBeyondTheObserverBoundsAreServedWithoutObserve() = runTest {
+        val fixture = StackFixture(this)
+        val (a, b, c) = listOf(Gauge("a"), Gauge("b"), Gauge("c"))
+        val server = fixture.server(CoapServerConfig(maxObservers = 2, maxObserversPerResource = 1)) {
+            add(a)
+            add(b)
+            add(c)
+        }
+        val first = fixture.client()
+        val collectors = mutableListOf(launch { first.observe(fixture.uri(server, "/a")).collect() })
+        delay(1.seconds)
+        assertEquals(1, a.observerCount)
+
+        // A second observer of a: served once, without Observe, so the client's flow ends after it.
+        val second = fixture.client()
+        val plain = second.observe(fixture.uri(server, "/a")).toList()
+        assertEquals(listOf("1"), plain.map { it.payloadAsText() })
+        assertNull(plain.single().options.observe)
+        assertEquals(1, a.observerCount)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS_PER_RESOURCE))
+
+        collectors += launch { second.observe(fixture.uri(server, "/b")).collect() }
+        delay(1.seconds)
+        assertEquals(1, b.observerCount)
+        assertEquals(1, fixture.client().observe(fixture.uri(server, "/c")).toList().size)
+        assertEquals(0, c.observerCount)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS))
+        collectors.forEach { it.cancel() }
+    }
+
+    @Test
+    fun rfc7641Section4_1AReRegistrationReplacesItsObserverAndCountsOnce() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge("g")
+        val server = fixture.server(CoapServerConfig(maxObservers = 1, maxObserversPerResource = 1)) { add(gauge) }
+        val peer = fixture.transport()
+        val address = fixture.address(server.endpoint)
+
+        assertTrue(answerTo(peer, address, request(CoapMessageType.CON, 1, 9, "g", observe = 0))?.options?.observe != null)
+        assertTrue(answerTo(peer, address, request(CoapMessageType.CON, 2, 9, "g", observe = 0))?.options?.observe != null)
+        assertNull(answerTo(peer, address, request(CoapMessageType.CON, 3, 8, "g", observe = 0))?.options?.observe)
+        assertEquals(1, gauge.observerCount)
+    }
+
+    @Test
+    fun rfc7641Section4_1OneClientEndpointCannotTakeEveryObserverPlace() = runTest {
+        val fixture = StackFixture(this)
+        val (a, b) = listOf(Gauge("a"), Gauge("b"))
+        val server = fixture.server(CoapServerConfig(maxObserversPerPeer = 2)) {
+            add(a)
+            add(b)
+        }
+        val flooder = fixture.transport()
+        val other = fixture.transport()
+        val address = fixture.address(server.endpoint)
+
+        // One source registering with ever new tokens, across resources: the third is served without Observe.
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 1, 1, "a", observe = 0))?.options?.observe != null)
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 2, 2, "b", observe = 0))?.options?.observe != null)
+        val refused = answerTo(flooder, address, request(CoapMessageType.CON, 3, 3, "a", observe = 0))
+        assertEquals(CoapCode.CONTENT, refused?.code)
+        assertNull(refused?.options?.observe)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS_PER_PEER))
+        assertEquals(2, server.observations.count(flooder.localEndpoint))
+
+        // A re-registration replaces its observer without counting again; another client is not affected.
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 4, 1, "a", observe = 0))?.options?.observe != null)
+        assertTrue(answerTo(other, address, request(CoapMessageType.CON, 1, 1, "a", observe = 0))?.options?.observe != null)
+        assertEquals(2, a.observerCount)
+        assertEquals(1, fixture.limits(Limit.OBSERVERS_PER_PEER))
+
+        // A deregistration (RFC 7641 §3.6) gives the place back.
+        assertNull(answerTo(flooder, address, request(CoapMessageType.CON, 5, 2, "b", observe = 1))?.options?.observe)
+        assertEquals(1, server.observations.count(flooder.localEndpoint))
+        assertTrue(answerTo(flooder, address, request(CoapMessageType.CON, 6, 3, "b", observe = 0))?.options?.observe != null)
+        assertEquals(2, server.observations.count(flooder.localEndpoint))
+        server.close()
+        assertEquals(0, server.observations.count(flooder.localEndpoint), "closing forgets the counts")
+    }
+
+    @Test
+    fun rfc8323AcceptedConnectionsThatNeverSendACsmAreBounded() = runTest {
+        val fixture = ReliableFixture(this)
+        val reliable = ReliableTransportConfig(maxPendingConnections = 1)
+        val server = fixture.server(endpointConfig = fixture.endpointConfig(reliable = reliable)) {
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        val silent = fixture.connections.connector.connect(Endpoint.Tcp("127.0.0.1", 5683)) as InMemoryByteStream
+        delay(100)
+        val refused = fixture.connections.connector.connect(Endpoint.Tcp("127.0.0.1", 5683)) as InMemoryByteStream
+        delay(100)
+
+        assertTrue(refused.isClosed, "beyond the bound: closed at once")
+        assertTrue(!silent.isClosed, "the first one still has csmTimeout to send its CSM")
+        assertEquals(1, fixture.limits(Limit.PENDING_CONNECTIONS))
+        delay(11.seconds)
+        assertTrue(silent.isClosed, "aborted without a CSM (RFC 8323 §3.3)")
+        assertEquals("ok", fixture.client().get(fixture.uri("/r")).payloadAsText(), "the place came back")
+        server.close()
+    }
+
+    @Test
+    fun rfc8323EstablishedAcceptedConnectionsAreBoundedToo() = runTest {
+        val fixture = ReliableFixture(this)
+        val server = fixture.server(endpointConfig = fixture.endpointConfig(reliable = ReliableTransportConfig(maxConnections = 1))) {
+            resource("r") { get { CoapResponse.content("ok") } }
+        }
+        val first = fixture.client()
+        assertEquals("ok", first.get(fixture.uri("/r")).payloadAsText())
+
+        // Every source port is a peer of its own; one more established connection is one too many.
+        val refused = fixture.connections.connector.connect(Endpoint.Tcp("127.0.0.1", 5683)) as InMemoryByteStream
+        delay(100)
+        assertTrue(refused.isClosed, "beyond the bound: closed at once")
+        assertEquals(1, fixture.limits(Limit.CONNECTIONS))
+        assertEquals("ok", first.get(fixture.uri("/r")).payloadAsText(), "the connection within the bound keeps serving")
+
+        first.endpoint.close()
+        delay(1.seconds)
+        assertEquals("ok", fixture.client().get(fixture.uri("/r")).payloadAsText(), "the place came back")
+        server.close()
+    }
+
+    @Test
+    fun boundsMustAllowAtLeastOne() {
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntries = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxConcurrentRequests = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchangesPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxExchanges = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxDeduplicationEntriesPerPeer = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapEndpointConfig { maxReservedMessageIds = 0 } }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObservers = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerResource = 0) }
+        assertFailsWith<IllegalArgumentException> { CoapServerConfig(maxObserversPerPeer = 0) }
+        assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxPendingConnections = 0) }
+        assertFailsWith<IllegalArgumentException> { ReliableTransportConfig(maxConnections = 0) }
+        val defaults = CoapEndpointConfig.Default
+        assertEquals(50_000, defaults.maxDeduplicationEntries)
+        assertEquals(256, defaults.maxConcurrentRequests)
+        assertEquals(256, defaults.maxExchangesPerPeer)
+        assertEquals(10_000, CoapServerConfig().maxObservers)
+        assertEquals(1_000, CoapServerConfig().maxObserversPerResource)
+        assertEquals(32, CoapServerConfig().maxObserversPerPeer)
+        assertEquals(128, ReliableTransportConfig().maxPendingConnections)
+        assertEquals(1024, ReliableTransportConfig().maxConnections)
+    }
+}

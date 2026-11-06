@@ -1,0 +1,283 @@
+public abstract interface class dev/kcoap/crypto/Aead {
+	public abstract fun decrypt ([B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun encrypt ([B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getNonceLength ()I
+	public abstract fun getTagLength ()I
+}
+
+public final class dev/kcoap/crypto/AeadAlgorithm : java/lang/Enum {
+	public static final field A128GCM Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field A192GCM Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field A256GCM Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_16_128_128 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_16_128_256 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_16_64_128 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_16_64_256 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_64_128_128 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_64_128_256 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_64_64_128 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field AES_CCM_64_64_256 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field CHACHA20_POLY1305 Ldev/kcoap/crypto/AeadAlgorithm;
+	public static final field Companion Ldev/kcoap/crypto/AeadAlgorithm$Companion;
+	public final fun getCoseId ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKeyLength ()I
+	public final fun getNonceLength ()I
+	public final fun getTagLength ()I
+	public final fun isAesCcm ()Z
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/AeadAlgorithm;
+	public static fun values ()[Ldev/kcoap/crypto/AeadAlgorithm;
+}
+
+public final class dev/kcoap/crypto/AeadAlgorithm$Companion {
+	public final fun fromCoseId (I)Ldev/kcoap/crypto/AeadAlgorithm;
+}
+
+public final class dev/kcoap/crypto/AeadAuthenticationException : java/lang/Exception {
+	public fun <init> ()V
+}
+
+public abstract interface class dev/kcoap/crypto/AesBlockCipher {
+	public abstract fun encryptBlock ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/crypto/AesCcm : dev/kcoap/crypto/Aead {
+	public fun <init> (Ldev/kcoap/crypto/AesBlockCipher;II)V
+	public fun decrypt ([B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun encrypt ([B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getNonceLength ()I
+	public fun getTagLength ()I
+}
+
+public final class dev/kcoap/crypto/CertificateValidationException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public abstract interface class dev/kcoap/crypto/CertificateValidator {
+	public abstract fun validate (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/kcoap/crypto/CryptoBackend {
+	public fun aead (Ldev/kcoap/crypto/AeadAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun aesBlockCipher ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun decapsulate (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun digest (Ldev/kcoap/crypto/HashAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun encapsulate (Ldev/kcoap/crypto/KemAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun generateKeyPair (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun hmac (Ldev/kcoap/crypto/HashAlgorithm;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun importKeyPair (Ldev/kcoap/crypto/KeyType;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun keyAgreement (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun randomBytes (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun sign (Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun supports (Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun verify (Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/crypto/CryptoBackend$DefaultImpls {
+	public static fun aead (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/AeadAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun decapsulate (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun encapsulate (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KemAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun generateKeyPair (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun importKeyPair (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun keyAgreement (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun sign (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/KeyType;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun supports (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun verify (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/SignatureAlgorithm;[B[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/kcoap/crypto/EcdhCurve : java/lang/Enum {
+	public static final field Companion Ldev/kcoap/crypto/EcdhCurve$Companion;
+	public static final field P_256 Ldev/kcoap/crypto/EcdhCurve;
+	public static final field P_384 Ldev/kcoap/crypto/EcdhCurve;
+	public static final field X25519 Ldev/kcoap/crypto/EcdhCurve;
+	public static final field X448 Ldev/kcoap/crypto/EcdhCurve;
+	public final fun getCoseId ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKeyLength ()I
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/EcdhCurve;
+	public static fun values ()[Ldev/kcoap/crypto/EcdhCurve;
+}
+
+public final class dev/kcoap/crypto/EcdhCurve$Companion {
+	public final fun fromCoseId (I)Ldev/kcoap/crypto/EcdhCurve;
+}
+
+public final class dev/kcoap/crypto/EcdsaSignatureCodec {
+	public static final field INSTANCE Ldev/kcoap/crypto/EcdsaSignatureCodec;
+	public final fun fromDer (Ldev/kcoap/crypto/SignatureAlgorithm;[B)[B
+	public final fun toDer (Ldev/kcoap/crypto/SignatureAlgorithm;[B)[B
+}
+
+public final class dev/kcoap/crypto/HashAlgorithm : java/lang/Enum {
+	public static final field Companion Ldev/kcoap/crypto/HashAlgorithm$Companion;
+	public static final field SHAKE256 Ldev/kcoap/crypto/HashAlgorithm;
+	public static final field SHA_256 Ldev/kcoap/crypto/HashAlgorithm;
+	public static final field SHA_384 Ldev/kcoap/crypto/HashAlgorithm;
+	public final fun getCoseId ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getOutputLength ()I
+	public final fun isXof ()Z
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/HashAlgorithm;
+	public static fun values ()[Ldev/kcoap/crypto/HashAlgorithm;
+}
+
+public final class dev/kcoap/crypto/HashAlgorithm$Companion {
+	public final fun fromCoseId (I)Ldev/kcoap/crypto/HashAlgorithm;
+}
+
+public final class dev/kcoap/crypto/Hkdf {
+	public fun <init> (Ldev/kcoap/crypto/CryptoBackend;Ldev/kcoap/crypto/HashAlgorithm;)V
+	public final fun derive ([B[B[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun expand ([B[BILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun extract ([B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getAlgorithm ()Ldev/kcoap/crypto/HashAlgorithm;
+}
+
+public final class dev/kcoap/crypto/KemAlgorithm : java/lang/Enum {
+	public static final field ML_KEM_1024 Ldev/kcoap/crypto/KemAlgorithm;
+	public static final field ML_KEM_512 Ldev/kcoap/crypto/KemAlgorithm;
+	public static final field ML_KEM_768 Ldev/kcoap/crypto/KemAlgorithm;
+	public final fun getCiphertextLength ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getSharedSecretLength ()I
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/KemAlgorithm;
+	public static fun values ()[Ldev/kcoap/crypto/KemAlgorithm;
+}
+
+public final class dev/kcoap/crypto/KemEncapsulation {
+	public fun <init> ([B[B)V
+	public final fun destroy ()V
+	public final fun getCiphertext ()[B
+	public final fun sharedSecret ()[B
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/KeyPair {
+	public fun <init> ([BLdev/kcoap/crypto/PrivateKey;)V
+	public final fun getPrivateKey ()Ldev/kcoap/crypto/PrivateKey;
+	public final fun getPublicKey ()[B
+	public final fun getType ()Ldev/kcoap/crypto/KeyType;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/KeyType : java/lang/Enum {
+	public static final field ED25519 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_DSA_44 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_DSA_65 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_DSA_87 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_KEM_1024 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_KEM_512 Ldev/kcoap/crypto/KeyType;
+	public static final field ML_KEM_768 Ldev/kcoap/crypto/KeyType;
+	public static final field P256 Ldev/kcoap/crypto/KeyType;
+	public static final field P384 Ldev/kcoap/crypto/KeyType;
+	public static final field X25519 Ldev/kcoap/crypto/KeyType;
+	public static final field X448 Ldev/kcoap/crypto/KeyType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getExpandedPrivateKeyLength ()Ljava/lang/Integer;
+	public final fun getPublicKeyLength ()I
+	public final fun getSeedLength ()Ljava/lang/Integer;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/KeyType;
+	public static fun values ()[Ldev/kcoap/crypto/KeyType;
+}
+
+public final class dev/kcoap/crypto/Kmac256 {
+	public static final field INSTANCE Ldev/kcoap/crypto/Kmac256;
+	public final fun compute ([B[BI[B)[B
+	public static synthetic fun compute$default (Ldev/kcoap/crypto/Kmac256;[B[BI[BILjava/lang/Object;)[B
+}
+
+public abstract class dev/kcoap/crypto/PrivateKey {
+	protected fun <init> (Ldev/kcoap/crypto/KeyType;)V
+	public fun destroy ()V
+	public final fun getType ()Ldev/kcoap/crypto/KeyType;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/Sec1 {
+	public static final field INSTANCE Ldev/kcoap/crypto/Sec1;
+	public final fun decompress (Ldev/kcoap/crypto/KeyType;[B)[B
+	public final fun isCompressed ([B)Z
+}
+
+public final class dev/kcoap/crypto/Shake256 {
+	public static final field INSTANCE Ldev/kcoap/crypto/Shake256;
+	public final fun digest ([BI)[B
+}
+
+public final class dev/kcoap/crypto/SignatureAlgorithm : java/lang/Enum {
+	public static final field Companion Ldev/kcoap/crypto/SignatureAlgorithm$Companion;
+	public static final field EDDSA Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static final field ES256 Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static final field ES384 Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static final field ML_DSA_44 Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static final field ML_DSA_65 Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static final field ML_DSA_87 Ldev/kcoap/crypto/SignatureAlgorithm;
+	public final fun getCoseId ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getSignatureLength ()I
+	public final fun getTrLength ()Ljava/lang/Integer;
+	public static fun valueOf (Ljava/lang/String;)Ldev/kcoap/crypto/SignatureAlgorithm;
+	public static fun values ()[Ldev/kcoap/crypto/SignatureAlgorithm;
+}
+
+public final class dev/kcoap/crypto/SignatureAlgorithm$Companion {
+	public final fun fromCoseId (I)Ldev/kcoap/crypto/SignatureAlgorithm;
+}
+
+public final class dev/kcoap/crypto/SoftwarePrivateKey : dev/kcoap/crypto/PrivateKey {
+	public fun <init> (Ldev/kcoap/crypto/KeyType;[B)V
+	public fun destroy ()V
+	public final fun encoded ()[B
+}
+
+public final class dev/kcoap/crypto/UnsupportedAlgorithmException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getAlgorithm ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/CertificateFormatException : dev/kcoap/common/KcoapException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class dev/kcoap/crypto/x509/SubjectPublicKeyInfo {
+	public static final field Companion Ldev/kcoap/crypto/x509/SubjectPublicKeyInfo$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getPublicKey ()[B
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/SubjectPublicKeyInfo$Companion {
+	public final fun decode ([B)Ldev/kcoap/crypto/x509/SubjectPublicKeyInfo;
+}
+
+public final class dev/kcoap/crypto/x509/X509Certificate {
+	public static final field Companion Ldev/kcoap/crypto/x509/X509Certificate$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEncoded ()[B
+	public final fun getKeyType ()Ldev/kcoap/crypto/KeyType;
+	public final fun getPublicKey ()[B
+	public final fun getSubjectCommonName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/kcoap/crypto/x509/X509Certificate$Companion {
+	public final fun parse ([B)Ldev/kcoap/crypto/x509/X509Certificate;
+}
+

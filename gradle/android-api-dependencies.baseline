@@ -1,0 +1,112 @@
+# Uses of Java APIs that Android API level 26 (android-minSdk) lacks, in the libraries behind kcoap's jvm
+# artifacts, each triaged as safe in samples/android-consumer/README.md ("API level findings"): R8 drops
+# it, kcoap never reaches it, or the library guards it at runtime. checkAndroidApiDependencies, part of
+# check, fails on a use that is not listed here, so a library update cannot add one unseen.
+#
+# One use per line, as the task prints it: the jar without its version, the class file, the use. Before
+# adding a line, triage the use and record it in that table. Remove lines that no longer appear.
+
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: Object javax.naming.directory.Attribute.get()
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.NamingException
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.directory.Attribute
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.directory.Attribute javax.naming.directory.Attributes.get(String)
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.directory.Attributes
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.directory.Attributes javax.naming.directory.DirContext.getAttributes(String)
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: javax.naming.directory.InitialDirContext
+bcprov-jdk18on: org/bouncycastle/jce/provider/CrlCache.class: Undefined reference: void javax.naming.directory.InitialDirContext.<init>(java.util.Hashtable)
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: Object javax.naming.NamingEnumeration.next()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: boolean javax.naming.NamingEnumeration.hasMore()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: boolean javax.naming.NamingEnumeration.hasMoreElements()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.NamingEnumeration
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.Attribute.getAll()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.Attributes.getAll()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.DirContext.search(String, String, javax.naming.directory.SearchControls)
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.Attribute
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.Attributes
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.Attributes javax.naming.directory.SearchResult.getAttributes()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.DirContext
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.InitialDirContext
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.SearchControls
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: javax.naming.directory.SearchResult
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.DirContext.close()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.InitialDirContext.<init>(java.util.Hashtable)
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.SearchControls.<init>()
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.SearchControls.setCountLimit(long)
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.SearchControls.setReturningAttributes(String[])
+bcprov-jdk18on: org/bouncycastle/jce/provider/X509LDAPCertStoreSpi.class: Undefined reference: void javax.naming.directory.SearchControls.setSearchScope(int)
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: Object javax.naming.NamingEnumeration.next()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: boolean javax.naming.NamingEnumeration.hasMore()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: boolean javax.naming.NamingEnumeration.hasMoreElements()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.NamingEnumeration
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.Attribute.getAll()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.Attributes.getAll()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.NamingEnumeration javax.naming.directory.DirContext.search(String, String, javax.naming.directory.SearchControls)
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.NamingException
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.Attribute
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.Attributes
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.Attributes javax.naming.directory.SearchResult.getAttributes()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.DirContext
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.InitialDirContext
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.SearchControls
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: javax.naming.directory.SearchResult
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.DirContext.close()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.InitialDirContext.<init>(java.util.Hashtable)
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.SearchControls.<init>()
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.SearchControls.setCountLimit(long)
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.SearchControls.setReturningAttributes(String[])
+bcprov-jdk18on: org/bouncycastle/x509/util/LDAPStoreHelper.class: Undefined reference: void javax.naming.directory.SearchControls.setSearchScope(int)
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: String java.beans.PropertyDescriptor.getName()
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.beans.BeanInfo
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.beans.BeanInfo java.beans.Introspector.getBeanInfo(Class)
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.beans.IntrospectionException
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.beans.PropertyDescriptor
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.beans.PropertyDescriptor[] java.beans.BeanInfo.getPropertyDescriptors()
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.lang.reflect.Method java.beans.PropertyDescriptor.getReadMethod()
+config: com/typesafe/config/impl/ConfigBeanImpl.class: Undefined reference: java.lang.reflect.Method java.beans.PropertyDescriptor.getWriteMethod()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/algorithms/JdkDsa$DsaParametersGenerator.class: Undefined reference: java.security.spec.DSAGenParameterSpec
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/algorithms/JdkDsa$DsaParametersGenerator.class: Undefined reference: void java.security.spec.DSAGenParameterSpec.<init>(int, int)
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: byte[] org.bouncycastle.crypto.params.Ed25519PublicKeyParameters.getEncoded()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: byte[] org.bouncycastle.crypto.params.Ed448PublicKeyParameters.getEncoded()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: byte[] org.bouncycastle.crypto.params.X25519PublicKeyParameters.getEncoded()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: byte[] org.bouncycastle.crypto.params.X448PublicKeyParameters.getEncoded()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: java.math.BigInteger org.bouncycastle.math.ec.ECFieldElement.toBigInteger()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: java.security.interfaces.EdECPrivateKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: java.security.interfaces.XECPrivateKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: java.util.Optional java.security.interfaces.EdECPrivateKey.getBytes()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: java.util.Optional java.security.interfaces.XECPrivateKey.getScalar()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed25519PublicKeyParameters org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters.generatePublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed448PrivateKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed448PublicKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.Ed448PublicKeyParameters org.bouncycastle.crypto.params.Ed448PrivateKeyParameters.generatePublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X25519PrivateKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X25519PublicKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X25519PublicKeyParameters org.bouncycastle.crypto.params.X25519PrivateKeyParameters.generatePublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X448PrivateKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X448PublicKeyParameters
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.crypto.params.X448PublicKeyParameters org.bouncycastle.crypto.params.X448PrivateKeyParameters.generatePublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.EdDSAPrivateKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.EdDSAPublicKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.EdDSAPublicKey org.bouncycastle.jcajce.interfaces.EdDSAPrivateKey.getPublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.XDHPrivateKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.XDHPublicKey
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jcajce.interfaces.XDHPublicKey org.bouncycastle.jcajce.interfaces.XDHPrivateKey.getPublicKey()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jce.spec.ECNamedCurveParameterSpec
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.jce.spec.ECNamedCurveParameterSpec org.bouncycastle.jce.ECNamedCurveTable.getParameterSpec(String)
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECFieldElement
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECFieldElement org.bouncycastle.math.ec.ECPoint.getAffineXCoord()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECFieldElement org.bouncycastle.math.ec.ECPoint.getAffineYCoord()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECPoint
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECPoint org.bouncycastle.jce.spec.ECNamedCurveParameterSpec.getG()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECPoint org.bouncycastle.math.ec.ECPoint.multiply(java.math.BigInteger)
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: org.bouncycastle.math.ec.ECPoint org.bouncycastle.math.ec.ECPoint.normalize()
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: void org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters.<init>(byte[])
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: void org.bouncycastle.crypto.params.Ed448PrivateKeyParameters.<init>(byte[])
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: void org.bouncycastle.crypto.params.X25519PrivateKeyParameters.<init>(byte[])
+cryptography-provider-jdk-jvm: dev/whyoleg/cryptography/providers/jdk/internal/BouncyCastleBridge.class: Undefined reference: void org.bouncycastle.crypto.params.X448PrivateKeyParameters.<init>(byte[])
+kotlin-reflect: kotlin/reflect/jvm/internal/ComputableClassValue.class: Undefined reference: void ClassValue.<init>()
+kotlinx-serialization-core-jvm: kotlinx/serialization/internal/ClassValueReferences.class: Undefined reference: void ClassValue.<init>()
+ktor-utils-jvm: io/ktor/util/debug/IntellijIdeaDebugDetector.class: Undefined reference: java.lang.management.RuntimeMXBean
+ktor-utils-jvm: io/ktor/util/debug/IntellijIdeaDebugDetector.class: Undefined reference: java.lang.management.RuntimeMXBean java.lang.management.ManagementFactory.getRuntimeMXBean()
+ktor-utils-jvm: io/ktor/util/debug/IntellijIdeaDebugDetector.class: Undefined reference: java.util.List java.lang.management.RuntimeMXBean.getInputArguments()

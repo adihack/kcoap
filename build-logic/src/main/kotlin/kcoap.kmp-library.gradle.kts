@@ -1,44 +1,21 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
-// Shared configuration for every kcoap library module.
+// Tier UNIVERSAL: every kcoap module that runs on all platforms, that is the core modules and the
+// adapters whose library builds for every target (docs/target-architecture.md §2.1).
 //
 // Targets:
-//  - jvm: used by both server-side JVM and Android consumers. The protocol code is pure Kotlin and the
-//    default crypto backend goes through JCA, so a separate Android target is not needed yet.
-//  - iosArm64 / iosSimulatorArm64: the iOS deliverable (XCFramework later).
+//  - jvm: server-side JVM and Android. The protocol code is pure Kotlin and the default crypto backend
+//    goes through JCA, so a separate Android target is not needed yet.
+//  - iosArm64 / iosSimulatorArm64: iPhone apps, through the app's own Kotlin framework; a prebuilt
+//    XCFramework for Swift-only apps comes from a facade module (roadmap E4, docs/adr/0016).
 //  - macosArm64: lets CI run native tests on a macOS host without booting a simulator.
+//  - linuxX64: Linux gateways; runs the common tests as native code on Linux CI.
+//  - js / wasmJs: browsers and Node.js, with WebCrypto under the default crypto backend.
+//
+// The module is published, with ABI dumps of its public API, unless kcoap.unpublished comes first.
+// Core modules also apply kcoap.core, which keeps their main code in commonMain.
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlinx.kover")
 }
 
-group = providers.gradleProperty("kcoap.group").get()
-version = providers.gradleProperty("kcoap.version").get()
-
-kotlin {
-    explicitApi()
-
-    jvm {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-            freeCompilerArgs.add("-Xjdk-release=17")
-        }
-    }
-    iosArm64()
-    iosSimulatorArm64()
-    macosArm64()
-
-    sourceSets {
-        commonTest.dependencies {
-            implementation(kotlin("test"))
-        }
-    }
-}
-
-tasks.withType<JavaCompile>().configureEach {
-    options.release.set(17)
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
-}
+configureKcoapLibrary(KcoapTargets.UNIVERSAL)
