@@ -1,0 +1,188 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
+// Alias: native => [iosArm64, iosSimulatorArm64, linuxX64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <dev.kcoap:kcoap-crypto-testsuite>
+abstract class dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest { // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest|null[0]
+    constructor <init>() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.<init>|<init>(){}[0]
+
+    abstract fun createBackend(): dev.kcoap.crypto/CryptoBackend // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.createBackend|createBackend(){}[0]
+    open fun backendName(dev.kcoap.crypto/CryptoBackend): kotlin/String // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.backendName|backendName(dev.kcoap.crypto.CryptoBackend){}[0]
+
+    // Targets: [native]
+    final fun everyAeadRunsExactlyWhenSupported() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyAeadRunsExactlyWhenSupported|everyAeadRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [native]
+    final fun everyHashRunsExactlyWhenSupported() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyHashRunsExactlyWhenSupported|everyHashRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [native]
+    final fun everyKemRunsExactlyWhenSupported() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyKemRunsExactlyWhenSupported|everyKemRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [native]
+    final fun everyKeyTypeRunsExactlyWhenSupported() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyKeyTypeRunsExactlyWhenSupported|everyKeyTypeRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [native]
+    final fun everySignatureAlgorithmRunsExactlyWhenSupported() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everySignatureAlgorithmRunsExactlyWhenSupported|everySignatureAlgorithmRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [native]
+    final fun theCapabilityReportAnswersEveryQuestion() // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.theCapabilityReportAnswersEveryQuestion|theCapabilityReportAnswersEveryQuestion(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun everyAeadRunsExactlyWhenSupported(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyAeadRunsExactlyWhenSupported|everyAeadRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun everyHashRunsExactlyWhenSupported(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyHashRunsExactlyWhenSupported|everyHashRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun everyKemRunsExactlyWhenSupported(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyKemRunsExactlyWhenSupported|everyKemRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun everyKeyTypeRunsExactlyWhenSupported(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everyKeyTypeRunsExactlyWhenSupported|everyKeyTypeRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun everySignatureAlgorithmRunsExactlyWhenSupported(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.everySignatureAlgorithmRunsExactlyWhenSupported|everySignatureAlgorithmRunsExactlyWhenSupported(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun theCapabilityReportAnswersEveryQuestion(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/CryptoBackendConformanceTest.theCapabilityReportAnswersEveryQuestion|theCapabilityReportAnswersEveryQuestion(){}[0]
+}
+
+abstract class dev.kcoap.crypto.testsuite/MlDsaConformanceTest { // dev.kcoap.crypto.testsuite/MlDsaConformanceTest|null[0]
+    constructor <init>() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.<init>|<init>(){}[0]
+
+    abstract fun createBackend(): dev.kcoap.crypto/CryptoBackend // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.createBackend|createBackend(){}[0]
+    abstract fun createBackend(dev.kcoap.crypto.testsuite/ScriptedRandom): dev.kcoap.crypto/CryptoBackend // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.createBackend|createBackend(dev.kcoap.crypto.testsuite.ScriptedRandom){}[0]
+
+    // Targets: [native]
+    final fun fips204KeyGenMatchesAcvpVectors() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204KeyGenMatchesAcvpVectors|fips204KeyGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [native]
+    final fun fips204SeedAndExpandedPrivateKeyAgree() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SeedAndExpandedPrivateKeyAgree|fips204SeedAndExpandedPrivateKeyAgree(){}[0]
+
+    // Targets: [native]
+    final fun fips204SigGenMatchesAcvpVectors() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SigGenMatchesAcvpVectors|fips204SigGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [native]
+    final fun fips204SigVerMatchesAcvpVectors() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SigVerMatchesAcvpVectors|fips204SigVerMatchesAcvpVectors(){}[0]
+
+    // Targets: [native]
+    final fun fips204VerifyRejectsModifiedAndMalformedSignatures() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204VerifyRejectsModifiedAndMalformedSignatures|fips204VerifyRejectsModifiedAndMalformedSignatures(){}[0]
+
+    // Targets: [native]
+    final fun importChecksThatThePrivateKeyBelongsToThePublicKey() // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.importChecksThatThePrivateKeyBelongsToThePublicKey|importChecksThatThePrivateKeyBelongsToThePublicKey(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips204KeyGenMatchesAcvpVectors(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204KeyGenMatchesAcvpVectors|fips204KeyGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips204SeedAndExpandedPrivateKeyAgree(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SeedAndExpandedPrivateKeyAgree|fips204SeedAndExpandedPrivateKeyAgree(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips204SigGenMatchesAcvpVectors(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SigGenMatchesAcvpVectors|fips204SigGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips204SigVerMatchesAcvpVectors(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204SigVerMatchesAcvpVectors|fips204SigVerMatchesAcvpVectors(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips204VerifyRejectsModifiedAndMalformedSignatures(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.fips204VerifyRejectsModifiedAndMalformedSignatures|fips204VerifyRejectsModifiedAndMalformedSignatures(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun importChecksThatThePrivateKeyBelongsToThePublicKey(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlDsaConformanceTest.importChecksThatThePrivateKeyBelongsToThePublicKey|importChecksThatThePrivateKeyBelongsToThePublicKey(){}[0]
+}
+
+abstract class dev.kcoap.crypto.testsuite/MlKemConformanceTest { // dev.kcoap.crypto.testsuite/MlKemConformanceTest|null[0]
+    constructor <init>() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.<init>|<init>(){}[0]
+
+    abstract fun createBackend(): dev.kcoap.crypto/CryptoBackend // dev.kcoap.crypto.testsuite/MlKemConformanceTest.createBackend|createBackend(){}[0]
+    abstract fun createBackend(dev.kcoap.crypto.testsuite/ScriptedRandom): dev.kcoap.crypto/CryptoBackend // dev.kcoap.crypto.testsuite/MlKemConformanceTest.createBackend|createBackend(dev.kcoap.crypto.testsuite.ScriptedRandom){}[0]
+
+    // Targets: [native]
+    final fun fips203EncapsulationMatchesAcvpVectors() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203EncapsulationMatchesAcvpVectors|fips203EncapsulationMatchesAcvpVectors(){}[0]
+
+    // Targets: [native]
+    final fun fips203HashCheckRejectsAcvpDecapsulationKey() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203HashCheckRejectsAcvpDecapsulationKey|fips203HashCheckRejectsAcvpDecapsulationKey(){}[0]
+
+    // Targets: [native]
+    final fun fips203ImplicitRejectionMatchesAcvpVector() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203ImplicitRejectionMatchesAcvpVector|fips203ImplicitRejectionMatchesAcvpVector(){}[0]
+
+    // Targets: [native]
+    final fun fips203KeyGenMatchesAcvpVectors() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203KeyGenMatchesAcvpVectors|fips203KeyGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [native]
+    final fun fips203ModulusCheckRejectsAcvpEncapsulationKey() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203ModulusCheckRejectsAcvpEncapsulationKey|fips203ModulusCheckRejectsAcvpEncapsulationKey(){}[0]
+
+    // Targets: [native]
+    final fun fips203SeedAndExpandedDecapsulationKeyAgree() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203SeedAndExpandedDecapsulationKeyAgree|fips203SeedAndExpandedDecapsulationKeyAgree(){}[0]
+
+    // Targets: [native]
+    final fun importRejectsADecapsulationKeyOfAnotherEncapsulationKey() // dev.kcoap.crypto.testsuite/MlKemConformanceTest.importRejectsADecapsulationKeyOfAnotherEncapsulationKey|importRejectsADecapsulationKeyOfAnotherEncapsulationKey(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203EncapsulationMatchesAcvpVectors(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203EncapsulationMatchesAcvpVectors|fips203EncapsulationMatchesAcvpVectors(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203HashCheckRejectsAcvpDecapsulationKey(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203HashCheckRejectsAcvpDecapsulationKey|fips203HashCheckRejectsAcvpDecapsulationKey(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203ImplicitRejectionMatchesAcvpVector(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203ImplicitRejectionMatchesAcvpVector|fips203ImplicitRejectionMatchesAcvpVector(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203KeyGenMatchesAcvpVectors(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203KeyGenMatchesAcvpVectors|fips203KeyGenMatchesAcvpVectors(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203ModulusCheckRejectsAcvpEncapsulationKey(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203ModulusCheckRejectsAcvpEncapsulationKey|fips203ModulusCheckRejectsAcvpEncapsulationKey(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun fips203SeedAndExpandedDecapsulationKeyAgree(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.fips203SeedAndExpandedDecapsulationKeyAgree|fips203SeedAndExpandedDecapsulationKeyAgree(){}[0]
+
+    // Targets: [js, wasmJs]
+    final fun importRejectsADecapsulationKeyOfAnotherEncapsulationKey(): kotlinx.coroutines.test.internal/JsPromiseInterfaceForTesting // dev.kcoap.crypto.testsuite/MlKemConformanceTest.importRejectsADecapsulationKeyOfAnotherEncapsulationKey|importRejectsADecapsulationKeyOfAnotherEncapsulationKey(){}[0]
+}
+
+final class dev.kcoap.crypto.testsuite/CapabilityReport { // dev.kcoap.crypto.testsuite/CapabilityReport|null[0]
+    final val supported // dev.kcoap.crypto.testsuite/CapabilityReport.supported|{}supported[0]
+        final fun <get-supported>(): kotlin.collections/List<kotlin/Enum<*>> // dev.kcoap.crypto.testsuite/CapabilityReport.supported.<get-supported>|<get-supported>(){}[0]
+    final val unsupported // dev.kcoap.crypto.testsuite/CapabilityReport.unsupported|{}unsupported[0]
+        final fun <get-unsupported>(): kotlin.collections/List<kotlin/Enum<*>> // dev.kcoap.crypto.testsuite/CapabilityReport.unsupported.<get-unsupported>|<get-unsupported>(){}[0]
+
+    final fun lines(kotlin/String): kotlin.collections/List<kotlin/String> // dev.kcoap.crypto.testsuite/CapabilityReport.lines|lines(kotlin.String){}[0]
+    final fun toString(): kotlin/String // dev.kcoap.crypto.testsuite/CapabilityReport.toString|toString(){}[0]
+
+    final object Companion { // dev.kcoap.crypto.testsuite/CapabilityReport.Companion|null[0]
+        final const val LINE_PREFIX // dev.kcoap.crypto.testsuite/CapabilityReport.Companion.LINE_PREFIX|{}LINE_PREFIX[0]
+            final fun <get-LINE_PREFIX>(): kotlin/String // dev.kcoap.crypto.testsuite/CapabilityReport.Companion.LINE_PREFIX.<get-LINE_PREFIX>|<get-LINE_PREFIX>(){}[0]
+
+        final suspend fun of(dev.kcoap.crypto/CryptoBackend): dev.kcoap.crypto.testsuite/CapabilityReport // dev.kcoap.crypto.testsuite/CapabilityReport.Companion.of|of(dev.kcoap.crypto.CryptoBackend){}[0]
+    }
+}
+
+final class dev.kcoap.crypto.testsuite/CapabilityViolation { // dev.kcoap.crypto.testsuite/CapabilityViolation|null[0]
+    final val answer // dev.kcoap.crypto.testsuite/CapabilityViolation.answer|{}answer[0]
+        final fun <get-answer>(): kotlin/Boolean // dev.kcoap.crypto.testsuite/CapabilityViolation.answer.<get-answer>|<get-answer>(){}[0]
+    final val problem // dev.kcoap.crypto.testsuite/CapabilityViolation.problem|{}problem[0]
+        final fun <get-problem>(): kotlin/String // dev.kcoap.crypto.testsuite/CapabilityViolation.problem.<get-problem>|<get-problem>(){}[0]
+    final val question // dev.kcoap.crypto.testsuite/CapabilityViolation.question|{}question[0]
+        final fun <get-question>(): kotlin/Enum<*> // dev.kcoap.crypto.testsuite/CapabilityViolation.question.<get-question>|<get-question>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.crypto.testsuite/CapabilityViolation.toString|toString(){}[0]
+}
+
+final class dev.kcoap.crypto.testsuite/ScriptedRandom { // dev.kcoap.crypto.testsuite/ScriptedRandom|null[0]
+    constructor <init>(kotlin/Array<out kotlin/ByteArray>...) // dev.kcoap.crypto.testsuite/ScriptedRandom.<init>|<init>(kotlin.Array<out|kotlin.ByteArray>...){}[0]
+
+    final val remaining // dev.kcoap.crypto.testsuite/ScriptedRandom.remaining|{}remaining[0]
+        final fun <get-remaining>(): kotlin/Int // dev.kcoap.crypto.testsuite/ScriptedRandom.remaining.<get-remaining>|<get-remaining>(){}[0]
+
+    final fun next(kotlin/Int): kotlin/ByteArray // dev.kcoap.crypto.testsuite/ScriptedRandom.next|next(kotlin.Int){}[0]
+}
+
+final object dev.kcoap.crypto.testsuite/CapabilityInvariant { // dev.kcoap.crypto.testsuite/CapabilityInvariant|null[0]
+    final val questions // dev.kcoap.crypto.testsuite/CapabilityInvariant.questions|{}questions[0]
+        final fun <get-questions>(): kotlin.collections/List<kotlin/Enum<*>> // dev.kcoap.crypto.testsuite/CapabilityInvariant.questions.<get-questions>|<get-questions>(){}[0]
+
+    final suspend fun check(dev.kcoap.crypto/CryptoBackend, kotlin/Enum<*>): dev.kcoap.crypto.testsuite/CapabilityViolation? // dev.kcoap.crypto.testsuite/CapabilityInvariant.check|check(dev.kcoap.crypto.CryptoBackend;kotlin.Enum<*>){}[0]
+    final suspend fun violations(dev.kcoap.crypto/CryptoBackend): kotlin.collections/List<dev.kcoap.crypto.testsuite/CapabilityViolation> // dev.kcoap.crypto.testsuite/CapabilityInvariant.violations|violations(dev.kcoap.crypto.CryptoBackend){}[0]
+}

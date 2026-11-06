@@ -119,8 +119,12 @@ final enum class dev.kcoap.crypto/KeyType : kotlin/Enum<dev.kcoap.crypto/KeyType
 
     final val entries // dev.kcoap.crypto/KeyType.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<dev.kcoap.crypto/KeyType> // dev.kcoap.crypto/KeyType.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val expandedPrivateKeyLength // dev.kcoap.crypto/KeyType.expandedPrivateKeyLength|{}expandedPrivateKeyLength[0]
+        final fun <get-expandedPrivateKeyLength>(): kotlin/Int? // dev.kcoap.crypto/KeyType.expandedPrivateKeyLength.<get-expandedPrivateKeyLength>|<get-expandedPrivateKeyLength>(){}[0]
     final val publicKeyLength // dev.kcoap.crypto/KeyType.publicKeyLength|{}publicKeyLength[0]
         final fun <get-publicKeyLength>(): kotlin/Int // dev.kcoap.crypto/KeyType.publicKeyLength.<get-publicKeyLength>|<get-publicKeyLength>(){}[0]
+    final val seedLength // dev.kcoap.crypto/KeyType.seedLength|{}seedLength[0]
+        final fun <get-seedLength>(): kotlin/Int? // dev.kcoap.crypto/KeyType.seedLength.<get-seedLength>|<get-seedLength>(){}[0]
 
     final fun valueOf(kotlin/String): dev.kcoap.crypto/KeyType // dev.kcoap.crypto/KeyType.valueOf|valueOf#static(kotlin.String){}[0]
     final fun values(): kotlin/Array<dev.kcoap.crypto/KeyType> // dev.kcoap.crypto/KeyType.values|values#static(){}[0]
@@ -142,6 +146,8 @@ final enum class dev.kcoap.crypto/SignatureAlgorithm : kotlin/Enum<dev.kcoap.cry
         final fun <get-keyType>(): dev.kcoap.crypto/KeyType // dev.kcoap.crypto/SignatureAlgorithm.keyType.<get-keyType>|<get-keyType>(){}[0]
     final val signatureLength // dev.kcoap.crypto/SignatureAlgorithm.signatureLength|{}signatureLength[0]
         final fun <get-signatureLength>(): kotlin/Int // dev.kcoap.crypto/SignatureAlgorithm.signatureLength.<get-signatureLength>|<get-signatureLength>(){}[0]
+    final val trLength // dev.kcoap.crypto/SignatureAlgorithm.trLength|{}trLength[0]
+        final fun <get-trLength>(): kotlin/Int? // dev.kcoap.crypto/SignatureAlgorithm.trLength.<get-trLength>|<get-trLength>(){}[0]
 
     final fun valueOf(kotlin/String): dev.kcoap.crypto/SignatureAlgorithm // dev.kcoap.crypto/SignatureAlgorithm.valueOf|valueOf#static(kotlin.String){}[0]
     final fun values(): kotlin/Array<dev.kcoap.crypto/SignatureAlgorithm> // dev.kcoap.crypto/SignatureAlgorithm.values|values#static(){}[0]
