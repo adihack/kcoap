@@ -7,6 +7,7 @@ import dev.kcoap.crypto.HashAlgorithm
 import dev.kcoap.crypto.KemAlgorithm
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.SignatureAlgorithm
+import dev.kcoap.crypto.backend.DefaultCryptoBackend
 import dev.kcoap.crypto.bc.BouncyCastleCryptoBackend
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -21,7 +22,7 @@ import kotlin.test.assertTrue
  * TBD3, with credentials as CCS (AKP COSE_Key) and as ML-DSA X.509 chains.
  */
 class PostQuantumBouncyCastleTest {
-    private val backend = BouncyCastleCryptoBackend()
+    private val backend = BouncyCastleCryptoBackend(DefaultCryptoBackend())
 
     private val mlKem1024Suite = CipherSuite(
         -23, AeadAlgorithm.A256GCM, HashAlgorithm.SHA_384, 16, KeyExchangeAlgorithm.Kem(KemAlgorithm.ML_KEM_1024),

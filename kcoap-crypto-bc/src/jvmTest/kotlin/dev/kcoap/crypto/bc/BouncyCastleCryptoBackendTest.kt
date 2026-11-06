@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 
 /** Round trips, input checks, delegation and key hygiene of [BouncyCastleCryptoBackend]. */
 class BouncyCastleCryptoBackendTest {
-    private val backend = BouncyCastleCryptoBackend()
+    private val backend = BouncyCastleCryptoBackend(DefaultCryptoBackend())
     private val data = "EDHOC message_2".encodeToByteArray()
     private val mlDsa = listOf(SignatureAlgorithm.ML_DSA_44, SignatureAlgorithm.ML_DSA_65, SignatureAlgorithm.ML_DSA_87)
 
@@ -130,7 +130,7 @@ class BouncyCastleCryptoBackendTest {
     /** FIPS 204 §3.4: hedged signing draws a fresh `rnd` for every signature; the deterministic variant repeats. */
     @Test
     fun hedgedSignaturesDifferAndDeterministicOnesRepeat() = runTest {
-        val deterministic = BouncyCastleCryptoBackend(isSigningDeterministic = true)
+        val deterministic = BouncyCastleCryptoBackend(DefaultCryptoBackend(), isSigningDeterministic = true)
         val key = backend.generateKeyPair(KeyType.ML_DSA_44).privateKey
         val algorithm = SignatureAlgorithm.ML_DSA_44
 
@@ -143,7 +143,7 @@ class BouncyCastleCryptoBackendTest {
     fun deterministicSigningIsHedgedSigningWithZeroRnd() = runTest {
         val random = ScriptedRandomBackend(ByteArray(MlDsa.RND_LENGTH))
         val hedged = BouncyCastleCryptoBackend(random)
-        val deterministic = BouncyCastleCryptoBackend(isSigningDeterministic = true)
+        val deterministic = BouncyCastleCryptoBackend(DefaultCryptoBackend(), isSigningDeterministic = true)
         val key = backend.generateKeyPair(KeyType.ML_DSA_65).privateKey
 
         val signature = hedged.sign(SignatureAlgorithm.ML_DSA_65, key, data)
