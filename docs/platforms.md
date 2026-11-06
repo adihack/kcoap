@@ -94,7 +94,7 @@ the suite's AEADs, hashes, key exchange and, for a method where a side signs, it
 | AES-CCM (all eight COSE variants), AES-GCM 128/192/256 | yes | yes | yes | yes | CI only | yes, but no 192-bit AES keys in Chromium | not run yet |
 | ChaCha20/Poly1305 | yes | yes | yes | **no** | CI only | **no** (WebCrypto has none) | not run yet |
 | X25519, Ed25519; P-256, P-384 | yes | yes | yes | yes | CI only | P-256 and P-384 yes; X25519 and Ed25519 in current browsers only | not run yet |
-| ML-KEM-512/768/1024, ML-DSA-44/65/87 | no | **yes** | no | no | no | no | with `kcoap-crypto-bc` |
+| ML-KEM-512/768/1024, ML-DSA-44/65/87 | no | **yes** | no | no | CI only | no | with `kcoap-crypto-bc` |
 | SHA-256, SHA-384, SHAKE256 | yes | yes | yes | yes | CI only | yes | not run yet |
 | **EDHOC suites** | 0–6, 24 | 0–6, 24, -24 | 0–6, 24 | 0–3, 6, 24 | CI only | 0–3, 6 and 24 where X25519 and Ed25519 exist, else 2, 3 and 24 | not run yet; -24 with `kcoap-crypto-bc` |
 
