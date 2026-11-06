@@ -31,7 +31,9 @@ import kotlinx.coroutines.sync.withLock
  * client.get("coap+tcp://127.0.0.1:5683/hello")
  * ```
  *
- * TLS is not simulated; a listener only reports the identities it was given.
+ * TLS is not simulated; a listener only reports the identities it was given. The connector lists `coaps+tcp` and
+ * `coaps+ws` as a connector that runs TLS does, so a CoAP client sends such URIs to it (RFC 8323 §9): it stands in
+ * for TLS in tests and must never carry real traffic.
  */
 public class InMemoryConnections(private val chunkSize: Int = Int.MAX_VALUE) {
     private val lock = Mutex()

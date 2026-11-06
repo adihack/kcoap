@@ -119,13 +119,18 @@ public interface MessageConnection : Connection {
  * request needs a connection to a peer it has none to, and closes it when the endpoint closes.
  */
 public interface Connector {
-    /** The schemes whose endpoints [connect] accepts. */
+    /**
+     * The schemes whose endpoints [connect] accepts. Listing `coaps+tcp` or `coaps+ws` is the connector's word that
+     * its connections for them run TLS (RFC 8323 §9): a CoAP client sends to such a URI only when a connector or
+     * listener of its endpoint serves the scheme.
+     */
     public val schemes: Set<CoapScheme>
 
     /**
      * Opens a connection to [peer], whose [Connection.remote] is [peer]. A WebSocket connector includes
      * the opening handshake with the subprotocol `coap` at `/.well-known/coap` (RFC 8323 §4.1, §8.3);
-     * a TLS connector the handshake, offering ALPN [CoapScheme.ALPN] (RFC 8323 §8.2).
+     * a TLS connector the handshake, offering ALPN [CoapScheme.ALPN] where its TLS stack can (RFC 8323 §8.2
+     * requires it on every port but 5684).
      *
      * @throws IllegalArgumentException for an endpoint of a scheme not in [schemes].
      * @throws Exception of the transport's own kind when the connection cannot be opened.
@@ -141,7 +146,7 @@ public interface Connector {
  * `/.well-known/coap` that requires the subprotocol `coap` (RFC 8323 §4.1).
  */
 public interface ConnectionListener {
-    /** The scheme of the accepted connections. */
+    /** The scheme of the accepted connections; `coaps+tcp` or `coaps+ws` only when they run TLS (RFC 8323 §9). */
     public val scheme: CoapScheme
 
     /** The next connection, or null once the listener is closed. */

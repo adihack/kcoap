@@ -7,6 +7,7 @@ import dev.kcoap.coap.security.ClientMessageSecurity
 import dev.kcoap.coap.security.ProtectedRequest
 import dev.kcoap.common.toHex
 import dev.kcoap.log.LogTags
+import dev.kcoap.transport.CoapScheme
 import dev.kcoap.transport.ConnectionListener
 import dev.kcoap.transport.Connector
 import dev.kcoap.transport.DatagramTransport
@@ -212,6 +213,12 @@ public class CoapEndpoint private constructor(
         is Endpoint.Tcp, is Endpoint.WebSocket -> true
         is Endpoint.Udp, is Endpoint.Secure, is Endpoint.Opaque -> false
     }
+
+    /**
+     * Whether a connector or listener of this endpoint serves [scheme], an RFC 8323 scheme; for `coaps+tcp` and
+     * `coaps+ws`, whether one of them runs TLS.
+     */
+    internal fun servesConnections(scheme: CoapScheme): Boolean = connections.serves(scheme)
 
     /** What the link to [peer] can do, known without opening it. */
     internal fun capabilities(peer: Endpoint): LinkCapabilities =

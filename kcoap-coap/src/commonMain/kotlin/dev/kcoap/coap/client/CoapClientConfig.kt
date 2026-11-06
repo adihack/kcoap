@@ -228,7 +228,11 @@ public enum class ObserveCancellation {
  * `withTimeout` while the caller is still active; only the caller's own cancellation passes as one.
  *
  * A [CoapClient] does not resolve `coaps` URIs: without DTLS (RFC 7252 §9.1) it fails such a call with
- * [CoapException.Reason.TRANSPORT_UNAVAILABLE] before the resolver runs.
+ * [CoapException.Reason.TRANSPORT_UNAVAILABLE] before the resolver runs. Nor does it resolve a `coaps+tcp` or
+ * `coaps+ws` URI unless a connector or listener of its endpoint runs TLS for that scheme, and it fails a call
+ * whose `coaps+tcp` or `coaps+ws` URI the resolver maps to a peer not reached over TLS (an [Endpoint.Tcp] or
+ * [Endpoint.WebSocket] without `usesTls`, or a datagram endpoint) the same way, before anything is sent
+ * (RFC 8323 §9).
  */
 public fun interface EndpointResolver {
     /**

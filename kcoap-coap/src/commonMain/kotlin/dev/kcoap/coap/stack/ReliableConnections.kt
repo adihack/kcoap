@@ -55,6 +55,13 @@ internal class ReliableConnections(
     /** The schemes this endpoint can open connections for. */
     val schemes: Set<CoapScheme> = connectors.flatMap { it.schemes }.toSet()
 
+    /**
+     * Whether a connector or a listener of this endpoint serves [scheme]. For `coaps+tcp` and `coaps+ws` that is
+     * the transport's word that it runs TLS: a [Connector] lists, and a [ConnectionListener] reports, a TLS scheme
+     * only when its connections are secured.
+     */
+    fun serves(scheme: CoapScheme): Boolean = scheme in schemes || listeners.any { it.scheme == scheme }
+
     fun start() {
         for (listener in listeners) scope.launch(CoroutineName("coap-accept-${listener.scheme.scheme}")) { acceptLoop(listener) }
     }
