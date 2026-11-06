@@ -66,7 +66,8 @@ nothing that needs a new download. The budget is for the js bundle; a wasm varia
 ```
 
 The sample takes the kcoap version from `-Pkcoap.version` or, without it, from the repository's `gradle.properties`,
-which is what a plain `publishToMavenLocal` publishes; it takes only `dev.kcoap` from the local Maven repository.
+which is what a plain `publishToMavenLocal` publishes; it takes `dev.kcoap` from the local Maven repository only
+(`exclusiveContent`), never from Maven Central, so a kcoap module the commit did not publish fails resolution.
 Node.js and Yarn come from the same repositories as kcoap's own build, which the Kotlin Gradle plugin downloads them
 from, and the npm packages webpack needs are pinned by [kotlin-js-store/yarn.lock](kotlin-js-store/yarn.lock).
 

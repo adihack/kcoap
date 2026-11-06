@@ -48,8 +48,9 @@ Running the app on emulators across API levels is PL-2.
 
 The sample takes the kcoap version, which it writes once, for `kcoap-bom`, from `-Pkcoap.version` or,
 without it, from the repository's `gradle.properties`, which is what a plain `publishToMavenLocal`
-publishes; pass the same `-Pkcoap.version` to both commands to use another. It takes only `dev.kcoap` from the local Maven
-repository. The APKs land in `app/build/outputs/apk/<flavor>/release/`, signed with the debug key so they
+publishes; pass the same `-Pkcoap.version` to both commands to use another. It takes `dev.kcoap` from the local Maven
+repository only (`exclusiveContent`), never from Maven Central, so a kcoap module the commit did not publish fails
+resolution. The APKs land in `app/build/outputs/apk/<flavor>/release/`, signed with the debug key so they
 install on an emulator, and R8's mapping in `app/build/outputs/mapping/`.
 
 ## What an app needs

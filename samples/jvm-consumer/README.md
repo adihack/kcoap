@@ -35,10 +35,13 @@ sequence-number store is right; a Master Secret that outlives the process needs 
 
 The sample takes the kcoap version from `-Pkcoap.version` or, without it, from the repository's
 `gradle.properties`, which is what a plain `publishToMavenLocal` publishes; pass the same `-Pkcoap.version` to both
-commands to use another. It takes only `dev.kcoap` from the local Maven repository. Gradle reads the local repository
+commands to use another. It takes `dev.kcoap` from the local Maven repository only (`exclusiveContent`), never from
+Maven Central, so a kcoap module the commit did not publish fails resolution. Gradle reads the local repository
 from `-Dmaven.repo.local=<directory>` when it is given, so both commands with it keep a trial away from `~/.m2`.
 
 ## Shown to fail
+The settings read that property, which makes it an input of Gradle's configuration cache: without that, a run
+against another directory reused the dependency graph of the last run and passed on artifacts it never read.
 
 WP-P1 broke the published artifacts in scratch copies of the local repository and ran `build run` against each:
 

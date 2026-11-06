@@ -10,12 +10,19 @@ pluginManagement {
     }
 }
 
+// mavenLocal() follows -Dmaven.repo.local, which the configuration cache does not see on its own: reading it here
+// makes it an input, so a run against another local repository resolves kcoap again instead of reusing the result
+// of the last one.
+val localMavenRepository: String? = providers.systemProperty("maven.repo.local").orNull
+
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     repositories {
-        // kcoap, as publishToMavenLocal left it; nothing else comes from the local repository.
-        mavenLocal {
-            content { includeGroup("dev.kcoap") }
+        // kcoap, as publishToMavenLocal left it, and from nowhere else: a kcoap module the commit did not publish
+        // fails resolution instead of coming from Maven Central. Nothing else comes from the local repository.
+        exclusiveContent {
+            forRepository { mavenLocal() }
+            filter { includeGroup("dev.kcoap") }
         }
         google()
         mavenCentral()
