@@ -134,6 +134,7 @@ final class dev.kcoap.testkit/InMemoryNetwork { // dev.kcoap.testkit/InMemoryNet
         final fun <set-tap>(kotlin/Function2<dev.kcoap.testkit/InMemoryDatagram, dev.kcoap.testkit/DatagramFate, kotlin/Unit>) // dev.kcoap.testkit/InMemoryNetwork.tap.<set-tap>|<set-tap>(kotlin.Function2<dev.kcoap.testkit.InMemoryDatagram,dev.kcoap.testkit.DatagramFate,kotlin.Unit>){}[0]
 
     final suspend fun attach(dev.kcoap.transport/Endpoint.Udp? = ..., kotlin/Int = ...): dev.kcoap.testkit/InMemoryTransport // dev.kcoap.testkit/InMemoryNetwork.attach|attach(dev.kcoap.transport.Endpoint.Udp?;kotlin.Int){}[0]
+    final suspend fun spoof(dev.kcoap.transport/Endpoint.Udp, dev.kcoap.transport/Endpoint, kotlin/ByteArray) // dev.kcoap.testkit/InMemoryNetwork.spoof|spoof(dev.kcoap.transport.Endpoint.Udp;dev.kcoap.transport.Endpoint;kotlin.ByteArray){}[0]
 
     final object Companion { // dev.kcoap.testkit/InMemoryNetwork.Companion|null[0]
         final const val DEFAULT_MAX_DATAGRAM_SIZE // dev.kcoap.testkit/InMemoryNetwork.Companion.DEFAULT_MAX_DATAGRAM_SIZE|{}DEFAULT_MAX_DATAGRAM_SIZE[0]

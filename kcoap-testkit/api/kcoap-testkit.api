@@ -146,6 +146,7 @@ public final class dev/kcoap/testkit/InMemoryNetwork {
 	public final fun setConditions (Ldev/kcoap/testkit/LinkConditions;)V
 	public final fun setFilter (Lkotlin/jvm/functions/Function1;)V
 	public final fun setTap (Lkotlin/jvm/functions/Function2;)V
+	public final fun spoof (Ldev/kcoap/transport/Endpoint$Udp;Ldev/kcoap/transport/Endpoint;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/kcoap/testkit/InMemoryNetwork$Companion {
