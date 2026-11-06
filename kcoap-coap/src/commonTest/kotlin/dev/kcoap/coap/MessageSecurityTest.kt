@@ -15,6 +15,11 @@ import dev.kcoap.coap.server.ObservableResource
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.random.Random
 import kotlin.test.Test
@@ -189,7 +194,10 @@ class MessageSecurityTest {
     @Test
     fun rfc8613Section8_2SecurityErrorsAreAnsweredUnprotectedWithMaxAgeZero() = runTest {
         val fixture = StackFixture(this)
-        val server = fixture.server(CoapServerConfig(security = ServerSide())) {
+        val records = mutableListOf<LogRecord>()
+        val logs = LoggerFactory(LogConfig.build { level = LogLevel.DEBUG; sink = LogSink { records += it } })
+        val serverEndpoint = fixture.endpointConfig().toBuilder().apply { loggerFactory = logs }.build()
+        val server = fixture.server(CoapServerConfig(security = ServerSide()), serverEndpoint) {
             resource("secret") { get { CoapResponse.content("classified") } }
         }
         val client = fixture.client(CoapClientConfig { security = ClientSide(kid = 9); requestTimeout = 20.seconds })
@@ -221,6 +229,12 @@ class MessageSecurityTest {
         assertNull(completed.resourcePath)
         assertEquals(CoapCode.UNAUTHORIZED, completed.responseCode)
         assertNull(completed.securityIdentity)
+
+        // A peer's input that message security refused: one DEBUG line on the server, without a stack trace.
+        assertTrue(records.none { it.level >= LogLevel.WARN }, "${records.filter { it.level >= LogLevel.WARN }}")
+        val logged = records.single { it.message.startsWith("Rejected a protected request") }
+        assertEquals(LogLevel.DEBUG, logged.level)
+        assertNull(logged.error)
     }
 
     @Test

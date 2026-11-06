@@ -192,11 +192,12 @@ internal class QBlockServer(
     suspend fun answer(ref: QBlockRequest, resource: CoapResource, key: OperationKey, limits: MessageLimits): Reply? {
         val violation = QBlockCheck.request(ref.request, limits.allowsBert, config.maxRequestBodySize)
         if (violation != null) {
-            log.debug { "Refused a Q-Block request from ${ref.inbound.peer}: $violation" }
             if (violation.resetIfNonConfirmable && !ref.inbound.isConfirmable) {
+                // The messaging layer logs the Reset, with the diagnostic, and reports it.
                 ref.inbound.reject(EndpointEvent.MessageRejected.Reason.UNRECOGNIZED_CRITICAL_OPTION, violation.diagnostic)
                 return null
             }
+            log.debug { "Refused a Q-Block request from ${ref.inbound.peer}: $violation" }
             val refusal = CoapResponse.error(violation.code, violation.diagnostic)
             return Reply.Single(violation.size1?.let { size1 -> refusal.withOptions { size1(size1) } } ?: refusal)
         }

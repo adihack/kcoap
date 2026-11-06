@@ -174,7 +174,7 @@ internal class ClientExchange(
         val unrecognized = unrecognizedCritical(inner.options, recognizedOptions)
         if (unrecognized.isNotEmpty()) {
             val numbers = unrecognized.joinToString { it.number.toString() }
-            log.debug { "Rejected a response ${inner.code} with unrecognized critical options $numbers" }
+            // Not logged here: the Reset or the drop that follows logs it once, with this message.
             val message = "Response with unrecognized critical options $numbers"
             return Inspection.Rejected(CoapException(message, CoapException.Reason.BAD_RESPONSE))
         }

@@ -12,6 +12,11 @@ import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.EndpointEvent.ResponseRejected
 import dev.kcoap.coap.stack.RawPeer
+import dev.kcoap.log.LogConfig
+import dev.kcoap.log.LogLevel
+import dev.kcoap.log.LogRecord
+import dev.kcoap.log.LogSink
+import dev.kcoap.log.LoggerFactory
 import dev.kcoap.transport.Endpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,13 +55,28 @@ class VerificationFailureTest {
         }
     }
 
-    private class Setup(val fixture: StackFixture, val peer: RawPeer, val client: CoapClient)
+    /** [records] are what the client's endpoint logged, at DEBUG and above. */
+    private class Setup(val fixture: StackFixture, val peer: RawPeer, val client: CoapClient, val records: List<LogRecord>)
 
     private suspend fun TestScope.setup(
         config: CoapClientConfig = CoapClientConfig { security = Toy; requestTimeout = 30.seconds },
     ): Setup {
         val fixture = StackFixture(this)
-        return Setup(fixture, RawPeer(fixture.transport()), fixture.client(config))
+        val records = mutableListOf<LogRecord>()
+        val logs = LoggerFactory(LogConfig.build { level = LogLevel.DEBUG; sink = LogSink { records += it } })
+        val endpointConfig = fixture.endpointConfig().toBuilder().apply { loggerFactory = logs }.build()
+        return Setup(fixture, RawPeer(fixture.transport()), fixture.client(config, endpointConfig), records)
+    }
+
+    /**
+     * A peer's input, expected in RFC 8613 §8.4, so logged once per response at DEBUG without a stack trace: a stale
+     * context must not flood a log that prints WARN by default (docs/logging.md).
+     */
+    private fun Setup.assertLoggedOnceAtDebug(about: String, count: Int) {
+        assertTrue(records.none { it.level >= LogLevel.WARN }, "${records.filter { it.level >= LogLevel.WARN }}")
+        val lines = records.filter { about in it.message }
+        assertEquals(count, lines.size, "$records")
+        assertTrue(lines.all { it.level == LogLevel.DEBUG && it.error == null }, "$lines")
     }
 
     private val Setup.rejections: List<ResponseRejected> get() = fixture.events.filterIsInstance<ResponseRejected>()
@@ -76,6 +96,7 @@ class VerificationFailureTest {
         delay(1.seconds)
         assertEquals(2, s.rejections.size, "each is reported when it is dropped")
         assertTrue(!pending.isCompleted, "and the request waits on for one that verifies (RFC 8613 §8.4)")
+        s.assertLoggedOnceAtDebug("failed verification", 2)
 
         val error = assertIs<CoapException>(pending.await().exceptionOrNull())
         assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
@@ -139,6 +160,7 @@ class VerificationFailureTest {
 
         assertEquals(listOf("1", "3"), pending.await().map { it.payloadAsText() })
         assertEquals(listOf(ResponseRejected.Reason.VERIFICATION_FAILED), s.rejections.map { it.reason })
+        s.assertLoggedOnceAtDebug("failed verification", 1)
     }
 
     @Test
