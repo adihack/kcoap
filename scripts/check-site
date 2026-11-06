@@ -28,8 +28,13 @@ The directory defaults to web/public next to this script. Every HTML page in it 
 - done and open said in text: every item of a .checks list starts with a visually hidden "Done: " or
   "Open: " that matches its is-open class, and every .meter-block ends with a visually hidden state;
 - repository links (github.com/adihack/kcoap/blob|tree/<branch>/) that all name the same branch;
-- at most 150 KB per page counting the HTML and its images, and 180 KB counting everything it loads, the
-  shared stylesheet and scripts included;
+- at most 150 KB per page, counting the HTML and every stylesheet, script and image it loads, each file once
+  (the site icons in the head aside: a browser fetches one of them for the whole site, not one per page);
+  the output lists every page's weight and its gzip size;
+- stylesheets: every page links site.css first and the others in the order of SHEET_ORDER, which keeps the
+  cascade as one stylesheet had it, and only sheets it uses; every class in a page's HTML, or set by a script
+  it loads (SCRIPT_CLASSES), is named by a rule in a stylesheet the page links; and every class a stylesheet
+  names is used by a page that links it, or set by one of their scripts (no dead CSS);
 - sitemap.xml listing every page except 404.html, and nothing that is not a page; robots.txt allowing
   everything and naming the sitemap;
 - _headers: at most 100 rules and 2,000 characters a line, splats only at the end of a path, one /* rule
@@ -39,6 +44,7 @@ The directory defaults to web/public next to this script. Every HTML page in it 
 Exit status: 0 when the site passes, 1 when anything fails, 2 for a missing directory. Needs only the
 Python 3 standard library.
 """
+import gzip
 import os
 import re
 import struct
@@ -49,8 +55,38 @@ from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
 
 SITE = "https://kcoap.dev"
-MAX_PAGE_BYTES = 150 * 1024          # the HTML and its images, as the site's brief counts them
-MAX_PAGE_TOTAL_BYTES = 180 * 1024    # everything a page loads, the shared stylesheet and scripts included
+# The HTML and every stylesheet, script and image a page loads, each file once (web/README.md, "Page weight").
+MAX_PAGE_BYTES = 150 * 1024
+# <link rel> values of the site icons, which the page weight leaves out: a browser fetches one of them, for
+# its tab or a home screen, once for the whole site. The SVG icon is the logo, which the header's <img> counts.
+SITE_ICON_RELS = {"icon", "shortcut", "apple-touch-icon", "mask-icon"}
+# The stylesheets in the order a page links them (site.css first, the others only where used). Each keeps its
+# rules in the order they had in the one site.css they came from, so this order keeps the cascade as it was.
+SHEET_ORDER = ["assets/site.css", "assets/figures.css", "assets/components.css", "assets/guide.css",
+               "assets/home.css"]
+# Classes the scripts add to a page, and the markup that makes them do it: an attribute ("[data-tabs]") or a
+# class (".code-block") the page must have, or None for every page that loads the script. The check below
+# finds each class in its script, and every class the script sets in this list.
+SCRIPT_CLASSES = {
+    "assets/site.js": [
+        (None, {"js", "visually-hidden"}),
+        ("[data-nav-toggle]", {"is-open"}),
+        (".code-block", {"copy-button", "is-copied"}),
+        ("[data-tabs]", {"tab-list", "tab", "tabs-ready"}),
+    ],
+    "assets/releases.js": [
+        ("[data-release-feed]", {"release-status", "block-loader", "release-list", "release-item", "badge",
+                                 "badge-partial", "release-meta", "release-notes", "muted", "link-arrow"}),
+    ],
+}
+# How the scripts set classes: className = "...", classList.add/toggle/remove("..."), and releases.js's helpers
+# el(tag, "classes", ...) and link(href, text, "classes").
+SCRIPT_CLASS_SETTERS = [
+    re.compile(r"\.className\s*=\s*\"([^\"]*)\""),
+    re.compile(r"\.classList\.(?:add|toggle|remove)\(((?:\s*\"[^\"]*\"\s*,?)+)"),
+    re.compile(r"\bel\(\s*\"[^\"]*\"\s*,\s*\"([^\"]*)\""),
+    re.compile(r"\blink\([^,()]+,\s*\"[^\"]*\"\s*,\s*\"([^\"]*)\"\s*\)"),
+]
 MAX_CODE_LINE = 80
 TOML_TABLE_LINE = re.compile(r"^[\w.-]+ = \{ .* \}$")
 NOT_FOUND_PAGE = "404.html"
@@ -99,6 +135,11 @@ class Page(HTMLParser):
         self.h1 = 0
         self.links = []          # (tag, attribute, url) for hyperlinks
         self.resources = []      # (tag, attribute, url) for things the browser loads
+        self.site_icons = set()  # (url, line) of the site icons, which the page weight leaves out
+        self.stylesheets = []    # (href, line) of every <link rel="stylesheet">, in order
+        self.scripts = []        # src of every <script src>
+        self.classes = {}        # every class in the markup, with the line it first appears on
+        self.attributes = set()  # every attribute name in the markup
         self.references = []     # (attribute, id) from aria-* and label/for
         self.problems = []
         self._script_has_src = None
@@ -129,6 +170,9 @@ class Page(HTMLParser):
             if a.get("tabindex") != "0":
                 self.problems.append(f"line {line}: <pre> needs tabindex=\"0\" so its code scrolls from the keyboard")
             self._pre = (line, "")
+        self.attributes |= set(a)
+        for name in a.get("class", "").split():
+            self.classes.setdefault(name, line)
         if "id" in a:
             self.ids.append((a["id"], line))
         if tag == "a" and "name" in a:
@@ -154,6 +198,10 @@ class Page(HTMLParser):
                 self.canonical.append(a.get("href", ""))
             if rels & RESOURCE_RELS:
                 self.resources.append(("link", "href", a.get("href", ""), line))
+            if rels & SITE_ICON_RELS:
+                self.site_icons.add((a.get("href", ""), line))
+            if "stylesheet" in rels:
+                self.stylesheets.append((a.get("href", ""), line))
         elif tag == "h1":
             self.h1 += 1
         elif tag == "style":
@@ -163,6 +211,7 @@ class Page(HTMLParser):
             self._script_text = ""
             if a.get("src"):
                 self.resources.append(("script", "src", a["src"], line))
+                self.scripts.append(a["src"])
         elif tag == "img":
             if "alt" not in a:
                 self.problems.append(f"line {line}: <img src=\"{a.get('src', '')}\"> has no alt attribute")
@@ -277,6 +326,161 @@ def check_markup(rel, text):
     return errors
 
 
+def css_selectors(text):
+    """(line, selector list) of every style rule in a stylesheet, those inside @media and @supports too."""
+    # Blank out comments and strings, keeping every offset, so braces and dots in them do not count.
+    blank = re.sub(r"/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'",
+                   lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    found = []
+
+    def walk(lo, hi):
+        i = lo
+        while True:
+            j = blank.find("{", i, hi)
+            if j < 0:
+                return
+            depth, k = 1, j + 1
+            while depth and k < hi:
+                depth += {"{": 1, "}": -1}.get(blank[k], 0)
+                k += 1
+            prelude = blank[i:j].split("}")[-1].split(";")[-1]
+            if prelude.strip().startswith(("@media", "@supports", "@container", "@layer")):
+                walk(j + 1, k - 1)
+            elif not prelude.strip().startswith("@"):
+                start = j - len(prelude) + (len(prelude) - len(prelude.lstrip()))
+                found.append((blank.count("\n", 0, start) + 1, prelude.strip()))
+            i = k
+    walk(0, len(blank))
+    return found
+
+
+def css_classes(text):
+    """Every class a stylesheet's selectors name, with the line it is first named on, and the set of classes
+    of each selector that names one."""
+    names = {}
+    selectors = []
+    for line, selector_list in css_selectors(text):
+        for name in re.findall(r"\.(-?[A-Za-z_][\w-]*)", selector_list):
+            names.setdefault(name, line)
+        for selector in re.split(r",(?![^()]*\))", selector_list):
+            classes = set(re.findall(r"\.(-?[A-Za-z_][\w-]*)", selector))
+            if classes:
+                selectors.append(classes)
+    return names, selectors
+
+
+def css_loads(root, css, seen=None):
+    """The local files a stylesheet loads with url() and @import, those of imported sheets included."""
+    seen = set() if seen is None else seen
+    text = css.read_text(encoding="utf-8")
+    base = "/" + css.relative_to(root).as_posix()
+    for m in re.finditer(r"url\(\s*['\"]?([^'\")]+)|@import\s+(?:url\()?\s*['\"]?([^'\";)]+)", text, re.I):
+        url = (m.group(1) or m.group(2)).strip()
+        if is_external(url) or url.startswith(("data:", "#")):
+            continue
+        target, _ = resolve(root, urlsplit(urljoin(base, url)).path)
+        if target is not None and target not in seen:
+            seen.add(target)
+            if target.suffix == ".css":
+                css_loads(root, target, seen)
+    return seen
+
+
+def script_classes(script, page):
+    """The classes a script sets on this page, by SCRIPT_CLASSES and the markup the page has."""
+    classes = set()
+    for trigger, names in SCRIPT_CLASSES.get(script, []):
+        if trigger is None or (trigger.startswith("[") and trigger[1:-1] in page.attributes) or \
+                (trigger.startswith(".") and trigger[1:] in page.classes):
+            classes |= names
+    return classes
+
+
+def check_script_classes(root):
+    """SCRIPT_CLASSES against the scripts: each class it lists is in its script, and it lists every class set."""
+    errors = []
+    for script, groups in sorted(SCRIPT_CLASSES.items()):
+        file = root / script
+        if not file.is_file():
+            errors.append(f"check-site: SCRIPT_CLASSES names {script}, which does not exist")
+            continue
+        text = file.read_text(encoding="utf-8")
+        listed = set().union(*(names for _, names in groups))
+        literals = " ".join(a or b for a, b in re.findall(r"\"([^\"\n]*)\"|'([^'\n]*)'", text))
+        for name in sorted(listed):
+            if not re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", literals):
+                errors.append(f"{script}: check-site's SCRIPT_CLASSES says it sets class {name!r}, which it does not "
+                              f"name; update SCRIPT_CLASSES")
+        for setter in SCRIPT_CLASS_SETTERS:
+            for m in setter.finditer(text):
+                for name in " ".join(re.findall(r"\"([^\"]*)\"", m.group(1)) or [m.group(1)]).split():
+                    if name not in listed:
+                        line = text.count("\n", 0, m.start()) + 1
+                        errors.append(f"{script}: line {line}: sets class {name!r}, which check-site's SCRIPT_CLASSES "
+                                      f"does not list; add it, with the markup that makes the script set it")
+    return errors
+
+
+def check_stylesheets(root, parsed):
+    """Which sheets each page links, every class it uses styled by them, and no class a sheet names unused."""
+    errors = []
+    sheets = {}          # stylesheet file -> its classes, and the classes of each of its selectors
+    linked_by = {}       # stylesheet file -> the pages that link it
+    uses = {}            # page -> {class: where it comes from}
+    for file, page in parsed.items():
+        rel = file.relative_to(root).as_posix()
+        url_path = page_url_path(root, file)
+        linked = []
+        for href, line in page.stylesheets:
+            target, _ = resolve(root, urlsplit(urljoin(url_path, href)).path)
+            if target is None or target.suffix != ".css":
+                continue          # a missing or foreign stylesheet is reported with the resources
+            linked.append(target)
+            linked_by.setdefault(target, []).append(rel)
+            if target not in sheets:
+                sheets[target] = css_classes(target.read_text(encoding="utf-8"))
+        names = [t.relative_to(root).as_posix() for t in linked]
+        order = [n for n in SHEET_ORDER if n in names]
+        if names[:1] != [SHEET_ORDER[0]] or names != order or len(set(names)) != len(names):
+            unknown = [n for n in names if n not in SHEET_ORDER]
+            errors.append(f"{rel}: links the stylesheets {', '.join(names) or 'none'}; a page links "
+                          f"{SHEET_ORDER[0]} first and the others in the order of SHEET_ORDER "
+                          f"({', '.join(SHEET_ORDER)}), once each, so the cascade stays as site.css describes"
+                          + (f" ({', '.join(unknown)} is not in SHEET_ORDER: add it in its place)" if unknown else ""))
+        used = {name: f"line {line}" for name, line in page.classes.items()}
+        for src in page.scripts:
+            target, _ = resolve(root, urlsplit(urljoin(url_path, src)).path)
+            if target is not None:
+                script = target.relative_to(root).as_posix()
+                for name in script_classes(script, page):
+                    used.setdefault(name, f"set by {script}")
+        uses[file] = used
+        styled = set().union(*(sheets[t][0] for t in linked)) if linked else set()
+        for name, where in sorted(used.items()):
+            if name not in styled:
+                errors.append(f"{rel}: class {name!r} ({where}) is in no stylesheet the page links "
+                              f"({', '.join(names) or 'none'}); link the sheet that styles it, or style it")
+        for target, name in zip(linked, names):
+            if name != SHEET_ORDER[0] and not any(classes <= set(used) for classes in sheets[target][1]):
+                errors.append(f"{rel}: links {name}, but none of its rules is for classes the page uses; drop "
+                              f"the link")
+    for css in sorted(root.rglob("*.css")):
+        rel = css.relative_to(root).as_posix()
+        if css not in linked_by:
+            errors.append(f"{rel}: no page links it; delete it or link it where it is used")
+            continue
+        readers = [f for f in parsed if f.relative_to(root).as_posix() in linked_by[css]]
+        available = set().union(*(uses[f] for f in readers))
+        who = "every page" if len(readers) == len(parsed) else \
+            ", ".join(sorted(page_url_path(root, f) for f in readers))
+        for name, line in sorted(sheets[css][0].items(), key=lambda kv: kv[1]):
+            if name not in available:
+                errors.append(f"{rel}: line {line}: dead CSS: class {name!r} is in none of the pages that link "
+                              f"this sheet ({who}), and none of their scripts sets it; remove the rule, or link "
+                              f"the sheet from the page that uses the class")
+    return errors
+
+
 def header_rule_regex(path):
     """A _headers rule path as an anchored regex: a splat matches anything, a :placeholder one segment."""
     parts = re.split(r"(\*|:[A-Za-z0-9_]+)", path)
@@ -376,7 +580,7 @@ def check(root):
     errors = []
     pages = sorted(p for p in root.rglob("*.html") if p.is_file())
     if not pages:
-        return [f"{root}: no HTML pages"], 0
+        return [f"{root}: no HTML pages"], 0, []
     parsed = {}
     for file in pages:
         page = Page()
@@ -386,6 +590,7 @@ def check(root):
 
     ids_of = {f: {i for i, _ in p.ids} for f, p in parsed.items()}
     branches = {}
+    weights = []
 
     for file, page in parsed.items():
         rel = file.relative_to(root).as_posix()
@@ -497,10 +702,8 @@ def check(root):
                     err(f"{rel}: line {line}: broken anchor {url} (no id {target_parts.fragment!r} "
                         f"in {target.relative_to(root).as_posix()})")
 
-        # Resources: only from the site itself; their files must exist.
-        size = file.stat().st_size
-        total = size
-        counted = set()
+        # Resources: only from the site itself; their files must exist. The page's weight counts each once.
+        counted = {file}
         for tag, attr, url, line in page.resources:
             if not url.strip():
                 err(f"{rel}: line {line}: <{tag}> with an empty {attr}")
@@ -518,18 +721,17 @@ def check(root):
             if target is None:
                 err(f"{rel}: line {line}: <{tag} {attr}=\"{url}\"> is missing ({reason})")
                 continue
-            is_image = tag in ("img", "image", "source", "video") or target.suffix.lower() in (
-                ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico")
-            if target not in counted:
-                counted.add(target)
-                total += target.stat().st_size
-                if is_image:
-                    size += target.stat().st_size
-        if size > MAX_PAGE_BYTES:
-            err(f"{rel}: {size / 1024:.1f} KB with its images, over the {MAX_PAGE_BYTES // 1024} KB limit")
-        if total > MAX_PAGE_TOTAL_BYTES:
-            err(f"{rel}: {total / 1024:.1f} KB with everything it loads, over the "
-                f"{MAX_PAGE_TOTAL_BYTES // 1024} KB limit")
+            if (url, line) in page.site_icons:
+                continue
+            counted.add(target)
+            if target.suffix == ".css":
+                counted |= css_loads(root, target)
+        total = sum(f.stat().st_size for f in counted)
+        compressed = sum(len(gzip.compress(f.read_bytes(), 9)) for f in counted)
+        weights.append((url_path, total, compressed))
+        if total > MAX_PAGE_BYTES:
+            err(f"{rel}: {total / 1024:.1f} KB with the stylesheets, scripts and images it loads, over the "
+                f"{MAX_PAGE_BYTES // 1024} KB limit (web/README.md, \"Page weight\")")
 
     if len(branches) > 1:
         summary = "; ".join(f"{b} ({len(v)} links, first {v[0]})" for b, v in sorted(branches.items()))
@@ -581,6 +783,9 @@ def check(root):
             if not m.group(1).startswith("#"):
                 errors.append(f"{rel}: refers to {m.group(1)}; only #fragments are allowed in an SVG file")
 
+    errors += check_script_classes(root)
+    errors += check_stylesheets(root, parsed)
+
     served = {page_url_path(root, f) for f in pages}
     served |= {"/" + f.relative_to(root).as_posix() for f in root.rglob("*")
                if f.is_file() and f.suffix != ".html" and f.name != "_headers"}
@@ -619,7 +824,7 @@ def check(root):
             if line.lower().startswith("disallow:") and line.split(":", 1)[1].strip():
                 errors.append(f"robots.txt: {line!r} keeps crawlers out")
 
-    return errors, len(pages)
+    return errors, len(pages), sorted(weights)
 
 
 def main(argv):
@@ -631,9 +836,15 @@ def main(argv):
     if not root.is_dir():
         print(f"check-site: no such directory: {root}", file=sys.stderr)
         return 2
-    errors, count = check(root)
+    errors, count, weights = check(root)
     for e in errors:
         print(e)
+    if weights:
+        print(f"Page weight, limit {MAX_PAGE_BYTES // 1024} KB: the HTML and every stylesheet, script and image "
+              f"it loads; gzip -9, file by file:")
+        width = max(len(path) for path, _, _ in weights)
+        for path, total, compressed in weights:
+            print(f"  {path:{width}}  {total / 1024:6.1f} KB  gzip {compressed / 1024:5.1f} KB")
     if errors:
         print(f"check-site: {len(errors)} problem(s) in {root}", file=sys.stderr)
         return 1

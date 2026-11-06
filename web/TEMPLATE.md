@@ -17,7 +17,8 @@ own copy of the head, the header and the footer below. Copy them exactly; change
 - **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
-- **Size:** keep each page with its images under about 150 KB before compression.
+- **Size:** a page with every stylesheet, script and image it loads stays within 150 KB before compression.
+  `scripts/check-site` checks it and prints each page's weight ([README](README.md#page-weight)).
 - **Assets are not fingerprinted.** The stylesheets, `site.js` and the images keep their names between
   deploys, so cache them with revalidation (for example `Cache-Control: public, max-age=0, must-revalidate` or
   a short `max-age`), not as immutable.
@@ -83,7 +84,10 @@ when `site.css` was the only stylesheet, so this order keeps every result of the
 | `/sponsors/` | `site.css`, `components.css` |
 | `404.html` | `site.css`, `figures.css` |
 
-A new page links the sheets its classes need, and no others.
+A new page links what its classes need. `scripts/check-site` fails when a page uses a class (in its markup, or
+one that `site.js` or `releases.js` sets) that no stylesheet it links names, when a sheet names a class that
+no page linking it uses, when a page links a sheet it uses nothing from, and when the order is not the one
+above.
 
 A page with a script of its own loads it right after `site.js`, with `defer` (only `/releases/` has one:
 `<script src="/assets/releases.js" defer></script>`). `404.html` is served at every missing path, so it has

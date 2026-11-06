@@ -63,10 +63,50 @@ fails on:
   (github.com only in `releases.js`, network calls only there) and SVG files;
 - a `<pre>` without `tabindex="0"`, a code line over 80 characters (one-line TOML tables aside), and a
   check-list item or meter block without its state in text;
-- a page over 150 KB with its images, or over 180 KB with everything it loads;
+- a page over 150 KB with every stylesheet, script and image it loads ([Page weight](#page-weight)); it
+  prints every page's weight and gzip size either way;
+- a class in a page, or set by `site.js` or `releases.js`, that no stylesheet the page links names; a class
+  a stylesheet names that no page linking it uses (dead CSS); a page that links a sheet it uses nothing
+  from, or links the sheets in another order than `site.css`'s header gives;
 - `_headers` beyond Cloudflare's limits, with a splat inside a path, without the security headers or with any
   other CSP, or giving one path the same header twice; a `robots.txt` that keeps crawlers out; a sitemap that
   does not match the pages.
+
+## Page weight
+
+Each page, with every stylesheet, script and image it loads, each file counted once, stays within 150 KB
+(150 × 1024 bytes) before compression. `scripts/check-site` fails on a page over it and prints every page's
+weight and its gzip size, so the numbers show in CI and in the Cloudflare build log. The site icons in the
+head (`favicon.ico`, `apple-touch-icon.png`) are left out: a browser fetches one of them, for its tab or a
+home screen, once for the whole site, and the SVG icon is the logo that the header's `<img>` counts already.
+
+The budget counts the stylesheets and scripts, not only the HTML and its images, because a first visit
+downloads all of them before the page looks and works as it should: a stylesheet that every page links is
+part of every page's weight. It is not about hosting limits. Cloudflare compresses text, and gzip brings the
+heaviest page, `/features/`, to about 33 KB (36 KB before the stylesheets were split). It is about discipline
+and headroom: hand-written pages grow a little with every change, and a fixed budget shows each addition
+before they add up.
+
+So the styles are split by the pages that use them, and each page links only the sheets it uses:
+
+| Sheet | Holds | Linked by |
+|---|---|---|
+| `site.css` | tokens, base, layout, header, footer; buttons, badges, cards, callouts, tables, facts, checks, code, the `/features/` sections | every page |
+| `figures.css` | figures and diagrams, the 404 page | `/`, `/features/`, `/releases/`, 404 |
+| `components.css` | steps, the release meter, tabs, platform links, the status card, fact tiles, the release feed | every page but `/features/` and 404 |
+| `guide.css` | the guide layout: contents list, long-form text, questions and answers, pager, matrix | `/start/` and its guides |
+| `home.css` | the home page's sections | `/` |
+
+`/features/` sets the shape: it has the most HTML (94 KB, 40 KB of it the inline SVG of eight diagrams and
+the icons), so `site.css` holds what it needs, and the components it does not use, a few small ones aside,
+sit in the sheets it does not link. On 6 November 2026 `/features/` weighs 146 KB, `/` 145 KB and the guides
+81 to 95 KB; with the one stylesheet they weighed 167 KB, 148 KB and 94 to 109 KB.
+
+Pages link the sheets in a fixed order, `site.css` first ([TEMPLATE.md](TEMPLATE.md#1-the-head)); each sheet
+keeps its rules in the order they had when `site.css` was the only stylesheet, so the cascade gives the same
+result as before. Before moving a rule to another sheet, check what it competes with: between two rules of
+equal specificity, the one in the later sheet wins. `scripts/check-site` checks the order, that every class a
+page uses is in a sheet it links, and that no sheet names a class none of its pages uses.
 
 ## Cloudflare settings
 
