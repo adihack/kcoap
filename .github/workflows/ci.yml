@@ -163,3 +163,26 @@ jobs:
             samples/android-consumer/app/build/reports/
             samples/android-consumer/app/build/outputs/apk/
             samples/android-consumer/app/build/outputs/mapping/
+
+  jvm-consumer:
+    name: JVM consumer (kcoap-bom from Maven Local, CoAP, OSCORE and EDHOC on loopback)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # kcoap from this commit into ~/.m2, where samples/jvm-consumer, a build of its own, takes it through
+      # kcoap-bom alone. build fails when a module it names is missing from the BOM (resolution) and when any kcoap
+      # module on its runtime classpath has a version the BOM does not set (verifyKcoapFromBom); run compiles and
+      # runs getting-started's tour, a CoAP GET, an OSCORE GET and EDHOC then OSCORE over UDP on loopback, with
+      # Java 17 bytecode, and fails on a wrong answer or a published dependency that is missing or wrong.
+      - run: ./gradlew --console=plain publishToMavenLocal
+      - run: ./gradlew --console=plain -p samples/jvm-consumer build run
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: jvm-consumer
+          path: samples/jvm-consumer/build/reports/
