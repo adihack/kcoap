@@ -12,6 +12,7 @@ import dev.kcoap.coap.server.QBlockServerConfig
 import dev.kcoap.coap.server.RequestContext
 import dev.kcoap.coap.stack.CoapEndpointConfig
 import dev.kcoap.coap.stack.CoapException
+import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MessageInterceptor
 import dev.kcoap.log.LogConfig
 import dev.kcoap.log.LogLevel
@@ -161,11 +162,27 @@ class QBlockStressTest {
         }
     }
 
+    /** Lines recorded from any thread, for a failure message. */
+    private class Record {
+        private val lines = AtomicReference<List<String>>(emptyList())
+
+        fun add(line: String) {
+            while (true) {
+                val current = lines.load()
+                if (lines.compareAndSet(current, current + line)) return
+            }
+        }
+
+        override fun toString(): String = lines.load().toString()
+    }
+
     /**
      * Three coroutines change a resource 30 times while kcoap's client observes it with Q-Block: the bodies arrive
      * whole and in order, once each, up to the latest state. The changes start once the first notification
      * arrived, so the check never runs on an empty list, and the server's sends show that notification bodies went
-     * in Q-Block2 (RFC 9177 §4.5), not in RFC 7959.
+     * in Q-Block2 (RFC 9177 §4.5), not in RFC 7959. One emission per body shows in strictly increasing Observe
+     * values; a state may come twice, since RFC 7641 §4.5 lets a server send it again. A failure says what the
+     * client delivered and recovered, why the server removed an observer, and what both sides still hold.
      */
     @Test
     fun notificationBodiesUnderConcurrentChangesArriveWholeAndInOrder() = runTest(timeout = 3.minutes) {
@@ -178,9 +195,27 @@ class QBlockStressTest {
                     if (it.options.qBlock2 != null && it.options.observe != null) qBlockNotifications.addAndFetch(1)
                 }
             }
-            val serverEndpoint = CoapEndpointConfig(loggerFactory = quiet.loggerFactory, interceptors = listOf(recorder))
+            val serverEvents = Record()
+            val clientEvents = Record()
+            val deliveredVersions = Record()
+            val serverEndpoint = CoapEndpointConfig(
+                loggerFactory = quiet.loggerFactory,
+                interceptors = listOf(recorder),
+                eventListener = { if (it is EndpointEvent.ObserverRemoved) serverEvents.add("$it") },
+            )
             val server = CoapServer(network.attach(), background, qBlockServer, serverEndpoint) { add(resource) }
-            val client = CoapClient(network.attach(), background, qBlockClient, quiet)
+            val clientEndpoint = CoapEndpointConfig(
+                loggerFactory = quiet.loggerFactory,
+                eventListener = {
+                    if (it is EndpointEvent.QBlockRecovery || it is EndpointEvent.PartialBodyDropped) clientEvents.add("$it")
+                },
+            )
+            val client = CoapClient(network.attach(), background, qBlockClient, clientEndpoint)
+            suspend fun diagnosis(): String =
+                "delivered versions $deliveredVersions; client events $clientEvents; server events $serverEvents; " +
+                    "resource version ${resource.version.load()}, ${resource.observerCount} observers, " +
+                    "${client.endpoint.exchangeCount()} client exchanges, ${qBlockNotifications.load()} Q-Block2 " +
+                    "notification blocks sent, ${server.qBlock.state()}"
             val last = 30
             val changers = mutableListOf<Job>()
             fun startChangers() {
@@ -198,20 +233,23 @@ class QBlockStressTest {
             val received = withTimeoutOrNull(60.seconds) {
                 client.observe(uriOf(server, "/obs"))
                     .onEach { if (changers.isEmpty()) startChangers() }
+                    .onEach { deliveredVersions.add("${versions[it.payload.toList()] ?: "not a whole body"} (Observe ${it.options.observe})") }
                     .takeWhile { versions[it.payload.toList()] != last }
                     .toList()
-            } ?: fail("iteration $iteration: the latest state never arrived")
+            } ?: fail("iteration $iteration: the latest state never arrived; ${diagnosis()}")
             changers.forEach { it.join() }
-            val delivered = received.map { versions[it.payload.toList()] ?: fail("a notification that is no whole body") }
-            assertEquals(0, delivered.firstOrNull(), "the registration's body came before any change")
-            assertEquals(delivered.sorted(), delivered, "in order")
-            assertEquals(delivered.distinct(), delivered, "one emission per body")
+            val delivered = received.map { versions[it.payload.toList()] ?: fail("a notification that is no whole body; ${diagnosis()}") }
+            assertEquals(0, delivered.firstOrNull(), "the registration's body came before any change; ${diagnosis()}")
+            assertEquals(delivered.sorted(), delivered, "in order; ${diagnosis()}")
+            // A body the client asked for again whole (RFC 9177 §4.4) comes without Observe; every other one has its own.
+            val observe = received.mapNotNull { it.options.observe }
+            assertTrue(observe.zipWithNext().all { (before, after) -> after > before }, "one emission per body: Observe $observe; ${diagnosis()}")
             assertEquals(last, resource.version.load())
             // The registration's body and at least the latest state's, 47 blocks each, every block with Observe.
             assertTrue(qBlockNotifications.load() >= 2 * 47, "notification bodies went in Q-Block2: ${qBlockNotifications.load()} blocks")
             withTimeoutOrNull(10.seconds) {
                 while (resource.observerCount > 0 || client.endpoint.exchangeCount() > 0) delay(5)
-            } ?: fail("left behind: ${resource.observerCount} observers, ${client.endpoint.exchangeCount()} exchanges")
+            } ?: fail("iteration $iteration: left behind; ${diagnosis()}")
             client.close()
         }
     }
