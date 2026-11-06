@@ -272,6 +272,27 @@ Read on 6 November 2026:
 4. On GitHub, make the "Website" check required on `main` (Settings → Rules → Rulesets, or the branch
    protection rule), beside the DCO check, so a change that fails `scripts/check-site` cannot merge.
 
+## When 0.1.0 is on Maven Central
+
+The site still describes kcoap before its first release: a snapshot built from a clone and taken from Maven
+Local. The repository's own docs name 0.1.0 from Maven Central since the release commit, but the site deploys
+when its branch is pushed, not when a tag is, so it changes only once the Central Portal deployment is
+published ([releasing](../docs/releasing.md#after-the-release)). Then:
+
+- The install steps on `/` and `/start/` and in the six platform guides: drop the clone and
+  `publishToMavenLocal` step and the `mavenLocal` repository, keep `mavenCentral()`, and set the BOM and the
+  version catalog to `0.1.0`; rewrite the "Could not find …-SNAPSHOT" troubleshooting entries and the
+  "Not released" callouts.
+- The footer's status line on every page, and its copy in TEMPLATE.md.
+- `/releases/`: the lede, the fact tiles ("Version now", "Published to"), the static "No release yet" note
+  (and what `assets/releases.js` says when GitHub lists no release), the "Before 0.1.0 is tagged" list, the
+  "not yet" badges of Maven Central and GitHub Packages, the API reference card, and the release steps, which
+  should say that the Central deployment is published by hand.
+- The meta descriptions of `/start/`, `/start/jvm/` and `/releases/`, and the `lastmod` dates in `sitemap.xml`.
+
+`grep -rn -e SNAPSHOT -e mavenLocal -e 'released yet' -e 'first release' web/public web/TEMPLATE.md` lists
+the places. Run `scripts/check-site` and commit.
+
 ## Facts with a date
 
 Some pages state the project's state on a given day. Update them when it changes:

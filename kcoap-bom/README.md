@@ -5,7 +5,7 @@ off every kcoap dependency:
 
 ```kotlin
 dependencies {
-    implementation(platform("dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"))
+    implementation(platform("dev.kcoap:kcoap-bom:0.1.0"))
     implementation("dev.kcoap:kcoap-coap")
     implementation("dev.kcoap:kcoap-crypto-default")
 }
@@ -31,7 +31,7 @@ For every published module, two artifacts at the BOM's version:
       <dependency>
         <groupId>dev.kcoap</groupId>
         <artifactId>kcoap-bom</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

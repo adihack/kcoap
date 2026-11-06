@@ -4,8 +4,7 @@ kcoap follows [Semantic Versioning 2.0.0](https://semver.org/). This page says w
 promises: which API it covers, how breaking changes are announced, what the build checks, and how
 protocol behaviour, security fixes and platform minimums are versioned.
 
-Nothing is released yet. The repository carries `0.1.0-SNAPSHOT`, and the first release waits for the
-[release freeze](releasing.md#release-freeze).
+The first release is 0.1.0, of 2026-11-06 ([changelog](../CHANGELOG.md)).
 
 ## Version numbers
 
@@ -126,6 +125,6 @@ version for a whole major version.
 
 ## The release freeze
 
-No `v*` tag is pushed until the API-breaking work packages of the refactoring plan have merged
-([releasing](releasing.md#release-freeze)), so the first release starts from the API that plan settles
-rather than from one it is about to change.
+No `v*` tag was pushed until the API-breaking work packages of the refactoring plan had merged
+([releasing](releasing.md#release-freeze)), so the first release, 0.1.0, starts from the API that plan
+settles rather than from one it was about to change.

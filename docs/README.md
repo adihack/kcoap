@@ -3,8 +3,8 @@
 [README](../README.md) · [Website](https://kcoap.dev) · [API reference](https://adihack.github.io/kcoap/) ·
 [Changelog](../CHANGELOG.md)
 
-Every page about kcoap, grouped by what you want to do. The API reference is published to GitHub Pages
-with the first release; until then `./gradlew dokkaGenerate` builds it into `build/dokka/html`.
+Every page about kcoap, grouped by what you want to do. Each release publishes the API reference to GitHub
+Pages; `./gradlew dokkaGenerate` builds it into `build/dokka/html`.
 
 ## Start here
 
@@ -12,7 +12,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 |---|---|
 | [README](../README.md) | What kcoap is, its highlights and the state of every protocol |
 | [Getting started](getting-started.md) | Which modules each use case needs (client, server, OSCORE, EDHOC, post-quantum, each transport, each platform), adding them with one version through `kcoap-bom`, and a first client and server, OSCORE and EDHOC, compiled and run by the tests |
-| [Installation](../README.md#installation) | The `dev.kcoap` coordinates, the BOM, and how to use a local snapshot until the first release |
+| [Installation](../README.md#installation) | The `dev.kcoap` coordinates on Maven Central and the BOM |
 | [Quick start](../README.md#quick-start) | An OSCORE server and client, then EDHOC with the combined request, in a few lines each |
 | [Platforms](platforms.md) | The minimum versions per target, the algorithms and EDHOC suites each target runs, the TLS each runtime has (client and server) and the ways to terminate it, the mobile lifecycle |
 
@@ -68,7 +68,7 @@ with the first release; until then `./gradlew dokkaGenerate` builds it into `bui
 
 | Page | What you find there |
 |---|---|
-| [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published with the first release |
+| [API reference](https://adihack.github.io/kcoap/) | Every public declaration with its KDoc (Dokka); published by each release |
 | [kcoap-bom](../kcoap-bom/README.md) | The bill of materials: one version for every published module, for Gradle and Maven builds, and how its constraints are generated |
 | [kcoap-common](../kcoap-common/README.md) | Logging API and sinks, hex, constant-time helpers, the opt-in markers, `KcoapException`, the root of every protocol's exception |
 | [kcoap-crypto](../kcoap-crypto/README.md) | The `CryptoBackend` SPI and its contract, the common-code blocks (AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER), X.509 parsing, keys in a key store |

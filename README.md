@@ -29,8 +29,8 @@
 kcoap™ implements CoAP, OSCORE and EDHOC once, in common Kotlin, for Android, iOS, JVM servers, Linux
 gateways, browsers and Node.js. It aims at complete compliance with the published RFCs and checks its
 parts against the RFCs' own test vectors where they exist and in live interop with libcoap, whose
-maintainers include RFC authors, and libedhoc. It is in development: nothing is released yet, and the
-version is `0.1.0-SNAPSHOT` ([project status](#project-status)).
+maintainers include RFC authors, and libedhoc. 0.1.0 is its first release
+([project status](#project-status)).
 
 > **0.x: the API may still change.** Until 1.0, a minor release may break the API; every breaking change is in the
 > [changelog](CHANGELOG.md) with a migration note, and [versioning](docs/versioning.md) says what each kind of
@@ -88,28 +88,18 @@ States follow the [checklist](docs/checklist.md), which names every open item an
 
 ## Installation
 
-Nothing is published yet. The coordinates are `dev.kcoap:<module>:<version>`; the first release goes
-to Maven Central, under the verified `dev.kcoap` namespace, once the release freeze
-([releasing](docs/releasing.md)) is over. Until then, publish a snapshot into your local Maven
-repository from a clone of the work branch:
-
-```bash
-git clone --branch feat/protocol-core https://github.com/adihack/kcoap.git && cd kcoap
-./gradlew publishToMavenLocal    # dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository
-```
-
-The iOS and macOS artifacts build only on a Mac. Then, in your build, import the bill of materials
-`kcoap-bom`, which gives every kcoap module the same version, and name the modules without one:
+kcoap is on Maven Central: `dev.kcoap:<module>:<version>`, under the verified `dev.kcoap` namespace. In
+your build, import the bill of materials `kcoap-bom`, which gives every kcoap module the same version, and
+name the modules without one:
 
 ```kotlin
 // build.gradle.kts
 repositories {
-    mavenLocal { content { includeGroup("dev.kcoap") } } // kcoap, until the first release is on Maven Central
-    mavenCentral()                                         // kcoap's own dependencies
+    mavenCentral()
 }
 
 dependencies {
-    implementation(platform("dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"))
+    implementation(platform("dev.kcoap:kcoap-bom:0.1.0"))
     implementation("dev.kcoap:kcoap-coap")            // CoAP client and server
     implementation("dev.kcoap:kcoap-transport-ktor")  // UDP and TCP sockets
     implementation("dev.kcoap:kcoap-crypto-default")  // the platform's cryptography
@@ -299,7 +289,7 @@ The [documentation hub](docs/README.md) lists every guide, design record and ref
 | [Platforms](docs/platforms.md) | minimum versions, algorithms and EDHOC suites per target, TLS per runtime, mobile lifecycle |
 | [Architecture](docs/architecture.md) | layers, transports, security layering, extension points |
 | [RFC compliance](docs/rfc-compliance.md) and [interop](interop/README.md) | what is implemented, section by section, and how it is cross-tested |
-| [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka); published with the first release, until then `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
+| [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka), published by each release; `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
 
 ## Build and test
 
@@ -325,14 +315,14 @@ Test vectors are generated from the RFC texts and NIST files by `tools/regen-vec
 
 ## Project status
 
-kcoap is in development: version `0.1.0-SNAPSHOT`, nothing released yet, and the website at
-[kcoap.dev](https://kcoap.dev) goes live later.
+kcoap 0.1.0, its first release, came out on 2026-11-06; the website at [kcoap.dev](https://kcoap.dev) goes
+live later.
 
 - [Roadmap](docs/roadmap.md): the milestones, built bottom-up, each verified before the next depends on it.
 - [Checklist](docs/checklist.md): every requirement with its status, evidence and next step, ending with
   the biggest gaps in the order that most moves kcoap toward its goals.
-- [Release freeze](docs/releasing.md#release-freeze): no release until the API-breaking work packages of
-  the [refactoring plan](docs/target-architecture.md) have merged. Before 1.0 a minor release may still
+- [Release freeze](docs/releasing.md#release-freeze): 0.1.0 waited until the API-breaking work packages of
+  the [refactoring plan](docs/target-architecture.md) had merged. Before 1.0 a minor release may still
   break the API, always with a migration note ([versioning](docs/versioning.md)).
 - **DTLS comes last.** Until it lands there is no `coaps://`; OSCORE and EDHOC protect messages end to
   end over any transport.

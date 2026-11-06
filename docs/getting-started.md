@@ -6,34 +6,25 @@ on the loopback interface with the platform's cryptography, by
 `kcoap-edhoc-oscore/src/jvmTest/kotlin/dev/kcoap/edhoc/oscore/GettingStartedExamplesTest.kt` (on free ports
 instead of 5683).
 
-> **Before 1.0, a minor release may break the API.** kcoap is at `0.1.0-SNAPSHOT` and nothing is released yet.
-> Every breaking change is listed in the [changelog](../CHANGELOG.md) with a migration note, and
-> [versioning](versioning.md) says what each kind of release may change.
+> **Before 1.0, a minor release may break the API.** The latest release is 0.1.0. Every breaking change is listed
+> in the [changelog](../CHANGELOG.md) with a migration note, and [versioning](versioning.md) says what each kind of
+> release may change.
 
 ## Add kcoap to a build
 
-Nothing is published yet. Until the first release reaches Maven Central, publish a snapshot into your local Maven
-repository from a clone of the work branch:
-
-```bash
-git clone --branch feat/protocol-core https://github.com/adihack/kcoap.git && cd kcoap
-./gradlew publishToMavenLocal    # dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository; Apple artifacts only on a Mac
-```
-
-Then import the bill of materials, `kcoap-bom`, and add the modules without versions. kcoap's modules share
-internal plumbing, so a build uses one version for all of them, and the BOM sets it for the modules you name and
-for those they bring along; a library built on a newer kcoap moves them all to its version together
-([kcoap-bom](../kcoap-bom/README.md#version-alignment)):
+kcoap is on Maven Central under the verified `dev.kcoap` namespace. Import the bill of materials, `kcoap-bom`, and
+add the modules without versions. kcoap's modules share internal plumbing, so a build uses one version for all of
+them, and the BOM sets it for the modules you name and for those they bring along; a library built on a newer kcoap
+moves them all to its version together ([kcoap-bom](../kcoap-bom/README.md#version-alignment)):
 
 ```kotlin
 // build.gradle.kts of a JVM or Android project
 repositories {
-    mavenLocal { content { includeGroup("dev.kcoap") } } // kcoap, until the first release
     mavenCentral()
 }
 
 dependencies {
-    implementation(platform("dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"))
+    implementation(platform("dev.kcoap:kcoap-bom:0.1.0"))
     implementation("dev.kcoap:kcoap-edhoc-oscore")   // EDHOC and OSCORE over CoAP; brings the CoAP stack
     implementation("dev.kcoap:kcoap-crypto-default") // the platform's cryptography
     implementation("dev.kcoap:kcoap-transport-ktor") // UDP and TCP sockets
@@ -53,7 +44,7 @@ that some targets lack goes into the source sets of the targets that have it:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(project.dependencies.platform("dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"))
+            implementation(project.dependencies.platform("dev.kcoap:kcoap-bom:0.1.0"))
             implementation("dev.kcoap:kcoap-edhoc-oscore")
             implementation("dev.kcoap:kcoap-crypto-default")
             implementation("dev.kcoap:kcoap-transport-ktor-websocket") // every target, browsers included
@@ -66,9 +57,8 @@ kotlin {
 ```
 
 A Maven build imports the BOM with `<scope>import</scope>` and names the JVM artifacts (`kcoap-coap-jvm`), as the
-[kcoap-bom README](../kcoap-bom/README.md#what-it-constrains) shows. The release coordinates will be the same,
-`dev.kcoap:<module>:<version>` from `mavenCentral()`, under the verified `dev.kcoap` namespace, once the
-[release freeze](releasing.md#release-freeze) is over.
+[kcoap-bom README](../kcoap-bom/README.md#what-it-constrains) shows. The coordinates are
+`dev.kcoap:<module>:<version>` from `mavenCentral()`.
 
 ## Which modules to add
 
@@ -347,5 +337,6 @@ or (on the JVM) the Java engine, for `coaps+ws`; not CIO, whose name check falls
   tuning, tests without a network.
 - [Platforms](platforms.md): minimum versions, the capability matrix, TLS per runtime, mobile lifecycle.
 - [Logging](logging.md): levels per tag, sinks, a ring buffer for diagnostics.
-- The module READMEs, from the [documentation hub](README.md#reference), and the API reference
-  (`./gradlew dokkaGenerate` builds it into `build/dokka/html` until it is published with the first release).
+- The module READMEs, from the [documentation hub](README.md#reference), and the
+  [API reference](https://adihack.github.io/kcoap/), which each release publishes (`./gradlew dokkaGenerate` builds
+  it into `build/dokka/html`).
