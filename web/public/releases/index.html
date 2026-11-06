@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Releases · kcoap</title>
+<meta name="description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<link rel="canonical" href="https://kcoap.dev/releases/">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1517" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/assets/kcoap-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/assets/site.css">
+<script src="/assets/site.js"></script>
+<script src="/assets/releases.js" defer></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="kcoap">
+<meta property="og:title" content="Releases · kcoap">
+<meta property="og:description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<meta property="og:url" content="https://kcoap.dev/releases/">
+<meta property="og:image" content="https://kcoap.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Releases · kcoap">
+<meta name="twitter:description" content="kcoap&#x27;s version and release status: nothing is released yet. The release freeze, the versioning policy in short, how a tag becomes a release, and the latest releases on GitHub.">
+<meta name="twitter:image" content="https://kcoap.dev/assets/og-image.png">
+<meta name="twitter:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="/" aria-label="kcoap home">
+      <img src="/assets/kcoap-logo.svg" alt="" width="32" height="32">
+      <span>kcoap</span>
+    </a>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <ul>
+        <li><a href="/start/">Get started</a></li>
+        <li><a href="/features/">Features</a></li>
+        <li><a href="/releases/" aria-current="page">Releases</a></li>
+        <li><a href="/sponsors/">Sponsors</a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+      </ul>
+    </nav>
+    <div class="header-actions">
+      <a class="icon-button header-github" href="https://github.com/adihack/kcoap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg><span class="header-github-label">GitHub</span><span class="visually-hidden"> repository</span></a>
+      <button class="icon-button theme-toggle" type="button" data-theme-toggle hidden aria-label="Switch theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 14.25A8.25 8.25 0 0 1 9.75 4 8.25 8.25 0 1 0 20 14.25z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+      <button class="icon-button nav-toggle" type="button" data-nav-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu" hidden><svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="page-head">
+    <div class="container">
+      <ol class="breadcrumb" aria-label="Breadcrumb">
+        <li><a href="/">Home</a></li>
+        <li aria-current="page">Releases</li>
+      </ol>
+      <p class="eyebrow">Releases</p>
+      <h1>Releases and versions</h1>
+      <p class="lede">kcoap has not released a version yet. The first release, 0.1.0, waits for the API-breaking work of the refactoring plan to land, so that it does not break its users right after.</p>
+      <ul class="fact-tiles" aria-label="Release status">
+        <li class="fact-tile"><span class="fact-tile-label">Version now</span><span class="fact-tile-value"><code>0.1.0-SNAPSHOT</code></span></li>
+        <li class="fact-tile"><span class="fact-tile-label">First release</span><span class="fact-tile-value">0.1.0</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Release freeze</span><span class="fact-tile-value">8 of 13 merged</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Published to</span><span class="fact-tile-value">Nowhere yet</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="latest">
+    <div class="container container-narrow">
+      <div class="section-head">
+        <p class="eyebrow">On GitHub</p>
+        <h2 id="latest">Latest releases</h2>
+        <p class="lede">Read live from GitHub when this page loads. Each release lists its changes, generated from the merged pull requests.</p>
+      </div>
+      <div class="release-feed" data-release-feed aria-live="polite">
+        <div class="callout callout-status">
+          <span class="callout-title">No release yet</span>
+          <p>kcoap had no release on 6 November 2026. The first, 0.1.0, follows the release freeze below; until then, build kcoap from source as <a href="/start/">Get started</a> shows. <a href="https://github.com/adihack/kcoap/releases">GitHub Releases</a> will list it.</p>
+        </div>
+      </div>
+      <p class="muted">The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">changelog</a> already lists every notable change since development began, under “Unreleased”, with a migration note for each breaking change.</p>
+    </div>
+  </section>
+
+  <section class="section section-soft" aria-labelledby="freeze">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">Release freeze</p>
+        <h2 id="freeze">What has to merge first</h2>
+        <p class="lede">No <code>v*</code> tag until thirteen work packages have merged: the ones that change the public API. Their state on 6 November 2026:</p>
+      </div>
+      <div class="card status-card">
+        <ol class="meter" aria-label="Work packages in the release freeze">
+          <li class="meter-block is-done" title="merged">A1</li>
+          <li class="meter-block is-done" title="merged">A2</li>
+          <li class="meter-block is-done" title="merged">A3</li>
+          <li class="meter-block is-done" title="merged">A4</li>
+          <li class="meter-block is-active" title="in progress">A5</li>
+          <li class="meter-block is-done" title="merged">W1</li>
+          <li class="meter-block is-done" title="merged">B1</li>
+          <li class="meter-block is-done" title="merged">B2</li>
+          <li class="meter-block" title="not started">B3</li>
+          <li class="meter-block is-done" title="merged">C1</li>
+          <li class="meter-block" title="not started">D1</li>
+          <li class="meter-block" title="not started">D2</li>
+          <li class="meter-block" title="not started">C3</li>
+        </ol>
+        <ul class="meter-legend">
+          <li class="is-done">8 merged</li>
+          <li class="is-active">1 in progress</li>
+          <li>4 not started</li>
+        </ul>
+      </div>
+      <div class="table-wrap mt-2">
+        <table class="table-stack">
+          <thead><tr><th scope="col">Package</th><th scope="col">What it does</th><th scope="col" class="state-col">State</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">A1</th><td>OSCORE safe persistence and secret hygiene</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">A2</th><td>EDHOC capability-aware negotiation, typed retry, returned sessions</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">A3</th><td>The EDHOC and OSCORE glue on interfaces and the application model</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">A4</th><td><code>kcoap-crypto</code> as the home of shared crypto blocks</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">A5</th><td><code>DefaultCryptoBackend</code> as a final adapter</td><td class="state-col"><span class="badge badge-partial">in progress</span></td></tr>
+            <tr><th scope="row">W1</th><td>RFC 8323 transport follow-ups</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">B1</th><td>One internal link per peer under the CoAP endpoint</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">B2</th><td><code>kcoap-coap-message</code> split out of <code>kcoap-coap</code></td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">B3</th><td>The public API of <code>kcoap-coap</code> cleaned up</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">C1</th><td>Build governance: ABI dumps, common-only cores, opt-in markers</td><td class="state-col"><span class="badge badge-done">merged</span></td></tr>
+            <tr><th scope="row">D1</th><td>Two configuration builders and explicit endpoint classes</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">D2</th><td>A <code>KcoapException</code> root, <code>@Throws</code> and a Swift smoke test</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+            <tr><th scope="row">C3</th><td>Assembly and documentation: a BOM, a getting-started guide, a platforms guide</td><td class="state-col"><span class="badge badge-todo">not started</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">TLS for <code>coaps+tcp</code> (T1), browser interop (I1), consumer samples (P1) and a crypto conformance suite (C2) do not block a release; C3 builds on C2, so C2 lands first in practice. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md#release-freeze">The freeze in the releasing guide</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="how">
+    <div class="container split">
+      <div>
+        <p class="eyebrow">Process</p>
+        <h2 id="how">How a tag becomes a release</h2>
+        <p class="lede">A release is a <code>v*</code> tag. The version is the tag without the <code>v</code>; between releases the build holds the next version with <code>-SNAPSHOT</code>.</p>
+        <ol class="steps">
+          <li><h3>Test</h3><p>The whole CI workflow runs again: unit tests on every target, the coverage floor, interop with libcoap and libedhoc, the Apple targets and the API reference. Nothing is published if any of it fails.</p></li>
+          <li><h3>Publish</h3><p>A macOS runner builds every module for every target. Releases always go to GitHub Packages, and to Maven Central once its namespace and secrets are set up; they are signed once a signing key is.</p></li>
+          <li><h3>Release notes</h3><p>A GitHub Release with notes generated from the merged pull requests. A version with a <code>-</code>, such as <code>0.2.0-rc1</code>, is marked as a pre-release.</p></li>
+          <li><h3>API reference</h3><p>Dokka builds the reference and the workflow deploys it to GitHub Pages.</p></li>
+        </ol>
+      </div>
+      <figure class="figure">
+        <svg class="diagram diagram-narrow" viewBox="0 0 440 491" role="img" aria-labelledby="fig-release-title fig-release-desc"><title id="fig-release-title">How a tag becomes a release</title><desc id="fig-release-desc">Pushing a v* tag, such as v0.1.0, starts the release workflow. Step 1 runs the whole CI workflow; if any of it fails, nothing is published. Step 2 publishes every module for every target from a macOS runner: always to GitHub Packages, and to Maven Central once its namespace and secrets are set up. Step 3 creates the GitHub Release with notes generated from the merged pull requests. Step 4 deploys the API reference, built by Dokka, to GitHub Pages.</desc><defs><marker id="rel-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head" d="M0 0 10 5 0 10z"/></marker></defs><rect class="d-box-amber" x="1" y="1" width="438" height="58" rx="12"/><text class="d-title d-on-amber" x="19" y="26">A v* tag is pushed</text><text class="d-mono-small d-on-amber" x="19" y="45">git push origin v0.1.0</text><path class="d-arrow" d="M220 59V81" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="84" width="438" height="58" rx="12"/><text class="d-title" x="19" y="109">1 · Test</text><text class="d-sub" x="19" y="128">the whole CI workflow; nothing is published if it fails</text><rect class="d-box" x="1" y="170" width="438" height="58" rx="12"/><text class="d-title" x="19" y="195">2 · Publish, on macOS</text><text class="d-sub" x="19" y="214">every module, every target, from one host</text><path class="d-arrow" d="M220 142V167" marker-end="url(#rel-head)"/><path class="d-line" d="M220 228V242M110 242H330M110 242V256M330 242V256"/><rect class="d-box-soft" x="1" y="258" width="214" height="58" rx="12"/><text class="d-title" x="108" y="283" text-anchor="middle">GitHub Packages</text><text class="d-sub" x="108" y="302" text-anchor="middle">every release</text><rect class="d-box-dashed" x="225" y="258" width="214" height="58" rx="12"/><text class="d-title" x="332" y="283" text-anchor="middle">Maven Central</text><text class="d-sub" x="332" y="302" text-anchor="middle">once it is set up</text><path class="d-line" d="M110 316V330M330 316V330M110 330H330"/><path class="d-arrow" d="M220 330V345" marker-end="url(#rel-head)"/><rect class="d-box" x="1" y="348" width="438" height="58" rx="12"/><text class="d-title" x="19" y="373">3 · GitHub Release</text><text class="d-sub" x="19" y="392">notes from the merged pull requests</text><path class="d-arrow" d="M220 406V428" marker-end="url(#rel-head)"/><rect class="d-box-accent" x="1" y="431" width="438" height="58" rx="12"/><text class="d-title d-on-accent" x="19" y="456">4 · API reference</text><text class="d-sub d-on-accent-2" x="19" y="475">Dokka, deployed to GitHub Pages</text></svg>
+        <figcaption>The release workflow, from tag to API reference. The dashed box is not set up yet.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section section-soft" aria-labelledby="before">
+    <div class="container container-narrow">
+      <div class="section-head">
+        <p class="eyebrow">Checklist</p>
+        <h2 id="before">Before 0.1.0 is tagged</h2>
+        <p class="lede">The releasing guide lists what has to be true first. On 6 November 2026:</p>
+      </div>
+      <ul class="checks card">
+        <li class="is-open">The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
+        <li class="is-open">CHANGELOG.md has an entry for the version, with migration notes.</li>
+        <li class="is-open">The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
+        <li class="is-open">The Maven Central and signing secrets are set.</li>
+        <li>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
+        <li>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
+        <li class="is-open">The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
+        <li class="is-open"><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="versioning">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">Versioning</p>
+        <h2 id="versioning">The versioning policy in short</h2>
+        <p class="lede">Semantic Versioning 2.0.0, one version for every module, and a build that checks the public API on every change.</p>
+      </div>
+      <div class="grid grid-3">
+        <article class="card">
+          <h3>One version for all modules</h3>
+          <p>Every published module is released at once with the same version. Use one version for all kcoap modules in a build: they share internal plumbing, and mixed versions are not supported.</p>
+        </article>
+        <article class="card">
+          <h3>Before 1.0</h3>
+          <p>A minor release, such as 0.1.0 to 0.2.0, may break the API; each break is listed in the changelog under “Changed (breaking)” with a migration note. A patch release is fixes only and never breaks the API.</p>
+        </article>
+        <article class="card">
+          <h3>From 1.0</h3>
+          <p>Breaking changes only in a major release, after a deprecation that lasts at least one minor release. A security fix that cannot avoid a break, or a raised minimum, may break in a minor.</p>
+        </article>
+        <article class="card">
+          <h3>API tiers</h3>
+          <p>The stable API is what the ABI dumps hold. <code>@ExperimentalKcoapApi</code> may change in any minor release; <code>@InternalKcoapApi</code> is not API. Unpublished modules promise nothing.</p>
+        </article>
+        <article class="card">
+          <h3>On the wire</h3>
+          <p>A deviation from an RFC is a bug, fixed in the next patch or minor. A default that changes the wire, such as turning Q-Block on, changes only in a minor or major release. Suite −24 follows its draft.</p>
+        </article>
+        <article class="card">
+          <h3>Security fixes</h3>
+          <p>Listed under “Security” in the changelog. A behaviour change that removes a vulnerability may ship in a patch release.</p>
+        </article>
+      </div>
+      <div class="table-wrap mt-2">
+        <table>
+          <caption>Raising a minimum is a breaking change, in a minor or major release only.</caption>
+          <thead><tr><th scope="col">Minimum</th><th scope="col">Version</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Android</th><td>API level 26 (Android 8.0)</td></tr>
+            <tr><th scope="row">Kotlin in a consuming project</th><td>2.3 (kcoap is built with Kotlin 2.4)</td></tr>
+            <tr><th scope="row">JVM bytecode and runtime</th><td>Java 17</td></tr>
+            <tr><th scope="row">Building kcoap</th><td>JDK 17</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted"><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/versioning.md">The full versioning policy</a> · <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/releasing.md">The releasing guide</a></p>
+    </div>
+  </section>
+
+  <section class="section section-soft" aria-labelledby="where">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">Channels</p>
+        <h2 id="where">Where releases will be</h2>
+      </div>
+      <div class="grid grid-2">
+        <article class="card">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 2.75 8.25 4.5v9.5L12 21.25 3.75 16.75v-9.5z"/><path d="m3.75 7.25 8.25 4.5 8.25-4.5M12 11.75v9.5"/></svg></div>
+          <h3>Maven Central</h3>
+          <p>After the first release, once the <code>dev.kcoap</code> namespace is verified: <code>dev.kcoap:&lt;module&gt;:&lt;version&gt;</code> from <code>mavenCentral()</code>, with no other repository. <span class="badge badge-todo">not yet</span></p>
+        </article>
+        <article class="card">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 2.75 8.25 4.5v9.5L12 21.25 3.75 16.75v-9.5z"/><path d="m3.75 7.25 8.25 4.5 8.25-4.5M12 11.75v9.5"/></svg></div>
+          <h3>GitHub Packages</h3>
+          <p>Every release, from <code>https://maven.pkg.github.com/adihack/kcoap</code>. Gradle needs a GitHub token with <code>read:packages</code> to read it, even for a public package. <span class="badge badge-todo">not yet</span></p>
+        </article>
+        <article class="card">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 12.25V4.5a1 1 0 0 1 1-1h7.75l8.25 8.25-8.75 8.75z"/><path d="M8 8h.01"/></svg></div>
+          <h3>GitHub Releases</h3>
+          <p>One per tag, with notes generated from the merged pull requests. The artifacts are in the Maven repositories, not attached to the release. <a href="https://github.com/adihack/kcoap/releases">GitHub Releases</a>.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4.75A1.75 1.75 0 0 1 5.75 3H20v15H5.75A1.75 1.75 0 0 0 4 19.75z"/><path d="M4 19.75A1.75 1.75 0 0 0 5.75 21.5H20V18"/></svg></div>
+          <h3>API reference</h3>
+          <p>Published to <code>adihack.github.io/kcoap</code> with the first release; it is not online yet. Until then, <code>./gradlew dokkaGenerate</code> builds it into <code>build/dokka/html</code>.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/"><img src="/assets/kcoap-logo.svg" alt="" width="32" height="32"><span>kcoap</span></a>
+        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. In development: version <code>0.1.0-SNAPSHOT</code>, nothing released yet.</p>
+      </div>
+      <div>
+        <p class="footer-heading">Site</p>
+        <ul class="footer-links">
+          <li><a href="/start/">Get started</a></li>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/releases/">Releases</a></li>
+          <li><a href="/sponsors/">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer-heading">Platforms</p>
+        <ul class="footer-links">
+          <li><a href="/start/jvm/">JVM</a></li>
+          <li><a href="/start/android/">Android</a></li>
+          <li><a href="/start/apple/">iOS and macOS</a></li>
+          <li><a href="/start/linux/">Linux</a></li>
+          <li><a href="/start/browser/">Browsers</a></li>
+          <li><a href="/start/node/">Node.js</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer-heading">Project</p>
+        <ul class="footer-links">
+          <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
