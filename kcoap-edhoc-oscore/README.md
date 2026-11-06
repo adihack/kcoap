@@ -96,7 +96,7 @@ share its store with contexts outside its repository.
 
 ```kotlin
 val security = PeerSecurity()
-val client = CoapClient(transport, scope, CoapClientConfig(security = security))
+val client = CoapClient(transport, scope, CoapClientConfig { this.security = security })
 val server = CoapUri.parse("coap://192.0.2.1")
 // Two round trips in total (RFC 9668): message_1 and message_2 here, message_3 with the first request.
 val (session, protection) = EdhocClientHandshake.over(client, server, initiatorConfig, crypto).runCombined()

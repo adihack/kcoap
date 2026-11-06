@@ -851,6 +851,14 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 - **Risk:** low, with a large diff at call sites.
 - **Accept:** RFC 7252/8323 matching tests for equality, including `usesTls`; the ABI diff matches the listed changes.
 
+> **Amendment (D1).** The constructors of the two configurations are deprecated, not yet private as §3.5 has
+> it: work in flight on other branches (I1) and the website's samples keep compiling, with a warning, and
+> [releasing.md](releasing.md#release-freeze) removes them before 0.1.0. The DSL factory is a function named
+> after the class (`CoapClientConfig { ... }`), which reads like the constructor it replaces, rather than
+> `LogConfig`'s `build { ... }`; both builders also have `Default`. `Endpoint.Udp` and `Tcp` keep `host` in
+> normal form (an `IpLiteral` or a lower-case name) and compare it; `Endpoint.WebSocket` keeps `uri` as given
+> and compares its RFC 7252 §6.6 normal form, with the RFC 6455 default ports.
+
 **WP-D2: KcoapException root, @Throws, Swift smoke test**
 
 - **Findings:** API-02 (1); API-03 (6); API-09 (5).

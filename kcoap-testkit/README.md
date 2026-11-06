@@ -44,7 +44,7 @@ on virtual time.
 fun survivesALossyNetwork() = runTest {
     val network = InMemoryNetwork(backgroundScope, Random(42))
     network.conditions = LinkConditions(lossRate = 0.2, duplicationRate = 0.1, jitter = 50.milliseconds)
-    val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+    val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
     val server = CoapServer(network.attach(), backgroundScope, endpointConfig = config) {
         resource("hello") { get { CoapResponse.content("Hello") } }
     }
@@ -82,14 +82,14 @@ abstract class MyConformanceTest {
     @Test
     fun getsTheResource() = runTest {
         val link = link(InMemoryNetwork(backgroundScope), InMemoryConnections())
-        val config = CoapEndpointConfig(timeSource = testScheduler.timeSource)
+        val config = CoapEndpointConfig { timeSource = testScheduler.timeSource }
         val server = link.server()
         CoapServer(CoapEndpoint(backgroundScope, config, server.transport, server.connectors, server.listeners)) {
             resource("hello") { get { CoapResponse.content("Hello") } }
         }
         val client = link.client()
         val resolver = EndpointResolver { uri -> client.peer(EndpointResolver.Default.resolve(uri)) }
-        val coap = CoapClient(CoapEndpoint(backgroundScope, config, client.transport, client.connectors), CoapClientConfig(resolver = resolver))
+        val coap = CoapClient(CoapEndpoint(backgroundScope, config, client.transport, client.connectors), CoapClientConfig { this.resolver = resolver })
         assertEquals("Hello", coap.get("${link.uri}/hello").payloadAsText())
     }
 }

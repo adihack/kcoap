@@ -52,7 +52,7 @@ messages of another stack, a proxy or a gateway. `kcoap-edhoc-oscore` needs both
 | State machine over sealed states | `EdhocInitiator`, `EdhocResponder`, the UDP messaging layer |
 | Callbacks (`fun interface`) and `Flow` | `EadHandler`, `EdhocSessionListener`, `EndpointEventListener`, Observe as `Flow` |
 | Interceptor chain | `MessageInterceptor` for tracing and metrics |
-| Builder / DSL | `CoapMessage.Builder`, `OptionSet.Builder`, the server's resource DSL, `LogConfig.Builder` |
+| Builder / DSL | `CoapMessage.Builder`, `OptionSet.Builder`, the server's resource DSL, `LogConfig.Builder`; the configurations certain to grow, `CoapEndpointConfig` and `CoapClientConfig` (`CoapClientConfig { ... }`, `Builder`, `toBuilder()`, `Default`), so a new option breaks neither source nor compiled callers. Every other configuration keeps named-argument constructors |
 
 ## Layers
 
@@ -346,7 +346,8 @@ Reset, not acknowledged, resource removed, error response, session ended, failed
 **Errors.** Each facade has one exception type for what goes wrong at runtime, and translates the
 exceptions of the layers below it at its boundary; `IllegalArgumentException` and `IllegalStateException`
 are for mistakes of the caller. For `CoapClient`, `CoapEndpoint` and `CoapServer` that type is
-`CoapException`, whose `Reason` says what failed:
+`CoapException`, whose `Reason` says what failed. `Reason`, like `OscoreError`, may gain constants in any minor
+release, so a `when` over it keeps an `else` branch ([versioning](versioning.md#how-the-build-enforces-it)):
 
 | Signal from below | Becomes |
 |---|---|
@@ -478,6 +479,14 @@ On reliable transports one messaging-layer instance serves one connection, so to
 the connection and `Endpoint.Tcp` / `Endpoint.WebSocket` only describe the peer. `Endpoint.Tcp` records
 TLS (`coaps+tcp` and `coap+tcp` are distinct origins, RFC 8323 §8); for a connection this side opens, a
 host name stays a name, which the connector resolves and TLS checks the certificate against.
+
+The `Endpoint` variants are final classes whose equality is the matching rule written out, not data
+classes, so a field added later cannot change what matches: `Udp` is an address and a port (RFC 7252
+§5.3.2), its host kept in `IpLiteral` form; `Tcp` and `WebSocket` are the peer as RFC 8323 §8 names it,
+compared as RFC 7252 §6.6 compares URIs (hosts case-insensitively, IP literals in RFC 5952 form, a WebSocket
+URI without a port with its scheme's default), with TLS and plain peers apart on the same host and port;
+`Opaque` compares link and address exactly; `Secure` is the DTLS session and epoch. A connection is kept per
+equal `Endpoint`, so `ws://h/.well-known/coap` and `ws://h:80/.well-known/coap` share one.
 
 Everything above the messaging layer sees exchanges and links, never sockets. There is no URI scheme
 registry ([ADR 0004](adr/0004-no-scheme-registry.md)): the client's `EndpointResolver` turns a URI into an

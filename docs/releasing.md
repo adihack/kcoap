@@ -30,6 +30,9 @@ accidental tag from publishing early.
 Before tagging 0.1.0:
 
 - the freeze list above has merged and CI is green on `main`;
+- nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is already on its way
+  out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig` and
+  `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
 - the `dev.kcoap` namespace shows as verified in the Central Portal, and the Maven Central and signing
   secrets are set ([below](#before-the-first-maven-central-release)); the license is already set;

@@ -7,8 +7,18 @@ markers, which every module above it reaches through this one; no third-party li
   `MessageConnection` (WebSocket): the three shapes RFC 7252 and RFC 8323 define. The two connection
   shapes share the sealed `Connection`; a `Connector` opens them for a peer and a
   `ConnectionListener` accepts them.
-- `Endpoint`: what the messaging layer matches and deduplicates by. `Endpoint.Secure` implements the
-  RFC 7252 §9.1 rule that DTLS messages match only within the same session and epoch.
+- `Endpoint`: what the messaging layer matches and deduplicates by. Its variants are final classes whose
+  equality is written out as the RFCs' matching rule, not data classes:
+  - `Endpoint.Udp`: an address and a port (RFC 7252 §5.3.2), the host kept and compared in `IpLiteral`
+    form, so `2001:DB8::1` and `2001:db8::1` are one peer;
+  - `Endpoint.Tcp` and `Endpoint.WebSocket`: the peer as RFC 8323 §8 names it, compared as RFC 7252 §6.6
+    compares URIs: hosts case-insensitively, a WebSocket URI without a port with its scheme's default, and
+    `coaps+tcp` apart from `coap+tcp` and `wss` apart from `ws` on the same host and port (`usesTls`);
+  - `Endpoint.Opaque`: link and address, compared exactly;
+  - `Endpoint.Secure`: the RFC 7252 §9.1 rule that DTLS messages match only within the same session and
+    epoch.
+
+  `EndpointMatchingTest` and `EndpointTest` check each rule.
 - `PeerIdentity` and `SecurityMode`: the channel-security identity handed to authorization.
 - `DatagramSecurity`: where DTLS plugs in, as a decorator of any `DatagramTransport`, with the contract
   an implementation must meet. It is `@ExperimentalKcoapApi` until kcoap-dtls implements it. TLS for

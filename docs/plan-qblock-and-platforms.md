@@ -128,7 +128,7 @@ public class QBlockClientConfig(
     public val withMessageSecurity: Boolean = false,
     public val missingBlockMBit: Boolean = false,
 )
-// CoapClientConfig(…, qBlock: QBlockClientConfig = QBlockClientConfig())
+// CoapClientConfig { qBlock = QBlockClientConfig() } (a constructor parameter until WP-D1 made it a builder property)
 
 // KC/server/QBlockServerConfig.kt
 public class QBlockServerConfig(

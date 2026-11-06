@@ -60,8 +60,11 @@ Declarations that are `internal` or `private` in Kotlin are not API either.
 
 ## Deprecation, from 1.0
 
-Before 1.0, API is changed or removed in a minor release, with its migration note. From 1.0, the plan
-is:
+Before 1.0, API is changed or removed in a minor release, with its migration note, and deprecating it
+first is optional. It is deprecated rather than removed at once only to let code still in flight move over
+with a warning instead of an error, such as other branches of the refactoring plan, and then it is removed
+before the next release, so that no release ships API that is already on its way out
+([releasing](releasing.md#release-freeze)). From 1.0, the plan is:
 
 1. A declaration that is to go is marked `@Deprecated` in a minor release, with a message that names its
    replacement and a `ReplaceWith` where the replacement is mechanical.

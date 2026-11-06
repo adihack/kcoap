@@ -11,9 +11,9 @@ an application that depends on kcoap-coap gets both, and imports the model from 
 
 | Package | What |
 |---|---|
-| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`, `CoapException` (how an exchange failed, with its `Reason`); internally the exchange layer, the `PeerLink` seam with `DatagramLink` (on the sans-IO `UdpMessaging`) and `ConnectionLink` (on the sans-IO `ReliableMessaging`) |
+| `dev.kcoap.coap.stack` | `CoapEndpoint`, its config (`CoapEndpointConfig { ... }` or its `Builder`) and `TransmissionParameters`, `TokenGenerator`, `MessageInterceptor`, `EndpointEvent`, `CoapException` (how an exchange failed, with its `Reason`); internally the exchange layer, the `PeerLink` seam with `DatagramLink` (on the sans-IO `UdpMessaging`) and `ConnectionLink` (on the sans-IO `ReliableMessaging`) |
 | `dev.kcoap.coap.server` | `CoapServer`, `CoapResource`, `ObservableResource`, `RequestContext`, `ResourceAttributes`, the `ResourceBuilder` DSL |
-| `dev.kcoap.coap.client` | `CoapClient`, `CoapClientConfig`, `EndpointResolver`, `ObserveCancellation` |
+| `dev.kcoap.coap.client` | `CoapClient`, `CoapClientConfig` (`CoapClientConfig { ... }` or its `Builder`), `EndpointResolver`, `ObserveCancellation` |
 
 ```kotlin
 val server = CoapServer(KtorUdpTransport.bind(port = 5683), scope) {
@@ -123,6 +123,12 @@ then message security (OSCORE through the SPI), then messaging, then the transpo
   responses. A call after `close()` fails with `CLOSED` without resolving its host, and one racing `close()`
   too, a ping on a connection included: the closed state is checked under the lock that registers the
   exchange. A malformed link-format document from a server is `BAD_RESPONSE`, with the parser's message.
+  `Reason` may gain constants in any minor release, so a `when` over it keeps an `else` branch.
+- **Configuration**: `CoapEndpointConfig` and `CoapClientConfig` are built with a DSL
+  (`CoapClientConfig { requestTimeout = 5.seconds }`) or a `Builder`, which Swift uses too, and have a `Default`
+  and `toBuilder()`; new options go into the builder, so neither source nor compiled callers break when one is
+  added. Their constructors are deprecated and go before the first release. Values are checked when the
+  configuration is built (`CoapClientConfigTest`, `CoapEndpointConfigTest`).
 - **Lifecycle**: one terminal transition however the endpoint ends (`close()`, cancellation of its
   scope, a failed datagram transport), with `closeCause` (`CLOSED` or `TRANSPORT_FAILED`) and
   `awaitClosed()`; open exchanges fail, `observe` collectors get a terminal failure, later calls fail at

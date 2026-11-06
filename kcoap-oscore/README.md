@@ -182,7 +182,7 @@ B.2 once it is implemented.
 | §5 | COSE_Encrypt0, nonce construction, AAD (Enc_structure over aad_array) |
 | §6 | OSCORE option compression ('kid', 'kid context', Partial IV) |
 | §7.2.1 | Sequence numbers below 2^40; the context stops when exhausted |
-| §8 | Request and response protection and verification, error responses with the RFC's diagnostics. Unprotected responses are not authenticated: the client passes the unprotected 4.xx and 5.xx errors (§8.2) on to a request that takes one response, and to a request carrying Inner Q-Block only 4.00, 4.01 and 5.xx without Echo or a block option, which end its body; every other one would steer the body from outside OSCORE (RFC 9177 §11) and is dropped |
+| §8 | Request and response protection and verification, error responses with the RFC's diagnostics (`OscoreError`, whose set may gain constants, so a `when` over it keeps an `else` branch). Unprotected responses are not authenticated: the client passes the unprotected 4.xx and 5.xx errors (§8.2) on to a request that takes one response, and to a request carrying Inner Q-Block only 4.00, 4.01 and 5.xx without Echo or a block option, which end its body; every other one would steer the body from outside OSCORE (RFC 9177 §11) and is dropped |
 | App. B.1.1 | Sequence-number persistence through the application's `SequenceNumberStore`: blocks reserved ahead, each durable before its first number is used; a failed or cancelled write hands out nothing and is retried |
 | App. B.1.2 | Echo freshness proof for contexts whose replay window may be lost (`FreshnessPolicy`, `AUTO` by default), surfaced to the stack as `UnprotectedRequest.challenge` |
 
