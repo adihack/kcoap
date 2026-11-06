@@ -28,6 +28,8 @@ package dev.kcoap.common
  * as a failed precondition does in Swift. `CoapUri.parse`, whose input is often typed in, lists
  * `IllegalArgumentException` so that Swift can catch a malformed URI.
  *
- * Only kcoap's modules create subtypes; the constructor is protected for them, and takes the [cause], or null.
+ * The class is open with a protected constructor, which takes the [cause] or null, for kcoap's protocol modules.
+ * Nothing stops another module from extending it, but applications should not, so that catching `KcoapException`
+ * means a failure of kcoap.
  */
 public open class KcoapException protected constructor(message: String, cause: Throwable?) : Exception(message, cause)
