@@ -59,15 +59,26 @@ import dev.whyoleg.cryptography.operations.SignatureVerifier
  *
  * The `supports` members probe once per instance and memoize the answer (docs/adr/0001-crypto-capabilities.md):
  * the first question about an algorithm runs its operations on throwaway keys, and every later one is a
- * lookup, however many callers ask at once. Probes call this backend's own operations, so a subclass that
- * overrides an operation is asked about its own; those operations must not ask `supports` in turn.
+ * lookup, however many callers ask at once.
  *
  * Private keys are [SoftwarePrivateKey]s holding raw key material in memory.
+ *
+ * The class is final (docs/adr/0002-delegation-not-subclassing.md). To change or add operations, wrap it in a
+ * decorator, `class MyBackend(d: CryptoBackend) : CryptoBackend by d`, as `BouncyCastleCryptoBackend` adds
+ * ML-KEM and ML-DSA. A decorator overrides the `supports` members of what it changes or adds: the delegate
+ * answers them by probing its own operations, never the decorator's.
+ *
+ * No cryptography-kotlin type is part of this module's public API, so the API does not follow
+ * cryptography-kotlin's releases. The provider is always the platform's default one.
  */
-public open class DefaultCryptoBackend(
-    private val provider: CryptographyProvider = CryptographyProvider.Default,
+public class DefaultCryptoBackend internal constructor(
+    private val provider: CryptographyProvider,
 ) : CryptoBackend {
-    private val capabilities = CapabilityMemo()
+    /** A backend on the platform's default provider: JCA, CryptoKit and CommonCrypto, OpenSSL or WebCrypto. */
+    public constructor() : this(CryptographyProvider.Default)
+
+    /** The answers of the `supports` members; internal so that tests can see what it holds. */
+    internal val capabilities: CapabilityMemo = CapabilityMemo()
 
     /** Probed once per instance: an AEAD built under a zero key encrypts an empty message. */
     override suspend fun supports(algorithm: AeadAlgorithm): Boolean =
@@ -80,7 +91,7 @@ public open class DefaultCryptoBackend(
     override suspend fun supports(algorithm: SignatureAlgorithm): Boolean =
         capabilities.answer(algorithm) { probe(algorithm) }
 
-    /** Probed once per instance; this backend has no KEM, so the answer is false unless a subclass adds one. */
+    /** Probed once per instance; this backend has no KEM, so the answer is false (a decorator may add one). */
     override suspend fun supports(algorithm: KemAlgorithm): Boolean =
         capabilities.answer(algorithm) { probe(algorithm) }
 
@@ -136,10 +147,7 @@ public open class DefaultCryptoBackend(
         return PlatformAead(algorithm.name, cipher, tagLength = algorithm.tagLength, nonceLength = algorithm.nonceLength)
     }
 
-    override suspend fun generateKeyPair(type: KeyType): KeyPair = platformKeyPair(type)
-
-    /** [generateKeyPair] on the provider, which no subclass replaces. */
-    private suspend fun platformKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
+    override suspend fun generateKeyPair(type: KeyType): KeyPair = capabilityCall(type.name) {
         when (type) {
             KeyType.X25519, KeyType.X448 -> {
                 val pair = platform(XDH).keyPairGenerator(type.xdhCurve()).generateKey()
@@ -268,7 +276,7 @@ public open class DefaultCryptoBackend(
      */
     private suspend fun generatesKeysOf(type: KeyType): Boolean = capabilities.answer(KeyGeneration(type)) {
         try {
-            platformKeyPair(type).privateKey.destroy()
+            generateKeyPair(type).privateKey.destroy()
             true
         } catch (_: UnsupportedAlgorithmException) {
             false
@@ -286,7 +294,7 @@ public open class DefaultCryptoBackend(
         provider.getOrNull(id) ?: throw UnsupportedAlgorithmException(id.name)
 
     /** The key material of a [SoftwarePrivateKey]; any other handle belongs to a different backend. */
-    protected fun PrivateKey.softwareKey(): SoftwarePrivateKey =
+    private fun PrivateKey.softwareKey(): SoftwarePrivateKey =
         this as? SoftwarePrivateKey
             ?: throw IllegalArgumentException("${this::class.simpleName} was not created by a software backend")
 

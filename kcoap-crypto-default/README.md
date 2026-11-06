@@ -21,7 +21,34 @@ if (!crypto.supports(AeadAlgorithm.CHACHA20_POLY1305)) { /* offer another AEAD *
 
 SHA-256, SHA-384, SHAKE256 (common code), HMAC, AES-CCM (common code on the provider's AES block),
 AES-GCM, ChaCha20/Poly1305, X25519, X448, Ed25519, and ECDH and ECDSA on P-256 and P-384, with raw key
-encodings as `KeyType` documents them. Post-quantum algorithms are in `kcoap-crypto-bc`.
+encodings as `KeyType` documents them. Post-quantum algorithms are in `kcoap-crypto-bc`, which wraps this
+backend: `BouncyCastleCryptoBackend(DefaultCryptoBackend())`.
+
+## Public API and extending it
+
+The public API is the class `DefaultCryptoBackend` with its no-argument constructor and the `CryptoBackend`
+members, nothing else. It always uses the platform's default provider, and no cryptography-kotlin type
+appears in it, so cryptography-kotlin is an `implementation` dependency: your code does not compile against
+it, and its 0.x releases do not change kcoap's API. Choosing a provider (a FIPS JCA provider, say) may be
+added later as a feature of its own.
+
+The class is final ([ADR 0002](../docs/adr/0002-delegation-not-subclassing.md)). To change or add
+operations, wrap it in a decorator that delegates everything else, and call the delegate where a subclass
+called `super`:
+
+```kotlin
+class AuditedBackend(private val inner: CryptoBackend = DefaultCryptoBackend()) : CryptoBackend by inner {
+    override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray): ByteArray {
+        audit.record(algorithm)                       // the application's own
+        return inner.sign(algorithm, privateKey, data)
+    }
+}
+```
+
+A decorator forwards the `supports` members to its delegate, which probes its own operations, not the
+decorator's. One that adds or removes an algorithm overrides the matching `supports` members, as
+`BouncyCastleCryptoBackend` does for ML-KEM and ML-DSA ([ADR 0001](../docs/adr/0001-crypto-capabilities.md)).
+A key-store backend is such a decorator too ([kcoap-crypto](../kcoap-crypto/README.md#keys-in-a-key-store)).
 
 ## Capabilities and fallbacks
 
@@ -55,7 +82,7 @@ values.
 | `HkdfTest` | RFC 5869, RFC 8613 Appendix C key derivation |
 | `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, fresh platform keys of both parities through `Sec1` (whose vectors are in kcoap-crypto), unusable peer keys |
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
-| `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads |
+| `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads (the testkit's `Stress`); the KEM and SHAKE256 answers, which never reach the provider, come from the memo too |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |
 | `ConsumerRulesTest` (JVM) | the jar's R8 rules cover every Bouncy Castle class cryptography-kotlin's JDK provider refers to (below) |
 

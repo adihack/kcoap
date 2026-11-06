@@ -1,7 +1,4 @@
-public class dev/kcoap/crypto/backend/DefaultCryptoBackend : dev/kcoap/crypto/CryptoBackend {
-	public fun <init> ()V
-	public fun <init> (Ldev/whyoleg/cryptography/CryptographyProvider;)V
-	public synthetic fun <init> (Ldev/whyoleg/cryptography/CryptographyProvider;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+public final class dev/kcoap/crypto/backend/DefaultCryptoBackend : dev/kcoap/crypto/CryptoBackend {
 	public fun aead (Ldev/kcoap/crypto/AeadAlgorithm;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun aesBlockCipher ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun decapsulate (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -13,7 +10,6 @@ public class dev/kcoap/crypto/backend/DefaultCryptoBackend : dev/kcoap/crypto/Cr
 	public fun keyAgreement (Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun randomBytes (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun sign (Ldev/kcoap/crypto/SignatureAlgorithm;Ldev/kcoap/crypto/PrivateKey;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	protected final fun softwareKey (Ldev/kcoap/crypto/PrivateKey;)Ldev/kcoap/crypto/SoftwarePrivateKey;
 	public fun supports (Ldev/kcoap/crypto/AeadAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun supports (Ldev/kcoap/crypto/HashAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun supports (Ldev/kcoap/crypto/KemAlgorithm;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
