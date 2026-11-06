@@ -24,7 +24,13 @@ kotlin {
 
 // The conformance suite prints a capability report (kcoap-crypto-testsuite). Its lines go to the build log, so a
 // CI log shows what the backend runs.
+// The report reaches the log only while the tests run, and it depends on the platform's cryptography, which
+// Gradle cannot see as an input. So the test tasks are never restored from the build cache (which CI's
+// setup-gradle brings from main) nor skipped as up to date: every build that asks for them runs them on its own
+// machine and logs that machine's report.
 tasks.withType<AbstractTestTask>().configureEach {
+    outputs.cacheIf("the capability report must reach the build log") { false }
+    outputs.upToDateWhen { false }
     val target = name
     val log = logger
     addTestOutputListener { _, output ->
