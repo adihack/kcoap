@@ -67,14 +67,17 @@ android {
 }
 
 dependencies {
-    implementation("dev.kcoap:kcoap-coap:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-transport-ktor:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-oscore:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-edhoc:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-cose:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-crypto:$kcoapVersion")
-    implementation("dev.kcoap:kcoap-crypto-default:$kcoapVersion")
-    "postQuantumImplementation"("dev.kcoap:kcoap-crypto-bc:$kcoapVersion")
+    // kcoap-bom sets the version of every kcoap module, those named here and those they bring along
+    // (docs/getting-started.md, "Add kcoap to a build").
+    implementation(platform("dev.kcoap:kcoap-bom:$kcoapVersion"))
+    implementation("dev.kcoap:kcoap-coap")
+    implementation("dev.kcoap:kcoap-transport-ktor")
+    implementation("dev.kcoap:kcoap-oscore")
+    implementation("dev.kcoap:kcoap-edhoc")
+    implementation("dev.kcoap:kcoap-cose")
+    implementation("dev.kcoap:kcoap-crypto")
+    implementation("dev.kcoap:kcoap-crypto-default")
+    "postQuantumImplementation"("dev.kcoap:kcoap-crypto-bc")
 
     // The unit tests run the tour's plain Kotlin on the JVM, without a device.
     testImplementation(libs.kotlin.test.junit)

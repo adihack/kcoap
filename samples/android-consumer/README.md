@@ -11,7 +11,7 @@ of its own, outside kcoap's, because it needs the Android SDK; CI builds it in t
 | | |
 |---|---|
 | minSdk | 26 (Android 8.0), from `android-minSdk` in kcoap's [version catalog](../../gradle/libs.versions.toml); compileSdk and targetSdk 36; AGP 9.4.1 |
-| Dependencies | kcoap's jvm artifacts resolve for Android from the published Gradle module metadata, with ktor, cryptography-kotlin and Bouncy Castle behind them |
+| Dependencies | kcoap's jvm artifacts resolve for Android from the published Gradle module metadata, every version set by `kcoap-bom` (WP-P1), with ktor, cryptography-kotlin and Bouncy Castle behind them |
 | Compilation | the app's Kotlin against kcoap's public API, with the Kotlin version kcoap is built with |
 | Dexing | D8 at minSdk 26 |
 | Shrinking | R8 on both release variants, with no rule of the app's own (`app/proguard-rules.pro` is empty): whatever kcoap needs ships in its jars |
@@ -46,9 +46,9 @@ Running the app on emulators across API levels is PL-2.
 ./gradlew -p samples/android-consumer assembleRelease lint test   # needs the Android SDK (ANDROID_HOME)
 ```
 
-The sample takes the kcoap version from `-Pkcoap.version` or, without it, from the repository's
-`gradle.properties`, which is what a plain `publishToMavenLocal` publishes; pass the same
-`-Pkcoap.version` to both commands to use another. It takes only `dev.kcoap` from the local Maven
+The sample takes the kcoap version, which it writes once, for `kcoap-bom`, from `-Pkcoap.version` or,
+without it, from the repository's `gradle.properties`, which is what a plain `publishToMavenLocal`
+publishes; pass the same `-Pkcoap.version` to both commands to use another. It takes only `dev.kcoap` from the local Maven
 repository. The APKs land in `app/build/outputs/apk/<flavor>/release/`, signed with the debug key so they
 install on an emulator, and R8's mapping in `app/build/outputs/mapping/`.
 
@@ -105,12 +105,14 @@ baseline for the libraries, and R8 in CI for what a release build keeps.
 ## Verified where
 
 - **Here, without the Android SDK:** the build configures with AGP 9.4.1 and the Kotlin Gradle plugin
-  2.4.21; both release classpaths resolve kcoap from the local Maven repository; each variant compiles the
-  intended Kotlin sources; the tour, compiled for the JVM against the published artifacts, runs in both
-  flavors (two GETs, one under OSCORE, and a second process restoring sequence numbers from the files),
-  and so do the unit tests; standalone R8 9.4.34 shrinks it to class files with JDK 21 as the library,
-  failing without kcoap-crypto-default's rules and passing with them, and the shrunk jar runs; no Java
-  resource is duplicated across the jars except `META-INF/MANIFEST.MF`, which AGP drops.
+  2.4.21; both release classpaths resolve kcoap from the local Maven repository (through `kcoap-bom`
+  since WP-P1, which checked the compile and runtime classpaths of both release variants again); each
+  variant compiles the intended Kotlin sources; the tour, compiled for the JVM against the published
+  artifacts, runs in both flavors (two GETs, one under OSCORE, and a second process restoring sequence
+  numbers from the files), and so do the unit tests; standalone R8 9.4.34 shrinks it to class files with
+  JDK 21 as the library, failing without kcoap-crypto-default's rules and passing with them, and the
+  shrunk jar runs; no Java resource is duplicated across the jars except `META-INF/MANIFEST.MF`, which AGP
+  drops.
 - **Here, with a stand-in for `android.jar`:** the same R8 shrinks it to DEX at min API 26 against a
   library of only the Java classes of API level 26 (from the signature `checkAndroidApi` uses) plus the
   EdEC and XEC key classes of API 33, which `android.jar` 36 has. In both flavors it reports no class
