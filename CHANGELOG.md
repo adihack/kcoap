@@ -419,6 +419,7 @@ Bounded reasons, and new events (WP-B4):
 - **`EndpointEvent` has three new subtypes**, `ResponseRejected`, `RequestCompleted` and `SecurityRejected`
   (see "Added"). A `when` over `EndpointEvent` without an `else` branch no longer compiles. *Migration:* add an
   `else` branch, which the KDoc of `EndpointEvent` has asked for since WP-B3, or branches for the new events.
+
 One exception root, and `@Throws` for Swift (WP-D2):
 
 - **Every protocol exception extends `KcoapException`** (kcoap-common) instead of `Exception`: `CoapException`,

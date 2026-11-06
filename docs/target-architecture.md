@@ -850,6 +850,11 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 >   scope asked (no lock on the hot path), not the suspend functions under the lock the finding suggested.
 > - **Ownership deviations**: kcoap-common's `LogConfig` default, `LoggerTest` and README for the WARN default (EO-8
 >   item 5). No expectation in kcoap-oscore or kcoap-edhoc-oscore had to change.
+> - **Found in review**: a datagram from UDP source port 0 could still write a WARN line with a stack trace, since
+>   every answer to it fails to send; it is dropped unparsed now, as `MessageRejected` with `INVALID_SOURCE`, and a
+>   failed send logs no stack trace. `ConnectionOpened` was reported under the connections' lock; it is reported
+>   after it, before the connection starts reading. `RequestCompleted` of a Q-Block2 follow-up reports what went
+>   out on that request (a 4.00, or nothing for a Continue), not the body's code.
 > - **Not done, as written**: EO-7 item 5 and EO-8 for kcoap-oscore and kcoap-edhoc stay with those modules, so they
 >   still log some rejected input at WARN, a dropped OSCORE response a second time next to kcoap-coap's DEBUG line;
 >   `CoapServerConfig.exceptionMapper` (EO-11's optional follow-up) is not added.

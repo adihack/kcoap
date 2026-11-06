@@ -234,8 +234,12 @@ application); Q-Block's multicast (RFC 9177 §4.8) and proxy rules
   (`UdpMessagingTest`, `ReliableMessagingTest`, `RequestResponseTest`), `RequestCompleted` per request with its
   bounded fields (`RequestCompletedTest`), `SecurityRejected` for a failed verification and a freshness challenge
   (`MessageSecurityTest`), the stats of an endpoint and a server as state comes and goes (`StatsTest`,
-  `QBlockReliableTest`), listeners combined with `+` (`EndpointEventListenerTest`), and `CoapResponseException`
-  for a request and a notification (`CoapResponseExceptionTest`).
+  `QBlockReliableTest`), listeners combined with `+` (`EndpointEventListenerTest`) and called outside the locks
+  (`ReliableTransportTest`), and `CoapResponseException` for a request and a notification
+  (`CoapResponseExceptionTest`). Rejected input logged once at DEBUG without a stack trace, and nothing at WARN:
+  malformed datagrams, invalid ACKs and Resets, datagrams from UDP source port 0 (`PeerInputLoggingTest`), responses
+  that failed verification (`VerificationFailureTest`) and requests message security rejected
+  (`MessageSecurityTest`).
 - Lifecycle, cancellation, failure boundaries and every resource bound per test class
   (`EndpointLifecycleTest`, `CancellationCleanupTest`, `FailureBoundaryTest`, `ResourceBoundsTest`,
   `TimeSourceContractTest`, `AmplificationTest`, `AddressVerificationTest`), on virtual time; floods from

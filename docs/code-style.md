@@ -126,7 +126,10 @@ The error model is [ADR 0011](adr/0011-error-model.md); in code:
   `CertificateValidationException`) do not extend it, and each layer translates them at its boundary
   ([architecture.md](architecture.md#the-coap-endpoint-as-built), "Errors"). A layer that catches broadly lets a
   cancellation of its caller pass unchanged and reports any other exception of what it calls as its own.
-- CoAP error responses (4.xx, 5.xx) are responses, returned to the caller, not exceptions.
+- CoAP error responses (4.xx, 5.xx) are responses: a client returns them to its caller, never throws them. On the
+  server a resource handler may throw `CoapResponseException` to answer with one from deep in its code; the server
+  turns it into that response, so it never leaves the server and is no facade exception
+  ([ADR 0011](adr/0011-error-model.md#amendment-wp-b4)).
 - A public suspend entry point that can fail lists `@Throws(KcoapException::class, CancellationException::class)`,
   so Swift gets an `NSError` instead of a crash; an override keeps the `@Throws` of what it overrides, which
   Kotlin/Native requires.

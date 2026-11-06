@@ -58,3 +58,13 @@ lambdas).
 - `ErrorModelTest` (kcoap-edhoc-oscore) asserts that every facade's type is a `KcoapException` and no SPI signal
   is; `ThrowsDeclarationsTest` reads every `@Throws` list back from the JVM class files; kcoap-swift-smoke catches a
   timeout and a malformed URI from Swift in the macOS CI job.
+
+## Amendment (WP-B4)
+
+WP-B4 added `CoapResponseException` (`dev.kcoap.coap.server`), which a resource handler throws with a 4.xx or 5.xx
+`CoapResponse` to answer its request from however deep in the application's code. It does not contradict "4.xx and
+5.xx responses are responses": the server catches it and sends the response it carries, so it never reaches a
+caller of kcoap, and a client still returns error responses. It is a control-flow signal inside the server, neither
+a facade's runtime failure nor a signal of an SPI between the layers, so it extends `Exception` rather than
+`KcoapException`: a `catch (e: KcoapException)` around a client call must not be expected to see it, and
+`ErrorModelTest`'s two lists leave it out.
