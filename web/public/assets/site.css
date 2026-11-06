@@ -1411,7 +1411,7 @@ pre {
   scrollbar-color: var(--c-code-border) transparent;
 }
 
-.code-block:not(:has(.code-block-label)) pre {
+.js .code-block:not(:has(.code-block-label)):not([data-no-copy]) pre {
   padding-top: 2.75rem;
 }
 
@@ -1645,7 +1645,11 @@ pre {
 
 .tabs-window .code-block pre {
   min-height: 27.5rem;
-  padding: 1.35rem 1.5rem 3.25rem;
+  padding: 1.35rem 1.5rem;
+}
+
+.js .tabs-window .code-block pre {
+  padding-bottom: 3.25rem;
 }
 
 .tabs-window .copy-button {
@@ -1666,7 +1670,11 @@ pre {
 
   .tabs-window .code-block pre {
     min-height: 0;
-    padding: 1.1rem 1rem 3.25rem;
+    padding: 1.1rem 1rem;
+  }
+
+  .js .tabs-window .code-block pre {
+    padding-bottom: 3.25rem;
   }
 }
 
@@ -2424,6 +2432,13 @@ pre {
 
 .cta-band :focus-visible {
   outline-color: #ffc145;
+}
+
+@media (max-width: 599px) {
+  .cta-band .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* 11. Utilities, motion, print ---------------------------------------------------------------------- */
