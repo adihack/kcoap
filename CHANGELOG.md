@@ -611,6 +611,11 @@ Build governance (WP-C1):
 
 ### Fixed
 
+- A Q-Block2 notification body could be lost on a busy client and recovered only after minutes, or not at
+  all. The client acknowledged a Confirmable block before its body had taken it, and a body that lagged behind
+  the receive loop dropped what did not fit its bounded inbox; the server never sends an acknowledged block
+  again (RFC 7252 §4.2). A Confirmable response that the body cannot take now stays unacknowledged, and its
+  retransmission is delivered.
 - A connection that an endpoint accepted or opened while it closed could stay open, and the accept loop
   could fail with `IllegalStateException: Already started`: a new connection was registered in the
   connection pool before it started, so a `close()` in between shut it down unstarted. It is now

@@ -265,6 +265,40 @@ class ExchangeModesTest {
         assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
     }
 
+    /**
+     * RFC 7252 §4.2: an ACK tells the sender that the message arrived, so it never sends it again. A Confirmable
+     * response that does not fit the inbox is therefore left unacknowledged and forgotten by deduplication (§4.5):
+     * the sender's retransmission after ACK_TIMEOUT is delivered as new, once the driver has made room.
+     */
+    @Test
+    fun rfc7252Section4_2AConfirmableResponseThatDoesNotFitTheInboxIsNotAcknowledgedAndComesAgain() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val endpoint = fixture.endpoint()
+        val inbox = ExchangeInbox(capacity = 2)
+        fun acknowledged() = fixture.sentBy(endpoint, CoapMessageType.ACK).map { it.messageId }
+        fun drain() = generateSequence { inbox.tryReceive() }.map { (it as ExchangeEvent.Response).message.payloadAsText() }.toList()
+
+        val exchange = endpoint.openExchange(peer.address, get(), false, null, ResponseMode.Inbox(inbox))
+        val request = peer.receive()
+        val responses = List(4) { peer.response(request, CoapMessageType.CON, "block $it") }
+        responses.forEach { peer.send(it) }
+        delay(1.seconds)
+
+        assertEquals(responses.take(2).map { it.messageId }, acknowledged(), "only what the inbox took is acknowledged")
+        assertEquals(2, inbox.lost)
+        assertEquals(listOf("block 0", "block 1"), drain())
+        // The sender retransmits what it got no ACK for, with the same Message IDs.
+        responses.drop(2).forEach { peer.send(it) }
+        delay(1.seconds)
+
+        assertEquals(listOf("block 2", "block 3"), drain(), "the retransmissions are delivered, not taken for duplicates")
+        assertEquals(responses.map { it.messageId }, acknowledged())
+        assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
+        assertTrue(exchange.isOpen)
+        exchange.cancel()
+    }
+
     @Test
     fun rfc9177Section7_1AConfirmableInboxExchangeReportsAnEmptyAckAndStaysOpen() = runTest {
         val fixture = StackFixture(this)

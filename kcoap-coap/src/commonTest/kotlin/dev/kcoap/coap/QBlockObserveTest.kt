@@ -18,6 +18,7 @@ import dev.kcoap.coap.stack.CoapException
 import dev.kcoap.coap.stack.EndpointEvent
 import dev.kcoap.coap.stack.MissingBlocks
 import dev.kcoap.coap.stack.TransmissionParameters
+import dev.kcoap.coap.stack.withHeader
 import dev.kcoap.testkit.DatagramFate
 import dev.kcoap.testkit.LinkConditions
 import dev.kcoap.transport.Endpoint
@@ -158,17 +159,19 @@ class QBlockObserveTest {
         observeCancellation: ObserveCancellation = ObserveCancellation.DEREGISTER,
         seed: Int = 1,
         amplification: AmplificationPolicy = AmplificationPolicy.OFF,
+        serverParameters: TransmissionParameters = parameters,
+        clientParameters: TransmissionParameters = parameters,
     ): Setup {
         val fixture = StackFixture(this, seed)
         val resource = Resource("obs", type, bodies)
         val server = fixture.server(
             CoapServerConfig(amplification = amplification, qBlock = QBlockServerConfig(isEnabled = true)),
-            fixture.endpointConfig(parameters = parameters),
+            fixture.endpointConfig(parameters = serverParameters),
         ) { add(resource) }
         val qBlock = QBlockClientConfig(QBlockMode.ASSUME_SUPPORTED, missingBlockMBit = missingBlockMBit)
         val client = fixture.client(
             CoapClientConfig(blockSize = blockSize, observeCancellation = observeCancellation, qBlock = qBlock),
-            fixture.endpointConfig(parameters = parameters),
+            fixture.endpointConfig(parameters = clientParameters),
         )
         return Setup(fixture, server, client, resource)
     }
@@ -802,6 +805,37 @@ class QBlockObserveTest {
         assertEquals(2, setup.received.size)
     }
 
+    /**
+     * RFC 7252 §4.2: the server never sends an acknowledged block again, so the client acknowledges a Confirmable
+     * notification block only once its body has taken it. Here the server sends the 47 Confirmable blocks of a body
+     * all at once (NSTART 64, as a client whose body lags behind its receive loop sees them) into a body inbox of
+     * 12 events (MAX_PAYLOADS 1): the blocks beyond it stay unacknowledged and come again after ACK_TIMEOUT, so the
+     * body is whole seconds later, not after MAX_TRANSMIT_SPAN.
+     */
+    @Test
+    fun rfc7252Section4_2ConfirmableNotificationBlocksTheClientCannotTakeYetComeAgain() = runTest {
+        val setup = setup(
+            { if (it == 0) body(16, 0) else body(3000, it) },
+            type = CoapMessageType.CON,
+            blockSize = 64,
+            serverParameters = TransmissionParameters(nstart = 64),
+            clientParameters = TransmissionParameters(maxPayloads = 1),
+        )
+        setup.observe(this, CoapRequest.Builder(CoapCode.GET, CoapUri.parse(setup.uri)).build())
+        delay(1.seconds)
+        setup.resource.change()
+        delay(10.seconds)
+
+        assertEquals(listOf(body(16, 0), body(3000, 1)).map { it.toList() }, setup.received.map { it.payload.toList() })
+        val server = setup.fixture.address(setup.server.endpoint)
+        val blocks = setup.fixture.traffic.filter { wire ->
+            wire.from == server && wire.message?.let { it.type == CoapMessageType.CON && it.options.qBlock2 != null } == true
+        }
+        assertTrue(blocks.size > 47, "blocks the client could not take yet were sent again: ${blocks.size}")
+        assertEquals(0, setup.fixture.events.count { it is EndpointEvent.QBlockRecovery }, "nothing had to be asked for")
+        assertEquals(1, setup.resource.observerCount)
+    }
+
     // ---------------------------------------------------------------- ending an observation
 
     @Test
@@ -1106,6 +1140,36 @@ class QBlockObserveTest {
         assertEquals(listOf(body(128, 1), body(128, 3)).map { it.toList() }, s.received.map { it.payload.toList() })
         assertEquals(1, s.fixture.events.count { it is EndpointEvent.PartialBodyDropped })
         assertNull(s.failure, "the observation goes on")
+    }
+
+    /**
+     * RFC 7252 §4.2 against a scripted server: 60 Confirmable blocks of a notification body back to back, more than
+     * the body's inbox of 48 events takes before the client's body driver runs. The client acknowledges only the
+     * blocks it took; the server sends the others again with the same Message IDs, as it would after ACK_TIMEOUT,
+     * and the client, which forgot them, delivers the whole body.
+     */
+    @Test
+    fun rfc7252Section4_2ConfirmableBlocksBeyondTheInboxAreNotAcknowledgedAndTheirRetransmissionsComplete() = runTest {
+        val s = scripted()
+        s.observe(this)
+        val (peer, registration) = s.requests.receive()
+        val token = registration.token
+        s.sendBody(peer, token, body(64, 0), 0, 1)
+        val big = body(64 * 60, 1)
+        val blocks = (0L until 60L).map { s.block(token, it, big, 1, 2).withHeader(CoapMessageType.CON, 0x7400 + it.toInt()) }
+        blocks.forEach { s.server.send(peer, it) }
+        delay(1.seconds)
+
+        fun acknowledged() = s.fixture.sentBy(s.client.endpoint).filter { it.type == CoapMessageType.ACK }.map { it.messageId }.toSet()
+        val unacknowledged = blocks.filter { it.messageId !in acknowledged() }
+        assertTrue(unacknowledged.isNotEmpty(), "the inbox holds fewer than 60 blocks, so some went unacknowledged")
+        unacknowledged.forEach { s.server.send(peer, it) }
+        delay(1.seconds)
+
+        assertEquals(listOf(body(64, 0), big).map { it.toList() }, s.received.map { it.payload.toList() })
+        assertEquals(blocks.map { it.messageId }.toSet(), acknowledged(), "every block acknowledged once taken")
+        assertEquals(emptyList(), s.fixture.sentBy(s.client.endpoint).filter { it.type == CoapMessageType.RST })
+        assertNull(s.failure)
     }
 
     @Test

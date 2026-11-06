@@ -20,7 +20,8 @@ import kotlin.time.Duration.Companion.seconds
  * - Message IDs that are not reused towards a peer within EXCHANGE_LIFETIME (§4.4),
  * - retransmission of Confirmable messages with exponential back-off inside MAX_TRANSMIT_SPAN (§4.2),
  * - deduplication over EXCHANGE_LIFETIME / NON_LIFETIME, answering duplicate Confirmable messages with
- *   the same ACK or RST (§4.5),
+ *   the same ACK or RST (§4.5), and forgetting a Confirmable response the upper layer could not take, so its
+ *   retransmission is delivered ([forgetUnanswered], §4.2),
  * - Empty ACKs for slow requests, switching to a separate response (§5.2.2),
  * - Resets for Empty Confirmable messages (CoAP ping), reserved code classes and format errors
  *   (§4.2, §4.3), and silently ignored invalid ACKs and RSTs,
@@ -274,6 +275,21 @@ internal class UdpMessaging(
     fun acknowledge(from: Endpoint, messageId: Int) {
         val entry = received[MessageKey(from, messageId)] ?: return
         if (entry.type == CoapMessageType.CON && entry.state == InboundEntry.State.PENDING) sendEmptyAck(entry)
+    }
+
+    /**
+     * Leaves a delivered Confirmable message that the upper layer could not take unanswered, and forgets that it
+     * arrived: an ACK would tell the sender not to send it again (§4.2), and with the deduplication entry the
+     * retransmission would be taken for a duplicate (§4.5). The sender's retransmission after ACK_TIMEOUT is then
+     * delivered as a new message. Only a message still unanswered is forgotten; a Non-confirmable one is left as
+     * it is, and counts as lost.
+     */
+    fun forgetUnanswered(from: Endpoint, messageId: Int) {
+        val key = MessageKey(from, messageId)
+        val entry = received[key] ?: return
+        if (entry.type != CoapMessageType.CON || entry.state != InboundEntry.State.PENDING) return
+        debug(from, messageId) { "Not taken; left for the sender to send again" }
+        received.remove(key)
     }
 
     /** Rejects a delivered message with a Reset (§4.2, §4.3), remembered for duplicates of a Confirmable one. */

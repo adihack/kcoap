@@ -45,6 +45,19 @@ internal class DeduplicationCache(
         return entries.size < maxEntries
     }
 
+    /**
+     * Forgets the message with [key], as if it had never arrived, so the next one with its Message ID is new. Its
+     * expiry goes too, so the expiry queues hold no more than [maxEntries] however often messages are forgotten;
+     * a forgotten message is a recent one, near the end of its queue.
+     */
+    fun remove(key: MessageKey) {
+        val entry = entries.remove(key) ?: return
+        pending.remove(entry)
+        val queue = if (entry.type == CoapMessageType.CON) confirmableExpiries else nonConfirmableExpiries
+        val index = queue.lastIndexOf(entry)
+        if (index >= 0) queue.removeAt(index)
+    }
+
     fun forget(peer: Endpoint) {
         entries.values.removeAll { it.key.peer == peer }
         pending.removeAll { it.key.peer == peer }

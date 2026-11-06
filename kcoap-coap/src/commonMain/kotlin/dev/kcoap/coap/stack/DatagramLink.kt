@@ -206,6 +206,14 @@ internal class DatagramLink(
         withMessaging { acknowledge(peer, messageId) }
     }
 
+    /**
+     * Leaves a Confirmable message from [peer] unanswered and forgets that it arrived, so its retransmission is
+     * delivered again (RFC 7252 §4.2, §4.5); see [UdpMessaging.forgetUnanswered].
+     */
+    suspend fun forgetUnanswered(peer: Endpoint, messageId: Int) {
+        withMessaging { forgetUnanswered(peer, messageId) }
+    }
+
     /** Rejects a message from [peer] with a Reset (RFC 7252 §4.2, §4.3). */
     suspend fun reject(peer: Endpoint, messageId: Int, reason: String) {
         withMessaging { reject(peer, messageId, reason) }
@@ -417,6 +425,10 @@ internal class DatagramLink(
 
         override suspend fun acceptResponse(response: CoapMessage) {
             this@DatagramLink.acknowledge(peer, response.messageId)
+        }
+
+        override suspend fun deferResponse(response: CoapMessage) {
+            forgetUnanswered(peer, response.messageId)
         }
 
         override suspend fun rejectResponse(response: CoapMessage, reason: String) {

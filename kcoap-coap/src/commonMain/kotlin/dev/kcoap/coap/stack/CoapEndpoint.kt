@@ -656,6 +656,11 @@ public class CoapEndpoint private constructor(
     /**
      * A response on [link] that did not come piggybacked, new (not a duplicate), matched by token among the
      * exchanges with its peer, and on a connection among that connection's (RFC 8323 §3.3).
+     *
+     * A Confirmable response is acknowledged only once its exchange took it. An ACK tells the sender that the
+     * message arrived, so it is never sent again (RFC 7252 §4.2); one that the full [ExchangeInbox] of a Q-Block
+     * body could not take is therefore left unacknowledged ([PeerLink.deferResponse]), and its retransmission
+     * after ACK_TIMEOUT is delivered again. A Non-confirmable one that does not fit counts as lost.
      */
     internal suspend fun onResponse(link: PeerLink, message: CoapMessage) {
         val exchange = lock.withLock { exchanges[ExchangeKey(link.peer, message.tokenHex)] }?.takeIf { it.link == link }
@@ -668,8 +673,9 @@ public class CoapEndpoint private constructor(
         // RFC 8323 §3.1: on a connection there is nothing to answer at the messaging layer.
         if (!link.capabilities.hasMessageTypes) return exchange.onResponse(message)
         // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
-        // options, which only the verified response shows; so it is answered after both, and before it is
-        // handed on. No timer answers it meanwhile (UdpMessaging), so every way out of here answers it.
+        // options, which only the verified response shows; so it is answered after both, and an accepted one
+        // only once it was handed on: if it was not taken, it is left for its sender to send again (§4.2). No
+        // timer answers it meanwhile (UdpMessaging), so every way out of here answers or defers it.
         val inspection = try {
             exchange.inspect(message)
         } catch (e: Throwable) {
@@ -678,21 +684,16 @@ public class CoapEndpoint private constructor(
             link.acceptResponse(message)
             throw e
         }
-        when (inspection) {
-            is ClientExchange.Inspection.Accepted -> {
-                link.acceptResponse(message)
-                exchange.accept(inspection.response)
-            }
+        val taken = when (inspection) {
+            is ClientExchange.Inspection.Accepted -> exchange.accept(inspection.response)
             is ClientExchange.Inspection.Rejected -> {
                 link.rejectResponse(message, inspection.cause.message ?: "unrecognized critical option")
-                exchange.refuse(inspection.cause)
+                return exchange.refuse(inspection.cause)
             }
-            is ClientExchange.Inspection.Unverified -> {
-                link.acceptResponse(message)
-                exchange.acceptUnverified(inspection.response, inspection.reason)
-            }
-            ClientExchange.Inspection.Dropped -> link.acceptResponse(message)
+            is ClientExchange.Inspection.Unverified -> exchange.acceptUnverified(inspection.response, inspection.reason)
+            ClientExchange.Inspection.Dropped -> true
         }
+        if (taken) link.acceptResponse(message) else link.deferResponse(message)
     }
 
     /**

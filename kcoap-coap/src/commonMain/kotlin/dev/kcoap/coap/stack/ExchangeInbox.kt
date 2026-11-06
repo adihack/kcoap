@@ -12,8 +12,10 @@ import kotlinx.coroutines.selects.select
 /**
  * The bounded queue that the exchanges of one Q-Block body ([ResponseMode.Inbox]) report into, and that
  * the body's driver reads. Reporting never waits, so the receive loop is never held up by a slow driver: an
- * event that does not fit is dropped and counted in [lost], as if the network had lost the datagram, which
- * the RFC 9177 recovery (4.08 and missing-block requests, the NON_RECEIVE_TIMEOUT ladder) is built for.
+ * event that does not fit is not taken, and counted in [lost]. A Non-confirmable response that does not fit is
+ * lost as if the network had lost the datagram, which the RFC 9177 recovery (4.08 and missing-block requests,
+ * the NON_RECEIVE_TIMEOUT ladder) is built for. A Confirmable one is not acknowledged, since an ACK would tell
+ * its sender that it arrived (RFC 7252 §4.2): it comes again after ACK_TIMEOUT ([CoapEndpoint.onResponse]).
  * Safe to use from any coroutine.
  */
 @OptIn(ExperimentalAtomicApi::class)
@@ -25,7 +27,7 @@ internal class ExchangeInbox(val capacity: Int) {
     private val events = Channel<ExchangeEvent>(capacity)
     private val dropped = AtomicInt(0)
 
-    /** Events dropped because the inbox was full. */
+    /** Events not taken because the inbox was full; a Confirmable response among them comes again. */
     val lost: Int get() = dropped.load()
 
     /** Queues [event]; false, and counted in [lost], when the inbox is full. */

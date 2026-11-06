@@ -173,8 +173,10 @@ observation whose notification it rejected (RFC 8323 §7.4).
 **Exchanges with several responses.** An exchange hands on responses in one of three modes: `Single`
 ends it with the first response, `Stream` keeps an observation open, and `Inbox` reports responses,
 Resets, timeouts and failures to a bounded inbox that all requests of one Q-Block body share (RFC 9177
-§4.3, §4.4); an event that does not fit is counted as lost, so the receive loop never waits for a slow
-driver. A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
+§4.3, §4.4); an event that does not fit is not taken, so the receive loop never waits for a slow driver. A
+Non-confirmable response that does not fit counts as lost; a Confirmable one is left unacknowledged and
+forgotten by deduplication, since the sender never sends an acknowledged message again (RFC 7252 §4.2), and
+its retransmission is delivered once the driver made room. A Non-confirmable body holds one NSTART slot through a `BodyLease`, queued like a request and
 released when the body ends or at min(bytes ÷ PROBING_RATE, NON_PROBING_WAIT) (§7.2); its blocks take no
 slot of their own. A Confirmable body takes a slot per block instead, so NSTART runs it in lock-step.
 
