@@ -31,6 +31,7 @@ import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
 import java.io.File
 import java.net.DatagramSocket
+import java.net.InetAddress
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -68,7 +69,8 @@ import org.junit.jupiter.api.TestInfo
  * established, never on the peer address, which is the proxy's for every client.
  *
  * libcoap 4.3.5b's direct proxy opens `coap://localhost:5683` whatever a request names, so the device listens on
- * 127.0.0.1:5683 (docs/adr/0009-browser-topology-interop.md). Its deviations that kcoap sees are pinned by the
+ * port 5683 of a loopback address of the test's own, which the proxy's `localhost` names and the requests name too
+ * (docs/adr/0009-browser-topology-interop.md). Its deviations that kcoap sees are pinned by the
  * `upstream…` tests, which fail, and are to be flipped, once libcoap is fixed. One is not: it reads the later blocks
  * of a request body it forwards from memory it has freed, which no test can expect a stable outcome of, so request
  * bodies here stay within one message on each side of the proxy, as OSCORE's inner blocks do. Skipped when docker or
@@ -80,8 +82,11 @@ class BrowserTopologyInteropTest {
     private val cleanUps = mutableListOf<suspend () -> Unit>()
     private var testName = "test"
 
-    /** The device as the browser names it: `coap://127.0.0.1`, the default port. */
-    private val device = CoapUri(CoapScheme.COAP, "127.0.0.1", UdpDevice.PORT)
+    /** The device's address: a loopback address of this test's own ([UdpDevice.loopbackAlias]). */
+    private val loopback = UdpDevice.loopbackAlias()
+
+    /** The device as the browser names it: `coap://<loopback>`, the default port. */
+    private val device = CoapUri(CoapScheme.COAP, loopback, UdpDevice.PORT)
 
     @BeforeEach
     fun recordName(info: TestInfo) {
@@ -136,7 +141,7 @@ class BrowserTopologyInteropTest {
             val visit = start.lights.single()
             assertEquals(browserIdentity, visit.identity)
             val proxyPeer = assertIs<Endpoint.Udp>(visit.peer, "the device sees the proxy, not the browser")
-            assertEquals("127.0.0.1", proxyPeer.host)
+            assertTrue(InetAddress.getByName(proxyPeer.host).isLoopbackAddress, "$proxyPeer")
             assertNotEquals(proxy.webSocketPort, proxyPeer.port)
 
             // What the proxy saw: the target in Class U options and no path, over WebSockets in and UDP out; the
@@ -315,7 +320,7 @@ class BrowserTopologyInteropTest {
 
         withTimeout(60.seconds) {
             awaitProxy(browser, proxy)
-            val target = CoapUri(CoapScheme.COAP, "127.0.0.1", namedPort, listOf("hello"))
+            val target = CoapUri(CoapScheme.COAP, loopback, namedPort, listOf("hello"))
             val request = route.viaProxyScheme(CoapRequest.Builder(CoapCode.GET, target).build())
             assertEquals(namedPort, request.options.uriPort, "the request names its port")
             // The device on 5683 got it, without its path: GET / of a server with message security, so 4.01.
@@ -392,7 +397,7 @@ class BrowserTopologyInteropTest {
             val dropped = assertFailsWith<CoapException> { browser.request(route.viaProxyUri(get("lights"))) }
             assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, dropped.reason)
             val sent = recording.exchanges.single().sent
-            assertEquals("coap://127.0.0.1", sent.options.proxyUri, "the outer Proxy-Uri keeps scheme and authority")
+            assertEquals("coap://$loopback", sent.options.proxyUri, "the outer Proxy-Uri keeps scheme and authority")
             assertTrue(sent.options.uriPath.isEmpty(), "the path went inside")
             assertTrue("OSCORE: Not enabled" in proxy.logs(), "the proxy tried to decrypt it")
             assertTrue(start.security.arrivals.isEmpty(), "nothing reached the device")
@@ -423,16 +428,17 @@ class BrowserTopologyInteropTest {
         greeting: String = "device",
     ): UdpDevice {
         val responder = peers.responderConfig(credentialResolver = responderTrusts)
-        return UdpDevice.start(scope, crypto, responder, provisioned, admitted, admittedCredentials, port, greeting)
-            .also { cleanUps += { it.close() } }
+        return UdpDevice.start(
+            scope, crypto, responder, loopback, provisioned, admitted, admittedCredentials, port, greeting,
+        ).also { cleanUps += { it.close() } }
     }
 
-    /** A proxy whose log is kept in `build/interop-logs/<test>-proxy.log` when its container goes. */
-    private fun startProxy(): LibcoapProxy = LibcoapProxy.start().also { proxy ->
-        cleanUps += {
-            File("build/interop-logs").apply { mkdirs() }.resolve("$testName-proxy.log").writeText(proxy.logs())
-            proxy.close()
-        }
+    /**
+     * A proxy that forwards to the device's [loopback] address, whose log is kept in
+     * `build/interop-logs/<test>-proxy.log` when its container goes.
+     */
+    private fun startProxy(): LibcoapProxy = LibcoapProxy.start(loopback).also { proxy ->
+        cleanUps += { proxy.closeKeepingLog(File("build/interop-logs/$testName-proxy.log")) }
     }
 
     private fun webSocketClient(config: CoapClientConfig): CoapClient =

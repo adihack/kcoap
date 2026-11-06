@@ -10,6 +10,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
@@ -20,19 +21,21 @@ import kotlinx.coroutines.delay
  * `kcoap/libcoap` image (`interop/libcoap/Dockerfile`, built with `--enable-proxy-code`) on the host network as
  *
  * ```
- * coap-server -A 127.0.0.1 -p <port> -w <ws port> -X 1152 -v 7 -P ,kcoap-proxy
+ * timeout <lifetime> coap-server -A 127.0.0.1 -p <port> -w <ws port> -X 1152 -v 7 -P ,kcoap-proxy
  * ```
  *
  * `-P ,kcoap-proxy` makes it a direct forward-proxy (no next hop) known as `kcoap-proxy`: a request with
  * Proxy-Uri, or Proxy-Scheme and a Uri-Host other than that name, is forwarded; anything else it serves itself.
  * `-X 1152` keeps the Max-Message-Size of its CSM within the 1472-byte buffer it reads WebSocket frames into
- * (interop/README.md, "Over TCP and WebSockets").
+ * (interop/README.md, "Over TCP and WebSockets"). `timeout` bounds the container's life, so a test JVM killed
+ * before [close] cannot leave a proxy holding its ports for longer than that.
  *
  * libcoap 4.3.5b's direct proxy never reads the target from the request (docs/adr/0009-browser-topology-interop.md):
  * it opens `coap://localhost:5683` for every request. The container's `/etc/hosts` is therefore replaced by one
- * that maps `localhost` to 127.0.0.1 alone, so the target does not depend on whether the host's `/etc/hosts`
- * also names `::1` localhost, and the device behind the proxy listens on 127.0.0.1:5683, the target the requests
- * name, which a corrected proxy opens as well.
+ * that maps `localhost` to one loopback address of the test's ([UdpDevice.loopbackAlias]), where the device
+ * listens on 5683. The requests name that address and the default port, so a proxy that honours the target
+ * opens the same one; and runs at the same time, each with its own address, neither collide nor reach each
+ * other's device.
  */
 internal class LibcoapProxy private constructor(
     /** The WebSocket port browsers connect to. */
@@ -65,13 +68,29 @@ internal class LibcoapProxy private constructor(
         }
     }
 
+    /** Whether the proxy's container still exists. */
+    fun isRunning(): Boolean = exitCode("docker", "container", "inspect", container) == 0
+
+    /** Writes the proxy's [logs] to [log], then removes its container whether or not that worked. */
+    fun closeKeepingLog(log: File) {
+        try {
+            log.parentFile?.mkdirs()
+            log.writeText(logs())
+        } finally {
+            close()
+        }
+    }
+
     override fun close() {
-        run(listOf("docker", "rm", "-f", container), 30)
-        hosts.delete()
+        try {
+            run(listOf("docker", "rm", "-f", container), 30)
+        } finally {
+            hosts.delete()
+        }
     }
 
     /**
-     * One message as libcoap printed it: `v:WebSocket c:POST {01} [ Uri-Host:127.0.0.1, ... ]` on the
+     * One message as libcoap printed it: `v:WebSocket c:POST {01} [ Uri-Host:127.18.4.9, ... ]` on the
      * browser's side, `v:1 t:CON c:POST i:1a2b {01} [ ... ]` on the device's side. libcoap names the OSCORE option
      * `Oscore` and prints the EDHOC option, which 4.3.5b does not know, by its number, `21`.
      */
@@ -110,24 +129,34 @@ internal class LibcoapProxy private constructor(
             exitCode("docker", "info") == 0 && exitCode("docker", "image", "inspect", IMAGE) == 0
         }
 
-        /** Starts a proxy on free ports; [close] removes its container. */
-        fun start(): LibcoapProxy {
+        /** How long a proxy's container lives at most, when nothing removes it before. */
+        val LIFETIME: Duration = 10.minutes
+
+        /**
+         * Starts a proxy on free ports, whose direct forwarding reaches [localhost] (an IPv4 address) on port
+         * 5683; [close] removes its container, and it stops by itself after [lifetime].
+         */
+        fun start(localhost: String, lifetime: Duration = LIFETIME): LibcoapProxy {
             val port = freeUdpAndTcpPort()
             val webSocketPort = ServerSocket(0).use { it.localPort }
             val name = "kcoap-interop-proxy-${UUID.randomUUID()}"
             val hosts = Files.createTempFile("kcoap-proxy", ".hosts").toFile()
-            hosts.writeText("127.0.0.1 localhost\n")
+            hosts.writeText("$localhost localhost\n")
             // -t: on a terminal libcoap's log is line-buffered, so `docker logs` has each message once it is handled.
+            // --rm: once `timeout` ends coap-server, the container goes too.
             val result = run(
                 listOf(
                     "docker", "run", "-d", "-t", "--rm", "--name", name, "--network", "host",
                     "-v", "${hosts.absolutePath}:/etc/hosts:ro", IMAGE,
+                    "timeout", "${lifetime.inWholeSeconds}",
                     "coap-server", "-A", "127.0.0.1", "-p", "$port", "-w", "$webSocketPort", "-X", "1152", "-v", "7",
                     "-P", ",$NAME",
                 ),
                 60,
             )
             if (result.exitCode != 0) {
+                // A `docker run` that timed out may have started the container all the same.
+                runCatching { run(listOf("docker", "rm", "-f", name), 30) }
                 hosts.delete()
                 error("The libcoap proxy did not start: ${result.output}")
             }

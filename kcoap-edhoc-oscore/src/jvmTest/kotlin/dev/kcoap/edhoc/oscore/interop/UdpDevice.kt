@@ -22,11 +22,13 @@ import dev.kcoap.oscore.SecurityContext
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.ktor.KtorUdpTransport
 import java.util.Collections
+import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * The device behind the gateway: a kcoap [CoapServer] on UDP at 127.0.0.1, by default on [PORT], the default CoAP
- * port, which is where libcoap 4.3.5b's direct proxy sends every request ([LibcoapProxy]). Its resources:
+ * The device behind the gateway: a kcoap [CoapServer] on UDP at a loopback address, by default on [PORT], the
+ * default CoAP port, which is where libcoap 4.3.5b's direct proxy sends every request ([LibcoapProxy]). Its
+ * resources:
  *
  * - `/.well-known/edhoc`, the EDHOC resource (RFC 9528 Appendix A.2), with the RFC 9668 combined request for
  *   every protected one ([CombinedRequestServer]); [established] lists the sessions EDHOC completed.
@@ -67,15 +69,26 @@ internal class UdpDevice private constructor(
         val firmware: ByteArray = ByteArray(3000) { (it % 251).toByte() }
 
         /**
-         * Starts a device on 127.0.0.1:[port] (by default [PORT], which must be free), answering `/hello` with
-         * [greeting]. EDHOC runs with [responder]; [provisioned] are OSCORE contexts set up without EDHOC.
-         * `/lights` admits the clients of the [admitted] provisioned contexts and those EDHOC authenticated with
-         * one of [admittedCredentials].
+         * A loopback address of the test's own, 127.a.b.c other than 127.0.0.1: Linux routes all of 127.0.0.0/8 to
+         * the loopback interface (RFC 1122 §3.2.1.3 reserves it for loopback), so a device binds port 5683 there
+         * without colliding with another run's device, or with a server on 127.0.0.1:5683.
+         */
+        fun loopbackAlias(): String {
+            val random = Random.Default
+            return "127.${random.nextInt(1, 255)}.${random.nextInt(0, 256)}.${random.nextInt(1, 255)}"
+        }
+
+        /**
+         * Starts a device on [host]:[port] (by default [PORT], which must be free there and on the wildcard
+         * address), answering `/hello` with [greeting]. EDHOC runs with [responder]; [provisioned] are OSCORE
+         * contexts set up without EDHOC. `/lights` admits the clients of the [admitted] provisioned contexts and
+         * those EDHOC authenticated with one of [admittedCredentials].
          */
         suspend fun start(
             scope: CoroutineScope,
             crypto: CryptoBackend,
             responder: EdhocResponderConfig,
+            host: String,
             provisioned: List<SecurityContext> = emptyList(),
             admitted: Set<OscoreIdentity> = emptySet(),
             admittedCredentials: Set<AuthenticationCredential> = emptySet(),
@@ -83,11 +96,11 @@ internal class UdpDevice private constructor(
             greeting: String = "device",
         ): UdpDevice {
             val transport = try {
-                KtorUdpTransport.bind("127.0.0.1", port)
+                KtorUdpTransport.bind(host, port)
             } catch (e: Exception) {
                 throw IllegalStateException(
-                    "UDP 127.0.0.1:$port is taken; the device behind libcoap's proxy needs it " +
-                        "(docs/adr/0009-browser-topology-interop.md)",
+                    "UDP $host:$port is taken; the device behind libcoap's proxy needs it, so nothing may hold UDP " +
+                        "port $port on the wildcard address (docs/adr/0009-browser-topology-interop.md)",
                     e,
                 )
             }
