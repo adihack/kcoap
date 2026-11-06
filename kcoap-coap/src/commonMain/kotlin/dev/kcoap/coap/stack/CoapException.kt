@@ -15,7 +15,7 @@ import dev.kcoap.coap.CoapResponse
  * protected request answered only by an error that message security could not verify, which ends with
  * [Reason.UNVERIFIED_RESPONSE] and carries that error as [response].
  *
- * New reasons may be added before 1.0; a `when` over [reason] should have an `else` branch.
+ * [Reason] may gain constants in any minor release, so a `when` over [reason] keeps an `else` branch.
  *
  * @property response the response the exchange ended with without acting on it: for
  *   [Reason.UNVERIFIED_RESPONSE], the unverified response as it came; null for every other reason.
@@ -27,7 +27,14 @@ public class CoapException(
     public val response: CoapResponse? = null,
 ) : Exception(message, cause) {
 
-    /** Why the exchange failed. */
+    /**
+     * Why the exchange failed.
+     *
+     * **This set may gain constants** in any minor release, also after 1.0, as kcoap covers more transports and
+     * more of the RFCs (DTLS, for one): a `when` over a reason keeps an `else` branch, which then handles a reason
+     * it does not know, such as by treating it as a failure of the peer. A new constant is an addition, not a
+     * breaking change (the project's versioning policy, docs/versioning.md).
+     */
     public enum class Reason {
         /**
          * A Confirmable message was not acknowledged within MAX_TRANSMIT_WAIT (RFC 7252 §4.2). Datagrams only: a
