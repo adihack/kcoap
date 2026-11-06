@@ -174,7 +174,7 @@ class VerificationFailureTest {
         val error = assertIs<CoapException>(pending.await().exceptionOrNull())
         assertEquals(CoapException.Reason.RESPONSE_TIMEOUT, error.reason)
         assertEquals("Unprotected 2.05 Content", assertIs<MessageSecurityException>(error.cause).message)
-        assertTrue("1 response failed verification" in error.message.orEmpty(), error.message)
+        assertTrue("1 response failed verification and was dropped" in error.message.orEmpty(), error.message)
         assertEquals(listOf(ResponseRejected.Reason.VERIFICATION_FAILED), s.rejections.map { it.reason })
     }
 }

@@ -321,9 +321,9 @@ internal class ClientExchange(
             val dropped = exchanges.sumOf { it.droppedResponses.load() }
             val last = exchanges.mapNotNull { it.lastDropped }.maxByOrNull { it.at }
             if (dropped == 0 || last == null) return CoapException(message, CoapException.Reason.RESPONSE_TIMEOUT)
-            val count = if (dropped == 1) "1 response" else "$dropped responses"
+            val count = if (dropped == 1) "1 response failed verification and was" else "$dropped responses failed verification and were"
             return CoapException(
-                "$message; $count failed verification and were dropped (RFC 8613 §8.4), the last: ${last.error.message}",
+                "$message; $count dropped (RFC 8613 §8.4), the last: ${last.error.message}",
                 CoapException.Reason.RESPONSE_TIMEOUT,
                 last.error,
             )
