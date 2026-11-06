@@ -28,7 +28,14 @@ reusing one across page loads would reuse nonces (RFC 8613 Appendix B.1.1;
 [kcoap-oscore](../../kcoap-oscore/README.md#writing-a-durable-store)). The server makes a Master Secret and a Sender
 ID for every page load instead and hands them over the page's own connection, as an ACE authorization server
 provisions OSCORE input material (RFC 9203), so the page's ephemeral sequence-number store is right. EDHOC is the
-other way to keys that are new per session.
+other way to keys that are new per session. The server keeps the contexts of the newest 1,000 page loads
+(`RecentSessions`), so asking for sessions over and over costs it bounded memory; an older page gets 4.01 and a
+reload gets it a new session.
+
+**Who gets a session.** The sample hands a session to anyone who asks, and every session may read `lights`: OSCORE
+protects the exchange, it does not decide who may make it. In production `/oscore-session` sits behind the
+application's own user authentication, as the ACE authorization server authenticates and authorizes a client before
+it provisions keys, and the context it creates grants exactly what that user may do.
 
 ## What it checks
 
@@ -37,7 +44,7 @@ other way to keys that are new per session.
 | The BOM | the build names `dev.kcoap:kcoap-bom` with the version and the modules without one; a module it names that the BOM lacks fails resolution, for the js and the jvm target |
 | The production bundle | `jsBrowserDistribution` compiles the page with the Kotlin/JS IR compiler and bundles it with webpack in production mode (minified by terser) into `build/dist/js/productionExecutable` |
 | Its size | `checkBundleSize` (part of `check`) fails when the bundle exceeds [bundle-budget.properties](bundle-budget.properties), minified or gzip-compressed ([below](#bundle-size)) |
-| The page's code on the JVM | `ReadLightsTest`: `readLights` against the sample server reads `on`; each page load gets a Master Secret and a Sender ID of its own; a request without OSCORE gets 4.01; a session the server does not know gets an unverified 4.01 (RFC 8613 §8.2), which the client refuses with `CoapException(UNVERIFIED_RESPONSE)` |
+| The page's code on the JVM | `ReadLightsTest`: `readLights` against the sample server reads `on`; each page load gets a Master Secret and a Sender ID of its own; the server keeps the newest sessions only, and the oldest gets 4.01; a request without OSCORE gets 4.01; a session the server does not know gets an unverified 4.01 (RFC 8613 §8.2), which the client refuses with `CoapException(UNVERIFIED_RESPONSE)` |
 | The minified bundle on Node.js | `NodePageTest` runs `js-consumer.js` unchanged on the Node.js the Kotlin plugin set up, with a stand-in for the page (`node-page.js`): fetch, WebSocket and WebCrypto are Node's, which have the browsers' APIs, and the page reports `on` |
 | The bundle in a browser | `BrowserSmokeTest`, with `-Pkcoap.browser=<command>`: a headless browser loads the page from the sample server, and the page reports `on`, read with OSCORE over the browser's own WebSocket on WebCrypto. **CI only**: the `js-consumer` job runs it in the runner's Chrome; without the property it skips, and nothing here downloads a browser |
 

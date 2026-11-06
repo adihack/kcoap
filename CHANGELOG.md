@@ -20,9 +20,11 @@ adds its entry and migration note below.
     kcoap module on the runtime classpath, also one that arrives as a dependency, has a version the BOM does not set.
   - [samples/js-consumer](samples/js-consumer/README.md) is a browser page (Kotlin/JS IR, a production webpack
     bundle) that reads a resource with OSCORE over CoAP over WebSockets, with keys its server makes for each page
-    load; its tests run the page's code on the JVM, the minified bundle on Node.js and, in CI, the bundle in headless
-    Chrome. `checkBundleSize` fails when the bundle exceeds the budget in `bundle-budget.properties`: 1 149 569 bytes
-    minified and 316 415 bytes with gzip measured, plus 5 % ([docs/platforms.md](docs/platforms.md#bundle-size)).
+    load and keeps for the newest 1,000 (in production that endpoint sits behind the application's user
+    authentication); its tests run the page's code on the JVM, the minified bundle on Node.js and, in CI, the bundle
+    in headless Chrome. `checkBundleSize` fails when the bundle exceeds the budget in `bundle-budget.properties`:
+    1 149 569 bytes minified and 316 415 bytes with gzip measured, plus 5 %
+    ([docs/platforms.md](docs/platforms.md#bundle-size)).
   [samples/android-consumer](samples/android-consumer/README.md) takes its versions from `kcoap-bom` now too.
   getting-started.md, platforms.md, testing.md and the README link the samples.
 - `kcoap-bom`, the bill of materials (WP-C3, [ADR 0016](docs/adr/0016-bom-from-published-modules.md)):

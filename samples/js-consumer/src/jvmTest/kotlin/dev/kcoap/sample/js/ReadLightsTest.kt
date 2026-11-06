@@ -3,6 +3,7 @@ package dev.kcoap.sample.js
 import dev.kcoap.coap.CoapCode
 import dev.kcoap.coap.client.CoapClient
 import dev.kcoap.coap.stack.CoapException
+import dev.kcoap.oscore.InMemoryContextRepository
 import dev.kcoap.transport.ktor.websocket.KtorWebSocketConnector
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +47,24 @@ class ReadLightsTest {
         val uri = "coap+ws://127.0.0.1:${server.port}/lights"
         assertEquals("on", readLights(scope, uri, second))
         assertEquals("on", readLights(scope, uri, first))
+    }
+
+    @Test
+    fun theServerKeepsTheSessionsOfTheNewestPageLoadsOnly() = withServer(maxSessions = 2) { server, scope ->
+        val oldest = OscoreSession.decode(post(server, "/oscore-session"))
+        val older = OscoreSession.decode(post(server, "/oscore-session"))
+        val newest = OscoreSession.decode(post(server, "/oscore-session"))
+        val uri = "coap+ws://127.0.0.1:${server.port}/lights"
+
+        val failure = assertFailsWith<CoapException> { readLights(scope, uri, oldest) }
+        assertEquals(CoapException.Reason.UNVERIFIED_RESPONSE, failure.reason, "RFC 8613 §8.2: no context left")
+        assertEquals("on", readLights(scope, uri, older))
+        assertEquals("on", readLights(scope, uri, newest))
+    }
+
+    @Test
+    fun aServerWithoutRoomForASessionIsRefused() {
+        assertFailsWith<IllegalArgumentException> { RecentSessions(InMemoryContextRepository(), max = 0) }
     }
 
     @Test
@@ -103,15 +122,18 @@ class ReadLightsTest {
         return response.body()
     }
 
-    private fun withServer(onReport: (String) -> Unit = {}, block: suspend (SampleServer, CoroutineScope) -> Unit) =
-        runBlocking(Dispatchers.IO) {
-            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-            val server = SampleServer.start(scope, site = null, onReport = onReport)
-            try {
-                withTimeout(30.seconds) { block(server, scope) }
-            } finally {
-                server.close()
-                scope.cancel()
-            }
+    private fun withServer(
+        maxSessions: Int = SampleServer.DEFAULT_MAX_SESSIONS,
+        onReport: (String) -> Unit = {},
+        block: suspend (SampleServer, CoroutineScope) -> Unit,
+    ) = runBlocking(Dispatchers.IO) {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val server = SampleServer.start(scope, site = null, maxSessions = maxSessions, onReport = onReport)
+        try {
+            withTimeout(30.seconds) { block(server, scope) }
+        } finally {
+            server.close()
+            scope.cancel()
         }
+    }
 }

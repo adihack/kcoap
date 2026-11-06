@@ -993,12 +993,13 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > - **samples/js-consumer** is a page (Kotlin/JS IR, webpack production bundle) with the minimal browser set,
 >   kcoap-coap, kcoap-oscore, kcoap-crypto-default and kcoap-transport-ktor-websocket, which reads a resource with
 >   OSCORE over `coap+ws` from a JVM sample server that also serves the page. A browser cannot keep a pre-shared
->   key's sequence numbers durable, so the server makes a Master Secret and a Sender ID for each page load. The
->   budget is the measured size plus 5 % (§3.10, platforms.md "Bundle size"); `checkBundleSize` was shown failing one
->   byte below either measurement. The headless smoke test is `BrowserSmokeTest`, in Chrome in the CI `js-consumer`
->   job only; `NodePageTest` runs the same minified bundle on Node.js locally, and found that kotlinx-browser's
->   `RequestInit(...)` factory sends nulls that fetch rejects. No wasmJs variant: its production bundle needs
->   Binaryen, a download the work package avoided.
+>   key's sequence numbers durable, so the server makes a Master Secret and a Sender ID for each page load, and keeps
+>   the newest 1,000 (`RecentSessions`); its README says that in production the session endpoint sits behind the
+>   application's user authentication. The budget is the measured size plus 5 % (§3.10, platforms.md "Bundle
+>   size"); `checkBundleSize` was shown failing one byte below either measurement. The headless smoke test is
+>   `BrowserSmokeTest`, in Chrome in the CI `js-consumer` job only; `NodePageTest` runs the same minified bundle on
+>   Node.js locally, and found that kotlinx-browser's `RequestInit(...)` factory sends nulls that fetch rejects. No
+>   wasmJs variant: its production bundle needs Binaryen, a download the work package avoided.
 > - **No deprecated API.** The constructors of `CoapEndpointConfig` and `CoapClientConfig`, deprecated by D1, are
 >   removed (releasing.md, "Before tagging 0.1.0"); no other `@Deprecated` declaration was left in the published
 >   modules.
