@@ -1,5 +1,5 @@
 /*
- * kcoap.dev: theme toggle, mobile menu, copy buttons and tabs.
+ * kcoap.dev: theme toggle, mobile menu, copy buttons, tabs and scroll regions.
  *
  * Progressive enhancement: every page works without this file. It is loaded in <head> without `defer` so
  * that a remembered theme is applied before the first paint; everything that needs the DOM waits for
@@ -147,6 +147,15 @@
     });
   }
 
+  /* The name a copy button reads out: the block's file name, or its tab's label. */
+  function blockName(block) {
+    var label = block.querySelector(".code-block-label");
+    if (label && label.textContent.trim()) return label.textContent.trim();
+    var panel = block.closest ? block.closest(".tab-panel") : null;
+    if (panel && panel.getAttribute("data-tab-label")) return panel.getAttribute("data-tab-label");
+    return "code";
+  }
+
   function setUpCopyButtons() {
     var live = document.createElement("div");
     live.className = "visually-hidden";
@@ -162,7 +171,7 @@
         button.type = "button";
         button.className = "copy-button";
         button.innerHTML = COPY_ICON + "<span>Copy</span>";
-        button.setAttribute("aria-label", "Copy code to clipboard");
+        button.setAttribute("aria-label", "Copy " + blockName(block));
         var text = button.querySelector("span");
         var timer = null;
         button.addEventListener("click", function () {
@@ -260,6 +269,7 @@
               panels[j].hidden = !on;
             }
             if (group && remember) writeStorage(TAB_KEY_PREFIX + group, label);
+            updateScrollRegions();
             if (group && propagate) selectInGroup(group, label, api);
           }
         };
@@ -274,11 +284,40 @@
     }
   }
 
+  /* ---- Scroll regions ---------------------------------------------------------------------------- */
+
+  /*
+   * Code blocks and table wrappers carry tabindex="0" in the markup, so their content can be scrolled from
+   * the keyboard without this file. Here only the ones that overflow stay in the tab order.
+   */
+  var scrollRegions = null;
+
+  function updateScrollRegions() {
+    if (!scrollRegions) return;
+    for (var i = 0; i < scrollRegions.length; i++) {
+      var region = scrollRegions[i];
+      if (region === document.activeElement || !region.getClientRects().length) continue;
+      region.tabIndex = region.scrollWidth > region.clientWidth + 1 ? 0 : -1;
+    }
+  }
+
+  function setUpScrollRegions() {
+    scrollRegions = document.querySelectorAll(".code-block pre[tabindex], .table-wrap[tabindex]");
+    updateScrollRegions();
+    var timer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(timer);
+      timer = setTimeout(updateScrollRegions, 150);
+    });
+    document.addEventListener("toggle", updateScrollRegions, true);
+  }
+
   function init() {
     setUpThemeToggle();
     setUpMenu();
     setUpTabs();
     setUpCopyButtons();
+    setUpScrollRegions();
   }
 
   if (document.readyState === "loading") {
