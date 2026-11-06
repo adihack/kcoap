@@ -24,6 +24,10 @@ AES-GCM, ChaCha20/Poly1305, X25519, X448, Ed25519, and ECDH and ECDSA on P-256 a
 encodings as `KeyType` documents them. Post-quantum algorithms are in `kcoap-crypto-bc`, which wraps this
 backend: `BouncyCastleCryptoBackend(DefaultCryptoBackend())`.
 
+Private keys are `SoftwarePrivateKey`s, raw key material in memory. The provider takes and hands out private
+keys as byte arrays, and the backend wipes each such copy once the provider is done with it; the provider's
+own key objects (JCA keys, say) cannot be wiped.
+
 ## Public API and extending it
 
 The public API is the class `DefaultCryptoBackend` with its no-argument constructor and the `CryptoBackend`
@@ -82,6 +86,7 @@ values.
 | `HkdfTest` | RFC 5869, RFC 8613 Appendix C key derivation |
 | `AsymmetricTest` | RFC 7748 (X25519), RFC 8032 (Ed25519), ECDH and ECDSA on fresh keys, compressed points, fresh platform keys of both parities through `Sec1` (whose vectors are in kcoap-crypto), unusable peer keys |
 | `PlatformAeadTest`, `CapabilitiesTest` | every AEAD round-trips or is reported unsupported; the mandatory algorithms are supported everywhere |
+| `RawPrivateKeysTest` | the copies of a private key handed to the provider or taken from it are wiped, also when the provider fails, and keys stay usable after |
 | `SupportsMemoTest` | a provider that counts lookups is reached only by the first question about an algorithm, also when callers race on real threads (the testkit's `Stress`); the KEM and SHAKE256 answers, which never reach the provider, come from the memo too |
 | `BouncyCastleDifferentialTest` (JVM) | CCM for every tag and nonce length, GCM and ChaCha20/Poly1305 against Bouncy Castle |
 | `ConsumerRulesTest` (JVM) | the jar's R8 rules cover every Bouncy Castle class cryptography-kotlin's JDK provider refers to (below) |

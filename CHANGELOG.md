@@ -726,3 +726,8 @@ Build governance (WP-C1):
 - EDHOC (WP-SEC1): when composing message_2 failed or was cancelled (C_R equal to C_I, an EAD handler
   failing, a server handler cancelled), the Responder's ephemeral key Y and PRK_3e2m were left for the
   garbage collector; they are wiped now (RFC 9528 §9.8).
+- kcoap-crypto-default (WP-A5): every key generation, key agreement and signature of `DefaultCryptoBackend`
+  left a copy of the raw private key for the garbage collector, the one handed to the platform or taken
+  from it. These copies are now wiped once the platform is done with them, as `BouncyCastleCryptoBackend`
+  already did. The platform's own key objects (JCA keys, say) cannot be wiped, so this narrows the exposure
+  of the key material rather than removing it.
