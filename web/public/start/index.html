@@ -104,7 +104,7 @@
         <dl class="facts mb-0">
           <dt>To build kcoap</dt><dd>Git and a JDK 17 or newer. Gradle comes with the wrapper; it is set to use up to 3 GB of memory, and the Kotlin daemon up to 2 GB.</dd>
           <dt>JVM bytecode</dt><dd>Java 17. Your project compiles to Java 17 or newer.</dd>
-          <dt>Kotlin</dt><dd>2.3 or newer in your project; kcoap is built with Kotlin 2.4.21. For native and web targets, use 2.4.21 or newer.</dd>
+          <dt>Kotlin</dt><dd>2.3 or newer in your project, as the versioning policy says. kcoap is built with Kotlin 2.4.21, and the samples use it.</dd>
           <dt>Android</dt><dd>API level 26 (Android 8.0) or later.</dd>
           <dt>iOS and macOS</dt><dd>A Mac with Apple silicon and Xcode. No minimum OS version is set yet.</dd>
           <dt>Browsers and Node.js</dt><dd>No minimum version is set. Kotlin/Wasm needs a browser with WebAssembly garbage collection.</dd>
@@ -194,25 +194,25 @@ kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-tra
       <div class="section-head">
         <p class="eyebrow">Modules</p>
         <h2 id="modules-title">Which modules to add</h2>
-        <p class="lede">Sixteen modules are published. An application usually needs four or five of them; the rest come in as dependencies.</p>
+        <p class="lede">Seventeen modules are published. An application usually needs four or five of them; the rest come in as dependencies.</p>
       </div>
       <div class="table-wrap">
         <table class="table-stack">
           <thead><tr><th scope="col">Module</th><th scope="col">Add it for</th><th scope="col">Targets</th></tr></thead>
           <tbody>
             <tr><th scope="row"><code>kcoap-coap</code></th><td><code>CoapClient</code> and <code>CoapServer</code>; brings the message model, the transport interfaces and kotlinx.coroutines</td><td data-label="Targets">all</td></tr>
-            <tr><th scope="row"><code>kcoap-crypto-default</code></th><td>The platform’s cryptography. No other module brings it: every app adds it, or <code>kcoap-crypto-bc</code></td><td data-label="Targets">all</td></tr>
-            <tr><th scope="row"><code>kcoap-transport-ktor</code></th><td>UDP (<code>coap</code>) and TCP (<code>coap+tcp</code>) sockets on ktor-network</td><td data-label="Targets">JVM, Android, Apple, Linux</td></tr>
-            <tr><th scope="row"><code>kcoap-transport-ktor-websocket</code></th><td>The WebSocket client (<code>coap+ws</code>, <code>coaps+ws</code>)</td><td data-label="Targets">all</td></tr>
+            <tr><th scope="row"><code>kcoap-crypto-default</code></th><td>The platform’s cryptography. No other module brings it: every app adds it, or a classical backend of its own</td><td data-label="Targets">all</td></tr>
+            <tr><th scope="row"><code>kcoap-transport-ktor</code></th><td>UDP (<code>coap</code>) and TCP (<code>coap+tcp</code>) sockets on ktor-network; on the JVM, also a TLS client (<code>coaps+tcp</code>)</td><td data-label="Targets">JVM, Android, Apple, Linux</td></tr>
+            <tr><th scope="row"><code>kcoap-transport-ktor-websocket</code></th><td>The WebSocket client (<code>coap+ws</code>; <code>coaps+ws</code> on Apple platforms and the web, or on an HTTP client you pass)</td><td data-label="Targets">all</td></tr>
             <tr><th scope="row"><code>kcoap-transport-ktor-websocket-server</code></th><td>The WebSocket server, with a ktor server engine you add, such as <code>io.ktor:ktor-server-cio</code></td><td data-label="Targets">JVM, Apple, Linux</td></tr>
             <tr><th scope="row"><code>kcoap-oscore</code></th><td>OSCORE with pre-shared keys; add <code>kcoap-coap</code> too to run it through the client and server</td><td data-label="Targets">all</td></tr>
             <tr><th scope="row"><code>kcoap-edhoc-oscore</code></th><td>EDHOC over CoAP, into OSCORE, with the combined request; brings <code>kcoap-edhoc</code>, <code>kcoap-oscore</code> and <code>kcoap-coap</code></td><td data-label="Targets">all</td></tr>
-            <tr><th scope="row"><code>kcoap-crypto-bc</code></th><td>Post-quantum EDHOC: ML-KEM and ML-DSA on Bouncy Castle; brings <code>kcoap-crypto-default</code></td><td data-label="Targets">JVM, Android</td></tr>
+            <tr><th scope="row"><code>kcoap-crypto-bc</code></th><td>Post-quantum EDHOC: ML-KEM and ML-DSA on Bouncy Castle, around a classical backend you pass, usually <code>DefaultCryptoBackend()</code> from <code>kcoap-crypto-default</code></td><td data-label="Targets">JVM, Android</td></tr>
             <tr><th scope="row"><code>kcoap-testkit</code></th><td>Tests without a network: a lossy in-memory network and in-memory connections on virtual time</td><td data-label="Targets">all</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="muted">The other published modules (<code>kcoap-common</code>, <code>kcoap-crypto</code>, <code>kcoap-cbor</code>, <code>kcoap-cose</code>, <code>kcoap-transport</code>, <code>kcoap-coap-message</code>, <code>kcoap-edhoc</code>) come in through these. <code>kcoap-dtls</code> is built and tested but not published until its engine exists. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/README.md#modules">All modules in the README</a>.</p>
+      <p class="muted">The other published modules (<code>kcoap-common</code>, <code>kcoap-crypto</code>, <code>kcoap-cbor</code>, <code>kcoap-cose</code>, <code>kcoap-transport</code>, <code>kcoap-coap-message</code>, <code>kcoap-edhoc</code>) come in through these, and <code>kcoap-crypto-testsuite</code> is for the tests of a <code>CryptoBackend</code> of your own. <code>kcoap-dtls</code> is built and tested but not published until its engine exists. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/README.md#modules">All modules in the README</a>.</p>
     </div>
   </section>
 
@@ -230,16 +230,17 @@ kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-tra
             <tr><th scope="row">Kotlin target</th><td><code>jvm</code></td><td><code>jvm</code>, from API level 26</td><td><code>iosArm64</code>, <code>iosSimulatorArm64</code>, <code>macosArm64</code></td><td><code>linuxX64</code></td><td><code>js</code>, <code>wasmJs</code></td><td><code>js</code>, <code>wasmJs</code></td></tr>
             <tr><th scope="row">UDP and TCP</th><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-done">yes</span><small>BSD sockets</small></td><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-todo">no</span><small>browsers have neither</small></td><td><span class="badge badge-deferred">deferred</span><small>no adapter yet</small></td></tr>
             <tr><th scope="row">WebSocket client</th><td><span class="badge badge-done">yes</span><small>CIO engine</small></td><td><span class="badge badge-done">yes</span><small>CIO engine</small></td><td><span class="badge badge-done">yes</span><small>URLSession</small></td><td><span class="badge badge-done">yes</span><small>CIO engine</small></td><td><span class="badge badge-done">yes</span><small>the browser’s WebSocket</small></td><td><span class="badge badge-done">yes</span><small>npm <code>ws</code></small></td></tr>
+            <tr><th scope="row">TLS client</th><td><span class="badge badge-done">yes</span><small><code>coaps+tcp</code>; <code>coaps+ws</code> on an HTTP client you pass</small></td><td><span class="badge badge-partial">not run</span><small>as on the JVM</small></td><td><span class="badge badge-partial">partial</span><small><code>coaps+ws</code> on URLSession; no <code>coaps+tcp</code></small></td><td><span class="badge badge-todo">no</span><small>no TLS in ktor on native</small></td><td><span class="badge badge-done">yes</span><small><code>coaps+ws</code>, the browser’s <code>wss</code></small></td><td><span class="badge badge-done">yes</span><small><code>coaps+ws</code></small></td></tr>
             <tr><th scope="row">WebSocket server</th><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-todo">no</span><small>not for apps</small></td><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-done">yes</span></td><td><span class="badge badge-todo">no</span></td><td><span class="badge badge-todo">no</span></td></tr>
             <tr><th scope="row">Cryptography</th><td>JCA</td><td>JCA</td><td>CryptoKit, CommonCrypto</td><td>OpenSSL 3, linked in</td><td>WebCrypto</td><td>WebCrypto</td></tr>
             <tr><th scope="row">EDHOC suites</th><td>0–6, 24<small>0, 2, 4, 24 cross-tested</small></td><td>what the device’s providers report</td><td>what CryptoKit reports</td><td>what OpenSSL reports</td><td>0–3, 6, 24<small>no ChaCha20-Poly1305</small></td><td>as in browsers</td></tr>
-            <tr><th scope="row">Post-quantum EDHOC</th><td><span class="badge badge-done">yes</span><small><code>kcoap-crypto-bc</code></small></td><td><span class="badge badge-done">yes</span><small><code>kcoap-crypto-bc</code></small></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td></tr>
-            <tr><th scope="row">Tested in CI</th><td>common tests, real sockets, interop with libcoap and libedhoc</td><td>API level 26 checks; a sample app built with R8 and lint; no device run yet</td><td>common tests on macOS and the iOS simulator; no iPhone run yet</td><td>common tests as native code; WebSocket loopback</td><td>common tests on Node.js; the js WebSocket client in headless Chrome</td><td>common tests; the WebSocket client against an npm <code>ws</code> server</td></tr>
+            <tr><th scope="row">Post-quantum EDHOC</th><td><span class="badge badge-done">yes</span><small><code>kcoap-crypto-bc</code></small></td><td><span class="badge badge-partial">builds</span><small><code>kcoap-crypto-bc</code>; not run on a device</small></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td><td><span class="badge badge-todo">to do</span></td></tr>
+            <tr><th scope="row">Tested in CI</th><td>common tests, real sockets, interop with libcoap and libedhoc</td><td>API level 26 checks; a sample app built with R8 and lint; no device run yet</td><td>common tests on macOS and the iOS simulator; a Swift smoke test; no iPhone run yet</td><td>common tests as native code; WebSocket loopback</td><td>common tests on Node.js; the js WebSocket client in headless Chrome</td><td>common tests; the WebSocket client against an npm <code>ws</code> server</td></tr>
             <tr><th scope="row">Guide</th><td><a href="/start/jvm/">JVM</a></td><td><a href="/start/android/">Android</a></td><td><a href="/start/apple/">iOS and macOS</a></td><td><a href="/start/linux/">Linux</a></td><td><a href="/start/browser/">Browsers</a></td><td><a href="/start/node/">Node.js</a></td></tr>
           </tbody>
         </table>
       </div>
-      <p class="muted">EDHOC asks the backend which suites it can run and offers only those, so a suite that a platform lacks is never offered there. A table of suites per platform, generated from these probes, is still to do.</p>
+      <p class="muted">Servers terminate TLS at a reverse proxy on every platform: kcoap has no TLS listener of its own (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/platforms.md#tls-support-per-runtime">TLS per runtime</a>). EDHOC asks the backend which suites it can run and offers only those, so a suite that a platform lacks is never offered there. A table of suites per platform, generated from these probes, is still to do.</p>
     </div>
   </section>
 

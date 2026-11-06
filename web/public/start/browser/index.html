@@ -81,7 +81,7 @@
       <div class="doc-body prose">
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
-          <li>A Kotlin Multiplatform project with a <code>js</code> or <code>wasmJs</code> target, on Kotlin 2.4.21 or newer.</li>
+          <li>A Kotlin Multiplatform project with a <code>js</code> or <code>wasmJs</code> target, on Kotlin 2.3 or newer; the samples use 2.4.21, the version kcoap is built with.</li>
           <li>A JDK 17 or newer and a clone of kcoap, to publish from.</li>
           <li>A CoAP server that speaks WebSockets: a kcoap server on the JVM or Linux, as below, or a proxy such as libcoap’s <code>coap-server</code> in front of UDP devices.</li>
           <li>The build sets no minimum browser version. Kotlin/Wasm needs a browser with WebAssembly garbage collection.</li>
@@ -218,16 +218,22 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h2 id="security">EDHOC and OSCORE in the page</h2>
         <p>The client half of EDHOC, then OSCORE, is the same as on any platform; the client uses <code>KtorWebSocketConnector()</code> and a <code>coaps+ws://</code> URI. Use cipher suite 2 (P-256): it needs neither X25519, Ed25519 nor ChaCha20-Poly1305, so every browser runs it.</p>
 <div class="code-block"><p class="code-block-label">Secure.kt</p><pre><code><span class="tok-k">val</span> security = <span class="tok-t">PeerSecurity</span>()
-<span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-f">listOf</span>(<span class="tok-t">KtorWebSocketConnector</span>()), scope, <span class="tok-t">CoapClientConfig</span>(security = security))
+<span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(
+    <span class="tok-f">listOf</span>(<span class="tok-t">KtorWebSocketConnector</span>()),
+    scope,
+    <span class="tok-t">CoapClientConfig</span> { <span class="tok-k">this</span>.security = security },
+)
 <span class="tok-k">val</span> gateway = <span class="tok-t">CoapUri</span>.<span class="tok-f">parse</span>(<span class="tok-s">"coaps+ws://gateway.example"</span>)
 <span class="tok-k">val</span> (session, protection) =
-    <span class="tok-t">EdhocClientHandshake</span>.<span class="tok-f">over</span>(client, gateway, initiatorConfig, crypto).<span class="tok-f">runCombined</span>()
+    <span class="tok-t">EdhocClientHandshake</span>.<span class="tok-f">over</span>(client, gateway, initiatorConfig, crypto)
+        .<span class="tok-f">runCombined</span>()
 security.<span class="tok-f">install</span>(client, gateway, protection)
 <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coaps+ws://gateway.example/lights"</span>).<span class="tok-f">payloadAsText</span>())</code></pre></div>
         <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>The README’s quick start with the WebSocket connector; names checked. EDHOC over a real WebSocket in a browser has not run anywhere yet: the full-stack EDHOC test runs on js and wasmJs on Node.js, over the in-memory network.</span></p>
         <ul>
           <li><strong>Prefer EDHOC to pre-shared keys in a browser.</strong> Pre-shared OSCORE keys need durable sequence numbers, and a user can clear a site’s storage at any time. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The IndexedDB recipe</a> exists, but is not compiled or tested.</li>
-          <li><strong>Through a proxy</strong>, such as libcoap’s <code>coap-server</code> forwarding to UDP devices, OSCORE and EDHOC stay end to end; TLS ends at the proxy. This path is not cross-tested yet.</li>
+          <li><strong>Through a proxy</strong>, such as libcoap’s <code>coap-server</code> forwarding to UDP devices, OSCORE and EDHOC stay end to end; TLS ends at the proxy. CI runs this path with a WebSocket-only kcoap client on the JVM through libcoap 4.3.5b’s forward-proxy to a UDP device, with OSCORE, EDHOC and the combined request; not yet from a real browser. kcoap’s client has no proxy setting yet: the test adds the Proxy-Scheme and Uri-Host options itself.</li>
+          <li><strong>Limits of libcoap’s proxy</strong> (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>): devices must listen on port 5683; request bodies must fit one message on each side, so post-quantum EDHOC does not cross it; and every browser behind it is one peer to the device, so EDHOC’s per-peer limits cover the whole gateway.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
@@ -242,7 +248,7 @@ security.<span class="tok-f">install</span>(client, gateway, protection)
         <h3>Not done yet in browsers</h3>
         <ul>
           <li>An npm package, <code>@JsExport</code> and TypeScript declarations, for use from JavaScript.</li>
-          <li>A cross-test from a browser through a proxy to a device, and the <code>wasmJs</code> WebSocket engine against a real server.</li>
+          <li>The proxy cross-test from a real browser, a client proxy setting, and the <code>wasmJs</code> WebSocket engine against a real server.</li>
           <li>OSCORE over HTTP, and a size budget for the JavaScript bundle.</li>
         </ul>
 

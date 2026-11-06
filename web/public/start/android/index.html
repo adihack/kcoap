@@ -192,9 +192,11 @@ kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-tra
     <span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(serverTransport, scope) {
         <span class="tok-f">resource</span>(<span class="tok-s">"hello"</span>) { <span class="tok-f">get</span> { <span class="tok-t">CoapResponse</span>.<span class="tok-f">content</span>(<span class="tok-s">"Hello"</span>) } }
     }
-    <span class="tok-k">val</span> uri = <span class="tok-s">"coap://127.0.0.1:${serverTransport.localEndpoint.port}/hello"</span>
-    <span class="tok-k">val</span> config = <span class="tok-t">CoapClientConfig</span>(requestTimeout = <span class="tok-n">10</span>.seconds)
-    <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(<span class="tok-s">"127.0.0.1"</span>, <span class="tok-n">0</span>), scope, config)
+    <span class="tok-k">val</span> port = serverTransport.localEndpoint.port
+    <span class="tok-k">val</span> uri = <span class="tok-s">"coap://127.0.0.1:$port/hello"</span>
+    <span class="tok-k">val</span> config = <span class="tok-t">CoapClientConfig</span> { requestTimeout = <span class="tok-n">10</span>.seconds }
+    <span class="tok-k">val</span> transport = <span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(<span class="tok-s">"127.0.0.1"</span>, <span class="tok-n">0</span>)
+    <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(transport, scope, config)
     <span class="tok-k">return</span> <span class="tok-k">try</span> {
         <span class="tok-k">val</span> answer = client.<span class="tok-f">get</span>(uri)
         <span class="tok-s">"GET $uri: ${answer.code} ${answer.payloadAsText()}"</span>
@@ -236,7 +238,7 @@ kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-tra
           <li><strong>One set of OSCORE contexts per process.</strong> Derive each context once, in the <code>Application</code> or a singleton, never per Activity. Android can run two Activities of an app at once, and two live contexts under one name hand out the same sequence numbers, which reuses nonces.</li>
           <li><strong>Sequence numbers outside Auto Backup.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>. The sample’s <code>FileSequenceNumberStore</code> follows <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">the JVM and Android recipe</a> with API 26 calls only, and keeps its files in <code>noBackupFilesDir</code>: a sequence number restored from a backup reuses nonces.</li>
           <li><strong>EDHOC needs no durable store.</strong> Its keys are new for each session. Cipher suite 2 (P-256) is the one every platform runs.</li>
-          <li><strong>Post-quantum EDHOC</strong> works on Android with <code>kcoap-crypto-bc</code>; the sample’s <code>postQuantum</code> flavor builds with it.</li>
+          <li><strong>Post-quantum EDHOC</strong> comes from <code>kcoap-crypto-bc</code>, as <code>BouncyCastleCryptoBackend(DefaultCryptoBackend())</code>. The sample’s <code>postQuantum</code> flavor builds and shrinks with it, but it has not run on a device.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
@@ -248,8 +250,10 @@ kcoap = [<span class="tok-s">"kcoap-coap"</span>, <span class="tok-s">"kcoap-tra
         warning += <span class="tok-s">"InvalidPackage"</span>
     }
 }</code></pre></div>
+        <h3>TLS</h3>
+        <p><code>KtorTlsConnector</code>, the <code>coaps+tcp</code> client of the JVM guide, is in the same jar. On Android it checks the server’s chain with the host through the platform, so your network security configuration applies per domain. It has not run on Android yet.</p>
         <h3>What holds API level 26</h3>
-        <p><code>checkAndroidApi</code> checks kcoap’s 16 jvm jars against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
+        <p><code>checkAndroidApi</code> checks every kcoap jvm jar against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
         <h3>Not done yet on Android</h3>
         <ul>
           <li>No run on an emulator or a device, and no report of which algorithms each API level offers.</li>

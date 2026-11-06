@@ -82,7 +82,7 @@
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
           <li>An x86-64 Linux machine to build on, with a JDK 17 or newer for Gradle. The Kotlin/Native toolchain downloads itself.</li>
-          <li>Kotlin 2.4.21 or newer, the version kcoap is built with.</li>
+          <li>Kotlin 2.3 or newer; the samples use 2.4.21, the version kcoap is built with.</li>
           <li>An x86-64 gateway to run on. The executable needs no JVM and no system OpenSSL.</li>
         </ul>
 
@@ -223,7 +223,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <ul>
           <li><strong>Pre-shared OSCORE keys</strong> need a durable <code>SequenceNumberStore</code>. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The Linux recipe</a> uses POSIX calls with <code>fsync</code> on the file and its directory. It is not compiled or tested on Linux yet.</li>
           <li><strong>EDHOC</strong> derives new keys for each session and needs no durable store. Bound the security contexts on a long-running gateway: <code>InMemoryContextRepository</code> never evicts.</li>
-          <li><strong>No post-quantum EDHOC on Linux native yet</strong>: ML-KEM and ML-DSA run only on the JVM and Android so far.</li>
+          <li><strong>No post-quantum EDHOC on Linux native yet</strong>: ML-KEM and ML-DSA come only from <code>kcoap-crypto-bc</code>, which is for the JVM and Android.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
@@ -232,7 +232,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h3>ARM gateways</h3>
         <p>There is no <code>linuxArm64</code> target yet; it is planned. On an ARM gateway with a Java 17 runtime, the JVM artifacts are today’s route. No ARM machine runs in CI.</p>
         <h3>TLS</h3>
-        <p>kcoap has no TLS connector for <code>coaps+tcp</code> yet. Until it has, terminate TLS in a proxy in front of the gateway, such as stunnel or nginx’s stream module. DTLS for <code>coaps://</code> comes last.</p>
+        <p>There is no TLS on Linux native: ktor has none there, so neither a <code>coaps+tcp</code> client nor <code>coaps+ws</code> runs on the gateway. Terminate TLS in a proxy in front of it, such as stunnel or nginx’s <code>stream</code> module, as <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0010-server-side-tls.md">ADR 0010</a> recommends for native gateways. DTLS for <code>coaps://</code> comes last.</p>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">

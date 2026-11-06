@@ -94,13 +94,13 @@
           <li>EDHOC: both traces of RFC 9529, every printed value, as Initiator and as Responder, and the invalid messages of its section 4.</li>
           <li>The combined EDHOC and OSCORE request of RFC 9668 Figure 4, and the RFC 8323 framing of Figure 5 and Figures 11 and 12.</li>
           <li>Every Q-Block figure of RFC 9177, 2 to 20, as a script on virtual time over the real messaging layer.</li>
-          <li>Cryptography: all 24 AES-CCM packets of RFC 3610, RFC 5869 HKDF, FIPS 197, SP 800-185 KMAC256, and NIST’s ACVP vectors for ML-KEM and ML-DSA.</li>
+          <li>Cryptography: all 24 AES-CCM packets of RFC 3610, RFC 5869 HKDF, FIPS 197, SP 800-185 KMAC256 samples 1 to 4, and a subset of NIST’s ACVP vectors for ML-KEM and ML-DSA.</li>
         </ul>
         <div class="evidence">
           <span class="evidence-title">Evidence and open items</span>
           <ul>
             <li><code>Rfc8613VectorsTest</code>, <code>Rfc9529TraceTest</code>, <code>Rfc9529InvalidTracesTest</code>, <code>QBlockFiguresTest</code>, <code>AesCcmTest</code>, <code>MlKemKnownAnswerTest</code>, <code>MlDsaKnownAnswerTest</code>.</li>
-            <li>Open: one case each for RFC 7748, RFC 8032 and FIPS 202; no CI check yet that the scripts reproduce the committed vectors.</li>
+            <li>Open: one case each for RFC 7748, RFC 8032 and FIPS 202; KMAC256 samples 5 and 6; no CI check yet that the scripts reproduce the committed vectors.</li>
           </ul>
         </div>
       </div>
@@ -119,8 +119,8 @@
           <p class="eyebrow">Interop</p>
           <h2 id="interop">Live interop in both roles</h2>
           <p class="lede">CI builds libcoap and libedhoc from pinned sources and runs kcoap against them: as client and as server, as Initiator and as Responder.</p>
-          <p>libcoap’s maintainers include RFC authors, and libedhoc is an independent EDHOC implementation in C. Against libcoap 4.3.5b, kcoap is tested over UDP, TCP and WebSockets, with Block-wise, Observe, Q-Block, Echo and OSCORE. Against libedhoc, every cipher suite and method both implement runs in both roles, and a session passes only when both sides derive the same OSCORE Master Secret and Salt, identifiers and exporter output, before and after a key update.</p>
-          <p class="open-items"><strong>Not cross-tested yet:</strong> EDHOC over CoAP and the combined request against an independent peer; cipher suites 1, 3, 5 and 6, which libedhoc lacks; DTLS; <code>coaps+tcp</code>; interop under systematic network impairment. Interop runs on the JVM target; the protocol code is the same common code everywhere.</p>
+          <p>libcoap’s maintainers include RFC authors, and libedhoc is an independent EDHOC implementation in C. Against libcoap 4.3.5b, kcoap is tested over UDP, TCP and WebSockets, with Block-wise, Observe, Q-Block, Echo and OSCORE, and as a TLS client over <code>coaps+tcp</code> and <code>coaps+ws</code>. libcoap’s forward-proxy also stands between a WebSocket-only kcoap client and a kcoap device on UDP, with OSCORE, EDHOC and the combined request end to end. Against libedhoc, every cipher suite and method both implement runs in both roles, and a session passes only when both sides derive the same OSCORE Master Secret and Salt, identifiers and exporter output, before and after a key update.</p>
+          <p class="open-items"><strong>Not cross-tested yet:</strong> EDHOC over CoAP and the combined request against an independent peer; cipher suites 1, 3, 5 and 6, which libedhoc lacks; DTLS; kcoap as a TLS server; the proxy path from a real browser; interop under systematic network impairment. Interop runs on the JVM target; the protocol code is the same common code everywhere.</p>
         </div>
         <figure class="figure">
           <svg class="diagram diagram-narrow" viewBox="0 0 440 524" role="img" aria-labelledby="fig-interop-title fig-interop-desc"><title id="fig-interop-title">Interop matrix</title><desc id="fig-interop-desc">Against libcoap v4.3.5b, kcoap runs as client and as server for CoAP over UDP, CoAP over TCP and WebSockets, Q-Block (RFC 9177) and OSCORE (RFC 8613), and as server for address verification with Echo (RFC 9175). Against libedhoc 0363bd3, kcoap runs as Initiator and as Responder for EDHOC (RFC 9528) suites 0, 2, 4 and 24 with methods 0 to 3, and for the post-quantum suite -24 with ML-KEM-512 and ML-DSA-44. EDHOC over CoAP and the combined request of RFC 9668 have no independent peer yet; they are tested kcoap against kcoap only.</desc><rect class="d-row-alt" x="272" y="1" width="80" height="522" rx="12"/><rect class="d-row-alt" x="356" y="1" width="80" height="522" rx="12"/><text class="d-title" x="0" y="22">Cross-tested in CI</text><text class="d-sub" x="0" y="40">against pinned builds</text><text class="d-title" x="312" y="22" text-anchor="middle">Client</text><text class="d-sub" x="312" y="40" text-anchor="middle">Initiator</text><text class="d-title" x="396" y="22" text-anchor="middle">Server</text><text class="d-sub" x="396" y="40" text-anchor="middle">Responder</text><rect class="d-box-soft" x="0.75" y="60" width="143" height="26" rx="13"/><text class="d-mono" x="13" y="77.5">libcoap v4.3.5b</text><text class="d-title" x="0" y="112">CoAP over UDP</text><text class="d-sub" x="0" y="129">Block-wise, Observe, discovery</text><circle class="d-fill-accent" cx="312" cy="115" r="12"/><path class="d-check" d="M306.5 115.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="115" r="12"/><path class="d-check" d="M390.5 115.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 136H262"/><text class="d-title" x="0" y="154">CoAP over TCP and WebSockets</text><text class="d-sub" x="0" y="171">CSM, Ping/Pong, BERT, Observe</text><circle class="d-fill-accent" cx="312" cy="157" r="12"/><path class="d-check" d="M306.5 157.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="157" r="12"/><path class="d-check" d="M390.5 157.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 178H262"/><text class="d-title" x="0" y="196">Q-Block, RFC 9177</text><text class="d-sub" x="0" y="213">bursts with loss, Observe, fallback</text><circle class="d-fill-accent" cx="312" cy="199" r="12"/><path class="d-check" d="M306.5 199.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="199" r="12"/><path class="d-check" d="M390.5 199.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 220H262"/><text class="d-title" x="0" y="238">Address verification</text><text class="d-sub" x="0" y="255">4.01 with Echo, RFC 9175</text><path class="d-line" d="M305 241h14"/><circle class="d-fill-accent" cx="396" cy="241" r="12"/><path class="d-check" d="M390.5 241.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 262H262"/><text class="d-title" x="0" y="280">OSCORE, RFC 8613</text><text class="d-sub" x="0" y="297">through the stack, over UDP, TCP, WS</text><circle class="d-fill-accent" cx="312" cy="283" r="12"/><path class="d-check" d="M306.5 283.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="283" r="12"/><path class="d-check" d="M390.5 283.5l3.75 3.75 7.25-7.5"/><rect class="d-box-soft" x="0.75" y="316" width="150.8" height="26" rx="13"/><text class="d-mono" x="13" y="333.5">libedhoc 0363bd3</text><text class="d-title" x="0" y="368">EDHOC, RFC 9528</text><text class="d-sub" x="0" y="385">suites 0, 2, 4, 24 × methods 0–3</text><circle class="d-fill-accent" cx="312" cy="371" r="12"/><path class="d-check" d="M306.5 371.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="371" r="12"/><path class="d-check" d="M390.5 371.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 392H262"/><text class="d-title" x="0" y="410">Post-quantum EDHOC</text><text class="d-sub" x="0" y="427">suite −24: ML-KEM-512, ML-DSA-44</text><circle class="d-fill-accent" cx="312" cy="413" r="12"/><path class="d-check" d="M306.5 413.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="413" r="12"/><path class="d-check" d="M390.5 413.5l3.75 3.75 7.25-7.5"/><rect class="d-box-dashed" x="0.75" y="446" width="184.7" height="26" rx="13"/><text class="d-small" x="13" y="463.5">no independent peer yet</text><text class="d-title" x="0" y="498">EDHOC over CoAP, RFC 9668</text><text class="d-sub" x="0" y="515">the combined request: kcoap ↔ kcoap only</text><circle class="d-box-dashed" cx="312" cy="501" r="11"/><circle class="d-box-dashed" cx="396" cy="501" r="11"/></svg>
@@ -152,6 +152,7 @@
             <li class="is-open">libcoap answers a request with both Block2 and Q-Block2 with 4.00 instead of 4.02, and keeps Q-Block for a whole session.</li>
             <li class="is-open">libcoap’s WebSocket server aborts on frames above 1472 bytes, so the tests cap its message size.</li>
             <li class="is-open">libedhoc’s Responder supports only its last configured suite, and accepts unknown critical EAD without a callback.</li>
+            <li class="is-open">libcoap’s forward-proxy reaches devices only on port 5683, drops an OSCORE request that names its target in Proxy-Uri, sends a deregistration on a new token, and corrupts request bodies of several blocks, which keeps post-quantum EDHOC off that path (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>).</li>
           </ul>
         </div>
         <div class="card">
@@ -175,10 +176,10 @@
           <p class="lede">The KEM-based key exchange of draft-ietf-lake-pqsuites, as libedhoc’s private cipher suite −24: ML-KEM-512 for the key exchange, ML-DSA-44 for signatures.</p>
           <ul class="checks">
             <li>Round trips with real ML-KEM and ML-DSA on Bouncy Castle 1.86.</li>
-            <li>ML-KEM and ML-DSA checked against NIST’s ACVP vectors, at a pinned ACVP-Server commit.</li>
+            <li>ML-KEM and ML-DSA checked against a subset of NIST’s ACVP vectors, at a pinned ACVP-Server commit.</li>
             <li>Live against libedhoc’s liboqs build, in both roles, with CCS and ML-DSA-44 X.509 credentials.</li>
             <li>Method 0 only: methods 1 to 3 need static Diffie-Hellman keys, which a KEM suite has not, so they are refused.</li>
-            <li class="is-open">JVM and Android only, through <code>kcoap-crypto-bc</code>. Other platforms, and suite −24 through EDHOC over CoAP, are still to do.</li>
+            <li class="is-open">On the JVM only, through <code>kcoap-crypto-bc</code>, which wraps the classical backend you pass. An Android app builds and shrinks with it, but has not run it on a device. Other platforms, and suite −24 through EDHOC over CoAP, are still to do.</li>
           </ul>
         </div>
         <div class="card">
@@ -196,14 +197,15 @@
         </div>
       </div>
       <div class="feature-code">
-<div class="code-block"><p class="code-block-label">PostQuantum.kt</p><pre><code><span class="tok-k">val</span> crypto = <span class="tok-t">BouncyCastleCryptoBackend</span>()  <span class="tok-c">// ML-KEM, ML-DSA; the rest from DefaultCryptoBackend</span>
+<div class="code-block"><p class="code-block-label">PostQuantum.kt</p><pre><code><span class="tok-c">// ML-KEM and ML-DSA on Bouncy Castle, around the classical backend you pass</span>
+<span class="tok-k">val</span> crypto = <span class="tok-t">BouncyCastleCryptoBackend</span>(<span class="tok-t">DefaultCryptoBackend</span>())
 <span class="tok-k">val</span> initiatorConfig = <span class="tok-t">EdhocInitiatorConfig</span>(
     method = <span class="tok-t">EdhocMethod</span>.<span class="tok-t">SIGNATURE_SIGNATURE</span>,
     cipherSuites = <span class="tok-f">listOf</span>(<span class="tok-t">CipherSuite</span>.<span class="tok-t">SUITE_PQC_1</span>),  <span class="tok-c">// suite −24</span>
-    credentials = <span class="tok-f">listOf</span>(credential),                <span class="tok-c">// an ML-DSA-44 key in a CCS</span>
+    credentials = <span class="tok-f">listOf</span>(credential),  <span class="tok-c">// an ML-DSA-44 key in a CCS</span>
     credentialResolver = <span class="tok-t">TrustedCredentials</span>(crypto, <span class="tok-f">listOf</span>(peerCredential)),
 )</code></pre></div>
-        <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Names checked against <code>kcoap-crypto-bc</code> and <code>kcoap-edhoc</code>; composed from <code>PostQuantumBouncyCastleTest</code>.</span></p>
+        <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Names checked against <code>kcoap-crypto-bc</code>, <code>kcoap-crypto-default</code> and <code>kcoap-edhoc</code>; composed from <code>PostQuantumBouncyCastleTest</code>.</span></p>
       </div>
     </div>
   </section>
@@ -231,14 +233,22 @@
         </figure>
       </div>
       <div class="feature-code">
-<div class="code-block"><p class="code-block-label">QBlock.kt</p><pre><code><span class="tok-c">// Server</span>
-<span class="tok-k">val</span> config = <span class="tok-t">CoapServerConfig</span>(qBlock = <span class="tok-t">QBlockServerConfig</span>(isEnabled = <span class="tok-k">true</span>))  <span class="tok-c">// off by default</span>
-<span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(port = <span class="tok-n">5683</span>), scope, config) { /* resources */ }
+<div class="code-block"><p class="code-block-label">QBlock.kt</p><pre><code><span class="tok-c">// Server: Q-Block is off by default</span>
+<span class="tok-k">val</span> serverConfig = <span class="tok-t">CoapServerConfig</span>(
+    qBlock = <span class="tok-t">QBlockServerConfig</span>(isEnabled = <span class="tok-k">true</span>),
+)
+<span class="tok-k">val</span> transport = <span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(port = <span class="tok-n">5683</span>)
+<span class="tok-k">val</span> server = <span class="tok-t">CoapServer</span>(transport, scope, serverConfig) {
+    <span class="tok-c">// resources</span>
+}
 
-<span class="tok-c">// Client</span>
-<span class="tok-k">val</span> qBlock = <span class="tok-t">QBlockClientConfig</span>(mode = <span class="tok-t">QBlockMode</span>.<span class="tok-t">PROBE</span>)  <span class="tok-c">// OFF by default</span>
-<span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(), scope, <span class="tok-t">CoapClientConfig</span>(qBlock = qBlock))
-<span class="tok-c">// Non-confirmable requests get Non-confirmable bursts; Confirmable ones go block by block.</span>
+<span class="tok-c">// Client: OFF by default; PROBE asks each server once</span>
+<span class="tok-k">val</span> clientConfig = <span class="tok-t">CoapClientConfig</span> {
+    qBlock = <span class="tok-t">QBlockClientConfig</span>(mode = <span class="tok-t">QBlockMode</span>.<span class="tok-t">PROBE</span>)
+}
+<span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(), scope, clientConfig)
+<span class="tok-c">// Non-confirmable requests get Non-confirmable bursts;</span>
+<span class="tok-c">// Confirmable ones go block by block.</span>
 <span class="tok-k">val</span> body = client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/big"</span>) { <span class="tok-f">nonConfirmable</span>() }.payload</code></pre></div>
         <p class="code-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The settings and calls of the guide’s Q-Block example, which <code>GuideExamplesTest</code> runs over real UDP in CI.</span></p>
       </div>
@@ -421,11 +431,11 @@
             <tr><th scope="row">Echo, Request-Tag</th><td data-label="RFC">9175</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Address verification against amplification is done; server freshness checks (§2.3) outside OSCORE to do. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-16</a></td></tr>
             <tr><th scope="row">Hop-Limit, 4.29</th><td data-label="RFC">8768, 8516</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>The option and codes exist; processing belongs to proxies, and there is no rate limiter. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-17, 18</a></td></tr>
             <tr><th scope="row">Extended tokens</th><td data-label="RFC">8974</td><td class="state-col"><span class="badge badge-todo">to do</span></td><td>Scope not decided. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-19</a></td></tr>
-            <tr><th scope="row">CoAP over TCP and WebSockets</th><td data-label="RFC">8323</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>CSM, Ping/Pong, Release, Abort, BERT and Observe work; TLS for <code>coaps+tcp</code> to do, and <code>coaps+ws</code> is not cross-tested. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-20, x9</a></td></tr>
+            <tr><th scope="row">CoAP over TCP and WebSockets</th><td data-label="RFC">8323</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>CSM, Ping/Pong, Release, Abort, BERT and Observe work. TLS: a <code>coaps+tcp</code> client on the JVM, TLS 1.2 without ALPN, cross-tested with <code>coaps+ws</code>; no TLS listener. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-20, x9</a></td></tr>
             <tr><th scope="row">DTLS 1.2</th><td data-label="RFC">6347, 7925, 9146</td><td class="state-col"><span class="badge badge-deferred">deferred</span></td><td>Interfaces only; the engine comes last. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#coap-core-and-companions">coap-core-21</a></td></tr>
-            <tr><th scope="row">OSCORE</th><td data-label="RFC">8613</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Outer Block-wise, protected signaling over TCP, proxies, OSCORE over HTTP and Appendix B.2 to do; nonce reuse after sequence-number exhaustion (§7.2.1) open. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#oscore">oscore-1 to 11, x1 to x6</a></td></tr>
+            <tr><th scope="row">OSCORE</th><td data-label="RFC">8613</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Works through an OSCORE-unaware forward proxy, cross-tested through libcoap’s. Outer Block-wise, protected signaling over TCP, a proxy of kcoap’s own, OSCORE over HTTP and Appendix B.2 to do; nonce reuse after sequence-number exhaustion (§7.2.1) open. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#oscore">oscore-1 to 11, x1 to x6</a></td></tr>
             <tr><th scope="row">EDHOC: methods 0–3, suites 0–6 and 24</th><td data-label="RFC">9528</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Suite 25, CWT and C509 credentials, and the Initiator’s C_R = C_I check to do; no independent peer for suites 1, 3, 5 and 6. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#edhoc">edhoc-1 to 9</a></td></tr>
-            <tr><th scope="row">Post-quantum EDHOC, suite −24</th><td data-label="RFC">draft-ietf-lake-pqsuites</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Done on the JVM and Android; other platforms to do. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#kotlin-multiplatform">edhoc-2, kmp-8</a></td></tr>
+            <tr><th scope="row">Post-quantum EDHOC, suite −24</th><td data-label="RFC">draft-ietf-lake-pqsuites</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>Done on the JVM; an Android app builds with it but has not run it on a device; other platforms to do. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#kotlin-multiplatform">edhoc-2, kmp-8</a></td></tr>
             <tr><th scope="row">EDHOC over CoAP, into OSCORE, combined request</th><td data-label="RFC">9528 App. A, 9668</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>The forward flow and the combined request work end to end, with MUSTs still missing: the client’s EDHOC error after a failed message_2 or message_4, the sequential fallback for a large request, Outer Block1 reassembly. The reverse flow is to do, and there is no independent peer yet. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#edhoc-with-coap-and-oscore">edhoc-oscore-1 to 7</a></td></tr>
             <tr><th scope="row">CBOR, COSE, CWT Claims Sets</th><td data-label="RFC">8949, 9052, 8392</td><td class="state-col"><span class="badge badge-partial">partial</span></td><td>What OSCORE and EDHOC need is done; full COSE messages, CWT validation and X.509 path validation to do. <a class="row-ids" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md#cbor-cose-crypto">foundations-1 to 5, x1 to x6</a></td></tr>
           </tbody>
@@ -460,7 +470,7 @@
         <article class="card">
           <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2.75v2.5M12 18.75v2.5M2.75 12h2.5M18.75 12h2.5M5.45 5.45l1.77 1.77M16.78 16.78l1.77 1.77M5.45 18.55l1.77-1.77M16.78 7.22l1.77-1.77"/></svg></div>
           <h3>Bounded state</h3>
-          <p>Limits on deduplication entries, concurrent requests, exchanges and observers per peer, connections and bodies hold back unauthenticated peers; each is reported as an event when reached.</p>
+          <p>Limits on deduplication entries, concurrent requests, exchanges and observers per peer, connections and bodies hold back unauthenticated peers; each is reported as an event when reached. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-coap/src/commonMain/kotlin/dev/kcoap/coap/stack/CoapEndpointConfig.kt">The limits</a>.</p>
         </article>
         <article class="card">
           <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="7.5" cy="12" r="4"/><path d="M11.5 12h10M17.5 12v3M20.5 12v2.25"/></svg></div>
@@ -526,8 +536,8 @@
           <thead><tr><th scope="col">Job</th><th scope="col">Runner</th><th scope="col">What it runs</th></tr></thead>
           <tbody>
             <tr><th scope="row">Unit tests and build checks</th><td data-label="Runner">Linux</td><td data-label="Runs">Every unit test on the JVM, Linux native, JS and Wasm; the ABI, common-only, server-engine and Android API checks; the coverage floor</td></tr>
-            <tr><th scope="row">Interop</th><td data-label="Runner">Linux, Docker</td><td data-label="Runs">The libcoap and libedhoc cross-tests, with images built from pinned sources</td></tr>
-            <tr><th scope="row">Native tests</th><td data-label="Runner">macOS</td><td data-label="Runs">The common tests on macOS and the iOS simulator, and the ABI check with the Apple klibs</td></tr>
+            <tr><th scope="row">Interop</th><td data-label="Runner">Linux, Docker</td><td data-label="Runs">The libcoap and libedhoc cross-tests, TLS and libcoap’s forward-proxy included, with images built from pinned sources</td></tr>
+            <tr><th scope="row">Native tests</th><td data-label="Runner">macOS</td><td data-label="Runs">The common tests on macOS and the iOS simulator, a Swift smoke test against a framework of <code>kcoap-coap</code>, and the ABI check with the Apple klibs</td></tr>
             <tr><th scope="row">Browser</th><td data-label="Runner">Linux</td><td data-label="Runs">The WebSocket client in headless Chrome against a JVM listener</td></tr>
             <tr><th scope="row">Android consumer</th><td data-label="Runner">Linux</td><td data-label="Runs">The sample app at minSdk 26: R8 on both release variants, lint, unit tests</td></tr>
             <tr><th scope="row">API reference and website</th><td data-label="Runner">Linux</td><td data-label="Runs">Dokka, and the checks of this website</td></tr>

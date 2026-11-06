@@ -81,7 +81,7 @@
       <div class="doc-body prose">
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
-          <li>A Kotlin Multiplatform project with a <code>js</code> or <code>wasmJs</code> target and the <code>nodejs()</code> environment, on Kotlin 2.4.21 or newer.</li>
+          <li>A Kotlin Multiplatform project with a <code>js</code> or <code>wasmJs</code> target and the <code>nodejs()</code> environment, on Kotlin 2.3 or newer; the samples use 2.4.21, the version kcoap is built with.</li>
           <li>A JDK 17 or newer and a clone of kcoap, to publish from.</li>
           <li>The build sets no minimum Node.js version. kcoap’s tests run on the Node.js the Kotlin Gradle plugin downloads.</li>
         </ul>
@@ -208,7 +208,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <ul>
           <li>UDP and TCP adapters for Node.js (deferred).</li>
           <li>An npm package with TypeScript declarations, for use from JavaScript.</li>
-          <li>Post-quantum EDHOC: ML-KEM and ML-DSA run only on the JVM and Android so far.</li>
+          <li>Post-quantum EDHOC: ML-KEM and ML-DSA come only from <code>kcoap-crypto-bc</code>, which is for the JVM and Android.</li>
         </ul>
 
         <h2 id="troubleshooting">Troubleshooting</h2>

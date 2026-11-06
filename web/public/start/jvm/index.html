@@ -68,7 +68,7 @@
       <p class="lede">The JVM is where kcoap is tested most: every common test, real sockets, and the live interop with libcoap and libedhoc. This guide sets up a Kotlin/JVM application and runs a first server and client.</p>
       <ul class="fact-tiles" aria-label="The JVM at a glance">
         <li class="fact-tile"><span class="fact-tile-label">Target</span><span class="fact-tile-value"><code>jvm</code>, Java 17 bytecode</span></li>
-        <li class="fact-tile"><span class="fact-tile-label">Transports</span><span class="fact-tile-value">UDP, TCP, WebSocket client and server</span></li>
+        <li class="fact-tile"><span class="fact-tile-label">Transports</span><span class="fact-tile-value">UDP, TCP, TLS client, WebSocket client and server</span></li>
         <li class="fact-tile"><span class="fact-tile-label">Cryptography</span><span class="fact-tile-value">JCA; Bouncy Castle for post-quantum</span></li>
         <li class="fact-tile"><span class="fact-tile-label">Minimum</span><span class="fact-tile-value">Java 17, Kotlin 2.3</span></li>
       </ul>
@@ -178,7 +178,7 @@ kotlin-jvm = { id = <span class="tok-s">"org.jetbrains.kotlin.jvm"</span>, versi
                 <tbody>
                   <tr><th scope="row">WebSocket client</th><td><code>dev.kcoap:kcoap-transport-ktor-websocket</code></td></tr>
                   <tr><th scope="row">WebSocket server</th><td><code>dev.kcoap:kcoap-transport-ktor-websocket-server</code> and a ktor server engine, such as <code>io.ktor:ktor-server-cio:3.6.1</code>, the ktor version kcoap is built with</td></tr>
-                  <tr><th scope="row">Post-quantum EDHOC</th><td><code>dev.kcoap:kcoap-crypto-bc</code> (ML-KEM and ML-DSA on Bouncy Castle 1.86)</td></tr>
+                  <tr><th scope="row">Post-quantum EDHOC</th><td><code>dev.kcoap:kcoap-crypto-bc</code> (ML-KEM and ML-DSA on Bouncy Castle 1.86), next to <code>kcoap-crypto-default</code></td></tr>
                   <tr><th scope="row">Tests on virtual time</th><td><code>dev.kcoap:kcoap-testkit</code> and <code>org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0</code></td></tr>
                 </tbody>
               </table>
@@ -280,35 +280,47 @@ on</code></pre></div>
     @<span class="tok-t">Test</span>
     <span class="tok-k">fun</span> <span class="tok-f">greets</span>() = <span class="tok-f">runTest</span> {
         <span class="tok-k">val</span> network = <span class="tok-t">InMemoryNetwork</span>(backgroundScope, <span class="tok-t">Random</span>(<span class="tok-n">1</span>))
-        network.conditions = <span class="tok-t">LinkConditions</span>(lossRate = <span class="tok-n">0.3</span>, duplicationRate = <span class="tok-n">0.1</span>)
-        <span class="tok-k">val</span> config = <span class="tok-t">CoapEndpointConfig</span>(timeSource = testScheduler.timeSource)
+        network.conditions =
+            <span class="tok-t">LinkConditions</span>(lossRate = <span class="tok-n">0.3</span>, duplicationRate = <span class="tok-n">0.1</span>)
+        <span class="tok-k">val</span> config = <span class="tok-t">CoapEndpointConfig</span> { timeSource = testScheduler.timeSource }
         <span class="tok-k">val</span> serverTransport = network.<span class="tok-f">attach</span>()
         <span class="tok-t">CoapServer</span>(serverTransport, backgroundScope, endpointConfig = config) {
             <span class="tok-f">resource</span>(<span class="tok-s">"hello"</span>) { <span class="tok-f">get</span> { <span class="tok-t">CoapResponse</span>.<span class="tok-f">content</span>(<span class="tok-s">"Hello"</span>) } }
         }
-        <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(network.<span class="tok-f">attach</span>(), backgroundScope, endpointConfig = config)
+        <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(
+            network.<span class="tok-f">attach</span>(), backgroundScope, endpointConfig = config,
+        )
         <span class="tok-k">val</span> address = serverTransport.localEndpoint
-        <span class="tok-f">assertEquals</span>(<span class="tok-s">"Hello"</span>, client.<span class="tok-f">get</span>(<span class="tok-s">"coap://${address.host}:${address.port}/hello"</span>).<span class="tok-f">payloadAsText</span>())
+        <span class="tok-k">val</span> reply = client.<span class="tok-f">get</span>(<span class="tok-s">"coap://${address.host}:${address.port}/hello"</span>)
+        <span class="tok-f">assertEquals</span>(<span class="tok-s">"Hello"</span>, reply.<span class="tok-f">payloadAsText</span>())
     }
 }</code></pre></div>
-        <p class="code-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The test is <code>GuideExamplesTest.greets</code>, which runs in CI. It needs <code>kotlinx-coroutines-test</code> and <code>kotlin("test")</code> as test dependencies.</span></p>
+        <p class="code-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The test is <code>GuideExamplesTest.greets</code>, which runs in CI, with its lines wrapped and its last assertion split in two here. It needs <code>kotlinx-coroutines-test</code> and <code>kotlin("test")</code> as test dependencies.</span></p>
 
         <h2 id="security">Securing it</h2>
         <p>OSCORE and EDHOC work the same on every platform; the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/README.md#quick-start">quick start</a> shows an OSCORE server and client, then EDHOC with the combined request, two round trips in all. On a JVM server, three things matter more than elsewhere:</p>
         <ul>
           <li><strong>Sequence numbers must survive restarts.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>; kcoap ships none on purpose. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The JVM recipe</a> writes a temporary file, forces it to disk and moves it into place.</li>
           <li><strong>Bound the contexts.</strong> <code>InMemoryContextRepository</code> never evicts. A production server that runs EDHOC supplies a bounded <code>MutableSecurityContextRepository</code>.</li>
-          <li><strong>Post-quantum EDHOC</strong> runs here. <code>BouncyCastleCryptoBackend()</code> from <code>kcoap-crypto-bc</code> adds ML-KEM and ML-DSA and passes everything else to <code>DefaultCryptoBackend</code>; configure <code>CipherSuite.SUITE_PQC_1</code> (suite −24). <a href="/features/#post-quantum">What is verified</a>.</li>
+          <li><strong>Post-quantum EDHOC</strong> runs here. <code>BouncyCastleCryptoBackend(DefaultCryptoBackend())</code> from <code>kcoap-crypto-bc</code> adds ML-KEM and ML-DSA to the classical backend you pass, here the one of <code>kcoap-crypto-default</code>; configure <code>CipherSuite.SUITE_PQC_1</code> (suite −24). <a href="/features/#post-quantum">What is verified</a>.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
         <h3>Transports</h3>
         <p><code>KtorUdpTransport</code> (<code>coap</code>), <code>KtorTcpConnector</code> and <code>KtorTcpListener</code> (<code>coap+tcp</code>) run on ktor-network’s NIO sockets. <code>KtorWebSocketConnector</code> uses the CIO client engine by default. <code>KtorWebSocketListener</code> brings no server engine: you pass one, and CIO is the one kcoap’s tests use. CI tests UDP and TCP on real sockets, over IPv4 and IPv6 loopback.</p>
+        <h3 id="tls">TLS</h3>
+        <p><code>KtorTlsConnector</code> opens <code>coaps+tcp</code> connections on ktor-network-tls. It checks the server’s chain against the JDK’s trust store, or trust anchors you give in <code>TlsClientConfig</code>, checks that the certificate names the host, and takes a pinning hook. It speaks TLS 1.2 without ALPN, so a port other than 5684 needs <code>allowsAnyPortWithoutAlpn</code>. For <code>coaps+ws</code>, pass <code>KtorWebSocketConnector</code> an <code>HttpClient</code> whose engine checks host names: the default CIO client does not list <code>coaps+ws</code> on the JVM.</p>
+<div class="code-block"><p class="code-block-label">Tls.kt</p><pre><code><span class="tok-c">// coaps+tcp to port 5684; the server's chain is checked against</span>
+<span class="tok-c">// the JDK's trust store and must name coap.example.org</span>
+<span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-f">listOf</span>(<span class="tok-t">KtorTlsConnector</span>()), scope)
+<span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coaps+tcp://coap.example.org/sensors/temp"</span>).<span class="tok-f">payloadAsText</span>())</code></pre></div>
+        <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>From the KDoc of <code>KtorTlsConnector</code>; names checked. <code>KcoapClientAgainstLibcoapTlsTest</code> runs the connector against libcoap in CI.</span></p>
+        <p>kcoap has no TLS listener: a server terminates TLS at a reverse proxy, such as HAProxy or nginx’s <code>stream</code> module, in front of <code>KtorTcpListener</code> (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0010-server-side-tls.md">ADR 0010</a>).</p>
         <h3>Cryptography</h3>
         <p><code>DefaultCryptoBackend()</code> uses the JDK’s own providers through JCA. The JVM runs every EDHOC suite kcoap implements; suites 0, 2, 4 and 24 and the post-quantum suite −24 are cross-tested against libedhoc here.</p>
         <h3>Not done yet on the JVM</h3>
         <ul>
-          <li>TLS for <code>coaps+tcp</code>: no TLS connector yet. Until then, terminate TLS at a reverse proxy. DTLS for <code>coaps://</code> comes last.</li>
+          <li>TLS 1.3, ALPN and a TLS listener: the client speaks TLS 1.2 only, and servers terminate TLS at a reverse proxy. DTLS for <code>coaps://</code> comes last.</li>
           <li>No benchmarks, no metrics adapter, no Java-friendly facade and no server guide yet. Each endpoint has one socket and one lock.</li>
         </ul>
 
@@ -319,7 +331,7 @@ on</code></pre></div>
           <dt>An error about inlining bytecode built with JVM target 17</dt>
           <dd>Your project compiles for an older JVM. Build it with a JDK 17 or newer, or set the Kotlin <code>jvmTarget</code> to 17 or newer.</dd>
           <dt><code>Cannot resolve '…': configure an EndpointResolver</code></dt>
-          <dd>The default resolver turns IP addresses and <code>localhost</code> into <code>coap://</code> endpoints but knows no DNS. Use an IP address, or set <code>CoapClientConfig(resolver = …)</code>. TCP and WebSocket connectors resolve host names themselves.</dd>
+          <dd>The default resolver turns IP addresses and <code>localhost</code> into <code>coap://</code> endpoints but knows no DNS. Use an IP address, or set <code>CoapClientConfig { resolver = EndpointResolver { … } }</code>. TCP and WebSocket connectors resolve host names themselves.</dd>
           <dt>The server cannot bind port 5683</dt>
           <dd>Another CoAP server, such as libcoap’s <code>coap-server</code>, has it. Pick another port, or pass <code>0</code> and read <code>transport.localEndpoint.port</code>.</dd>
           <dt>The WebSocket listener does not start</dt>

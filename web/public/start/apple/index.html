@@ -65,7 +65,7 @@
       </ol>
       <p class="eyebrow">Get started · Apple</p>
       <h1>iOS and macOS apps</h1>
-      <p class="lede">kcoap builds for the iPhone, the iOS simulator and Apple silicon Macs, on CryptoKit and CommonCrypto. Today it is used from a Kotlin Multiplatform shared module in your app: Kotlin code calls kcoap, and Swift calls that module. A Swift-facing API is not done yet.</p>
+      <p class="lede">kcoap builds for the iPhone, the iOS simulator and Apple silicon Macs, on CryptoKit and CommonCrypto. Today it is used from a Kotlin Multiplatform shared module in your app: Kotlin code calls kcoap, and Swift calls that module. There is no Swift package yet.</p>
       <ul class="fact-tiles" aria-label="Apple at a glance">
         <li class="fact-tile"><span class="fact-tile-label">Targets</span><span class="fact-tile-value"><code>iosArm64</code>, <code>iosSimulatorArm64</code>, <code>macosArm64</code></span></li>
         <li class="fact-tile"><span class="fact-tile-label">Transports</span><span class="fact-tile-value">UDP, TCP, WebSocket on URLSession</span></li>
@@ -83,14 +83,14 @@
         <ul>
           <li>A Mac with Apple silicon and Xcode. kcoap has no Intel targets (<code>iosX64</code>, <code>macosX64</code>), and none for tvOS or watchOS.</li>
           <li>A JDK 17 or newer, and a clone of kcoap.</li>
-          <li>Kotlin 2.4.21 or newer in the shared module, the version kcoap is built with.</li>
+          <li>Kotlin 2.3 or newer in the shared module; the samples use 2.4.21, the version kcoap is built with.</li>
           <li>The build sets no iOS or macOS deployment target yet, so none is documented.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
           <span class="callout-title">Not released, and no Swift package yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local; run that build on the Mac that builds your app. There is no XCFramework and no Swift Package Manager package, and kcoap’s functions declare no <code>@Throws</code> yet (work packages PL-3 and D2). CI runs the common tests on macOS and the iOS simulator; nothing has run on an iPhone yet.</p>
+          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local; run that build on the Mac that builds your app. There is no XCFramework and no Swift Package Manager package. kcoap’s public suspend functions list <code>KcoapException</code> in <code>@Throws</code>, so their failures reach Swift as an <code>NSError</code>; a Swift smoke test in the macOS CI job checks that, and has not had its first run yet. CI runs the common tests on macOS and the iOS simulator; nothing has run on an iPhone yet.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
@@ -186,7 +186,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         </ol>
 
         <h2 id="first-client-and-server">First client, called from Swift</h2>
-        <p>Put the kcoap calls in a class of the shared module, and give its public functions <code>@Throws</code>. kcoap’s own functions declare none yet, so without it a Kotlin exception, such as a timeout, would crash the Swift caller instead of arriving as an <code>Error</code>.</p>
+        <p>Put the kcoap calls in a class of the shared module, and give its public functions <code>@Throws</code>. Swift calls your functions, not kcoap’s, and Kotlin/Native ends the process when an exception leaves a function that does not list it: without the annotation, a timeout would crash the Swift caller instead of arriving as an <code>Error</code>.</p>
 <div class="code-block"><p class="code-block-label">shared/src/commonMain/kotlin/Lights.kt</p><pre><code><span class="tok-k">import</span> dev.kcoap.coap.client.<span class="tok-t">CoapClient</span>
 <span class="tok-k">import</span> dev.kcoap.transport.ktor.<span class="tok-t">KtorUdpTransport</span>
 <span class="tok-k">import</span> kotlinx.coroutines.<span class="tok-t">CoroutineScope</span>
@@ -197,7 +197,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 <span class="tok-k">class</span> <span class="tok-t">Lights</span> {
     <span class="tok-k">private</span> <span class="tok-k">val</span> scope = <span class="tok-t">CoroutineScope</span>(<span class="tok-t">SupervisorJob</span>() + <span class="tok-t">Dispatchers</span>.<span class="tok-t">Default</span>)
 
-    <span class="tok-c">// kcoap declares no @Throws yet: this one turns its exceptions into Swift errors.</span>
+    <span class="tok-c">// Swift calls this function, so it lists what may reach Swift:</span>
+    <span class="tok-c">// kcoap's KcoapException, a socket's exception, a cancellation.</span>
     @<span class="tok-t">Throws</span>(<span class="tok-t">Exception</span>::<span class="tok-k">class</span>)
     <span class="tok-k">suspend</span> <span class="tok-k">fun</span> <span class="tok-f">state</span>(uri: <span class="tok-t">String</span>): <span class="tok-t">String</span> {
         <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-t">KtorUdpTransport</span>.<span class="tok-f">bind</span>(), scope)
@@ -215,28 +216,27 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
 
 <span class="tok-k">let</span> lights = <span class="tok-t">Lights</span>()
 <span class="tok-k">let</span> state = <span class="tok-k">try</span> <span class="tok-k">await</span> lights.state(uri: <span class="tok-s">"coap://192.0.2.1/lights"</span>)</code></pre></div>
-        <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>The kcoap names are checked against the sources, and the client lines are the guide’s. The <code>@Throws</code> wrapper and the Swift call follow Kotlin/Native’s conventions; kcoap’s repository has no Swift code yet, so neither is tested there.</span></p>
+        <p class="code-note code-note-names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>The kcoap names are checked against the sources, and the client lines are the guide’s. The <code>@Throws</code> wrapper and the Swift call follow Kotlin/Native’s conventions and are not tested; kcoap’s own Swift smoke test calls kcoap directly.</span></p>
         <p>A server works the same way: <code>CoapServer(KtorUdpTransport.bind(port = 5683), scope) { … }</code> in the shared module, as in the <a href="/start/jvm/#first-client-and-server">JVM guide</a>. The kcoap calls are the same common code on every platform.</p>
 
         <h2 id="security">Keys and state in an app</h2>
         <ul>
           <li><strong>EDHOC needs no durable store</strong>: its keys are new for each session. Cipher suite 2 (P-256) runs on every platform.</li>
           <li><strong>Pre-shared OSCORE keys</strong> need a durable <code>SequenceNumberStore</code>. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The Apple recipe</a> writes with POSIX calls and <code>F_FULLFSYNC</code>, in Application Support and excluded from backups, never in <code>NSUserDefaults</code>. It is not compiled or tested on Apple yet.</li>
-          <li><strong>No post-quantum EDHOC on Apple yet</strong>: ML-KEM and ML-DSA run only on the JVM and Android so far.</li>
+          <li><strong>No post-quantum EDHOC on Apple yet</strong>: ML-KEM and ML-DSA come only from <code>kcoap-crypto-bc</code>, which is for the JVM and Android.</li>
         </ul>
 
         <h2 id="notes">Platform notes</h2>
         <h3>Transports</h3>
-        <p><code>kcoap-transport-ktor</code> runs UDP and TCP on ktor-network’s BSD sockets. BSD sockets do not bring up the cellular radio and do not support VPN On Demand. The WebSocket client runs on the Darwin engine, which uses URLSession and does both. A Network.framework adapter is planned, not built.</p>
+        <p><code>kcoap-transport-ktor</code> runs UDP and TCP on ktor-network’s BSD sockets. BSD sockets do not bring up the cellular radio and do not support VPN On Demand. The WebSocket client runs on the Darwin engine, which uses URLSession and does both, and takes <code>coaps+ws</code> on URLSession’s TLS. There is no <code>coaps+tcp</code> on Apple platforms: ktor has no TLS there. A Network.framework adapter is planned, not built.</p>
         <h3>Local network</h3>
         <p>iOS asks the user before an app talks to peers on the local network. Add a usage description for it (<code>NSLocalNetworkUsageDescription</code> in Info.plist) if your app reaches CoAP devices on the LAN.</p>
         <h3>What CI checks</h3>
-        <p>The macOS job runs every common test on <code>macosArm64</code> and <code>iosSimulatorArm64</code>, with CryptoKit and CommonCrypto underneath, and the WebSocket loopback test on the Darwin engine. The release workflow compiles <code>iosArm64</code>. CryptoKit signs Ed25519 with randomness, so on Apple the RFC 8032 and RFC 9529 signature checks verify signatures instead of comparing bytes.</p>
+        <p>The macOS job runs every common test on <code>macosArm64</code> and <code>iosSimulatorArm64</code>, with CryptoKit and CommonCrypto underneath, and the WebSocket loopback test on the Darwin engine. It also builds a <code>KcoapSmoke</code> framework of <code>kcoap-coap</code> and compiles and runs a Swift script against it, which catches a timeout and a malformed URI as <code>NSError</code>; that step has not run yet. The release workflow compiles <code>iosArm64</code>. CryptoKit signs Ed25519 with randomness, so on Apple the RFC 8032 and RFC 9529 signature checks verify signatures instead of comparing bytes.</p>
         <h3>Not done yet on Apple</h3>
         <ul>
-          <li><code>@Throws</code> on kcoap’s public suspend functions and a Swift smoke test in CI (PL-3, D2).</li>
           <li>An XCFramework, a Swift package and a Swift facade with Flow bridging (E4). Swift-only apps wait for that.</li>
-          <li>A run on a real iPhone, a durable store tested on Apple, and an iOS guide.</li>
+          <li>A run on a real iPhone, a first run of the Swift smoke test, a durable store tested on Apple, and an iOS guide.</li>
         </ul>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
@@ -254,7 +254,7 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <h2 id="next-steps">Next steps</h2>
         <ul>
           <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>: the same API on every platform.</li>
-          <li>The plan for the Swift-facing API: <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/target-architecture.md">target architecture</a>, work package D2.</li>
+          <li>The plan for the Swift-facing API: <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/target-architecture.md">target architecture</a>, roadmap item E4.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
         </ul>
 
