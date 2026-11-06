@@ -6,9 +6,65 @@ API; every breaking change is listed here with a migration note.
 
 ## Unreleased
 
-Nothing has been released yet. The API is still changing as the refactoring plan in
-[docs/target-architecture.md](docs/target-architecture.md) lands; each work package that breaks the API
-adds its entry and migration note below.
+Nothing has changed since 0.1.0 yet.
+
+## 0.1.0 - 2026-11-06
+
+The first release. kcoap implements CoAP, OSCORE and EDHOC once, in common Kotlin, for the JVM, Android, iOS, macOS,
+Linux, browsers and Node.js. [docs/checklist.md](docs/checklist.md) tracks every requirement: of 125, 27 are Done
+(met and verified), 60 Partial (the row names what is missing), 32 To do and 6 Deferred.
+
+- **CoAP** (9 of 30 Done, 11 Partial): RFC 7252 over UDP and RFC 8323 over TCP and WebSockets, client and server;
+  the link format (RFC 6690), Observe (RFC 7641), Block-wise (RFC 7959), Q-Block (RFC 9177, off by default), FETCH,
+  PATCH and iPATCH (RFC 8132), No-Response (RFC 7967), Echo and Request-Tag (RFC 9175), Too Many Requests (RFC 8516).
+- **OSCORE**, RFC 8613 (7 of 17 Done, 5 Partial): every Appendix C vector byte for byte, the replay window, Observe,
+  Appendix B.1.1 and B.1.2. It fails closed: by default a server with OSCORE refuses unprotected requests.
+- **EDHOC**, RFC 9528 (5 of 12 Done, 3 Partial): methods 0–3 in both roles, suites 0–6 and 24, EAD, the exporter,
+  key update; both RFC 9529 traces byte for byte. **Post-quantum EDHOC**: the KEM-based exchange of
+  draft-ietf-lake-pqsuites-02 §3 as libedhoc's private suite -24 (ML-KEM-512, ML-DSA-44), JVM and Android only.
+- **EDHOC over CoAP into OSCORE** (0 of 12 Done, 8 Partial): the forward flow of RFC 9528 Appendix A.2.1 and the
+  combined request of RFC 9668, whose Figure 4 it reproduces byte for byte.
+
+**Where it runs.** CI runs the same common tests on the JVM, `linuxX64`, `js` and `wasmJs` on Node.js, macOS and the
+iOS simulator, and a Swift smoke test; Apple results come from CI only. The jvm artifacts need Java 17 or newer;
+Android uses them from API level 26, and CI builds a sample app at minSdk 26 with R8 and lint, but nothing has run on
+an emulator or a device yet. Browsers use WebSockets only (`coap+ws`, `coaps+ws`), through a proxy to the devices; CI
+runs the WebSocket client's tests and a sample page's bundle in headless Chrome.
+
+**Interop**, in both roles ([interop/README.md](interop/README.md)): 84 tests against libcoap 4.3.5b over UDP, TCP,
+WebSockets and TLS, Q-Block included (over TLS kcoap is the client only); 10 with OSCORE against libcoap; 11 against
+libedhoc, suites 0, 2, 4 and 24 with methods 0–3, and suite -24; 10 through libcoap's forward-proxy from WebSockets
+to UDP, with kcoap at both ends.
+
+**Add it** from Maven Central through `kcoap-bom`, which gives every kcoap module one version;
+[docs/getting-started.md](docs/getting-started.md) says which modules each use case needs. The artifacts are signed
+with the [release key](docs/releasing.md#the-release-signing-key) `58337699D9CB8E6F5EB1BDFB4A7E491069FAEAB3`.
+
+```kotlin
+implementation(platform("dev.kcoap:kcoap-bom:0.1.0"))
+implementation("dev.kcoap:kcoap-edhoc-oscore")   // EDHOC and OSCORE over CoAP; brings the CoAP stack
+implementation("dev.kcoap:kcoap-crypto-default") // the platform's cryptography
+implementation("dev.kcoap:kcoap-transport-ktor") // UDP and TCP sockets
+```
+
+**Not in 0.1.0** (the [checklist's biggest gaps](docs/checklist.md#biggest-gaps) list the rest in order):
+
+- No DTLS, so no `coaps://` and no RawPublicKey mode, which RFC 7252 makes mandatory; a `coaps` request fails before
+  anything is sent. DTLS comes last; until then OSCORE and EDHOC protect `coap` end to end.
+- TLS only as a client: `coaps+tcp` on the JVM (TLS 1.2, no ALPN), `coaps+ws` where the WebSocket engine
+  authenticates the server. No TLS server of its own: servers terminate TLS at a reverse proxy.
+- CoAP: no caching, proxying or multicast. OSCORE: no Appendix B.2, no Outer Block-wise, no OSCORE over HTTP.
+- EDHOC: no suite 25, no CWT or C509 credentials, no X.509 path validator (pin certificates or supply one), no
+  reverse flow, no fallback from the combined request to the sequential flow; no independent peer yet for EDHOC over
+  CoAP or for suites 1, 3, 5 and 6.
+- Swift: no XCFramework or SwiftPM package (an app exports kcoap's types from its own Kotlin framework), no Flow
+  bridge; `Duration` and `CoapCode` reach Swift as raw values; no minimum iOS version yet. No JS facade or npm
+  package.
+
+**0.x: a minor release may break the API**; every breaking change is listed under "Changed (breaking)" with a
+migration note ([docs/versioning.md](docs/versioning.md)). The rest of this entry records the changes made while
+building toward 0.1.0, including breaking changes between development snapshots, which matter only to someone who
+built kcoap from source before this release.
 
 ### Added
 
