@@ -11,6 +11,8 @@
 #   scripts/test coverage   unit and interop tests with the Kover report and the coverage rule
 #   scripts/test apple      the common tests on macOS and the iOS simulator, and checkKotlinAbi with
 #                           the Apple klibs built natively (macOS only)
+#   scripts/test swift      the Swift smoke test: links kcoap-swift-smoke's macOS framework, compiles
+#                           its Swift script against it with xcrun swiftc, and runs it (macOS only)
 #   scripts/test browser [command]
 #                           kcoap-transport-ktor-websocket's js tests in a headless browser against a
 #                           JVM WebSocket listener; command is google-chrome (the default), chromium or
@@ -76,6 +78,15 @@ apple() {
     gradle macosArm64Test iosSimulatorArm64Test checkKotlinAbi --continue "$@"
 }
 
+swift_smoke() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        echo "The Swift smoke test runs only on macOS." >&2
+        exit 1
+    fi
+    say "Swift smoke test against the KcoapSmoke framework (kcoap-swift-smoke)"
+    gradle :kcoap-swift-smoke:swiftSmoke "$@"
+}
+
 browser() {
     # The browser command comes first when given; anything starting with '-' is already a Gradle flag.
     local command=google-chrome
@@ -127,8 +138,9 @@ case "$suite" in
     interop) interop "$@" ;;
     coverage) coverage "$@" ;;
     apple) apple "$@" ;;
+    swift) trap - EXIT; swift_smoke "$@" ;;
     browser) browser "$@" ;;
     images) trap - EXIT; build_images ;;
     all) unit "$@"; interop "$@"; coverage "$@" ;;
-    *) sed -n '2,22p' "$0"; trap - EXIT; exit 2 ;;
+    *) sed -n '2,24p' "$0"; trap - EXIT; exit 2 ;;
 esac

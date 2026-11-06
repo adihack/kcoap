@@ -76,6 +76,14 @@ jobs:
       # The same common tests against CryptoKit and CommonCrypto, and checkKotlinAbi with the Apple
       # klibs built by the macOS toolchain rather than cross-compiled on Linux.
       - run: scripts/test apple
+      # kcoap from Swift (kcoap-swift-smoke): links the KcoapSmoke framework for macOS, compiles
+      # src/swift/SwiftSmoke.swift against it with xcrun swiftc (-F and -rpath from the link task's output
+      # directory) and runs it. It builds a CoapClientConfig with explicit values and catches a request timeout
+      # and a malformed URI as NSError, checking the Kotlin exception in userInfo; any mismatch exits non-zero.
+      - name: Swift smoke test
+        run: |
+          xcrun swiftc --version
+          scripts/test swift
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

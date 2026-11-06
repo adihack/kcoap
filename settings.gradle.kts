@@ -78,4 +78,6 @@ include(
     ":kcoap-edhoc",
     // Core. EDHOC + OSCORE glue (RFC 9668, RFC 9528 Appendix A).
     ":kcoap-edhoc-oscore",
+    // Unpublished, Apple targets only. The framework the Swift smoke test of the macOS CI job runs against.
+    ":kcoap-swift-smoke",
 )
