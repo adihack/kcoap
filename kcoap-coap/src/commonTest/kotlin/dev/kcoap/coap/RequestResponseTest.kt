@@ -70,6 +70,26 @@ class RequestResponseTest {
     }
 
     @Test
+    fun aHandlerReadsMethodPathQueryAndBodyFromItsContext() = runTest {
+        val fixture = StackFixture(this)
+        val server = fixture.server {
+            resource("sensors") {
+                resource("temp") {
+                    post {
+                        // The message is plumbing (InternalKcoapApi); the context's own properties show the same.
+                        check(message.options.path == path && message.code == method)
+                        CoapResponse.content("$method $path ${query.joinToString("&")} ${payloadAsText()}")
+                    }
+                }
+            }
+        }
+        val client = fixture.client()
+
+        val response = client.post(fixture.uri(server, "/sensors/temp?unit=C"), "21".encodeToByteArray())
+        assertEquals("0.02 POST /sensors/temp unit=C 21", response.payloadAsText())
+    }
+
+    @Test
     fun aHandlerCanAcknowledgeEarly() = runTest {
         val fixture = StackFixture(this)
         val server = fixture.server(endpointConfig = fixture.endpointConfig(separateResponseDelay = null)) {
