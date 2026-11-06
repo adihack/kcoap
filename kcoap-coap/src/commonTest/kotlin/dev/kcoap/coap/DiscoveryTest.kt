@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -87,7 +88,9 @@ class DiscoveryTest {
 
         val error = assertFailsWith<CoapException> { client.discover(fixture.uri(server)) }
         assertEquals(CoapException.Reason.BAD_RESPONSE, error.reason)
-        assertNull(error.cause, "never the parser's IllegalArgumentException")
+        assertTrue("Unterminated quoted string" in error.message.orEmpty(), "says what is wrong: ${error.message}")
+        // The parser's exception is kept, as the cause of the one exception the client throws.
+        assertIs<IllegalArgumentException>(error.cause)
     }
 
     @Test

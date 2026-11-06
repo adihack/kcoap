@@ -343,7 +343,8 @@ public class CoapClient private constructor(
      * path is replaced), with [query] as RFC 6690 §4.1 filter such as `rt=temperature-c`, and parses it. The
      * links are the server's input: their targets are text, to be parsed with [CoapUri.parseOrNull].
      *
-     * @throws CoapException with [CoapException.Reason.BAD_RESPONSE] unless the answer is 2.05 link format.
+     * @throws CoapException with [CoapException.Reason.BAD_RESPONSE] unless the answer is 2.05 link format; for a
+     *   malformed document, its message says where, and the parser's exception is its cause.
      */
     public suspend fun discover(server: CoapUri, query: String? = null): List<WebLink> {
         val uri = CoapUri(server.scheme, server.host, server.port, listOf(".well-known", "core"), listOfNotNull(query))
@@ -351,8 +352,12 @@ public class CoapClient private constructor(
         if (response.code != CoapCode.CONTENT) {
             throw CoapException("Discovery answered ${response.code}", CoapException.Reason.BAD_RESPONSE)
         }
-        return LinkFormat.parseOrNull(response.payloadAsText())
-            ?: throw CoapException("Discovery returned no valid link format", CoapException.Reason.BAD_RESPONSE)
+        // The server's document is peer input: its malformation is a bad response, translated here with the reason.
+        return try {
+            LinkFormat.parse(response.payloadAsText())
+        } catch (e: IllegalArgumentException) {
+            throw CoapException("Discovery returned no valid link format: ${e.message}", CoapException.Reason.BAD_RESPONSE, e)
+        }
     }
 
     /** Resource discovery at the server of the CoAP URI [server]; see [discover]. */
