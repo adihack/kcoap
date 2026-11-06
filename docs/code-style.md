@@ -48,6 +48,26 @@ who knows the RFC can follow the code without guessing.
 - Booleans read as questions: `isCritical`, `hasPayload`.
 - Factory functions describe what they make: `CoapMessage.request(...)`, `SecurityContext.derive(...)`.
 
+### API vocabulary
+
+The same concept has the same name in every module, so a named-argument call site reads the same everywhere
+([target-architecture.md](target-architecture.md) §3.5):
+
+| Concept | Name | Examples |
+|---|---|---|
+| A `LoggerFactory` parameter | `loggerFactory`, default `LoggerFactory.Global` | `CoapEndpointConfig.loggerFactory`, `EdhocServer(..., loggerFactory)` |
+| A `CryptoBackend` parameter | `crypto` | `SecurityContext.derive(parameters, crypto, ...)`, `CipherSuite.isSupportedBy(crypto, method)` |
+| Block sizes | `preferredBlockSize` on the client (it asks for one, RFC 7959 §2.4), `maxBlockSize` on the server (it caps them) | `CoapClientConfig`, `CoapServerConfig` |
+| Body limits | `maxRequestBodySize` (the server assembles requests), `maxResponseBodySize` (the client assembles responses) | `CoapServerConfig`, `CoapClientConfig` |
+| A lookup by a property | `from<Property>(x)`, null when nothing matches | `CoapMessageType.fromValue`, `CipherSuite.fromValue`, `CoseCurve.fromValue` |
+| A conversion | `from(x)` | `CoapResponse.from(message)` |
+| A value built from parts | `of(parts)` | `CoapCode.of(4, 4)` |
+| Binary formats and transfer encodings | `decode` / `encode` | CBOR, CoAP messages, EDHOC messages, the OSCORE option, `SubjectPublicKeyInfo.decode` |
+| Text grammars, and DER certificates by custom | `parse` | `CoapUri.parse`, `LinkFormat.parse`, `IpLiteral.parse`, `X509Certificate.parse` |
+| Input a peer sent | `parseOrNull`, `fromOptionsOrNull`: null instead of the `IllegalArgumentException` of `parse` | `CoapUri.parseOrNull`, `LinkFormat.parseOrNull` |
+| The configuration with every default | `Default` on the companion | `CoapClientConfig.Default`, `TlsClientConfig.Default` |
+| A builder's DSL factory | a function named after the class | `CoapClientConfig { ... }`, `CoapEndpointConfig { ... }` |
+
 ## Documentation
 
 - KDoc on every public declaration: what it is for, then anything surprising. Cite the RFC section
@@ -58,20 +78,55 @@ who knows the RFC can follow the code without guessing.
 
 ## Types and data
 
-- Immutable by default. Types that hold a `ByteArray` copy it on the way in and out, and compare
-  by content.
+- Immutable by default.
 - `toString()` is for humans and logs: it never contains key material, and payloads only as lengths.
 - Model protocol states as sealed types; illegal states should not be representable.
-- Configuration uses classes with defaults and validation in `init`, plus a builder or DSL when there
-  are many options.
+- Configuration: a named-argument constructor with defaults and validation in `init`, the RFC cited in its
+  messages. A configuration that is certain to grow gets a builder instead (`Builder`, `toBuilder()`, `Default`,
+  a DSL factory named after the class), as `CoapEndpointConfig` and `CoapClientConfig` have; when any other
+  configuration gains a parameter, its previous constructor stays as a `@Deprecated(level = HIDDEN)` overload
+  ([ADR 0012](adr/0012-configuration-shapes.md)).
+- Equality that is a protocol rule is written out, not generated: the `Endpoint` variants compare as RFC 7252 and
+  RFC 8323 match peers, so they are final classes with their own `equals`, not data classes. Data classes are for
+  shapes an RFC fixes (`CborValue`).
+
+### Ownership of arrays, lists and keys
+
+Who owns a `ByteArray`, a list or a key handle after a call is part of the API, and its KDoc says so when the rule
+below does not:
+
+- **Value types copy.** A type that holds a `ByteArray` copies it on the way in and out and compares by content;
+  one that holds a list copies it with `toList()` before its `init` checks it (`CoapUri`, `WebLink`,
+  `CoapEndpointConfig.interceptors`), so the caller cannot change it afterwards.
+- **Transfer types hand over.** On the hot paths, a value that only carries bytes from one layer to the next does
+  not copy: the receiver owns the arrays afterwards and the sender must not reuse them. Transport events and
+  connections (`DatagramEvent`, `MessageConnection`; the rule is on `Transport.kt`), codec and parse results, the
+  backend SPI's results (`KemEncapsulation`) and DTLS effects are such types, and their KDoc says it.
+- **Secrets come from functions, public bytes from properties.** `SecurityContextParameters.masterSecret()` is a
+  function, so every copy of a secret shows at its call site; `senderId` is a property. Derived keys and the Common
+  IV never leave `SecurityContext`.
+- **The owner wipes.** Whoever owns secret bytes overwrites them with `wipe()` once they are no longer needed, and
+  releases a key handle with `PrivateKey.destroy()` (a KEM result with `KemEncapsulation.destroy()`), in a
+  `finally` that also runs on failure and cancellation. `destroy()` must not throw, since it runs while a failed
+  handshake cleans up. EDHOC's sealed states wipe what they hold on every transition.
 
 ## Errors
 
-- `require(...)` for caller mistakes (invalid arguments), which throw `IllegalArgumentException`.
-- One exception type per protocol for peer or wire problems (`CborException`, `OscoreException`,
-  `EdhocException`), carrying what the protocol needs to answer: an error code, a CoAP response code. It
-  extends `KcoapException` (kcoap-common); the signals of SPIs between the layers do not, and are translated
-  at the layer's boundary ([architecture.md](architecture.md#the-coap-endpoint-as-built), "Errors").
+The error model is [ADR 0011](adr/0011-error-model.md); in code:
+
+- `require(...)` and `check(...)` for mistakes of the caller only, which throw `IllegalArgumentException` and
+  `IllegalStateException`. Input from a peer never does: a peer's URI, link-format document or DER goes through
+  `parseOrNull` or a parser whose one exception is the protocol's.
+- One exception type per facade for what goes wrong at runtime with the peer, the network, security or the
+  lifecycle (`CoapException`, `OscoreException`, `EdhocException`, `CborException`, `CertificateFormatException`),
+  carrying what the protocol needs to answer: a reason, an error code, a CoAP response code. It extends
+  `KcoapException` (kcoap-common). An enum of reasons that may grow says so in its KDoc, and callers keep an `else`.
+- The signals of the SPIs between the layers (`MessageSecurityException`, `CoapFormatException`,
+  `SessionEndedException`, `AeadAuthenticationException`, `UnsupportedAlgorithmException`,
+  `CertificateValidationException`) do not extend it, and each layer translates them at its boundary
+  ([architecture.md](architecture.md#the-coap-endpoint-as-built), "Errors"). A layer that catches broadly lets a
+  cancellation of its caller pass unchanged and reports any other exception of what it calls as its own.
+- CoAP error responses (4.xx, 5.xx) are responses, returned to the caller, not exceptions.
 - A public suspend entry point that can fail lists `@Throws(KcoapException::class, CancellationException::class)`,
   so Swift gets an `NSError` instead of a crash; an override keeps the `@Throws` of what it overrides, which
   Kotlin/Native requires.
@@ -101,12 +156,30 @@ Use the pattern that matches the need; do not add abstraction a second implement
 | Need | Pattern | Example |
 |---|---|---|
 | Replaceable subsystem | Interface (SPI) with a default implementation | `CryptoBackend`, `DatagramTransport` |
-| Changing or adding to an implementation | Decorator (`X by delegate`); implementations are final, never subclassed ([ADR 0002](adr/0002-delegation-not-subclassing.md)) | `BouncyCastleCryptoBackend` around a classical backend; test doubles around `DefaultCryptoBackend` |
+| Changing or adding to an implementation | Decorator (`X by delegate`); implementations are final, never subclassed ([ADR 0002](adr/0002-delegation-not-subclassing.md)) | `BouncyCastleCryptoBackend` around a classical backend; a key-store backend around a software one; test doubles around `DefaultCryptoBackend` |
 | Variant behaviour | Strategy | EDHOC key exchange: Diffie-Hellman or KEM |
 | User-defined resources | Template method on an abstract class | `CoapResource.handleGet()` |
 | Notifications | `fun interface` callbacks or `Flow` | `LogSink`, Observe notifications |
 | Cross-cutting processing | Interceptor chain | message tracing, metrics |
 | Protocol progress | State machine over sealed states | EDHOC Initiator and Responder |
+
+### Final implementations, delegation over subclassing
+
+- **Implementations are `final`**: crypto backends, transport adapters, stores, the protocol facades. The SPI
+  interfaces are the extension points, so an implementation can change without breaking anyone, and the ABI dumps
+  show what is public ([ADR 0002](adr/0002-delegation-not-subclassing.md)).
+- **Extend by delegation**: `class MyBackend(private val software: CryptoBackend) : CryptoBackend by software`,
+  overriding only what changes. Composition happens in the application, by construction
+  (`BouncyCastleCryptoBackend(classical = DefaultCryptoBackend())`), never through a registry or a dispatch chain.
+- **A decorator that adds algorithms answers for them.** `X by delegate` forwards `supports(...)` to the delegate,
+  so a decorator that adds or removes algorithms overrides the matching `supports` members, and its tests extend
+  the conformance suite of kcoap-crypto-testsuite, which fails a decorator that forgets
+  ([ADR 0001](adr/0001-crypto-capabilities.md)). A hardware or key-store decorator answers statically and never
+  probes, since a probe could create a persistent key or prompt for a biometric.
+- **Test doubles delegate too**: `object : CryptoBackend by DefaultCryptoBackend() { override ... }`, calling a named
+  delegate where a subclass would have called `super`.
+- Template methods are for application code that kcoap calls, such as `CoapResource.handleGet()`; abstract classes
+  are not a way to extend kcoap's own implementations.
 
 ## Logging
 
@@ -128,4 +201,7 @@ Use the pattern that matches the need; do not add abstraction a second implement
 
 ## Commits
 
-Imperative subject line under 72 characters, a body that says why, and the co-author trailer.
+Imperative subject line under 72 characters, a body that says why, and the trailers last: the `Signed-off-by`
+line of the [DCO](../DCO), which every commit needs, then any `Co-authored-by` lines
+([CONTRIBUTING.md](../CONTRIBUTING.md#commit-messages)). One logical step per commit, which builds and passes its
+tests.
