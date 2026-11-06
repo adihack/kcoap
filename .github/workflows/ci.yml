@@ -117,6 +117,34 @@ jobs:
             kcoap-transport-ktor-websocket/build/browser/*.txt
             kcoap-transport-ktor-websocket/build/browser/*.log
 
+  js-consumer:
+    name: Browser consumer (production bundle, size budget, headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - run: google-chrome --version
+      # kcoap from this commit into ~/.m2, where samples/js-consumer, a build of its own, finds it through kcoap-bom.
+      # Its build compiles the page to a production webpack bundle and fails when the bundle exceeds the budget in
+      # samples/js-consumer/bundle-budget.properties (checkBundleSize); its JVM tests run the page's code against
+      # the sample server, the minified bundle on Node.js, and, with -Pkcoap.browser, the bundle in the runner's
+      # Chrome, where the page reads lights with OSCORE over the browser's WebSocket (BrowserSmokeTest).
+      - run: ./gradlew --console=plain publishToMavenLocal
+      - run: ./gradlew --console=plain -p samples/js-consumer build -Pkcoap.browser=google-chrome
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: js-consumer
+          path: |
+            samples/js-consumer/build/reports/
+            samples/js-consumer/build/dist/js/productionExecutable/
+            samples/js-consumer/build/browser/*.txt
+            samples/js-consumer/build/browser/*.log
+
   docs:
     name: API reference
     runs-on: ubuntu-latest
