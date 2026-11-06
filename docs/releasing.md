@@ -37,8 +37,8 @@ Before tagging 0.1.0:
   out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig` and
   `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone;
 - [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes;
-- the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)); the
-  license is already set, and the `dev.kcoap` namespace is verified;
+- the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)): done on
+  2026-11-06; the license is set, and the `dev.kcoap` namespace is verified;
 - `./gradlew publishToMavenLocal` works, a sample consumer builds against it through `kcoap-bom`
   ([getting started](getting-started.md#add-kcoap-to-a-build); WP-P1's JVM and js consumers), the POMs
   (`<module>/build/publications/<target>/pom-default.xml`) name the license, the developer and the SCM, and
@@ -113,9 +113,40 @@ workflow's own token cannot turn it on.
   `kcoap.dev` domain, whose DNS is on Cloudflare. The Central Portal verified it on 2026-11-06 through a
   DNS `TXT` record on `kcoap.dev`. The steps below stay as the record of how, and for a namespace that
   ever needs verifying again.
-- **User token.** Generate one in the [Central Portal](https://central.sonatype.com) under *Account* →
-  *Generate User Token*. Its username and password become the `MAVEN_CENTRAL_USERNAME` and
-  `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), with the signing key.
+- **User token: done.** Generated in the [Central Portal](https://central.sonatype.com) under *Account* →
+  *Generate User Token*; its username and password are the `MAVEN_CENTRAL_USERNAME` and
+  `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), set on 2026-11-06.
+- **Signing key: done.** The `SIGNING_KEY`, `SIGNING_KEY_ID` and `SIGNING_PASSWORD` secrets hold the release
+  key below, set on 2026-11-06. The passphrase is checked only when a release first signs; a wrong one fails
+  the publish step, and nothing is published.
+
+### The release signing key
+
+Every artifact, on Maven Central and on GitHub Packages, carries a detached signature (`.asc`) made with this
+key:
+
+| | |
+|---|---|
+| Fingerprint | `5833 7699 D9CB 8E6F 5EB1  BDFB 4A7E 4910 69FA EAB3` |
+| User ID | Adrian Sołtys (kcoap release signing) &lt;adrian.soltys@seelso.net&gt; |
+| Algorithm | RSA 4096, one primary key that certifies and signs, with no subkeys |
+| Created, expires | 2026-11-06, 2029-11-05 |
+| Published on | `keyserver.ubuntu.com`, one of the three key servers Maven Central checks |
+
+To check a downloaded artifact: `gpg --keyserver keyserver.ubuntu.com --recv-keys 58337699D9CB8E6F5EB1BDFB4A7E491069FAEAB3`,
+then `gpg --verify <artifact>.asc <artifact>`.
+
+The key has no subkeys because Maven Central verifies signatures against the primary key only
+([its GPG requirements](https://central.sonatype.org/publish/requirements/gpg/)). It was made with
+`gpg --quick-generate-key "<user id>" rsa4096 sign 3y`, which creates the primary key alone, and its secret
+part went into the secret through a pipe (`gpg --export-secret-keys --armor <fingerprint> | gh secret set
+SIGNING_KEY`), so it was never written to the repository. The owner keeps an offline copy and the revocation
+certificate.
+
+**Before it expires**, extend it (`gpg --edit-key <fingerprint>`, then `expire` and `save`), send the public
+key to the key server again (`gpg --keyserver keyserver.ubuntu.com --send-keys <fingerprint>`) and set
+`SIGNING_KEY` again from the extended key. A new key instead needs all three secrets, the key server, and
+this table and the website's releases page updated, and the CHANGELOG of the first release it signs says so.
 
 ### Verifying the dev.kcoap namespace
 

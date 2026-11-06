@@ -32,10 +32,10 @@ milestones are identifiers, so the ones still open (12, 13) keep theirs.
 
 In order, as far as the order is known:
 
-1. **The first release, 0.1.0.** The freeze list has merged; what [releasing.md](releasing.md#release-freeze) still
-   asks before the tag: the deprecated constructors of `CoapEndpointConfig` and `CoapClientConfig` removed, a
-   CHANGELOG entry for the version, the Maven Central and signing secrets set (the owner's steps), and the
-   consumer samples of WP-P1 (a JVM consumer on the BOM, a js consumer with a bundle-size budget).
+1. **The first release, 0.1.0.** The freeze list has merged, and the Maven Central and signing secrets are set;
+   what [releasing.md](releasing.md#release-freeze) still asks before the tag: the deprecated constructors of
+   `CoapEndpointConfig` and `CoapClientConfig` removed, a CHANGELOG entry for the version, and the consumer
+   samples of WP-P1 (a JVM consumer on the BOM, a js consumer with a bundle-size budget).
 2. **The rest of the CoAP work packages.** WP-B4 (the rest of the error and observability findings: a
    `ResponseRejected` event, reason enums for rejected and malformed messages, `stats()`, `CoapResponseException`).
 3. **Platforms.** Android emulator runs with a capability report per API level (PL-2); a JS facade and npm package
