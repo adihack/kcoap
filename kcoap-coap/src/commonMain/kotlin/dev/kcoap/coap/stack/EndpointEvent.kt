@@ -117,8 +117,9 @@ public sealed interface EndpointEvent {
         public enum class Limit {
             /**
              * [CoapEndpointConfig.maxDeduplicationEntries]: a new message from [peer] was dropped, because every
-             * message remembered must still be processed at most once (RFC 7252 §4.5), or because it would have
-             * had to be remembered too while three quarters of the bound hold such messages.
+             * message remembered must still be processed at most once (RFC 7252 §4.5), or because it was a
+             * non-idempotent request, which would have had to be remembered too, while three quarters of the bound
+             * hold such messages.
              */
             DEDUPLICATION_ENTRIES,
 

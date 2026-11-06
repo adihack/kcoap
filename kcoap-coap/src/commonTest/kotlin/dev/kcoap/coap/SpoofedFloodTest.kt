@@ -354,6 +354,38 @@ class SpoofedFloodTest {
     }
 
     @Test
+    fun rfc7252Section11_3AFloodOfPostsLeavesRoomForTheResponsesToASharedEndpointsOwnRequests() = runTest {
+        val fixture = StackFixture(this)
+        val gauge = Gauge("g")
+        val remote = fixture.server {
+            add(gauge)
+            resource("slow") {
+                get {
+                    delay(3.seconds)
+                    CoapResponse.content("done")
+                }
+            }
+        }
+        val shared = fixture.server(endpointConfig = fixture.bounded { maxDeduplicationEntries = 400 }) {
+            resource("store") { post { CoapResponse.changed() } }
+        }
+        val notifications = Channel<String>(Channel.UNLIMITED)
+        val client = CoapClient(shared.endpoint)
+        backgroundScope.launch { notifications.collect(client, fixture.uri(remote, "/g")) }
+        assertEquals("0", notifications.receive())
+
+        fixture.flood(shared, 2_000) { request(CoapCode.POST, CoapMessageType.CON, it, "store") }
+        delay(1.seconds)
+        assertTrue(fixture.limits(Limit.DEDUPLICATION_ENTRIES) > 0, "the POSTs filled the three quarters")
+
+        // The responses to the shared endpoint's own requests are no forged requests: it still takes a notification
+        // and a separate response.
+        gauge.value = 1
+        assertEquals("1", withTimeout(5.seconds) { notifications.receive() })
+        assertEquals("done", client.get(fixture.uri(remote, "/slow")).payloadAsText())
+    }
+
+    @Test
     fun rfc7252Section4_4AFloodOfNonConfirmableGetsLeavesMessageIdsForWhatTheEndpointMustSend() = runTest {
         val fixture = StackFixture(this)
         val gauge = Gauge("g")

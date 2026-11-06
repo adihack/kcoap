@@ -24,9 +24,11 @@ import kotlin.time.Duration
  *   forgotten one is processed as a new message.
  * - When nothing repeatable is left, it refuses the new message, which is then dropped without state or
  *   answer: every remembered message must still be processed at most once.
- * - A quarter of [maxEntries] is kept for repeatable entries: a message whose entry must be kept (a
- *   non-idempotent request or a response) is refused once three quarters of [maxEntries] hold entries that
- *   must be kept, so a flood of non-idempotent requests cannot crowd out idempotent ones.
+ * - A quarter of [maxEntries] is kept for repeatable entries: a non-idempotent request, whose entry must be
+ *   kept, is refused once three quarters of [maxEntries] hold entries that must be kept, so a flood of
+ *   non-idempotent requests cannot crowd out idempotent ones, nor the responses to the endpoint's own requests.
+ *   A response does not count against that share: one that matches no exchange, which is all a forged source
+ *   can send, is reset at once and so becomes repeatable.
  *
  * All operations take constant time, apart from [forget], which walks every entry once.
  */

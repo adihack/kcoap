@@ -84,15 +84,18 @@ public class CoapEndpointConfig private constructor(builder: Builder) {
      * bounds what a flood of spoofed datagrams makes the endpoint remember. When it is full, a new message takes
      * the place of the oldest *repeatable* one, a message §4.5 lets the endpoint process again because that
      * ends the same way: a request with an idempotent method (GET, PUT, DELETE, FETCH, iPATCH) once answered or
-     * acknowledged, a message answered with a Reset, or a request answered before anything acted on it (a
-     * message-security failure, an access refusal, an unknown path, an unrecognized critical option, an
-     * overload refusal). A duplicate of a forgotten message is processed as a new one (§4.5 "relaxed"
-     * deduplication). When nothing repeatable is left, a new message is dropped silently, without state and
-     * without an answer that would go to a possibly spoofed source (§11.3), and reported as
-     * [EndpointEvent.LimitReached] with `DEDUPLICATION_ENTRIES`; its sender retransmits a Confirmable one, and
-     * duplicates of remembered messages are still answered. A quarter of the bound is kept for repeatable
-     * messages: a new message that must be remembered, a non-idempotent request or a response, is dropped once
-     * three quarters hold such messages, so a flood of POSTs never keeps a GET out.
+     * acknowledged, a message answered with a Reset, or a request answered or dropped before anything acted on
+     * it (a message-security failure, an access refusal, an unknown path, an unrecognized critical option, an
+     * overload refusal). A request message security verified is never repeatable: OSCORE records its Partial
+     * IV in the replay window (RFC 8613 §7.4), so processing it again would end in a replay error. A duplicate
+     * of a forgotten message is processed as a new one (§4.5 "relaxed" deduplication). When nothing repeatable
+     * is left, a new message is dropped silently, without state and without an answer that would go to a
+     * possibly spoofed source (§11.3), and reported as [EndpointEvent.LimitReached] with
+     * `DEDUPLICATION_ENTRIES`; its sender retransmits a Confirmable one, and duplicates of remembered messages
+     * are still answered. A quarter of the bound is kept for repeatable messages: a new non-idempotent request
+     * is dropped once three quarters hold messages that must be remembered, so a flood of POSTs never keeps a
+     * GET out, nor the responses to the endpoint's own requests, which do not count against that share (a
+     * response that matches no exchange, all a forged source can send, is reset at once).
      */
     public val maxDeduplicationEntries: Int = builder.maxDeduplicationEntries
 

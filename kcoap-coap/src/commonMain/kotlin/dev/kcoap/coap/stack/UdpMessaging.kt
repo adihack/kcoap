@@ -504,9 +504,11 @@ internal class UdpMessaging(
         val key = MessageKey(from, message.messageId)
         received[key]?.let { return onDuplicate(it) }
         // Pings and reserved codes are reset at once, and idempotent requests are answered, so their entries
-        // become repeatable; other requests and responses must be remembered for their whole lifetime.
+        // become repeatable; other requests must be remembered for their whole lifetime. So must a response that
+        // matches an exchange, but one that matches none, which is all a forged source can send, is reset at
+        // once: responses therefore do not count against the share of requests that must be kept.
         val idempotent = message.isIdempotentRequest
-        val mustBeKept = !idempotent && (message.isRequest || message.isResponse)
+        val mustBeKept = message.isRequest && !idempotent
         received.admit(from, now, mustBeKept)?.let { return dropForLimit(from, message, it) }
         val entry = received.add(key, CoapMessageType.CON, now, idempotent)
         schedule(entry.expiresAt)
@@ -536,7 +538,8 @@ internal class UdpMessaging(
             return
         }
         val idempotent = message.isIdempotentRequest
-        received.admit(from, now, mustBeKept = !idempotent)?.let { return dropForLimit(from, message, it) }
+        val mustBeKept = message.isRequest && !idempotent
+        received.admit(from, now, mustBeKept)?.let { return dropForLimit(from, message, it) }
         schedule(received.add(key, CoapMessageType.NON, now, idempotent).expiresAt)
         effects += if (message.isRequest) {
             MessagingEffect.DeliverRequest(from, message)
