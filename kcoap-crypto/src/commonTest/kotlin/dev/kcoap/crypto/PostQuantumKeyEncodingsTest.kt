@@ -55,7 +55,8 @@ class PostQuantumKeyEncodingsTest {
             val type = algorithm.keyType
             assertEquals(size.first, type.publicKeyLength, algorithm.name)
             assertEquals(size.second, type.expandedPrivateKeyLength, algorithm.name)
-            assertEquals(32 + 32 + 64 + 32 * ((l + k) * etaBits + 13 * k), type.expandedPrivateKeyLength, algorithm.name)
+            val skLength = 32 + 32 + 64 + 32 * ((l + k) * etaBits + 13 * k)
+            assertEquals(skLength, type.expandedPrivateKeyLength, algorithm.name)
             assertEquals(size.third, algorithm.signatureLength, algorithm.name)
             assertEquals(32, type.seedLength, algorithm.name)
             assertEquals(64, algorithm.trLength, algorithm.name)

@@ -1,4 +1,5 @@
-"""Extract a few NIST ACVP ML-KEM (FIPS 203) and ML-DSA (FIPS 204) test cases into Kotlin test sources.
+"""Extract a few NIST ACVP ML-KEM (FIPS 203) and ML-DSA (FIPS 204) test cases into Kotlin sources of the conformance
+suite (kcoap-crypto-testsuite), which replays them through any backend.
 
 Usage: python3 -I gen_pq_vectors.py <dir-with-acvp-json> <output-kotlin-dir> <acvp-server-commit>
 
@@ -12,7 +13,7 @@ import sys
 from pathlib import Path
 
 src, out, commit = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-PKG = "dev.kcoap.crypto.bc.vectors"
+PKG = "dev.kcoap.crypto.testsuite.vectors"
 WIDTH = 96  # hex digits per line inside multi-line strings
 
 # FIPS 203 Table 3 (ek, dk, c) and FIPS 204 Table 2 (pk, sk, signature), to catch a wrong pick early.

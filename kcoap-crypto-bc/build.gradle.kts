@@ -16,6 +16,8 @@ kotlin {
         jvmTest.dependencies {
             // The classical backend the tests wrap, as an application does.
             implementation(project(":kcoap-crypto-default"))
+            // The conformance suites: the capability contract, and NIST's ACVP vectors for ML-KEM and ML-DSA.
+            implementation(project(":kcoap-crypto-testsuite"))
         }
     }
 }
