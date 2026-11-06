@@ -15,8 +15,10 @@
 
 <p>
   <a href="https://kcoap.dev">Website</a> ·
+  <a href="docs/getting-started.md">Getting started</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="docs/guide-client-server.md">Guide</a> ·
+  <a href="docs/platforms.md">Platforms</a> ·
   <a href="docs/rfc-compliance.md">RFC compliance</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="SPONSORS.md">Sponsor</a>
@@ -29,6 +31,10 @@ gateways, browsers and Node.js. It aims at complete compliance with the publishe
 parts against the RFCs' own test vectors where they exist and in live interop with libcoap, whose
 maintainers include RFC authors, and libedhoc. It is in development: nothing is released yet, and the
 version is `0.1.0-SNAPSHOT` ([project status](#project-status)).
+
+> **0.x: the API may still change.** Until 1.0, a minor release may break the API; every breaking change is in the
+> [changelog](CHANGELOG.md) with a migration note, and [versioning](docs/versioning.md) says what each kind of
+> release promises.
 
 ## Highlights
 
@@ -85,36 +91,38 @@ States follow the [checklist](docs/checklist.md), which names every open item an
 Nothing is published yet. The coordinates are `dev.kcoap:<module>:<version>`; the first release goes
 to Maven Central once the `dev.kcoap` namespace is verified and the release freeze
 ([releasing](docs/releasing.md)) is over. Until then, publish a snapshot into your local Maven
-repository from a clone:
+repository from a clone of the work branch:
 
 ```bash
-git clone https://github.com/adihack/kcoap.git && cd kcoap
+git clone --branch feat/protocol-core https://github.com/adihack/kcoap.git && cd kcoap
 ./gradlew publishToMavenLocal    # dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository
 ```
 
-The iOS and macOS artifacts build only on a Mac. Then, in your build:
+The iOS and macOS artifacts build only on a Mac. Then, in your build, import the bill of materials
+`kcoap-bom`, which gives every kcoap module the same version, and name the modules without one:
 
 ```kotlin
 // build.gradle.kts
 repositories {
-    mavenLocal()    // kcoap 0.1.0-SNAPSHOT, until the first release is on Maven Central
-    mavenCentral()  // kcoap's own dependencies
+    mavenLocal { content { includeGroup("dev.kcoap") } } // kcoap, until the first release is on Maven Central
+    mavenCentral()                                         // kcoap's own dependencies
 }
 
 dependencies {
-    val kcoap = "0.1.0-SNAPSHOT"
-    implementation("dev.kcoap:kcoap-coap:$kcoap")            // CoAP client and server
-    implementation("dev.kcoap:kcoap-transport-ktor:$kcoap")  // UDP and TCP sockets
-    implementation("dev.kcoap:kcoap-crypto-default:$kcoap")  // the platform's cryptography
-    implementation("dev.kcoap:kcoap-oscore:$kcoap")          // OSCORE
-    implementation("dev.kcoap:kcoap-edhoc-oscore:$kcoap")    // EDHOC over CoAP, into OSCORE
+    implementation(platform("dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"))
+    implementation("dev.kcoap:kcoap-coap")            // CoAP client and server
+    implementation("dev.kcoap:kcoap-transport-ktor")  // UDP and TCP sockets
+    implementation("dev.kcoap:kcoap-crypto-default")  // the platform's cryptography
+    implementation("dev.kcoap:kcoap-oscore")          // OSCORE
+    implementation("dev.kcoap:kcoap-edhoc-oscore")    // EDHOC over CoAP, into OSCORE
 }
 ```
 
-In a Kotlin Multiplatform project the same coordinates go into `commonMain.dependencies`, except the
-adapters a target lacks: `kcoap-transport-ktor` builds for the JVM, Apple and Linux, and browsers use
-`kcoap-transport-ktor-websocket` instead ([platforms](#platforms)). Use one version for every kcoap
-module ([versioning](docs/versioning.md)).
+[Getting started](docs/getting-started.md) says which modules each use case needs (client, server, OSCORE,
+EDHOC, post-quantum, each transport and each platform), how to add them in a Kotlin Multiplatform or Maven
+build, and walks through a first client and server, OSCORE and EDHOC. In a Kotlin Multiplatform project the
+adapters a target lacks go into the source sets of the targets that have them: `kcoap-transport-ktor` builds for
+the JVM, Apple and Linux, and browsers use `kcoap-transport-ktor-websocket` instead ([platforms](#platforms)).
 
 ## Quick start
 
@@ -189,7 +197,8 @@ More in the [client and server guide](docs/guide-client-server.md).
 
 | Module | What it is |
 |---|---|
-| [`kcoap-common`](kcoap-common) | Logging API and sinks, hex, constant-time helpers, the opt-in markers `@InternalKcoapApi` and `@ExperimentalKcoapApi` |
+| [`kcoap-bom`](kcoap-bom/README.md) | The bill of materials: one version for every published module, for Gradle and Maven builds |
+| [`kcoap-common`](kcoap-common/README.md) | Logging API and sinks, hex, constant-time helpers, `KcoapException`, the opt-in markers `@InternalKcoapApi` and `@ExperimentalKcoapApi` |
 | [`kcoap-crypto`](kcoap-crypto/README.md) | The `CryptoBackend` SPI (all `suspend`, opaque key handles), AES-CCM, HKDF, SHAKE256, KMAC256, SEC1 points, ECDSA DER, X.509 parsing |
 | [`kcoap-crypto-default`](kcoap-crypto-default/README.md) | Backend on cryptography-kotlin: JCA on JVM/Android, CryptoKit and CommonCrypto on Apple, OpenSSL on Linux, WebCrypto in browsers and Node.js |
 | [`kcoap-crypto-bc`](kcoap-crypto-bc/README.md) | Post-quantum backend on Bouncy Castle: ML-KEM and ML-DSA (JVM, Android) |
@@ -227,6 +236,10 @@ backend runs. Only adapters that wrap a runtime-bound library build for fewer ta
 | `iosArm64`, `iosSimulatorArm64`, `macosArm64` | Apple | CryptoKit, CommonCrypto | all but `kcoap-crypto-bc` |
 | `linuxX64` | Linux gateways | OpenSSL 3 | all but `kcoap-crypto-bc` |
 | `js`, `wasmJs` | browsers, Node.js | WebCrypto | all but `kcoap-crypto-bc`, `kcoap-transport-ktor` and `kcoap-transport-ktor-websocket-server` |
+
+[Platforms](docs/platforms.md) has the minimum versions, the algorithms and EDHOC suites each target runs (from the
+conformance suite's capability report), the TLS each runtime has, client and server, and what mobile apps must
+handle when they are suspended or change networks.
 
 <details>
 <summary><strong>In a browser</strong>: what runs today, how it reaches devices, and what WebCrypto lacks</summary>
@@ -276,7 +289,9 @@ The [documentation hub](docs/README.md) lists every guide, design record and ref
 
 | Read | For |
 |---|---|
+| [Getting started](docs/getting-started.md) | which modules to add for each use case, a first client and server, OSCORE, EDHOC, post-quantum |
 | [Client and server guide](docs/guide-client-server.md) | serving and requesting resources over UDP, TCP and WebSockets, Q-Block, message security |
+| [Platforms](docs/platforms.md) | minimum versions, algorithms and EDHOC suites per target, TLS per runtime, mobile lifecycle |
 | [Architecture](docs/architecture.md) | layers, transports, security layering, extension points |
 | [RFC compliance](docs/rfc-compliance.md) and [interop](interop/README.md) | what is implemented, section by section, and how it is cross-tested |
 | [API reference](https://adihack.github.io/kcoap/) | every public declaration (Dokka); published with the first release, until then `./gradlew dokkaGenerate` builds it into `build/dokka/html` |
