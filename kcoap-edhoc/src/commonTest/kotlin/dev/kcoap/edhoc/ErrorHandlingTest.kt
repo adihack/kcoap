@@ -8,6 +8,7 @@ import dev.kcoap.common.toHex
 import dev.kcoap.cose.CwtClaimsSet
 import dev.kcoap.crypto.CertificateValidationException
 import dev.kcoap.crypto.CertificateValidator
+import dev.kcoap.crypto.CryptoBackend
 import dev.kcoap.crypto.KeyPair
 import dev.kcoap.crypto.KeyType
 import dev.kcoap.crypto.PrivateKey
@@ -492,7 +493,7 @@ class ErrorHandlingTest {
 
     @Test
     fun backendFailuresBecomeEdhocExceptions() = runTest {
-        val failing = object : DefaultCryptoBackend() {
+        val failing = object : CryptoBackend by DefaultCryptoBackend() {
             override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray) =
                 throw IllegalStateException("secure element unavailable")
         }
@@ -520,7 +521,7 @@ class ErrorHandlingTest {
     /** Checks that do not trust the backend: the all-zero DH output (RFC 9528 §9.2) and signature lengths. */
     @Test
     fun backendOutputIsChecked() = runTest {
-        val lax = object : DefaultCryptoBackend() {
+        val lax = object : CryptoBackend by DefaultCryptoBackend() {
             override suspend fun keyAgreement(privateKey: PrivateKey, peerPublicKey: ByteArray) = ByteArray(32)
         }
         val (initiatorConfig, responderConfig) = Fixtures.configs(backend, method0, CipherSuite.SUITE_0)
@@ -528,9 +529,10 @@ class ErrorHandlingTest {
         responder.processMessage1(EdhocInitiator(initiatorConfig, backend).createMessage1())
         assertEquals("Invalid public key: all-zero shared secret", diagnosticOf { responder.createMessage2() })
 
-        val shortSignatures = object : DefaultCryptoBackend() {
+        val signer = DefaultCryptoBackend()
+        val shortSignatures = object : CryptoBackend by signer {
             override suspend fun sign(algorithm: SignatureAlgorithm, privateKey: PrivateKey, data: ByteArray) =
-                super.sign(algorithm, privateKey, data).copyOf(63)
+                signer.sign(algorithm, privateKey, data).copyOf(63)
         }
         val initiator = EdhocInitiator(initiatorConfig, shortSignatures)
         val honest = EdhocResponder(responderConfig, backend)

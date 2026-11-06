@@ -271,7 +271,7 @@ class SuiteNegotiationTest {
     fun aMissingKemIsNamed() = runTest {
         val pq = FakePostQuantumBackend()
         val (initiatorConfig, responderConfig) = Fixtures.configs(pq, method0, CipherSuite.SUITE_PQC_1)
-        val noEncapsulation = object : FakePostQuantumBackend() {
+        val noEncapsulation = object : CryptoBackend by pq {
             override suspend fun encapsulate(algorithm: KemAlgorithm, publicKey: ByteArray): KemEncapsulation =
                 throw UnsupportedAlgorithmException(algorithm.name)
 
