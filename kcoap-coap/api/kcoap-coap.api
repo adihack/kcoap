@@ -249,6 +249,7 @@ public final class dev/kcoap/coap/server/CoapServer {
 	public final fun getConfig ()Ldev/kcoap/coap/server/CoapServerConfig;
 	public final fun getEndpoint ()Ldev/kcoap/coap/stack/CoapEndpoint;
 	public final fun getRoot ()Ldev/kcoap/coap/server/CoapResource;
+	public final fun stats ()Ldev/kcoap/coap/server/ServerStats;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -377,6 +378,15 @@ public final class dev/kcoap/coap/server/ResourceBuilder {
 	public final fun setDiscoverable (Z)V
 }
 
+public final class dev/kcoap/coap/server/ServerStats {
+	public final fun getBlock1Transfers ()I
+	public final fun getBlock2Transfers ()I
+	public final fun getObservers ()I
+	public final fun getQBlock1Bodies ()I
+	public final fun getQBlock2Bodies ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class dev/kcoap/coap/stack/CoapEndpoint {
 	public fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;)V
 	public synthetic fun <init> (Ldev/kcoap/transport/DatagramTransport;Lkotlinx/coroutines/CoroutineScope;Ldev/kcoap/coap/stack/CoapEndpointConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -390,6 +400,7 @@ public final class dev/kcoap/coap/stack/CoapEndpoint {
 	public final fun isClosed ()Z
 	public final fun ping (Ldev/kcoap/transport/Endpoint;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun ping (Ldev/kcoap/transport/Endpoint;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stats ()Ldev/kcoap/coap/stack/EndpointStats;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -764,6 +775,16 @@ public abstract interface class dev/kcoap/coap/stack/EndpointEventListener {
 
 public final class dev/kcoap/coap/stack/EndpointEventListener$Companion {
 	public final fun getNone ()Ldev/kcoap/coap/stack/EndpointEventListener;
+}
+
+public final class dev/kcoap/coap/stack/EndpointStats {
+	public final fun getConnections ()I
+	public final fun getDeduplicationEntries ()I
+	public final fun getExchanges ()I
+	public final fun getReservedMessageIds ()I
+	public final fun getRunningHandlers ()I
+	public final fun getTransmissions ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract interface class dev/kcoap/coap/stack/MessageInterceptor {

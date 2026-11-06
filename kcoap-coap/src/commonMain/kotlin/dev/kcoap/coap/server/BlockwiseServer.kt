@@ -12,6 +12,7 @@ import dev.kcoap.coap.stack.MessageLimits
 import dev.kcoap.coap.stack.OperationKey
 import dev.kcoap.common.ByteArrayBuilder
 import dev.kcoap.transport.Endpoint
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,6 +30,28 @@ internal class BlockwiseServer(
     lifetime: Duration,
 ) {
     private val lock = Mutex()
+
+    /** Runs [action] under [lock], then publishes the sizes [CoapServer.stats] reads. */
+    private suspend inline fun <T> locked(action: () -> T): T = lock.withLock {
+        try {
+            action()
+        } finally {
+            uploadCount = uploads.size
+            representationCount = representations.size
+        }
+    }
+
+    /**
+     * The Block1 uploads being assembled and the Block2 representations kept for their later blocks, for
+     * [CoapServer.stats]: written when a section under [lock] ends, and read without it.
+     */
+    @Volatile
+    var uploadCount: Int = 0
+        private set
+
+    @Volatile
+    var representationCount: Int = 0
+        private set
     private val uploads = ExpiringCache<OperationKey, Upload>(config.maxConcurrentTransfers, lifetime)
     private val representations = ExpiringCache<OperationKey, CoapResponse>(config.maxConcurrentTransfers, lifetime)
 
@@ -56,16 +79,16 @@ internal class BlockwiseServer(
         now: Duration,
         limits: MessageLimits,
     ): Block1Result =
-        lock.withLock {
+        locked {
             val payload = request.payload
             val options = request.options
             // §2.3: with M set, the payload size MUST match SZX; RFC 8323 §6: a non-final BERT block is a multiple of 1024.
             val sizeMatches = if (block.isBert) payload.isNotEmpty() && payload.size % block.size == 0 else payload.size == block.size
             if (block.more && !sizeMatches) {
-                return@withLock reject(CoapCode.BAD_REQUEST, "Block1 payload of ${payload.size} bytes does not match ${block.size}")
+                return@locked reject(CoapCode.BAD_REQUEST, "Block1 payload of ${payload.size} bytes does not match ${block.size}")
             }
             options.size1?.let { announced ->
-                if (announced > config.maxRequestBodySize) return@withLock tooLarge(key)
+                if (announced > config.maxRequestBodySize) return@locked tooLarge(key)
             }
             // The key holds every option but the Block and NoCacheKey ones (RFC 9175 §3.3), Content-Format
             // and Request-Tag included, so a block with another Content-Format finds no earlier blocks and
@@ -74,7 +97,7 @@ internal class BlockwiseServer(
                 Upload().also { uploads.put(key, it, now) }
             } else {
                 uploads.get(key, now)
-                    ?: return@withLock reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "No earlier blocks of this body")
+                    ?: return@locked reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "No earlier blocks of this body")
             }
             val offset = block.offset
             val received = upload.body.size.toLong()
@@ -84,10 +107,10 @@ internal class BlockwiseServer(
                 offset < received && offset + payload.size <= received && block.more -> Unit
                 else -> {
                     uploads.remove(key)
-                    return@withLock reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "Block ${block.number} is out of sequence")
+                    return@locked reject(CoapCode.REQUEST_ENTITY_INCOMPLETE, "Block ${block.number} is out of sequence")
                 }
             }
-            if (upload.body.size > config.maxRequestBodySize) return@withLock tooLarge(key)
+            if (upload.body.size > config.maxRequestBodySize) return@locked tooLarge(key)
             // §2.3: the control SZX is the server's preference, at most what the client used.
             val exponent = if (block.isBert && limits.allowsBert && config.maxBlockSize == Blockwise.MAX_BLOCK_SIZE) {
                 block.sizeExponent
@@ -96,7 +119,7 @@ internal class BlockwiseServer(
             }
             val control = BlockOption(block.number, block.more, exponent)
             if (block.more) {
-                return@withLock Block1Result.Respond(CoapResponse(CoapCode.CONTINUE).withOptions { block1(control) })
+                return@locked Block1Result.Respond(CoapResponse(CoapCode.CONTINUE).withOptions { block1(control) })
             }
             uploads.remove(key)
             val assembled = request.toBuilder().apply {
@@ -121,7 +144,7 @@ internal class BlockwiseServer(
     }
 
     /** The representation a follow-up Block2 request continues, if still cached. */
-    suspend fun representation(key: OperationKey, now: Duration): CoapResponse? = lock.withLock { representations.get(key, now) }
+    suspend fun representation(key: OperationKey, now: Duration): CoapResponse? = locked { representations.get(key, now) }
 
     /**
      * Turns [response] into the block the request asks for (RFC 7959 §2.4): unchanged if it
@@ -163,7 +186,7 @@ internal class BlockwiseServer(
         if (body.size > sizing.chunk) {
             // Later blocks are plain responses: a notification's Observe stays with its first block.
             val stored = full.withOptions { remove(CoapOptions.OBSERVE.number) }
-            lock.withLock { representations.put(key, stored, now) }
+            locked { representations.put(key, stored, now) }
         }
         return CoapResponse(
             full.code,
@@ -177,7 +200,7 @@ internal class BlockwiseServer(
 
     /** Drops every transfer of [peer], whose endpoint is gone. */
     suspend fun forget(peer: Endpoint) {
-        lock.withLock {
+        locked {
             uploads.removeAll { it.peer == peer }
             representations.removeAll { it.peer == peer }
         }

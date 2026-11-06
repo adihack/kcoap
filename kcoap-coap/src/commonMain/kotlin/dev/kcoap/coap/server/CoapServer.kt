@@ -177,6 +177,19 @@ public class CoapServer private constructor(
     public fun add(resource: CoapResource): CoapResource = rootResource.add(resource)
 
     /**
+     * How much the server holds now: observers, and Block-wise and Q-Block bodies in progress ([ServerStats]).
+     * Reading takes no lock, so a metrics library may poll it as often as it likes, from any thread; what its
+     * endpoint holds is [CoapEndpoint.stats].
+     */
+    public fun stats(): ServerStats = ServerStats(
+        observers = observations.size,
+        block1Transfers = blockwise.uploadCount,
+        block2Transfers = blockwise.representationCount,
+        qBlock1Bodies = qBlock.partialBodyCount,
+        qBlock2Bodies = qBlock.servedBodyCount,
+    )
+
+    /**
      * Stops serving: requests from now on are rejected as if there were no server, the handlers still
      * running are cancelled, and observers are dropped silently. A request on a connection whose handler
      * was cancelled before it answered gets 5.03 Service Unavailable, since RFC 8323 §3.3 has every

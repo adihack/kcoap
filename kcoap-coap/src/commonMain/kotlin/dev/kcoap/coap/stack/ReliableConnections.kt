@@ -44,6 +44,11 @@ internal class ReliableConnections(
     private val log = config.loggerFactory.logger(LogTags.TRANSPORT)
     private val lock = Mutex()
     private val drivers = HashMap<Endpoint, ConnectionDriver>()
+
+    /** The size of [drivers], written under [lock] and read without it by [CoapEndpoint.stats]. */
+    @Volatile
+    var connectionCount: Int = 0
+        private set
     private val connecting = HashMap<Endpoint, Attempt>()
     private val holdOffUntil = HashMap<Endpoint, Duration>()
 
@@ -299,6 +304,7 @@ internal class ReliableConnections(
         val reason = if (isClosed) Refusal.CLOSED else refusal()
         if (reason == null) {
             drivers[driver.peer] = driver
+            connectionCount = drivers.size
             onEvent(EndpointEvent.ConnectionOpened(driver.peer, driver.isInitiator))
             driver.start()
         }
@@ -376,7 +382,12 @@ internal class ReliableConnections(
             endpoint.onLinkEnded(driver.link, cause)
         } finally {
             // However that ended: a slot that stayed taken would keep the peer unreachable for good.
-            withContext(NonCancellable) { lock.withLock { if (drivers[driver.peer] === driver) drivers.remove(driver.peer) } }
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (drivers[driver.peer] === driver) drivers.remove(driver.peer)
+                    connectionCount = drivers.size
+                }
+            }
             driver.retired.complete(Unit)
         }
     }

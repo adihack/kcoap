@@ -744,8 +744,14 @@ internal class UdpMessaging(
     /** Diagnostics for tests: deduplication entries, reserved Message IDs, and timed transmissions. */
     internal val stateSizes: Triple<Int, Int, Int> get() = Triple(received.size, messageIds.reservedCount, timed.size)
 
-    /** Diagnostics for tests: the messages kept in [outbound], and the peers the deduplication cache keeps shares for. */
+    /** The messages kept in [outbound], for [CoapEndpoint.stats] and tests. */
     internal val outboundCount: Int get() = outbound.size
+
+    /** The deduplication entries and the reserved Message IDs, for [CoapEndpoint.stats]. */
+    internal val deduplicationEntryCount: Int get() = received.size
+    internal val reservedMessageIdCount: Int get() = messageIds.reservedCount
+
+    /** Diagnostics for tests: the peers the deduplication cache keeps shares for, and its repeatable entries. */
     internal val deduplicationPeers: Int get() = received.peerCount
     internal val repeatableEntries: Int get() = received.repeatableCount
 

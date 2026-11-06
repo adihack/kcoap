@@ -9,6 +9,7 @@ import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionEndedException
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
@@ -62,6 +63,22 @@ internal class DatagramLink(
         config.maxReservedMessageIdsPerPeer,
     )
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * What [messaging] keeps, for [CoapEndpoint.stats]: written under [lock] after every step of the state machine,
+     * and read without it, which may see a value one step old.
+     */
+    @Volatile
+    var transmissionCount: Int = 0
+        private set
+
+    @Volatile
+    var deduplicationEntryCount: Int = 0
+        private set
+
+    @Volatile
+    var reservedMessageIdCount: Int = 0
+        private set
 
     /** What one datagram may be (RFC 7252 §4.6): the transport's datagram size, in the UDP framing. */
     val limits: MessageLimits = MessageLimits(transport.maxDatagramSize, UdpMessageCodec, allowsBert = false, isReliable = false)
@@ -269,6 +286,9 @@ internal class DatagramLink(
                 } finally {
                     effects = messaging.takeEffects()
                     wakeup = messaging.takeWakeup()
+                    transmissionCount = messaging.outboundCount
+                    deduplicationEntryCount = messaging.deduplicationEntryCount
+                    reservedMessageIdCount = messaging.reservedMessageIdCount
                 }
             }
         } finally {

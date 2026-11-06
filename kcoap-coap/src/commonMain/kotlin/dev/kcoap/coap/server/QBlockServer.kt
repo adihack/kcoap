@@ -34,6 +34,7 @@ import dev.kcoap.log.LogTags
 import dev.kcoap.transport.Endpoint
 import kotlin.math.ceil
 import kotlin.random.Random
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 import kotlinx.coroutines.CancellationException
@@ -132,6 +133,28 @@ internal class QBlockServer(
     private val scope = CoroutineScope(endpoint.scope.coroutineContext + SupervisorJob(parent) + CoroutineName("coap-qblock"))
 
     private val lock = Mutex()
+
+    /** Runs [action] under [lock], then publishes the sizes [CoapServer.stats] reads. */
+    private suspend inline fun <T> locked(action: () -> T): T = lock.withLock {
+        try {
+            action()
+        } finally {
+            partialBodyCount = partials.size
+            servedBodyCount = served.size + sending.size
+        }
+    }
+
+    /**
+     * The Q-Block1 uploads being assembled and the Q-Block2 bodies kept or still sending, for [CoapServer.stats]:
+     * written when a section under [lock] ends, and read without it.
+     */
+    @Volatile
+    var partialBodyCount: Int = 0
+        private set
+
+    @Volatile
+    var servedBodyCount: Int = 0
+        private set
     private val partials = LinkedHashMap<OperationKey, PartialBody>()
     private val served = ExpiringCache<OperationKey, ServedBody>(qBlock.maxCachedBodies, timing.nonPartialTimeout)
 
@@ -214,7 +237,7 @@ internal class QBlockServer(
     private suspend fun receive(ref: QBlockRequest, resource: CoapResource, key: OperationKey, limits: MessageLimits): Reply {
         val block = checkNotNull(ref.request.options.qBlock1)
         val now = endpoint.now()
-        return when (val upload = lock.withLock { receive(ref, key, block, now) }) {
+        return when (val upload = locked { receive(ref, key, block, now) }) {
             is Upload.Repeat -> repeat(ref, key, upload.record, limits)
             Upload.Duplicate -> Reply.None
             is Upload.Refused -> refuse(ref.inbound.peer, upload.limit)
@@ -295,12 +318,12 @@ internal class QBlockServer(
             // A FETCH registration is uploaded with Observe on every block; its token is the completing one's (Figure 14).
             server.respondTo(resource, assembled, ref.inbound, ref.unprotected, key, requestedBlockSize(ref))
         } catch (e: Throwable) {
-            lock.withLock { if (completed.peek(key, endpoint.now()) === record) completed.remove(key) }
+            locked { if (completed.peek(key, endpoint.now()) === record) completed.remove(key) }
             throw e
         }
         val response = answered.response
         val reply = shape(ref, response, key, limits, answered.observation)
-        lock.withLock {
+        locked {
             record.response = response
             record.etag = (reply as? Reply.Body)?.body?.etag
             record.completing = ref
@@ -329,8 +352,8 @@ internal class QBlockServer(
         val etag = record.etag
         if (etag != null && (registered == null || observation != null)) {
             val now = endpoint.now()
-            val again = lock.withLock {
-                val body = served.get(key, now)?.takeIf { !it.isDropped && it.etag.contentEquals(etag) } ?: return@withLock null
+            val again = locked {
+                val body = served.get(key, now)?.takeIf { !it.isDropped && it.etag.contentEquals(etag) } ?: return@locked null
                 Reply.Body(body, body.sender.restart(now, target).also { schedule(body) }, isNew = false)
             }
             if (again != null) return again
@@ -357,8 +380,8 @@ internal class QBlockServer(
     private fun resetOwner(body: PartialBody) = DeliveryOwner { _, outcome ->
         if (outcome == DeliveryOutcome.Rejected) {
             launch("discard a Q-Block1 body after a Reset") {
-                val actions = lock.withLock {
-                    if (body.isDropped) return@withLock emptyList()
+                val actions = locked {
+                    if (body.isDropped) return@locked emptyList()
                     body.receiver.onReset(endpoint.now()).also { if (body.receiver.isDiscarded) removePartial(body) }
                 }
                 executeUpload(body, actions)
@@ -367,7 +390,7 @@ internal class QBlockServer(
     }
 
     private suspend fun onPartialTimer(body: PartialBody, at: Duration) {
-        val actions = lock.withLock {
+        val actions = locked {
             if (body.isDropped || body.timerAt != at) return
             body.timer = null
             body.timerAt = null
@@ -438,7 +461,7 @@ internal class QBlockServer(
         }
         if (isFollowUp) {
             val now = endpoint.now()
-            val reply = lock.withLock {
+            val reply = locked {
                 when (val lookup = find(key, now, untagged = !hasPayload)) {
                     is Lookup.Found -> {
                         val body = lookup.body
@@ -531,7 +554,7 @@ internal class QBlockServer(
         val mode = BodyMode.of(ref.inbound.message.type, ref.inbound.link.capabilities)
         val now = endpoint.now()
         val evicted = ArrayList<Pair<Endpoint, Limit>>()
-        val reply = lock.withLock {
+        val reply = locked {
             val sender = QBlock2Sender<QBlockTarget>(response.payloadSize, size, mode, timing, timing.drawNonTimeoutRandom(random))
             val body = ServedBody(key, response, nextETag(), sender, now, observation)
             observation?.let { follow(body, it) }
@@ -649,7 +672,7 @@ internal class QBlockServer(
             }
         if (mustVerify) {
             if (reply.isNew) {
-                lock.withLock {
+                locked {
                     if (served.peek(body.key, endpoint.now()) === body) served.remove(body.key)
                     body.drop()
                 }
@@ -667,7 +690,7 @@ internal class QBlockServer(
         }
         // One reply's blocks all go on one request: the trigger's own, or the original one of a Continue.
         val own = (blocks.firstOrNull()?.ref as? QBlockRequest)?.takeIf { it.inbound === trigger.inbound }
-        if (own != null && bytes > 0) lock.withLock { own.sentBytes += bytes }
+        if (own != null && bytes > 0) locked { own.sentBytes += bytes }
         execute(body, reply.actions)
         // A request the body did not answer, such as a Continue whose set went out before, gets no response.
         if (!trigger.inbound.isAnswered) trigger.inbound.finishWithoutResponse()
@@ -731,7 +754,7 @@ internal class QBlockServer(
     }
 
     private suspend fun step(body: ServedBody, event: (QBlock2Sender<QBlockTarget>, Duration) -> List<QBlockAction<QBlockTarget>>) {
-        val actions = lock.withLock {
+        val actions = locked {
             if (body.isDropped) return
             val now = endpoint.now()
             keepAlive(body, now)
@@ -746,7 +769,7 @@ internal class QBlockServer(
 
     private suspend fun onServedTimer(body: ServedBody, at: Duration) {
         val now = endpoint.now()
-        val actions = lock.withLock {
+        val actions = locked {
             if (body.isDropped || body.timerAt != at) return
             body.timer = null
             body.timerAt = null
@@ -762,7 +785,7 @@ internal class QBlockServer(
         val blocks = actions.filterIsInstance<QBlockAction.SendBlock<QBlockTarget>>()
         val ref = blocks.firstOrNull()?.ref as? QBlockRequest
         if (ref != null) {
-            val before = lock.withLock { ref.sentBytes }
+            val before = locked { ref.sentBytes }
             var bytes = 0L
             val mustVerify = server.mustVerifyAddress(ref.inbound, ref.request, ref.unprotected, isBurst = true) {
                 bytes = wireBytes(body, blocks)
@@ -770,7 +793,7 @@ internal class QBlockServer(
             }
             if (mustVerify) {
                 log.debug { "Stopped $body: its next set would take ${ref.inbound.peer} beyond the amplification factor" }
-                lock.withLock {
+                locked {
                     body.sender.onReset(endpoint.now())
                     schedule(body)
                     settle(body)
@@ -778,7 +801,7 @@ internal class QBlockServer(
                 settleIfDone(body)
                 return
             }
-            if (bytes > 0) lock.withLock { ref.sentBytes += bytes }
+            if (bytes > 0) locked { ref.sentBytes += bytes }
         }
         execute(body, actions)
         settleIfDone(body)
@@ -830,14 +853,14 @@ internal class QBlockServer(
         val size = blockSize(response, limits, requested)
             ?: return CoapResponse.error(CoapCode.REQUEST_ENTITY_TOO_LARGE, "The notification options leave no room for a block")
         val mode = BodyMode.of(type, observation.link.capabilities)
-        val nonTimeoutRandom = lock.withLock { timing.drawNonTimeoutRandom(random) }
+        val nonTimeoutRandom = locked { timing.drawNonTimeoutRandom(random) }
         val lease = if (mode == BodyMode.NON) endpoint.leaseBody(observation.peer, response.payloadSize, nonTimeoutRandom) else null
         val target = NotificationBody(observation, type, lease)
         val evicted = ArrayList<Pair<Endpoint, Limit>>()
         val started = try {
-            lock.withLock {
+            locked {
                 // Checked under the lock that stop() takes after the observation was deactivated.
-                if (!observation.isActive) return@withLock null
+                if (!observation.isActive) return@locked null
                 val now = endpoint.now()
                 // No request to piggyback block 0 on: every block goes in a message of its own.
                 val sender = QBlock2Sender<QBlockTarget>(
@@ -883,7 +906,7 @@ internal class QBlockServer(
             if (e.reason != CoapException.Reason.IDENTIFIERS_EXHAUSTED) return failed(body, observation, num, e)
             // A bound of the endpoint refused the block (RFC 7252 §11.3): the body sends nothing more by itself, its
             // client may still ask for what it misses (§4.4), and the observer stays for the next body.
-            lock.withLock { stop(body, endpoint.now()) }
+            locked { stop(body, endpoint.now()) }
             observation.refused(e)
         } catch (e: Exception) {
             failed(body, observation, num, e)
@@ -896,7 +919,7 @@ internal class QBlockServer(
      */
     private suspend fun failed(body: ServedBody, observation: ServerObservation, num: Long, e: Exception) {
         log.warn { "Could not send block $num of a notification to ${observation.peer}: ${e.message}" }
-        lock.withLock { stop(body, endpoint.now()) }
+        locked { stop(body, endpoint.now()) }
         server.observations.remove(observation, ObserverRemoved.Reason.FAILED, "notification failed: ${e.message}")
     }
 
@@ -907,7 +930,7 @@ internal class QBlockServer(
      */
     suspend fun stop(observation: ServerObservation) {
         if (observation.qBlockSize == null) return
-        lock.withLock {
+        locked {
             val now = endpoint.now()
             bodiesOf(observation).forEach { stop(it, now) }
         }
@@ -968,7 +991,7 @@ internal class QBlockServer(
     /** A body of an observation is done once every block went out (Confirmable ones acknowledged), or it stopped. */
     private suspend fun settleIfDone(body: ServedBody) {
         if (body.observation == null || body.isDone) return
-        lock.withLock { if (body.sender.isStopped || body.sender.hasSentAll) body.markDone() }
+        locked { if (body.sender.isStopped || body.sender.hasSentAll) body.markDone() }
     }
 
     // ---------------------------------------------------------------- timers and teardown
@@ -999,7 +1022,7 @@ internal class QBlockServer(
 
     private suspend fun sweep() {
         while (true) {
-            val next = lock.withLock {
+            val next = locked {
                 val now = endpoint.now()
                 served.prune(now).forEach { it.drop() }
                 completed.prune(now)
@@ -1011,7 +1034,7 @@ internal class QBlockServer(
 
     /** The session or connection of [peer] ended (RFC 7252 §9.1.1, RFC 8323 §7.4): its bodies and timers go. */
     suspend fun forget(peer: Endpoint) {
-        val dropped = lock.withLock {
+        val dropped = locked {
             val uploads = partials.values.filter { it.peer == peer }
             uploads.forEach { removePartial(it) }
             served.removeAll { it.peer == peer }.forEach { it.drop() }
@@ -1031,7 +1054,7 @@ internal class QBlockServer(
 
     /** The server stopped: every body and timer goes. */
     suspend fun close() {
-        lock.withLock {
+        locked {
             partials.values.forEach { it.drop() }
             partials.clear()
             served.removeAll { true }.forEach { it.drop() }
@@ -1063,7 +1086,7 @@ internal class QBlockServer(
                 "sendingBodies=$sendingBodies, completedBodies=$completedBodies, timers=$timers)"
     }
 
-    suspend fun state(): State = lock.withLock {
+    suspend fun state(): State = locked {
         val bodies = partials.values + served.entryList.map { it.second } + sending
         State(
             partials.size,

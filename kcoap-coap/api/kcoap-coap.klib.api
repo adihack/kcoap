@@ -717,6 +717,7 @@ final class dev.kcoap.coap.server/CoapServer { // dev.kcoap.coap.server/CoapServ
         final fun <get-root>(): dev.kcoap.coap.server/CoapResource // dev.kcoap.coap.server/CoapServer.root.<get-root>|<get-root>(){}[0]
 
     final fun add(dev.kcoap.coap.server/CoapResource): dev.kcoap.coap.server/CoapResource // dev.kcoap.coap.server/CoapServer.add|add(dev.kcoap.coap.server.CoapResource){}[0]
+    final fun stats(): dev.kcoap.coap.server/ServerStats // dev.kcoap.coap.server/CoapServer.stats|stats(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap.server/CoapServer.toString|toString(){}[0]
     final suspend fun close() // dev.kcoap.coap.server/CoapServer.close|close(){}[0]
 }
@@ -884,6 +885,21 @@ final class dev.kcoap.coap.server/ResourceBuilder { // dev.kcoap.coap.server/Res
     final fun resource(kotlin/String, kotlin/Function1<dev.kcoap.coap.server/ResourceBuilder, kotlin/Unit> = ...): dev.kcoap.coap.server/ObservableResource // dev.kcoap.coap.server/ResourceBuilder.resource|resource(kotlin.String;kotlin.Function1<dev.kcoap.coap.server.ResourceBuilder,kotlin.Unit>){}[0]
 }
 
+final class dev.kcoap.coap.server/ServerStats { // dev.kcoap.coap.server/ServerStats|null[0]
+    final val block1Transfers // dev.kcoap.coap.server/ServerStats.block1Transfers|{}block1Transfers[0]
+        final fun <get-block1Transfers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.block1Transfers.<get-block1Transfers>|<get-block1Transfers>(){}[0]
+    final val block2Transfers // dev.kcoap.coap.server/ServerStats.block2Transfers|{}block2Transfers[0]
+        final fun <get-block2Transfers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.block2Transfers.<get-block2Transfers>|<get-block2Transfers>(){}[0]
+    final val observers // dev.kcoap.coap.server/ServerStats.observers|{}observers[0]
+        final fun <get-observers>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.observers.<get-observers>|<get-observers>(){}[0]
+    final val qBlock1Bodies // dev.kcoap.coap.server/ServerStats.qBlock1Bodies|{}qBlock1Bodies[0]
+        final fun <get-qBlock1Bodies>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.qBlock1Bodies.<get-qBlock1Bodies>|<get-qBlock1Bodies>(){}[0]
+    final val qBlock2Bodies // dev.kcoap.coap.server/ServerStats.qBlock2Bodies|{}qBlock2Bodies[0]
+        final fun <get-qBlock2Bodies>(): kotlin/Int // dev.kcoap.coap.server/ServerStats.qBlock2Bodies.<get-qBlock2Bodies>|<get-qBlock2Bodies>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.server/ServerStats.toString|toString(){}[0]
+}
+
 final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndpoint|null[0]
     constructor <init>(dev.kcoap.transport/DatagramTransport, kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.stack/CoapEndpointConfig = ...) // dev.kcoap.coap.stack/CoapEndpoint.<init>|<init>(dev.kcoap.transport.DatagramTransport;kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.stack.CoapEndpointConfig){}[0]
     constructor <init>(kotlinx.coroutines/CoroutineScope, dev.kcoap.coap.stack/CoapEndpointConfig = ..., dev.kcoap.transport/DatagramTransport? = ..., kotlin.collections/List<dev.kcoap.transport/Connector> = ..., kotlin.collections/List<dev.kcoap.transport/ConnectionListener> = ...) // dev.kcoap.coap.stack/CoapEndpoint.<init>|<init>(kotlinx.coroutines.CoroutineScope;dev.kcoap.coap.stack.CoapEndpointConfig;dev.kcoap.transport.DatagramTransport?;kotlin.collections.List<dev.kcoap.transport.Connector>;kotlin.collections.List<dev.kcoap.transport.ConnectionListener>){}[0]
@@ -898,6 +914,7 @@ final class dev.kcoap.coap.stack/CoapEndpoint { // dev.kcoap.coap.stack/CoapEndp
     final var closeCause // dev.kcoap.coap.stack/CoapEndpoint.closeCause|{}closeCause[0]
         final fun <get-closeCause>(): dev.kcoap.coap.stack/CoapException? // dev.kcoap.coap.stack/CoapEndpoint.closeCause.<get-closeCause>|<get-closeCause>(){}[0]
 
+    final fun stats(): dev.kcoap.coap.stack/EndpointStats // dev.kcoap.coap.stack/CoapEndpoint.stats|stats(){}[0]
     final fun toString(): kotlin/String // dev.kcoap.coap.stack/CoapEndpoint.toString|toString(){}[0]
     final suspend fun awaitClosed(): dev.kcoap.coap.stack/CoapException // dev.kcoap.coap.stack/CoapEndpoint.awaitClosed|awaitClosed(){}[0]
     final suspend fun close() // dev.kcoap.coap.stack/CoapEndpoint.close|close(){}[0]
@@ -1051,6 +1068,23 @@ final class dev.kcoap.coap.stack/CoapException : dev.kcoap.common/KcoapException
         final fun valueOf(kotlin/String): dev.kcoap.coap.stack/CoapException.Reason // dev.kcoap.coap.stack/CoapException.Reason.valueOf|valueOf#static(kotlin.String){}[0]
         final fun values(): kotlin/Array<dev.kcoap.coap.stack/CoapException.Reason> // dev.kcoap.coap.stack/CoapException.Reason.values|values#static(){}[0]
     }
+}
+
+final class dev.kcoap.coap.stack/EndpointStats { // dev.kcoap.coap.stack/EndpointStats|null[0]
+    final val connections // dev.kcoap.coap.stack/EndpointStats.connections|{}connections[0]
+        final fun <get-connections>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.connections.<get-connections>|<get-connections>(){}[0]
+    final val deduplicationEntries // dev.kcoap.coap.stack/EndpointStats.deduplicationEntries|{}deduplicationEntries[0]
+        final fun <get-deduplicationEntries>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.deduplicationEntries.<get-deduplicationEntries>|<get-deduplicationEntries>(){}[0]
+    final val exchanges // dev.kcoap.coap.stack/EndpointStats.exchanges|{}exchanges[0]
+        final fun <get-exchanges>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.exchanges.<get-exchanges>|<get-exchanges>(){}[0]
+    final val reservedMessageIds // dev.kcoap.coap.stack/EndpointStats.reservedMessageIds|{}reservedMessageIds[0]
+        final fun <get-reservedMessageIds>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.reservedMessageIds.<get-reservedMessageIds>|<get-reservedMessageIds>(){}[0]
+    final val runningHandlers // dev.kcoap.coap.stack/EndpointStats.runningHandlers|{}runningHandlers[0]
+        final fun <get-runningHandlers>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.runningHandlers.<get-runningHandlers>|<get-runningHandlers>(){}[0]
+    final val transmissions // dev.kcoap.coap.stack/EndpointStats.transmissions|{}transmissions[0]
+        final fun <get-transmissions>(): kotlin/Int // dev.kcoap.coap.stack/EndpointStats.transmissions.<get-transmissions>|<get-transmissions>(){}[0]
+
+    final fun toString(): kotlin/String // dev.kcoap.coap.stack/EndpointStats.toString|toString(){}[0]
 }
 
 final class dev.kcoap.coap.stack/ReliableTransportConfig { // dev.kcoap.coap.stack/ReliableTransportConfig|null[0]

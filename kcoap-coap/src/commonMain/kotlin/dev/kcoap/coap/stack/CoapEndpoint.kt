@@ -108,6 +108,10 @@ public class CoapEndpoint private constructor(
     /** How many of [exchanges] each peer has, for [CoapEndpointConfig.maxExchangesPerPeer]; under [lock]. */
     private val exchangesPerPeer = HashMap<Endpoint, Int>()
 
+    /** The size of [exchanges], written under [lock] and read without it by [stats]. */
+    @Volatile
+    private var exchangeCount = 0
+
     /** One permit per running request handler, [CoapEndpointConfig.maxConcurrentRequests] in all. */
     private val handlerPermits = Semaphore(config.maxConcurrentRequests)
     private val clockStart = config.timeSource.markNow()
@@ -383,12 +387,14 @@ public class CoapEndpoint private constructor(
         } else if (previous !== exchange) {
             previous.markReplaced()
         }
+        exchangeCount = exchanges.size
         return exchange
     }
 
     /** Called under [lock]: [exchange] leaves the registry. */
     private fun unregister(exchange: ClientExchange) {
         exchanges.remove(exchange.key)
+        exchangeCount = exchanges.size
         val remaining = (exchangesPerPeer[exchange.peer] ?: 1) - 1
         if (remaining > 0) exchangesPerPeer[exchange.peer] = remaining else exchangesPerPeer.remove(exchange.peer)
     }
@@ -515,6 +521,23 @@ public class CoapEndpoint private constructor(
         if (lease.isPaced) datagram?.release(lease) else ConnectionLink.release(lease)
     }
 
+    /**
+     * How much the endpoint holds now: exchanges, running handlers, what the datagram messaging layer keeps and
+     * open connections ([EndpointStats]). Reading takes no lock, since every layer keeps its counts up to date as it
+     * changes them, so a metrics library may poll it as often as it likes, from any thread.
+     */
+    public fun stats(): EndpointStats {
+        val datagram = datagram
+        return EndpointStats(
+            exchanges = exchangeCount,
+            runningHandlers = config.maxConcurrentRequests - handlerPermits.availablePermits,
+            transmissions = datagram?.transmissionCount ?: 0,
+            deduplicationEntries = datagram?.deduplicationEntryCount ?: 0,
+            reservedMessageIds = datagram?.reservedMessageIdCount ?: 0,
+            connections = connections.connectionCount,
+        )
+    }
+
     /** Body leases that hold a slot or wait for one, for tests. */
     internal suspend fun leaseCount(): Int = datagram?.leaseCount() ?: 0
 
@@ -591,6 +614,7 @@ public class CoapEndpoint private constructor(
             if (closeCause != null) return@withContext
             closeCause = cause
             exchangesPerPeer.clear()
+            exchangeCount = 0
             exchanges.values.toList().also { exchanges.clear() }
         }
         // The datagram link takes its lock here after closeCause is set, so once it failed what it had, nothing

@@ -134,11 +134,18 @@ class QBlockReliableTest {
         val busy = f.server.qBlock.state()
         assertEquals(1, busy.partialBodies)
         assertEquals(1, busy.servedBodies)
+        // What stats() reads without the lock agrees with the state under it.
+        val stats = f.server.stats()
+        assertEquals(1 to 1, stats.qBlock1Bodies to stats.qBlock2Bodies)
+        assertEquals(1, f.client.stats().connections)
+        assertEquals(1, f.server.endpoint.stats().connections)
 
         f.client.close()
         delay(1.seconds)
 
         assertTrue(f.server.qBlock.state().isEmpty, "${f.server.qBlock.state()}")
+        assertEquals(0 to 0, f.server.stats().let { it.qBlock1Bodies to it.qBlock2Bodies })
+        assertEquals(0, f.server.endpoint.stats().connections)
         assertEquals("the session ended", f.reliable.events.filterIsInstance<EndpointEvent.PartialBodyDropped>().single().reason)
     }
 
