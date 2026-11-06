@@ -206,11 +206,17 @@ jobs:
       # kcoap-bom alone. build fails when a module it names is missing from the BOM (resolution) and when any kcoap
       # module on its runtime classpath has a version the BOM does not set (verifyKcoapFromBom); run compiles and
       # runs getting-started's tour, a CoAP GET, an OSCORE GET and EDHOC then OSCORE over UDP on loopback, with
-      # Java 17 bytecode, and fails on a wrong answer or a published dependency that is missing or wrong.
+      # Java 17 bytecode, and fails on a wrong answer or a dependency in the Gradle module metadata that is missing
+      # or wrong. samples/jvm-consumer/pom-only builds and runs the same program as Maven sees kcoap, from the POMs
+      # alone with the -jvm artifacts named: it fails on a POM dependency that is missing, has the wrong scope or
+      # names a multiplatform root artifact (verifyJvmArtifactsOnly).
       - run: ./gradlew --console=plain publishToMavenLocal
       - run: ./gradlew --console=plain -p samples/jvm-consumer build run
+      - run: ./gradlew --console=plain -p samples/jvm-consumer/pom-only build run
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: jvm-consumer
-          path: samples/jvm-consumer/build/reports/
+          path: |
+            samples/jvm-consumer/build/reports/
+            samples/jvm-consumer/pom-only/build/reports/

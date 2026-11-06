@@ -989,7 +989,10 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 >   application compiled to Java 17 bytecode. `verifyKcoapFromBom` fails when a kcoap module on its runtime classpath
 >   is not constrained by the BOM at the BOM's version, which resolution alone notices only for the modules a build
 >   names. Shown failing on scratch copies of the local repository: a transitive module left out of the BOM, a named
->   one left out, and a published dependency on unpublished kcoap-dtls.
+>   one left out, and a published dependency on unpublished kcoap-dtls. Its `pom-only` build runs the same program
+>   from the POMs alone, as Maven reads them; shown failing on a POM that names a multiplatform root artifact and one
+>   that gives a needed dependency the runtime scope, both of which the module-metadata build passes. The samples
+>   take `dev.kcoap` from Maven Local only (`exclusiveContent`).
 > - **samples/js-consumer** is a page (Kotlin/JS IR, webpack production bundle) with the minimal browser set,
 >   kcoap-coap, kcoap-oscore, kcoap-crypto-default and kcoap-transport-ktor-websocket, which reads a resource with
 >   OSCORE over `coap+ws` from a JVM sample server that also serves the page. A browser cannot keep a pre-shared

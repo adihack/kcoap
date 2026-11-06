@@ -18,6 +18,8 @@ adds its entry and migration note below.
   - [samples/jvm-consumer](samples/jvm-consumer/README.md) runs getting started's tour, a CoAP GET, an OSCORE GET and
     EDHOC then OSCORE over UDP on loopback, compiled to Java 17 bytecode; its `verifyKcoapFromBom` fails when any
     kcoap module on the runtime classpath, also one that arrives as a dependency, has a version the BOM does not set.
+    Its `pom-only` build runs the same program from the POMs alone, as a Maven build reads kcoap, and fails on a POM
+    dependency that is missing, has the wrong scope or names a multiplatform root artifact.
   - [samples/js-consumer](samples/js-consumer/README.md) is a browser page (Kotlin/JS IR, a production webpack
     bundle) that reads a resource with OSCORE over CoAP over WebSockets, with keys its server makes for each page
     load and keeps for the newest 1,000 (in production that endpoint sits behind the application's user

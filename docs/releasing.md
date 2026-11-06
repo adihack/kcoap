@@ -43,7 +43,8 @@ Before tagging 0.1.0:
 - **in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
   `kcoap-bom` ([getting started](getting-started.md#add-kcoap-to-a-build)): the CI `jvm-consumer` job builds and runs
   [samples/jvm-consumer](../samples/jvm-consumer/README.md), whose `verifyKcoapFromBom` fails when a kcoap module on
-  its classpath has a version the BOM does not set, and the `js-consumer` job builds
+  its classpath has a version the BOM does not set, and the same program from the POMs alone, as Maven reads them
+  (`pom-only`), and the `js-consumer` job builds
   [samples/js-consumer](../samples/js-consumer/README.md) within its bundle-size budget and runs it in headless
   Chrome. `verifyBomConstraints` (the unit job) keeps the BOM equal to the published modules. Still to look at
   before the tag: that the modules' own POMs (`<module>/build/publications/<target>/pom-default.xml`) name the

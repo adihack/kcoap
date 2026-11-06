@@ -84,7 +84,8 @@ only those, and `all` (the default) runs both.
 ```
 
 The sample consumers are builds of their own, against `./gradlew publishToMavenLocal`:
-`./gradlew -p samples/jvm-consumer build run` ([samples/jvm-consumer](../samples/jvm-consumer/README.md)),
+`./gradlew -p samples/jvm-consumer build run` and, from the POMs alone, `./gradlew -p samples/jvm-consumer/pom-only
+build run` ([samples/jvm-consumer](../samples/jvm-consumer/README.md)),
 `./gradlew -p samples/js-consumer build` with `-Pkcoap.browser=<browser command>` for its browser run
 ([samples/js-consumer](../samples/js-consumer/README.md)), and, with the Android SDK,
 `./gradlew -p samples/android-consumer assembleRelease lint test`
@@ -176,7 +177,7 @@ Both Android checks write everything they find to `<module>/build/reports/androi
 | Browser consumer | Linux, with the runner's Chrome | `publishToMavenLocal`, then [samples/js-consumer](../samples/js-consumer/README.md), a build of its own through `kcoap-bom`: `build -Pkcoap.browser=google-chrome`, which bundles the page with webpack in production mode, fails when the bundle exceeds its size budget (`checkBundleSize`), and runs the page's code on the JVM, the minified bundle on Node.js and the bundle in headless Chrome against the sample server, reading a resource with OSCORE over CoAP over WebSockets (WP-P1) |
 | API reference | Linux | `dokkaGenerate` |
 | Android consumer | Linux, with the runner's Android SDK | `publishToMavenLocal`, then [samples/android-consumer](../samples/android-consumer/README.md), a build of its own: `assembleRelease lint test` with AGP 9.4.1 at minSdk 26, R8 on the release variants of both flavors (classical, post-quantum) with no app rules, lint on the default variant, and the unit tests, which run the sample's tour on the JVM (PL-1) |
-| JVM consumer | Linux | `publishToMavenLocal`, then [samples/jvm-consumer](../samples/jvm-consumer/README.md), a build of its own through `kcoap-bom` alone: `build run`, where `verifyKcoapFromBom` fails when a kcoap module on the runtime classpath has a version the BOM does not set, and `run` executes getting started's tour (a CoAP GET, an OSCORE GET, EDHOC then OSCORE over UDP on loopback) compiled to Java 17 bytecode (WP-P1) |
+| JVM consumer | Linux | `publishToMavenLocal`, then [samples/jvm-consumer](../samples/jvm-consumer/README.md), a build of its own through `kcoap-bom` alone: `build run`, where `verifyKcoapFromBom` fails when a kcoap module on the runtime classpath has a version the BOM does not set, and `run` executes getting started's tour (a CoAP GET, an OSCORE GET, EDHOC then OSCORE over UDP on loopback) compiled to Java 17 bytecode; then the same program from the POMs alone, as Maven reads them (`pom-only`), where a POM dependency that is missing, has the wrong scope or names a multiplatform root artifact fails it (WP-P1) |
 
 Test reports are uploaded as artifacts, and the interop logs when an interop test fails; the Android job
 uploads its lint and test reports, APKs and R8 mappings, the browser consumer its reports, bundle and the browser's
