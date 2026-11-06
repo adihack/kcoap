@@ -23,7 +23,7 @@ against a TLS server.
 | JVM | `KtorTlsConnector` (kcoap-transport-ktor) on ktor-network-tls. Tested against a JSSE server (`KtorTlsConnectorTest`) and cross-tested with libcoap 4.3.5b on OpenSSL 3.0 (`KcoapClientAgainstLibcoapTlsTest`) | `KtorWebSocketConnector` on the CIO engine, whose TLS is ktor-network-tls too; trust is the engine's (`https { trustManager }`, the platform store by default). Cross-tested with libcoap 4.3.5b (`KcoapClientAgainstLibcoapTlsTest`) |
 | Android | The same jar as the JVM; not run on Android yet | The same CIO client; not run on Android yet |
 | Linux native | None: ktor-network-tls has no TLS there, its handshake throws "TLS sessions are not supported on Native platform." (`NativeTlsUnavailableTest`) | None: the default client's CIO engine fails the same way (`LinuxSecureWebSocketTest`) |
-| Apple (iOS, macOS) | None, for the same reason (`NativeTlsUnavailableTest`, run by the macOS CI job) | The Darwin engine, on URLSession's TLS and the system's trust store; not run |
+| Apple (iOS, macOS) | None, for the same reason: the 3.6.1 klibs for `macosArm64` and `iosArm64` hold the same stub, and `NativeTlsUnavailableTest` checks it in the macOS CI job (`scripts/test apple`), which has not run it yet | The Darwin engine, on URLSession's TLS and the system's trust store; not run |
 | Browsers | None: no sockets | The browser's own `wss`; not run |
 | Node.js | None: the socket transports are not built for js | The runtime's WebSocket through ktor's Js engine; not run |
 
