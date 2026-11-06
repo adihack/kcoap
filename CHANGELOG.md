@@ -263,12 +263,15 @@ adds its entry and migration note below.
   every target, with a [README](kcoap-crypto-testsuite/README.md). A backend's tests extend
   `CryptoBackendConformanceTest`, which checks the capability contract of ADR 0001 (`supports(x)` is false
   exactly when the operations on `x` throw `UnsupportedAlgorithmException`, and what is supported runs and
-  reproduces a published known answer) and prints a `CapabilityReport` line per kind of question;
-  `CapabilityInvariant` offers the same checks as functions. `MlKemConformanceTest` and `MlDsaConformanceTest`
-  replay NIST's ACVP vectors through any ML-KEM or ML-DSA backend, with `ScriptedRandom` supplying the
-  randomness FIPS 203 and 204 draw; the vectors moved here from kcoap-crypto-bc's tests. kcoap-crypto-default
-  runs the suite on every target and kcoap-crypto-bc on the JVM, and both copy the capability report into the
-  build log, so CI shows what each target runs.
+  reproduces a published known answer: one for every AEAD, curve, signature algorithm, KEM and hash, from the
+  RFCs, NIST, the GCM specification and the COSE Working Group's AES-CCM examples) and prints a
+  `CapabilityReport` line per kind of question; `CapabilityInvariant` offers the same checks as functions.
+  `MlKemConformanceTest` and `MlDsaConformanceTest` replay NIST's ACVP vectors through any ML-KEM or ML-DSA
+  backend, with `ScriptedRandom` supplying the randomness FIPS 203 and 204 draw; the vectors moved here from
+  kcoap-crypto-bc's tests. kcoap-crypto-default runs the suite on every target and kcoap-crypto-bc on the JVM,
+  and both copy the capability report into the build log, so CI shows what each target runs; their test tasks
+  are never restored from the build cache or up to date, so the report is in the log of every build that asks
+  for them.
 
 ### Changed
 

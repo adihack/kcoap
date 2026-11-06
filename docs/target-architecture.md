@@ -645,16 +645,19 @@ Parallel from the start: C1, S1, A1, A2. Then A3 runs alongside A4, W1 alongside
 > `CapabilityViolation`, `CapabilityReport`, `MlKemConformanceTest`, `MlDsaConformanceTest` and `ScriptedRandom`;
 > the ACVP vectors stay internal, and kcoap-crypto-bc's own tests derive expanded keys with Bouncy Castle where
 > they read the vectors. The invariant goes beyond throws or not: a yes must also reproduce one published known
-> answer per algorithm (part of checklist row foundations-x6), SHAKE256 must be a yes, and each answer is asked
-> twice. The ACVP suites require bad input to be rejected with an exception other than
+> answer per algorithm (part of checklist row foundations-x6), from the RFCs, NIST, the GCM specification, and
+> for the seven COSE AES-CCM variants RFC 3610 lacks the cose-wg examples; SHAKE256 must be a yes, and each
+> answer is asked twice. The ACVP suites require bad input to be rejected with an exception other than
 > `UnsupportedAlgorithmException`, as EDHOC reads it, not with `IllegalArgumentException`, which BC's own tests
 > keep checking; NIST's deterministic ML-DSA vectors run as hedged signing with `rnd = {0}^32` (FIPS 204 §3.4),
 > so a backend needs no deterministic mode. The metadata sits on `KeyType` (`seedLength`,
 > `expandedPrivateKeyLength`, null for the classical types), since `importKeyPair` takes a `KeyType`, and on
 > `SignatureAlgorithm` (`trLength`); BC keeps the lengths of the randomness `m` and `rnd` as its own. The report
 > lines reach the build log through a test-output listener in the crypto-default and crypto-bc build files,
-> not build-logic. The suite found that JCA's AES-GCM and ChaCha20/Poly1305 refuse a nonce repeated under one
-> key, so it encrypts with a fresh nonce each time.
+> not build-logic. A listener fires only while a test task runs, so those test tasks are never restored from
+> the build cache (which CI's setup-gradle restores from main) nor up to date; each build logs the report of
+> the machine it runs on. The suite found that JCA's AES-GCM and ChaCha20/Poly1305 refuse a nonce repeated under
+> one key, so it encrypts with a fresh nonce each time.
 
 **WP-B1: One internal PeerLink seam**
 

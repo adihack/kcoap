@@ -11,7 +11,7 @@ first byte that differs, which pins down the exact step that is wrong.
 |---|---|
 | `kcoap-crypto` | FIPS 202 (SHAKE256), NIST SP 800-185 (KMAC256) |
 | `kcoap-crypto-default` | FIPS 197 (the AES block, through ECB and CTR), RFC 3610 (AES-CCM, all 24), RFC 5869 (HKDF), RFC 7748 (X25519), RFC 8032 (Ed25519), RFC 8613 Appendix C (AEAD and key derivation), SEC 2 base points (point decompression) |
-| `kcoap-crypto-testsuite` | NIST ACVP ML-KEM and ML-DSA key generation, encapsulation, decapsulation, signing and verification, and one published known answer per classical algorithm (RFC 3610, the GCM test cases, RFC 8439, RFC 7748, RFC 8032, FIPS 180-4, FIPS 202, RFC 4231), run through each backend that extends its suites |
+| `kcoap-crypto-testsuite` | NIST ACVP ML-KEM and ML-DSA key generation, encapsulation, decapsulation, signing and verification, and one published known answer per classical algorithm (RFC 3610 and the cose-wg examples for AES-CCM, the GCM test cases, RFC 8439, RFC 7748 §6.1 and §6.2, RFC 5903 §8.1 and §8.2, RFC 8032, RFC 6979 §A.2.5 and §A.2.6, FIPS 180-4, FIPS 202, RFC 4231), run through each backend that extends its suites |
 | `kcoap-crypto-bc` | The ACVP suites of `kcoap-crypto-testsuite`, through the public backend |
 | `kcoap-cbor` | RFC 8949 Appendix A |
 | `kcoap-cose` | RFC 8613 C.4 (AAD), RFC 9529 credentials |
@@ -25,6 +25,8 @@ Every crypto backend also runs the conformance suite of `kcoap-crypto-testsuite`
 hold (what it says it runs works and reproduces the known answers, what it says it lacks throws
 `UnsupportedAlgorithmException`), on every target it builds for. The suite prints a capability report, which
 the build copies into its log: `[jsNodeTest] kcoap-crypto capabilities of DefaultCryptoBackend: AEAD yes ...`.
+The crypto modules' test tasks are never taken from the build cache or up to date, so every build that asks for
+them logs the report of its own machine.
 
 ## 2. Differential tests against independent implementations
 
