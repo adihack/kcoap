@@ -90,11 +90,11 @@
         <h2 id="vectors">RFC vectors, byte for byte</h2>
         <p class="lede">Where a specification prints test vectors, kcoap replays them and compares every intermediate value, not only the result.</p>
         <ul class="checks">
-          <li>OSCORE: RFC 8613 Appendix C.1 to C.8, from context derivation to protected messages, on both sides.</li>
-          <li>EDHOC: both traces of RFC 9529, every printed value, as Initiator and as Responder, and the invalid messages of its section 4.</li>
-          <li>The combined EDHOC and OSCORE request of RFC 9668 Figure 4, and the RFC 8323 framing of Figure 5 and Figures 11 and 12.</li>
-          <li>Every Q-Block figure of RFC 9177, 2 to 20, as a script on virtual time over the real messaging layer.</li>
-          <li>Cryptography: all 24 AES-CCM packets of RFC 3610, RFC 5869 HKDF, FIPS 197, SP 800-185 KMAC256 samples 1 to 4, and a subset of NIST’s ACVP vectors for ML-KEM and ML-DSA.</li>
+          <li><span class="visually-hidden">Done: </span>OSCORE: RFC 8613 Appendix C.1 to C.8, from context derivation to protected messages, on both sides.</li>
+          <li><span class="visually-hidden">Done: </span>EDHOC: both traces of RFC 9529, every printed value, as Initiator and as Responder, and the invalid messages of its section 4.</li>
+          <li><span class="visually-hidden">Done: </span>The combined EDHOC and OSCORE request of RFC 9668 Figure 4, and the RFC 8323 framing of Figure 5 and Figures 11 and 12.</li>
+          <li><span class="visually-hidden">Done: </span>Every Q-Block figure of RFC 9177, 2 to 20, as a script on virtual time over the real messaging layer.</li>
+          <li><span class="visually-hidden">Done: </span>Cryptography: all 24 AES-CCM packets of RFC 3610, RFC 5869 HKDF, FIPS 197, SP 800-185 KMAC256 samples 1 to 4, and a subset of NIST’s ACVP vectors for ML-KEM and ML-DSA.</li>
         </ul>
         <div class="evidence">
           <span class="evidence-title">Evidence and open items</span>
@@ -150,11 +150,11 @@
           <h3>Deviations found in the peers</h3>
           <p>Each is listed in the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/interop/README.md">interop notes</a> and pinned by an <code>upstream…</code> test where it can be. kcoap does not copy them.</p>
           <ul class="checks">
-            <li class="is-open">libcoap 4.3.5b protects only one response per request, so Q-Block under OSCORE is cross-tested kcoap against kcoap only.</li>
-            <li class="is-open">libcoap answers a request with both Block2 and Q-Block2 with 4.00 instead of 4.02, and keeps Q-Block for a whole session.</li>
-            <li class="is-open">libcoap’s WebSocket server aborts on frames above 1472 bytes, so the tests cap its message size.</li>
-            <li class="is-open">libedhoc’s Responder supports only its last configured suite, and accepts unknown critical EAD without a callback.</li>
-            <li class="is-open">libcoap’s forward-proxy reaches devices only on port 5683, drops an OSCORE request that names its target in Proxy-Uri, sends a deregistration on a new token, and corrupts request bodies of several blocks, which keeps post-quantum EDHOC off that path (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>).</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>libcoap 4.3.5b protects only one response per request, so Q-Block under OSCORE is cross-tested kcoap against kcoap only.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>libcoap answers a request with both Block2 and Q-Block2 with 4.00 instead of 4.02, and keeps Q-Block for a whole session.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>libcoap’s WebSocket server aborts on frames above 1472 bytes, so the tests cap its message size.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>libedhoc’s Responder supports only its last configured suite, and accepts unknown critical EAD without a callback.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>libcoap’s forward-proxy reaches devices only on port 5683, drops an OSCORE request that names its target in Proxy-Uri, sends a deregistration on a new token, and corrupts request bodies of several blocks, which keeps post-quantum EDHOC off that path (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0009-browser-topology-interop.md">ADR 0009</a>).</li>
           </ul>
         </div>
         <div class="card">
@@ -177,11 +177,11 @@
           <h2 id="post-quantum">Post-quantum EDHOC</h2>
           <p class="lede">The KEM-based key exchange of draft-ietf-lake-pqsuites, as libedhoc’s private cipher suite −24: ML-KEM-512 for the key exchange, ML-DSA-44 for signatures.</p>
           <ul class="checks">
-            <li>Round trips with real ML-KEM and ML-DSA on Bouncy Castle 1.86.</li>
-            <li>ML-KEM and ML-DSA checked against a subset of NIST’s ACVP vectors, at a pinned ACVP-Server commit.</li>
-            <li>Live against libedhoc’s liboqs build, in both roles, with CCS and ML-DSA-44 X.509 credentials.</li>
-            <li>Method 0 only: methods 1 to 3 need static Diffie-Hellman keys, which a KEM suite has not, so they are refused.</li>
-            <li class="is-open">On the JVM only, through <code>kcoap-crypto-bc</code>, which wraps the classical backend you pass. An Android app builds and shrinks with it, but has not run it on a device. Other platforms, and suite −24 through EDHOC over CoAP, are still to do.</li>
+            <li><span class="visually-hidden">Done: </span>Round trips with real ML-KEM and ML-DSA on Bouncy Castle 1.86.</li>
+            <li><span class="visually-hidden">Done: </span>ML-KEM and ML-DSA checked against a subset of NIST’s ACVP vectors, at a pinned ACVP-Server commit.</li>
+            <li><span class="visually-hidden">Done: </span>Live against libedhoc’s liboqs build, in both roles, with CCS and ML-DSA-44 X.509 credentials.</li>
+            <li><span class="visually-hidden">Done: </span>Method 0 only: methods 1 to 3 need static Diffie-Hellman keys, which a KEM suite has not, so they are refused.</li>
+            <li class="is-open"><span class="visually-hidden">Open: </span>On the JVM only, through <code>kcoap-crypto-bc</code>, which wraps the classical backend you pass. An Android app builds and shrinks with it, but has not run it on a device. Other platforms, and suite −24 through EDHOC over CoAP, are still to do.</li>
           </ul>
         </div>
         <div class="card">
@@ -221,11 +221,11 @@
           <h2 id="q-block">Q-Block, RFC 9177</h2>
           <p class="lede">Large bodies travel in bursts of Non-confirmable blocks, and a lost block is asked for again on its own, without restarting the transfer.</p>
           <ul class="checks">
-            <li>Client and server, uploads (Q-Block1) and downloads (Q-Block2), over UDP, TCP and WebSockets.</li>
-            <li>With Observe: each change goes out as one body, with a new ETag.</li>
-            <li>Under OSCORE, opt-in on both sides, with a replay window per request.</li>
-            <li>Before a burst to an unverified address, the server checks it with Echo.</li>
-            <li>Off by default. A client set to probe asks each server once and falls back to RFC 7959 Block-wise.</li>
+            <li><span class="visually-hidden">Done: </span>Client and server, uploads (Q-Block1) and downloads (Q-Block2), over UDP, TCP and WebSockets.</li>
+            <li><span class="visually-hidden">Done: </span>With Observe: each change goes out as one body, with a new ETag.</li>
+            <li><span class="visually-hidden">Done: </span>Under OSCORE, opt-in on both sides, with a replay window per request.</li>
+            <li><span class="visually-hidden">Done: </span>Before a burst to an unverified address, the server checks it with Echo.</li>
+            <li><span class="visually-hidden">Done: </span>Off by default. A client set to probe asks each server once and falls back to RFC 7959 Block-wise.</li>
           </ul>
           <p class="open-items"><strong>Evidence:</strong> every RFC 9177 figure on virtual time; soaks of 20 seeds at 10 % and 30 % loss; libcoap 4.3.5b in both roles. <strong>Open:</strong> the nightly soak is not scheduled in CI yet. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0006-q-block.md">ADR 0006</a>.</p>
         </div>
@@ -267,10 +267,10 @@
           <h2 id="fail-closed">Fail-closed message security</h2>
           <p class="lede">With OSCORE configured, nothing unprotected gets through by accident, in either direction.</p>
           <ul class="checks">
-            <li><strong>Server:</strong> every resource has an access policy, <code>MessageSecurityRequired</code> by default once security is set. A refused request gets 4.01, or 4.03 with an identity, before any handler, buffer, observation or burst.</li>
-            <li><strong>Client:</strong> it acts only on responses it verified. An unprotected error, which anyone on the path can send, is never repeated with its Echo or continued; the request fails with <code>UNVERIFIED_RESPONSE</code>.</li>
-            <li><strong>No silent plaintext:</strong> a request without a context fails instead of going out unprotected, unless <code>allowUnprotected</code> says otherwise.</li>
-            <li><code>/.well-known/core</code> lists only what the caller may use.</li>
+            <li><span class="visually-hidden">Done: </span><strong>Server:</strong> every resource has an access policy, <code>MessageSecurityRequired</code> by default once security is set. A refused request gets 4.01, or 4.03 with an identity, before any handler, buffer, observation or burst.</li>
+            <li><span class="visually-hidden">Done: </span><strong>Client:</strong> it acts only on responses it verified. An unprotected error, which anyone on the path can send, is never repeated with its Echo or continued; the request fails with <code>UNVERIFIED_RESPONSE</code>.</li>
+            <li><span class="visually-hidden">Done: </span><strong>No silent plaintext:</strong> a request without a context fails instead of going out unprotected, unless <code>allowUnprotected</code> says otherwise.</li>
+            <li><span class="visually-hidden">Done: </span><code>/.well-known/core</code> lists only what the caller may use.</li>
           </ul>
         </div>
         <figure class="figure">
@@ -306,11 +306,11 @@
         <h2 id="sans-io">Sans-IO state machines</h2>
         <p class="lede">The protocol cores take bytes and the time, and return bytes and timers. Sockets and clocks live in thin adapters, so each layer is tested with fixed vectors on virtual time.</p>
         <ul class="checks">
-          <li>CoAP messaging over datagrams and over streams, and the four Q-Block machines, run inside the endpoint.</li>
-          <li>EDHOC’s <code>EdhocInitiator</code> and <code>EdhocResponder</code> are public API: message bytes in and out, transport left to you.</li>
-          <li>OSCORE protects and verifies messages without the endpoint, so a proxy or another CoAP stack can use it.</li>
-          <li>Time and randomness are injected; ephemeral keys too, which is how the RFC 9529 traces replay.</li>
-          <li class="is-open">A public sans-IO CoAP engine, for embedding in Netty or Vert.x event loops, is not built yet.</li>
+          <li><span class="visually-hidden">Done: </span>CoAP messaging over datagrams and over streams, and the four Q-Block machines, run inside the endpoint.</li>
+          <li><span class="visually-hidden">Done: </span>EDHOC’s <code>EdhocInitiator</code> and <code>EdhocResponder</code> are public API: message bytes in and out, transport left to you.</li>
+          <li><span class="visually-hidden">Done: </span>OSCORE protects and verifies messages without the endpoint, so a proxy or another CoAP stack can use it.</li>
+          <li><span class="visually-hidden">Done: </span>Time and randomness are injected; ephemeral keys too, which is how the RFC 9529 traces replay.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>A public sans-IO CoAP engine, for embedding in Netty or Vert.x event loops, is not built yet.</li>
         </ul>
       </div>
       <figure class="figure">
@@ -329,10 +329,10 @@
         <h2 id="platforms">One code base, every target</h2>
         <p class="lede">All protocol code is common Kotlin, with no <code>expect</code>/<code>actual</code>; the build fails a core module that grows code anywhere else.</p>
         <ul class="checks">
-          <li>The same common tests run in CI on the JVM, Linux, macOS, the iOS simulator, and JS and Wasm on Node.js.</li>
-          <li>Android uses the JVM artifacts from API level 26; CI checks the API level and builds a sample app with R8.</li>
-          <li>Tests choose algorithms by what the backend supports, never by the platform they run on.</li>
-          <li class="is-open">Not yet run on an Android device or an iPhone. No <code>linuxArm64</code>, no Intel Apple targets.</li>
+          <li><span class="visually-hidden">Done: </span>The same common tests run in CI on the JVM, Linux, macOS, the iOS simulator, and JS and Wasm on Node.js.</li>
+          <li><span class="visually-hidden">Done: </span>Android uses the JVM artifacts from API level 26; CI checks the API level and builds a sample app with R8.</li>
+          <li><span class="visually-hidden">Done: </span>Tests choose algorithms by what the backend supports, never by the platform they run on.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>Not yet run on an Android device or an iPhone. No <code>linuxArm64</code>, no Intel Apple targets.</li>
         </ul>
         <p class="btn-row"><a class="btn btn-primary" href="/start/">Setup by platform <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p>
       </div>
@@ -352,10 +352,10 @@
         <h2 id="crypto">Capability-aware crypto</h2>
         <p class="lede">All cryptography goes through one asynchronous <code>CryptoBackend</code>. Protocol code asks what the backend supports, so a platform’s gaps become choices made up front, not failures halfway through a handshake.</p>
         <ul class="checks">
-          <li><code>DefaultCryptoBackend</code> runs on JCA, CryptoKit and CommonCrypto, OpenSSL 3 or WebCrypto. It probes each algorithm once and remembers the answer.</li>
-          <li><code>supports(x)</code> is false exactly when the operation would throw. EDHOC offers and accepts only the suites the backend runs.</li>
-          <li>Small, public-data gaps get common-code fallbacks, such as AES-CCM on the AES block and point decompression. Secret-key algorithms do not.</li>
-          <li>Private keys are opaque handles that protocol code never reads, so a hardware backend can hold them. None ships yet.</li>
+          <li><span class="visually-hidden">Done: </span><code>DefaultCryptoBackend</code> runs on JCA, CryptoKit and CommonCrypto, OpenSSL 3 or WebCrypto. It probes each algorithm once and remembers the answer.</li>
+          <li><span class="visually-hidden">Done: </span><code>supports(x)</code> is false exactly when the operation would throw. EDHOC offers and accepts only the suites the backend runs.</li>
+          <li><span class="visually-hidden">Done: </span>Small, public-data gaps get common-code fallbacks, such as AES-CCM on the AES block and point decompression. Secret-key algorithms do not.</li>
+          <li><span class="visually-hidden">Done: </span>Private keys are opaque handles that protocol code never reads, so a hardware backend can hold them. None ships yet.</li>
         </ul>
         <p class="open-items"><strong>Open:</strong> Ed448 and suite 25; post-quantum beyond the JVM; a generated table of suites per platform. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0001-crypto-capabilities.md">ADR 0001</a>.</p>
       </div>

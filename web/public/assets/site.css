@@ -41,6 +41,7 @@
   --c-amber: #ffc145;
   --c-amber-soft: #fff2d1;
   --c-amber-ink: #6b4600;
+  --c-amber-line: #b07a00;
   --c-on-amber: #2b1d00;
   --c-ok-soft: #e2f3e8;
   --c-ok-ink: #17673b;
@@ -71,6 +72,7 @@
   --d-surface: #ffffff;
   --d-surface-2: #edf3f4;
   --d-stroke: #b8cace;
+  --d-lifeline: #8fa6ab;
   --d-line: #6d8287;
   --d-text: #0c1a1d;
   --d-muted: #4b5f64;
@@ -113,7 +115,7 @@
     --c-surface: #112225;
     --c-surface-2: #162b2f;
     --c-border: #21393d;
-    --c-border-strong: #4d6a6f;
+    --c-border-strong: #56757a;
     --c-text: #e3eeef;
     --c-text-2: #b4c7ca;
     --c-text-3: #93aaae;
@@ -124,6 +126,7 @@
     --c-accent-line: #1f5a61;
     --c-amber-soft: #33270c;
     --c-amber-ink: #ffd27a;
+    --c-amber-line: #ffc145;
     --c-ok-soft: #0f2b1d;
     --c-ok-ink: #7fdca3;
     --c-todo-soft: #1b2a2d;
@@ -141,6 +144,7 @@
     --d-surface: #112225;
     --d-surface-2: #183034;
     --d-stroke: #345257;
+    --d-lifeline: #4f7075;
     --d-line: #8aa3a7;
     --d-text: #e3eeef;
     --d-muted: #a5babd;
@@ -160,7 +164,7 @@
   --c-surface: #112225;
   --c-surface-2: #162b2f;
   --c-border: #21393d;
-  --c-border-strong: #4d6a6f;
+  --c-border-strong: #56757a;
   --c-text: #e3eeef;
   --c-text-2: #b4c7ca;
   --c-text-3: #93aaae;
@@ -171,6 +175,7 @@
   --c-accent-line: #1f5a61;
   --c-amber-soft: #33270c;
   --c-amber-ink: #ffd27a;
+  --c-amber-line: #ffc145;
   --c-ok-soft: #0f2b1d;
   --c-ok-ink: #7fdca3;
   --c-todo-soft: #1b2a2d;
@@ -188,6 +193,7 @@
   --d-surface: #112225;
   --d-surface-2: #183034;
   --d-stroke: #345257;
+  --d-lifeline: #4f7075;
   --d-line: #8aa3a7;
   --d-text: #e3eeef;
   --d-muted: #a5babd;
@@ -1249,7 +1255,7 @@ caption {
 }
 
 .meter-block.is-active {
-  border: 1.5px solid var(--c-amber);
+  border: 1.5px solid var(--c-amber-line);
   background: var(--c-amber-soft);
   color: var(--c-amber-ink);
 }
@@ -1286,7 +1292,7 @@ caption {
 }
 
 .meter-legend .is-active::before {
-  border: 1.5px solid var(--c-amber);
+  border: 1.5px solid var(--c-amber-line);
   background: var(--c-amber-soft);
 }
 
@@ -1363,13 +1369,43 @@ caption {
   width: 0.9rem;
   height: 0.9rem;
   background: transparent;
-  border: 2.5px solid var(--c-amber);
+  border: 2.5px solid var(--c-amber-line);
   -webkit-mask: none;
   mask: none;
 }
 
 .checks .is-open::after {
   display: none;
+}
+
+/* In forced colors the backgrounds go, so the done marks and blocks keep theirs in system colours. */
+@media (forced-colors: active) {
+  .checks li::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .checks li::after {
+    forced-color-adjust: none;
+    border-color: Canvas;
+  }
+
+  .checks .is-open::before {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .meter-block.is-done {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: CanvasText;
+    color: Canvas;
+  }
+
+  .meter-block.is-active {
+    border-style: double;
+    border-width: 3px;
+  }
 }
 
 /* 7. Code -------------------------------------------------------------------------------------------- */
@@ -1846,7 +1882,7 @@ pre {
 
 .diagram .d-box-amber-soft {
   fill: var(--c-amber-soft);
-  stroke: var(--c-amber);
+  stroke: var(--c-amber-line);
   stroke-width: 1.5;
 }
 
@@ -1871,7 +1907,7 @@ pre {
 
 .diagram .d-lifeline {
   fill: none;
-  stroke: var(--d-stroke);
+  stroke: var(--d-lifeline);
   stroke-width: 1.5;
   stroke-dasharray: 3 5;
 }
@@ -1890,7 +1926,7 @@ pre {
 
 .diagram .d-arrow-amber {
   fill: none;
-  stroke: var(--c-amber);
+  stroke: var(--c-amber-line);
   stroke-width: 2.5;
 }
 
@@ -1910,7 +1946,7 @@ pre {
 }
 
 .diagram .d-head-amber {
-  fill: var(--c-amber);
+  fill: var(--c-amber-line);
 }
 
 .diagram .d-fill-accent {

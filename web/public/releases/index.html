@@ -101,19 +101,19 @@
       </div>
       <div class="card status-card">
         <ol class="meter" aria-label="Work packages in the release freeze">
-          <li class="meter-block is-done" title="merged">A1</li>
-          <li class="meter-block is-done" title="merged">A2</li>
-          <li class="meter-block is-done" title="merged">A3</li>
-          <li class="meter-block is-done" title="merged">A4</li>
-          <li class="meter-block is-done" title="merged">A5</li>
-          <li class="meter-block is-done" title="merged">W1</li>
-          <li class="meter-block is-done" title="merged">B1</li>
-          <li class="meter-block is-done" title="merged">B2</li>
-          <li class="meter-block is-done" title="merged">B3</li>
-          <li class="meter-block is-done" title="merged">C1</li>
-          <li class="meter-block is-done" title="merged">D1</li>
-          <li class="meter-block is-done" title="merged">D2</li>
-          <li class="meter-block" title="not started">C3</li>
+          <li class="meter-block is-done">A1<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">A2<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">A3<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">A4<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">A5<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">W1<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">B1<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">B2<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">B3<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">C1<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">D1<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block is-done">D2<span class="visually-hidden">, merged</span></li>
+          <li class="meter-block">C3<span class="visually-hidden">, not started</span></li>
         </ol>
         <ul class="meter-legend">
           <li class="is-done">12 merged</li>
@@ -174,15 +174,15 @@
       </div>
       <div class="card">
         <ul class="checks mb-0">
-          <li class="is-open">The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
-          <li class="is-open">Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed.</li>
-          <li class="is-open">CHANGELOG.md has an entry for the version, with migration notes.</li>
-          <li class="is-open">The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
-          <li class="is-open">The Maven Central and signing secrets are set.</li>
-          <li>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
-          <li>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
-          <li class="is-open">The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
-          <li class="is-open"><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The release freeze has merged and CI is green on <code>main</code>. Pull request #1 is still a draft.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>Nothing deprecated is left in the API: the constructors of <code>CoapEndpointConfig</code> and <code>CoapClientConfig</code>, deprecated for their builders, are removed.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>CHANGELOG.md has an entry for the version, with migration notes.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The <code>dev.kcoap</code> namespace is verified in Maven Central’s portal, through a DNS record on kcoap.dev.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The Maven Central and signing secrets are set.</li>
+          <li><span class="visually-hidden">Done: </span>Every POM names the license, the website, the maintainer, the issue tracker and the sources.</li>
+          <li><span class="visually-hidden">Done: </span>Snapshots publish to Maven Local, and CI builds an Android consumer app against them.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span>The ABI dumps are current. CI checks them on every pull request; the check is repeated for the tag.</li>
+          <li class="is-open"><span class="visually-hidden">Open: </span><code>v*</code> tags are protected, and GitHub Pages serves from GitHub Actions.</li>
         </ul>
       </div>
     </div>
