@@ -252,6 +252,8 @@ kotlin-multiplatform = { id = <span class="tok-s">"org.jetbrains.kotlin.multipla
         <dl class="qa-list">
           <dt>The app crashes when a request times out</dt>
           <dd>The function Swift calls has no <code>@Throws</code>. Add <code>@Throws(Exception::class)</code> to every function of your shared module that Swift calls and that can throw.</dd>
+          <dt>The app crashes on a malformed URI</dt>
+          <dd>kcoap treats a malformed URI string as the caller’s mistake, an <code>IllegalArgumentException</code> that the <code>@Throws</code> lists of <code>CoapClient</code> leave out. If Swift calls kcoap directly, parse the URI first with <code>CoapUri.parse</code>, whose <code>@Throws</code> lists that exception, or keep the call behind a wrapper of your own, as above.</dd>
           <dt>Could not find <code>dev.kcoap:kcoap-coap-iosarm64</code> or a similar artifact</dt>
           <dd>Publish kcoap to Maven Local on a Mac with Xcode: the iOS and macOS artifacts build only there.</dd>
           <dt>No variant for an Intel Mac or the Intel simulator</dt>

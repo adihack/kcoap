@@ -3094,6 +3094,7 @@ pre {
 /* Releases fetched from GitHub by releases.js. */
 .release-feed {
   min-height: 7rem;
+  margin-bottom: 1.5rem;
 }
 
 /* One line under the note that says what GitHub answered; its height is reserved, so nothing jumps. */
