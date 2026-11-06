@@ -15,6 +15,7 @@ import dev.kcoap.coap.security.ResponseVerification
 import dev.kcoap.testkit.InMemoryByteStream
 import dev.kcoap.testkit.InMemoryTransport
 import dev.kcoap.transport.DatagramEvent
+import dev.kcoap.transport.DatagramTransport
 import dev.kcoap.transport.Endpoint
 import dev.kcoap.transport.PeerIdentity
 import dev.kcoap.transport.SessionEndReason
@@ -34,8 +35,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 
 /**
  * The exchange layer under several responses per request and Q-Block pacing: the response modes of
@@ -322,6 +325,40 @@ class ExchangeModesTest {
         assertEquals(emptyList(), fixture.sentBy(endpoint, CoapMessageType.RST))
         assertTrue(exchange.isOpen)
         exchange.cancel()
+    }
+
+    /**
+     * RFC 7252 §4.2: a Confirmable separate response is acknowledged before the caller gets it, so a caller that
+     * closes the endpoint as soon as its request returned does not leave it unacknowledged, for its sender to send
+     * again until MAX_RETRANSMIT. Every send of the endpoint's transport suspends once, as a socket's does when its
+     * buffer is full, which gives the caller its turn while an ACK is on its way.
+     */
+    @Test
+    fun rfc7252Section4_2AConfirmableResponseIsAcknowledgedBeforeTheCallerGetsIt() = runTest {
+        val fixture = StackFixture(this)
+        val peer = RawPeer(fixture.transport())
+        val transport = fixture.transport()
+        val endpoint = CoapEndpoint(SuspendingSends(transport), backgroundScope, fixture.endpointConfig())
+
+        val exchange = endpoint.openExchange(peer.address, get(), true, null)
+        val request = peer.receive()
+        peer.send(CoapMessage.empty(CoapMessageType.ACK, request.messageId))
+        val response = peer.response(request, CoapMessageType.CON, "done")
+        peer.send(response)
+        assertEquals("done", exchange.awaitResponse().payloadAsText())
+        endpoint.close()
+        advanceUntilIdle()
+
+        val acks = fixture.traffic.filter { it.from == transport.localEndpoint && it.message?.type == CoapMessageType.ACK }
+        assertEquals(listOf(response.messageId), acks.map { it.message!!.messageId }, "the response acknowledged before close()")
+    }
+
+    /** A transport each of whose sends suspends once before the datagram goes out. */
+    private class SuspendingSends(private val inner: InMemoryTransport) : DatagramTransport by inner {
+        override suspend fun send(to: Endpoint, datagram: ByteArray) {
+            yield()
+            inner.send(to, datagram)
+        }
     }
 
     /**

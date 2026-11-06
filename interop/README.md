@@ -61,8 +61,10 @@ Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` t
 
 - three separate gaps in an upload get a plain 4.08 ("Too many missing blocks"), and the body is given up
   (`upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4`);
-- a block asked for once its 8 s cache expired comes without ETag and Size2, from the handler run again
-  (`upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8`);
+- a block asked for once its cache expired, 8 s (4 × NON_TIMEOUT) after it last sent the body's last block,
+  comes without ETag and Size2, from the handler run again; kcoap's client then asks for the whole body again
+  (`upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8`, which loses the last block until
+  then);
 - only block 0 of a 2.01 or 2.04 body is sent (`-e`); the rest comes when the client asks for it
   (`upstreamLibcoapSendsOnlyBlock0OfAnEchoedPutBodyAndTheRestIsFetchedK9`);
 - without `-L`, its 4.02 to the probe repeats the Q-Block2 option it rejects
@@ -80,6 +82,18 @@ Deviations of libcoap 4.3.5b's server, each pinned by the `upstreamLibcoap…` t
 - a request with both Block2 and Q-Block2 gets 4.00 "Both Block2 and Q-Block2 invalid" instead of the 4.02 of
   RFC 9177 §4.1 (`upstreamLibcoapAnswersBlock2MixedWithQBlock2With400`, a raw datagram, since kcoap never sends
   the mix).
+
+One more was seen in a run and is not pinned, since it shows only when two random Message IDs come close:
+
+- **Message IDs reused** (server). `handle_request` in `src/coap_net.c` gives a Non-confirmable response the
+  Message ID of the request it answers, while the blocks a body sends on its own take IDs from the session's
+  counter. When the client's IDs run into the range that counter used shortly before, a response repeats an ID
+  libcoap sent within NON_LIFETIME, which RFC 7252 §4.4 forbids, and kcoap drops it as a duplicate (§4.5). In
+  one local run of K8 (kcoap's IDs from 0xeb6c, libcoap's from 0xeb6f) the answers for blocks 2 and 23 were
+  dropped that way until the test timed out at 90 s. Any Non-confirmable case against `coap-server` can meet
+  it, with odds of roughly one in a thousand per case. A failed case of `KcoapClientAgainstLibcoapQBlockTest`
+  prints, after its wire, the IDs libcoap sent on more than one token and which of them kcoap dropped; a run
+  that failed that way met this deviation, not a fault of kcoap, and can be run again.
 
 Two more deviations named in the plan (§1.6) are known from libcoap's source but not pinned:
 
@@ -130,16 +144,22 @@ Deviations of libcoap 4.3.5b's client, each pinned by the `upstreamLibcoap…` t
   a Q-Block2 body back, libcoap's Continue repeats `Q-Block1 0/M` and Size1 without a payload. RFC 9177 §4.7
   wants neither, and a Q-Block1 block with M set must fill its block (RFC 7959 §2.3), so kcoap answers
   4.00; libcoap then gives the body up after its first set.
-- **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9): with
-  blocks 3, 11 and 14 lost on kcoap's side, libcoap asks for block 3 alone when block 10 arrives, usually sends
-  Resets to blocks of set 1 on the original token, asks for the rest of set 1 with `11/M` and for the later
-  sets, gets every block, and exits 0 having written one 64-byte block instead of the 3000-byte body. The test
-  also checks kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks answered
-  on its own token from the cached body, and the Continues' sets on the original token, so it holds only while
-  the fault is libcoap's. It does not assert the Resets: whether libcoap sends any depends on how its request
-  for block 3 interleaves with kcoap's set. One interop run under load saw none; alone, the test saw Resets in
-  20 of 20 runs both before and after the PeerLink refactoring (WP-B1, ee9d3d7 and its head), so the timing is
-  libcoap's and not a change in kcoap.
+- **Gaps across two sets** (`upstreamLibcoapWritesOneBlockForABodyWhoseGapsSpanTwoSetsL3`, found by L9):
+  libcoap's client keeps the blocks it received as at most three ranges (`COAP_RBLOCK_CNT` − 1 in
+  `coap_block_internal.h`); a block that would start a fourth fails the body (`update_received_blocks`), and
+  coap-client is handed that block alone as the body. With blocks 3, 11 and 14 lost on kcoap's side, libcoap
+  asks for block 3 alone when block 10 arrives, and block 15 needs a fourth range unless block 3 came first.
+  kcoap sends set 1 back to back, so alone the request for block 3 arrives after the whole set; under load it
+  can arrive, and be answered, before block 15 goes out, and libcoap then gets the body whole (a CI run of
+  1a35ced, and 1 of 2 runs of the class on two CPUs beside two busy loops). So the test holds that request back
+  on kcoap's side until kcoap sent set 1, as a slower network would. libcoap then fails the body at block 15,
+  usually sends Resets to the blocks after it on the original token, asks for the rest of set 1 with `11/M` once
+  block 3 came and for the later sets, gets every block, and exits 0 having written one 64-byte block instead of
+  the 3000-byte body.
+  The test also checks kcoap's side: one ETag and Size2 3000 on every block, every request for missing blocks
+  answered on its own token from the cached body, and the Continues' sets on the original token, so it holds
+  only while the fault is libcoap's. It does not assert the Resets, which are how libcoap's client answers
+  blocks of a body it gave up.
 
 ```bash
 interop/libcoap/coap.sh coap-client -L 7 -v 7 -B 10 coap://127.0.0.1:5683/hello

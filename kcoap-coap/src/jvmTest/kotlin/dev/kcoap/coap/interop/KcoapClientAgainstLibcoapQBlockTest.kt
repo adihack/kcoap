@@ -138,10 +138,30 @@ class KcoapClientAgainstLibcoapQBlockTest {
         } catch (e: Throwable) {
             System.err.println("libcoap log:\n${server.logs().takeLast(20_000)}")
             System.err.println("kcoap wire:\n${wire.joinToString("\n")}")
+            reusedMessageIds()?.let(System.err::println)
             throw e
         } finally {
             server.close()
         }
+    }
+
+    /**
+     * For a failed case: the Message IDs that libcoap sent on more than one token, and which of them kcoap dropped
+     * as duplicates (RFC 7252 §4.5). libcoap's server can give a Non-confirmable response an ID it sent shortly
+     * before (interop/README.md, "Message IDs reused"), and a case whose answers were dropped that way can time out
+     * without a fault of kcoap. Null when libcoap reused none.
+     */
+    private fun reusedMessageIds(): String? {
+        val incoming = synchronized(wire) { wire.filter { !it.outgoing && it.message.type in setOf(CoapMessageType.CON, CoapMessageType.NON) } }
+        val reused = incoming.groupBy { it.message.messageId }
+            .mapValues { (_, lines) -> lines.map { it.message.tokenHex }.distinct() }
+            .filterValues { it.size > 1 }
+        if (reused.isEmpty()) return null
+        val duplicates = synchronized(events) { events.filterIsInstance<EndpointEvent.DuplicateReceived>().map { it.messageId }.toSet() }
+        val lines = reused.entries.joinToString("\n") { (id, tokens) ->
+            "  mid=$id on tokens $tokens${if (id in duplicates) ", dropped by kcoap as a duplicate" else ""}"
+        }
+        return "libcoap reused Message IDs on other tokens (interop/README.md, \"Message IDs reused\"):\n$lines"
     }
 
     private fun withClient(
@@ -609,20 +629,34 @@ class KcoapClientAgainstLibcoapQBlockTest {
 
     // ---------------------------------------------------------------- K8
 
+    /**
+     * Pinned (K8): libcoap 4.3.5's server keeps a body for 4 × NON_TIMEOUT (8 s) after it last sent the body's last
+     * block; a request for a block after that runs its handler again and gets that block alone, without ETag and
+     * Size2, where RFC 9177 §4.4 has every block of a body carry the body's ETag. The client loses every copy of
+     * block 23, the last, until such an answer comes: libcoap answers its requests for block 23 from the cache
+     * first, and one of them comes 8 s or more after libcoap last sent the block, since they back off
+     * (NON_RECEIVE_TIMEOUT × 2^n: 4, 8, 16 s). The client takes a block without ETag and Size2 for a changed
+     * representation and asks for the whole body again (`0/M`), which libcoap sends with a new ETag.
+     */
     @Test
     fun upstreamLibcoapAnswersWithoutETagOnceItsCacheExpiredAndTheGetRestartsK8() = withServer("-L", "7", "-v", "7") { server ->
-        var lost = 0
-        withClient(dropIn = { message -> message.options.qBlock2?.number == 2L && message.options.size2 != null && lost++ < 2 }) { client ->
+        fun isLastBlock(message: CoapMessage) = message.code == CoapCode.CONTENT && message.options.qBlock2?.number == 23L
+        fun isUntagged(message: CoapMessage) = message.options.etags.isEmpty() && message.options.size2 == null
+        fun answeredUntagged() = received().any { isLastBlock(it.message) && isUntagged(it.message) }
+        withClient(dropIn = { message -> isLastBlock(message) && !isUntagged(message) && !answeredUntagged() }) { client ->
             val response = client.get("${server.uri}/example_data") { nonConfirmable() }
 
             assertContentEquals(exampleData, response.payload)
-            val asked = requests("/example_data").filter { 2L in it.message.options.qBlock2List.map(BlockOption::number) }
-            assertEquals(2, asked.size, "block 2 asked for twice: ${requests("/example_data").map { it.message.qBlock2 }}")
-            val unTagged = received().filter { it.message.options.qBlock2 != null && it.message.options.etags.isEmpty() }
-            assertTrue(unTagged.isNotEmpty(), "libcoap answers without ETag once its cache expired")
-            assertTrue(unTagged.all { it.message.options.size2 == null })
-            val restart = requests("/example_data").last { it.message.qBlock2 == listOf("0/M/64") }
-            assertTrue(restart.at > unTagged.first().at, "the GET starts again")
+            val asked = requests("/example_data").filter { it.message.qBlock2 == listOf("23/_/64") }.map { it.message.tokenHex }
+            val answers = synchronized(wire) { wire.filter { !it.outgoing && isLastBlock(it.message) && it.message.tokenHex in asked } }
+            val untagged = answers.filter { isUntagged(it.message) }
+            assertEquals(1, untagged.size, "libcoap answers a request for block 23 without ETag and Size2 once: $answers")
+            val cached = answers.filter { it.at < untagged.single().at }
+            assertTrue(cached.isNotEmpty() && cached.all { it.dropped && it.message.options.etags.size == 1 }, "from its cache before: $answers")
+            val restarts = requests("/example_data").filter { it.message.qBlock2 == listOf("0/M/64") && it.at > untagged.single().at }
+            assertEquals(1, restarts.size, "the GET starts again: ${requests("/example_data").map { it.message.qBlock2 }}")
+            val etags = blocks().filter { !isUntagged(it.message) }.map { it.message.options.etags.single().toList() }.distinct()
+            assertEquals(2, etags.size, "the body again, with a new ETag: $etags")
             assertNoMessageMixesBlockAndQBlock()
         }
     }
@@ -724,28 +758,44 @@ class KcoapClientAgainstLibcoapQBlockTest {
      * 3000 bytes and a GET of what libcoap then holds, with 10 % loss on both sides (`-l 10%` on libcoap's,
      * [LossyTransport] on kcoap's). Every run ends with the right body, a clean [CoapException], or libcoap's
      * plain 4.08 for an upload with three gaps or more (its limit, pinned in
-     * [upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4]); libcoap holds the new body or
-     * the one before, never a mix; no exchange is left after a run, and no message mixes Block and Q-Block. In
-     * the nightly soak a quarter of the uploads and half the downloads complete at least.
+     * [upstreamLibcoapGivesUpAnUploadWithThreeGapsAndItsPlain408IsReturnedK4]); libcoap holds one of the bodies it
+     * may have stored, whole, never a mix; no exchange is left after a run, and no message mixes Block and
+     * Q-Block. In the nightly soak a quarter of the uploads and half the downloads complete at least.
+     *
+     * Which bodies libcoap may hold follows from what the client saw: an upload answered 2.04 or 2.01 is the one
+     * it holds, and a body the client downloaded is the one it holds. Any other upload may have been stored all the
+     * same: its 2.04 can be lost, and then the blocks the client still sends start a new upload in libcoap, which
+     * it answers with its plain 4.08 for three gaps (seen once under load: the PUT ended with that 4.08, and the GET
+     * after it got the whole upload). A download that failed tells nothing, so a later run may still get an upload
+     * from before it.
      */
     @Test
     fun kSoakBodiesBothWaysAt10PercentLoss() = withServer("-L", "7", "-v", "7", "-l", "10%") { server ->
         val random = java.util.Random(11)
         fun lose(): Boolean = synchronized(random) { random.nextDouble() < 0.1 }
-        var held = exampleData
+        val uploaded = mutableListOf<ByteArray>()
+        // The bodies libcoap may hold, as "the original" or "run n".
+        var mayHold = mapOf("the original" to exampleData)
+        fun nameOf(payload: ByteArray): String =
+            (mapOf("the original" to exampleData) + uploaded.mapIndexed { run, body -> "run $run" to body }).entries
+                .firstOrNull { it.value.contentEquals(payload) }?.key ?: "none of the bodies sent (${payload.size} bytes)"
         var uploads = 0
         var downloads = 0
         val outcomes = mutableListOf<String>()
         repeat(Soak.runs) { run ->
             withClient(dropOut = { lose() }, dropIn = { lose() }, timeout = 10.minutes) { client ->
                 val upload = body(3000, 100 + run)
+                uploaded += upload
                 val put = runCatching { client.put("${server.uri}/example_data", upload, ContentFormat.TEXT_PLAIN) { nonConfirmable() } }
                 put.exceptionOrNull()?.let { assertCleanFailure(it, "run $run PUT") }
                 val code = put.getOrNull()?.code
                 outcomes += "PUT ${code ?: put.exceptionOrNull()?.let { (it as CoapException).reason }}"
                 when (code) {
-                    CoapCode.CHANGED, CoapCode.CREATED -> uploads++
-                    null, CoapCode.REQUEST_ENTITY_INCOMPLETE -> Unit
+                    CoapCode.CHANGED, CoapCode.CREATED -> {
+                        uploads++
+                        mayHold = mapOf("run $run" to upload)
+                    }
+                    null, CoapCode.REQUEST_ENTITY_INCOMPLETE -> mayHold = mayHold + ("run $run" to upload)
                     else -> throw AssertionError("run $run: PUT answered $code")
                 }
 
@@ -755,10 +805,10 @@ class KcoapClientAgainstLibcoapQBlockTest {
                 outcomes += "GET ${got?.code ?: get.exceptionOrNull()?.let { (it as CoapException).reason }}"
                 if (got != null) {
                     assertEquals(CoapCode.CONTENT, got.code, "run $run")
-                    val isNew = got.payload.contentEquals(upload)
-                    assertTrue(isNew || got.payload.contentEquals(held), "run $run: libcoap holds the new body or the one before")
-                    if (isNew) held = upload
-                    if (code == CoapCode.CHANGED || code == CoapCode.CREATED) assertTrue(isNew, "run $run: the stored body is the upload")
+                    val held = nameOf(got.payload)
+                    if (code == CoapCode.CHANGED || code == CoapCode.CREATED) assertEquals("run $run", held, "run $run: the stored body is the upload")
+                    assertTrue(held in mayHold, "run $run: libcoap holds one of ${mayHold.keys}, but the body is $held; $outcomes")
+                    mayHold = mapOf(held to got.payload)
                     downloads++
                 }
                 assertNoMessageMixesBlockAndQBlock()

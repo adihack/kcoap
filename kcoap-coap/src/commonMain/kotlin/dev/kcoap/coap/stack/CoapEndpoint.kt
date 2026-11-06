@@ -752,13 +752,16 @@ public class CoapEndpoint private constructor(
      * A response on [link] that did not come piggybacked, new (not a duplicate), matched by token among the
      * exchanges with its peer, and on a connection among that connection's (RFC 8323 §3.3).
      *
-     * A Confirmable response is acknowledged only once its exchange took it. An ACK tells the sender that the
-     * message arrived, so it is never sent again (RFC 7252 §4.2); one that the full [ExchangeInbox] of a Q-Block
-     * body has no room for is therefore left unacknowledged ([PeerLink.deferResponse]), and its retransmission
-     * after ACK_TIMEOUT is delivered again. Whether it fits is decided before it is verified, with an
-     * [ExchangeInbox.Reservation], so the security layer records nothing for it: OSCORE would otherwise have its
-     * Partial IV in the replay window and refuse the retransmission, which carries the same one (RFC 8613 §7.4).
-     * A Non-confirmable one that does not fit counts as lost.
+     * A Confirmable response is acknowledged only once its exchange is sure to take it. An ACK tells the sender
+     * that the message arrived, so it is never sent again (RFC 7252 §4.2); one that the full [ExchangeInbox] of a
+     * Q-Block body has no room for is therefore left unacknowledged ([PeerLink.deferResponse]), and its
+     * retransmission after ACK_TIMEOUT is delivered again. Whether it fits is decided before it is verified, with
+     * an [ExchangeInbox.Reservation], so the security layer records nothing for it: OSCORE would otherwise have
+     * its Partial IV in the replay window and refuse the retransmission, which carries the same one (RFC 8613
+     * §7.4). With the room reserved, and for any other exchange, which takes every response, the response is
+     * acknowledged before it is handed on: a caller that gets it and closes the endpoint at once would otherwise
+     * close the transport ahead of the ACK and leave it unacknowledged. A Non-confirmable one that does not fit
+     * counts as lost.
      */
     internal suspend fun onResponse(link: PeerLink, message: CoapMessage) {
         val exchange = lock.withLock { exchanges[ExchangeKey(link.peer, message.tokenHex)] }?.takeIf { it.link == link }
@@ -778,11 +781,15 @@ public class CoapEndpoint private constructor(
         }
         // RFC 7252 §5.4.1: whether a Confirmable response is acknowledged or rejected depends on its critical
         // options, which only the verified response shows; so it is answered after both, and an accepted one
-        // only once it was handed on: if it was not taken, it is left for its sender to send again (§4.2). No
-        // timer answers it meanwhile (UdpMessaging), so every way out of here answers or defers it.
+        // before it is handed on, which then takes it: its room is reserved, or its exchange takes every response.
+        // A Non-confirmable one that was not taken is deferred after. No timer answers a Confirmable one meanwhile
+        // (UdpMessaging), so every way out of here answers or defers it.
         val taken = try {
             when (val inspection = exchange.inspect(message)) {
-                is ClientExchange.Inspection.Accepted -> exchange.accept(inspection.response, reservation)
+                is ClientExchange.Inspection.Accepted -> {
+                    acknowledgeConfirmable(link, message)
+                    exchange.accept(inspection.response, reservation)
+                }
                 is ClientExchange.Inspection.Rejected -> {
                     // The exchange ends, and its last event takes the room back.
                     reservation?.release()
@@ -790,7 +797,10 @@ public class CoapEndpoint private constructor(
                     exchange.refuse(inspection.cause)
                     return
                 }
-                is ClientExchange.Inspection.Unverified -> exchange.acceptUnverified(inspection.response, inspection.reason, reservation)
+                is ClientExchange.Inspection.Unverified -> {
+                    acknowledgeConfirmable(link, message)
+                    exchange.acceptUnverified(inspection.response, inspection.reason, reservation)
+                }
                 ClientExchange.Inspection.Dropped -> true
             }
         } catch (e: Throwable) {
@@ -802,7 +812,19 @@ public class CoapEndpoint private constructor(
         } finally {
             reservation?.release()
         }
-        if (taken) link.acceptResponse(message) else link.deferResponse(message)
+        if (taken) return link.acceptResponse(message)
+        // Only a Non-confirmable one can be left here: a Confirmable one was acknowledged above, and an ACK cannot
+        // be taken back, so its exchange must have taken it.
+        check(message.type != CoapMessageType.CON) { "A Confirmable response was acknowledged but not taken: $message" }
+        link.deferResponse(message)
+    }
+
+    /**
+     * Acknowledges [message] if it is Confirmable, before its exchange takes it ([onResponse]); answering it again
+     * afterwards does nothing.
+     */
+    private suspend fun acknowledgeConfirmable(link: PeerLink, message: CoapMessage) {
+        if (message.type == CoapMessageType.CON) link.acceptResponse(message)
     }
 
     /**

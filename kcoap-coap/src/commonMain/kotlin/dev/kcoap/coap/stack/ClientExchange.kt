@@ -122,7 +122,8 @@ internal class ClientExchange(
     sealed interface Inspection {
         /**
          * Verified, or the answer to a request sent without message security, with every critical option
-         * recognized: [accept] it, then acknowledge it if it was taken.
+         * recognized: the endpoint acknowledges a Confirmable one, then hands it on with [accept]; a
+         * Non-confirmable one that was not taken counts as lost.
          */
         class Accepted(val response: CoapMessage) : Inspection
 
@@ -130,8 +131,9 @@ internal class ClientExchange(
         class Rejected(val cause: CoapException) : Inspection
 
         /**
-         * The security layer handed it on unverified ([ResponseVerification.Unverified]): [acceptUnverified] it,
-         * which acts on nothing in it, then acknowledge it if it was taken.
+         * The security layer handed it on unverified ([ResponseVerification.Unverified]): the endpoint acknowledges
+         * a Confirmable one, as it does an [Accepted] one, then hands it on with [acceptUnverified], which acts on
+         * nothing in it.
          */
         class Unverified(val response: CoapMessage, val reason: String) : Inspection
 
@@ -201,9 +203,12 @@ internal class ClientExchange(
      *
      * An inbox exchange queues it in the room [reservation] holds, which the endpoint took before verifying a
      * Confirmable response ([ExchangeInbox.tryReserve]); the caller releases a reservation this did not use.
-     * Returns false only when the [ExchangeInbox] of an inbox exchange had no room for it, so it was not taken:
-     * the endpoint then leaves a Confirmable one unacknowledged, for its sender to send again (RFC 7252 §4.2).
-     * True otherwise, also when the exchange is closed and drops it.
+     * Returns false only when the [ExchangeInbox] of an inbox exchange had no room for it, so it was not taken,
+     * which an unused [reservation] rules out: only a Non-confirmable response, for which the endpoint reserves
+     * nothing, can be refused, and it counts as lost. The endpoint acknowledges a Confirmable one before calling
+     * this ([CoapEndpoint.onResponse]), since its room is reserved or its exchange takes every response; one with
+     * no room was left unacknowledged before it got here. True otherwise, also when the exchange is closed and
+     * drops it.
      */
     suspend fun accept(response: CoapMessage, reservation: ExchangeInbox.Reservation? = null): Boolean {
         settleRequest()
