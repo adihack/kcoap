@@ -582,6 +582,8 @@ class ObserveTest {
         serverTransport.inject(DatagramEvent.SessionEnded(session, SessionEndReason.TIMEOUT))
         delay(1.seconds)
         assertEquals(0, counter.observerCount)
+        val removals = fixture.events.filterIsInstance<EndpointEvent.ObserverRemoved>()
+        assertEquals(listOf(EndpointEvent.ObserverRemoved.Reason.SESSION_ENDED), removals.map { it.reason })
     }
 
     @Test
