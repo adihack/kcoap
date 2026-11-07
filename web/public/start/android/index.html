@@ -47,7 +47,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -85,32 +85,24 @@
         <ul>
           <li>An app with <code>minSdk</code> 26 or higher, built with the Android Gradle plugin. The sample uses AGP 9.4.1 with compileSdk and targetSdk 36.</li>
           <li>Kotlin 2.3 or newer. AGP 9 compiles Kotlin with the Kotlin Gradle plugin on the build’s classpath; the sample puts 2.4.21 there, the version kcoap is built with.</li>
-          <li>A JDK 17 or newer, and a clone of kcoap to publish from.</li>
+          <li>A JDK 17 or newer, to run Gradle.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released, and not run on a device yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code>, built from source into Maven Local. API level 26 is held by checks of every jar against the API 26 signature and by the sample’s R8 build in CI, not yet by a run on an emulator or a phone. Whether the X25519 and Ed25519 probes answer on API levels 26 to 32 is still open.</p>
+          <span class="callout-title">Not run on a device yet</span>
+          <p>kcoap 0.1.0 is on Maven Central. API level 26 is held by checks of every jar against the API 26 signature and by the sample’s R8 build in CI, not yet by a run on an emulator or a phone. Whether the X25519 and Ed25519 probes answer on API levels 26 to 32 is still open.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
           <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
-          <li>
-            <h3>Let Maven Local serve kcoap</h3>
-            <p>In <code>settings.gradle.kts</code>, take only the <code>dev.kcoap</code> group from Maven Local, as the sample does.</p>
+            <h3>Check the repositories</h3>
+            <p>kcoap comes from Maven Central, which the <code>settings.gradle.kts</code> of a new Android project already lists.</p>
 <div class="code-block"><p class="code-block-label">settings.gradle.kts</p><pre tabindex="0"><code><span class="tok-f">dependencyResolutionManagement</span> {
     <span class="tok-f">repositories</span> {
-        <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }  <span class="tok-c">// kcoap only</span>
         <span class="tok-f">google</span>()
-        <span class="tok-f">mavenCentral</span>()
+        <span class="tok-f">mavenCentral</span>()  <span class="tok-c">// kcoap</span>
     }
 }</code></pre></div>
           </li>
@@ -131,7 +123,7 @@
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)
@@ -143,7 +135,7 @@
               <div class="tab-panel" data-tab-label="Version catalog">
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -216,7 +208,7 @@ kcoap = [
         server.<span class="tok-f">close</span>()
     }
 }</code></pre></div>
-        <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Shortened from the sample’s <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/app/src/main/kotlin/dev/kcoap/sample/android/LoopbackGets.kt"><code>LoopbackGets.kt</code></a>, which CI builds and shrinks with R8; the sample also sends the same GET under OSCORE. This shortened form is not compiled on its own.</span></p>
+        <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>Shortened from the sample’s <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/app/src/main/kotlin/dev/kcoap/sample/android/LoopbackGets.kt"><code>LoopbackGets.kt</code></a>, which CI builds and shrinks with R8; the sample also sends the same GET under OSCORE. This shortened form is not compiled on its own.</span></p>
         <p>Run it from a coroutine scope that lives as long as the screen, and cancel the scope when Android destroys the Activity:</p>
 <div class="code-block"><p class="code-block-label">MainActivity.kt</p><pre tabindex="0"><code><span class="tok-k">import</span> android.app.<span class="tok-t">Activity</span>
 <span class="tok-k">import</span> android.os.<span class="tok-t">Bundle</span>
@@ -248,7 +240,7 @@ kcoap = [
         <h2 id="security">Keys and state in an app</h2>
         <ul>
           <li><strong>One set of OSCORE contexts per process.</strong> Derive each context once, in the <code>Application</code> or a singleton, never per Activity. Android can run two Activities of an app at once, and two live contexts under one name hand out the same sequence numbers, which reuses nonces.</li>
-          <li><strong>Sequence numbers outside Auto Backup.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>. The sample’s <code>FileSequenceNumberStore</code> follows <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">the JVM and Android recipe</a> with API 26 calls only, and keeps its files in <code>noBackupFilesDir</code>: a sequence number restored from a backup reuses nonces.</li>
+          <li><strong>Sequence numbers outside Auto Backup.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>. The sample’s <code>FileSequenceNumberStore</code> follows <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md#writing-a-durable-store">the JVM and Android recipe</a> with API 26 calls only, and keeps its files in <code>noBackupFilesDir</code>: a sequence number restored from a backup reuses nonces.</li>
           <li><strong>EDHOC needs no durable store.</strong> Its keys are new for each session. Cipher suite 2 (P-256) is the one every platform runs.</li>
           <li><strong>Post-quantum EDHOC</strong> comes from <code>kcoap-crypto-bc</code>, as <code>BouncyCastleCryptoBackend(DefaultCryptoBackend())</code>. The sample’s <code>postQuantum</code> flavor builds and shrinks with it, but it has not run on a device.</li>
         </ul>
@@ -265,7 +257,7 @@ kcoap = [
         <h3>TLS</h3>
         <p><code>KtorTlsConnector</code>, the <code>coaps+tcp</code> client of the JVM guide, is in the same jar. On Android it checks the server’s chain with the host through the platform, so your network security configuration applies per domain. It has not run on Android yet.</p>
         <h3>What holds API level 26</h3>
-        <p><code>checkAndroidApi</code> checks every kcoap jvm jar against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
+        <p><code>checkAndroidApi</code> checks every kcoap jvm jar against the API 26 signature, and <code>checkAndroidApiDependencies</code> checks the libraries behind them against a triaged baseline. No core library desugaring is needed at minSdk 26. <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/README.md#api-level-findings">The findings, library by library</a>.</p>
         <h3>Not done yet on Android</h3>
         <ul>
           <li>No run on an emulator or a device, and no report of which algorithms each API level offers.</li>
@@ -275,8 +267,8 @@ kcoap = [
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
-          <dt>Could not find <code>dev.kcoap:…:0.1.0-SNAPSHOT</code></dt>
-          <dd>Publish kcoap to Maven Local, and check that the repositories in <code>settings.gradle.kts</code> include <code>mavenLocal()</code>. With <code>RepositoriesMode.FAIL_ON_PROJECT_REPOS</code>, repositories in a module’s build file are refused.</dd>
+          <dt>Could not find <code>dev.kcoap:…:0.1.0</code></dt>
+          <dd>Check that the repositories in <code>settings.gradle.kts</code> include <code>mavenCentral()</code>. With <code>RepositoriesMode.FAIL_ON_PROJECT_REPOS</code>, repositories in a module’s build file are refused.</dd>
           <dt>R8 fails the release build on missing Bouncy Castle classes</dt>
           <dd>Check that <code>kcoap-crypto-default</code> is on the classpath: its jar carries the rules.</dd>
           <dt>Binding the socket fails with a permission error</dt>
@@ -289,8 +281,8 @@ kcoap = [
 
         <h2 id="next-steps">Next steps</h2>
         <ul>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/samples/android-consumer/README.md">Android sample</a>: what it checks, what an app needs, and the API level findings.</li>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a> and the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md">OSCORE guide</a>.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/samples/android-consumer/README.md">Android sample</a>: what it checks, what an app needs, and the API level findings.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a> and the <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md">OSCORE guide</a>.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
         </ul>
 
@@ -308,7 +300,7 @@ kcoap = [
     <div class="footer-grid">
       <div class="footer-brand">
         <a class="brand" href="/"><img src="/assets/kcoap-logo.svg" alt="" width="32" height="32"><span>kcoap</span></a>
-        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. In development: version <code>0.1.0-SNAPSHOT</code>, nothing released yet.</p>
+        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. Latest release: <code>0.1.0</code>, on Maven Central.</p>
       </div>
       <div>
         <p class="footer-heading">Site</p>
@@ -334,18 +326,18 @@ kcoap = [
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

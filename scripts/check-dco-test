@@ -204,12 +204,13 @@ head=$(write_baseline "$r" "$unsigned" "Fill in the baseline" "Signed-off-by: $a
 expect fail "a baseline added in the head is ignored when the base has the file" "$r" "$base" "$head" \
   "Unsigned work"
 
-# A baseline only in the head is honoured when the base has none.
-r=$(new_repo baseline-bootstrap)
+# A baseline only in the head is ignored: the base has none, so nothing is exempt.
+r=$(new_repo baseline-only-in-head)
 base=$(git -C "$r" rev-parse HEAD)
 unsigned=$(author "$r" "$bob" "Pre-DCO work" "")
 head=$(write_baseline "$r" "$unsigned" "Adopt the DCO" "Signed-off-by: $alice")
-expect pass "a baseline only in the head is honoured when the base has none" "$r" "$base" "$head" "Exempt"
+expect fail "a baseline only in the head is ignored when the base has none" "$r" "$base" "$head" \
+  "FAIL  Pre-DCO work"
 
 # A baseline that is not a commit is ignored with a warning.
 r=$(new_repo baseline-missing)

@@ -12,9 +12,10 @@ own copy of the head, the header and the footer below. Copy them exactly; change
   links), all JavaScript in `/assets/site.js`. SVG presentation attributes (`fill`, `stroke`, `transform`,
   `viewBox`) are fine.
 - **One `h1` per page**, `lang="en"`, the skip link, `<main id="main">`.
-- **Repository links** use exactly `https://github.com/adihack/kcoap/blob/feat/protocol-core/<path>` (or
-  `tree/` for folders), so one replacement switches them to `main` after PR #1 merges.
-- **The API reference** (https://adihack.github.io/kcoap/) is not online yet; say so wherever it is linked.
+- **Repository links** use exactly `https://github.com/adihack/kcoap/blob/main/<path>` (or
+  `tree/` for folders), the default branch; `scripts/check-site` fails when two links name different
+  branches.
+- **The API reference** (https://adihack.github.io/kcoap/) is online; link it where a page names it.
 - **Wording** follows the brief: plain sentences, no superlatives, no "simply", "just" or "easy", nothing
   claimed that the code, tests or interop do not show, and unfinished work named as unfinished.
 - **Size:** a page with every stylesheet, script and image it loads, its tab icon included, stays within 150 KB
@@ -121,7 +122,7 @@ Copy it as is. On the page the navigation item belongs to, add `aria-current="pa
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -181,7 +182,7 @@ Copy it as is, followed by `</body></html>`.
     <div class="footer-grid">
       <div class="footer-brand">
         <a class="brand" href="/"><img src="/assets/kcoap-logo.svg" alt="" width="32" height="32"><span>kcoap</span></a>
-        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. In development: version <code>0.1.0-SNAPSHOT</code>, nothing released yet.</p>
+        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. Latest release: <code>0.1.0</code>, on Maven Central.</p>
       </div>
       <div>
         <p class="footer-heading">Site</p>
@@ -207,18 +208,18 @@ Copy it as is, followed by `</body></html>`.
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>
@@ -434,9 +435,12 @@ and `fig-release` (on `/releases/`); `d-head-lost` colours an arrow head in the 
 
 ## 7. Dated facts to update
 
-The home page's release-freeze meter shows the work packages as of 6 November 2026 (all 13 merged, C3
-last; `docs/releasing.md` "Release freeze"). Update the blocks, their hidden state text, the legend and
-the date if the freeze list changes, and `/releases/` with them.
-On `/releases/`, that means the meter, the table of work packages, the fact tile “13 of 13 merged”, the
-“Before 0.1.0 is tagged” list and the static “No release yet” note. `web/README.md` lists the same places
-and the other states the pages describe.
+The release-freeze meter on the home page and on `/releases/` records what 0.1.0 waited for: all 13 work
+packages, merged by 6 November 2026, C3 last (`docs/releasing.md` "Release freeze"). It stays as that record,
+together with the table of work packages and the fact tile “13 of 13 merged” on `/releases/`.
+
+The release itself is a dated fact on several pages: the footer’s status line on every page (section 4), the
+hero’s status line and the release card on the home page, the install steps on `/start/` and in the platform
+guides, and on `/releases/` the fact tiles, the static note about the latest release, the “What 0.1.0 needed”
+list and the badges of the channels. Update them with each release. `web/README.md` lists the same places and
+the other states the pages describe.

@@ -14,12 +14,12 @@
 #
 # History from before the DCO was adopted is exempt: .github/dco-baseline names one commit (its first
 # line that is neither blank nor a comment, a full SHA), and that commit and its ancestors are not
-# checked. The file is read from <base-sha>. Only when <base-sha> has no such file is it read from
-# <head-sha>, which lets a branch be checked against a base from before the DCO (such as main before
-# PR #1 merges); it also lets that branch exempt its own commits, so it is no guard there. In CI the
-# DCO workflow runs on pull_request_target: the workflow, this script and the baseline all come from
-# the base branch, which has the baseline whenever it has the workflow, so a pull request can change
-# none of them. A baseline that is not a commit of this repository is ignored with a warning.
+# checked. The file is read from <base-sha> only: a baseline that only <head-sha> has, or that it
+# changes, is ignored, so a branch cannot exempt its own commits, and a base without the file exempts
+# nothing. In CI the DCO workflow runs on pull_request_target: the workflow, this script and the
+# baseline all come from the base branch, which has the baseline whenever it has the workflow, so a
+# pull request can change none of them. A baseline that is not a commit of this repository is ignored
+# with a warning.
 #
 # Exit status: 0 when every commit passes or there is none to check, 1 when a commit fails, 2 for
 # invalid arguments. Needs nothing but bash and git.
@@ -75,18 +75,12 @@ is_clean_merge() {
   [ -z "$remerge" ]
 }
 
-# The baseline: from the base commit's tree, or from the head commit's when the base has no such file.
+# The baseline, from the base commit's tree only.
 baseline=
-baseline_source=
 if git cat-file -e "${base}:${baseline_path}" 2>/dev/null; then
-  baseline_source=$base
-elif git cat-file -e "${head}:${baseline_path}" 2>/dev/null; then
-  baseline_source=$head
-fi
-if [ -n "$baseline_source" ]; then
-  content=$(git show "${baseline_source}:${baseline_path}")
+  content=$(git show "${base}:${baseline_path}")
   entry=$(first_entry <<<"$content")
-  short_source=$(git rev-parse --short "$baseline_source")
+  short_source=$(git rev-parse --short "$base")
   if [ -z "$entry" ]; then
     echo "warning: $baseline_path in $short_source names no commit; no history is exempt" >&2
   elif ! [[ "$entry" =~ ^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$ ]]; then

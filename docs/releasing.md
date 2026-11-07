@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a tag. Pushing `v0.1.0` (or `v0.2.0-rc1`) runs `.github/workflows/release.yml`:
+A release is a tag. Pushing `v0.2.0` (or `v0.2.0-rc1`) runs `.github/workflows/release.yml`:
 
 1. **Test**: the whole CI workflow (unit tests on every target, coverage floor, interop with libcoap and
    libedhoc, the Apple targets, the API reference). Nothing is published if any of it fails.
@@ -19,15 +19,16 @@ A release is a tag. Pushing `v0.1.0` (or `v0.2.0-rc1`) runs `.github/workflows/r
    pull requests. A version with a `-` (`0.2.0-rc1`) is marked as a pre-release. The release is created when
    the upload ends, before the Central deployment is published, so the Maven Central coordinates its body
    gives resolve only after that step.
-5. **API reference** (Dokka) deployed to GitHub Pages.
+5. **API reference** (Dokka) deployed to GitHub Pages, through the `github-pages` environment, which must
+   allow `v*` tags ([after the release](#after-the-release)).
 
 A release can also be started by hand (Actions → Release → Run workflow) with a version number, without
 the `v`; that creates the tag through the GitHub Release step, and the release notes come from CHANGELOG.md
 in the same way.
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## Release notes
@@ -55,34 +56,38 @@ summary:
   summary page shows the body as soon as the `notes` job ends, before anything is published.
 - No section for the version: the job fails with an error that names the version, so the artifacts are not
   published and no GitHub Release is created (nor, in a manual run, the tag). Delete a tag pushed without the
-  entry (`git push --delete origin v<version>`), add the entry, and tag the commit that has it. If a ruleset
-  protects `v*` tags, delete the tag as a bypass actor of that ruleset, or in Settings → Rules. An entry with no
+  entry (`git push --delete origin v<version>`), add the entry, and tag the commit that has it. A ruleset
+  protects `v*` tags, so delete the tag as an administrator, a bypass actor of that ruleset. An entry with no
   summary above its first `### ` heading only warns: its body is the link alone.
 
 ## Release freeze
 
-No `v*` tag until the API-breaking work packages of the refactoring plan have merged
+No `v*` tag was pushed until the API-breaking work packages of the refactoring plan had merged
 ([target-architecture.md](target-architecture.md), section 4): A1–A5, W1, B1–B3, C1, D1, D2 and C3. T1,
-I1, P1, C2 and B4 do not block a release. Protecting `v*` tags (Settings → Rules → Rulesets) keeps an
-accidental tag from publishing early.
+I1, P1, C2 and B4 did not block the release. A ruleset protects `v*` tags (Settings → Rules → Rulesets): only
+administrators can push one, so an accidental tag cannot publish.
 
-**The freeze list is complete.** C3, its last package, merged into `feat/protocol-core` on 2026-11-06, after A1–A5,
-W1, B1–B3, C1, D1 and D2. What stands between the branch and a tag is the checklist below.
+The freeze list was complete on 2026-11-06: C3, its last package, merged after A1–A5, W1, B1–B3, C1, D1 and
+D2. Pull request #1 brought it to `main` the same day, and 0.1.0 was tagged on that merge, `3ccf4e4`.
 
-Before tagging 0.1.0:
+### The 0.1.0 checklist
 
-- the freeze list above has merged and CI is green on `main`;
+What had to be true before 0.1.0 was tagged, kept as the record of the first release. A later release repeats
+the items that are not one-off: CI green on `main`, the CHANGELOG entry, the POMs, the ABI dumps against the
+entry, and the install instructions.
+
+- **done:** the freeze list above merged, and pull request #1 brought it to `main` on 2026-11-06; the release
+  workflow ran the whole CI workflow again on the tagged commit, and it passed;
 - **done (WP-P1):** nothing deprecated before the release is left in the API, so 0.1.0 ships no API that is
   already on its way out ([versioning](versioning.md#deprecation-from-10)): the constructors of `CoapEndpointConfig`
   and `CoapClientConfig`, deprecated by WP-D1 for their builders, are gone, and no other `@Deprecated` declaration
   is left in the published modules;
-- [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes, headed
-  `## <version> - <date>` and opening with the summary that becomes the release body
-  ([release notes](#release-notes)): **done** for 0.1.0, dated 2026-11-06 (a tag pushed on another day changes
-  the date first);
-- the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)): done on
+- **done:** [CHANGELOG.md](../CHANGELOG.md) has an entry for the version, with migration notes, headed
+  `## <version> - <date>` and opening with the summary that became the release body
+  ([release notes](#release-notes)), for 0.1.0 dated 2026-11-06, the day of the tag;
+- **done:** the Maven Central and signing secrets are set ([below](#before-the-first-maven-central-release)), on
   2026-11-06; the license is set, and the `dev.kcoap` namespace is verified;
-- **in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
+- **done, in CI (WP-P1):** `./gradlew publishToMavenLocal` works and the sample consumers build against it through
   `kcoap-bom` ([getting started](getting-started.md#add-kcoap-to-a-build)): the CI `jvm-consumer` job builds and runs
   [samples/jvm-consumer](../samples/jvm-consumer/README.md), whose `verifyKcoapFromBom` fails when a kcoap module on
   its classpath has a version the BOM does not set, and the same program from the POMs alone, as Maven reads them
@@ -99,23 +104,31 @@ Before tagging 0.1.0:
   done
   ```
 
-- the ABI dumps are current (`checkKotlinAbi` is green on both CI runners) and their diff since the last
-  release matches the CHANGELOG entry ([versioning](versioning.md));
-- the install instructions (README, getting-started.md, versioning.md, the module READMEs) name 0.1.0 from
-  Maven Central, not a snapshot from Maven Local: **done** on 2026-11-06. The website follows once the
-  artifacts are on Maven Central ([after the release](#after-the-release));
-- GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages), or the API reference job
-  fails after the release is out: **done** (checked on 2026-11-06).
+- **done:** the ABI dumps are current (`checkKotlinAbi` passed on both CI runners in the release's test step);
+  0.1.0 is the first release, so there was no earlier dump to compare with the CHANGELOG entry
+  ([versioning](versioning.md));
+- **done:** the install instructions (README, getting-started.md, versioning.md, the module READMEs) name 0.1.0
+  from Maven Central, not a snapshot from Maven Local, since the release commit. The website followed once the
+  artifacts were on Maven Central ([after the release](#after-the-release));
+- **done:** GitHub Pages is enabled with "GitHub Actions" as its source (Settings → Pages), checked on
+  2026-11-06. That was not enough: the `github-pages` environment allowed deployments from `main` only, so the
+  API reference job of the release failed until it also allowed `v*` tags ([after the release](#after-the-release)).
 
 ## After the release
 
 - Publish the deployment in the Central Portal (step 3 above), and check that
-  `dev.kcoap:kcoap-bom:<version>` resolves from Maven Central.
-- Set `kcoap.version` in `gradle.properties` to the next version with `-SNAPSHOT` (0.2.0-SNAPSHOT after
-  0.1.0), as [versioning](versioning.md#version-numbers) asks between releases.
-- After 0.1.0, bring the website to the release once the artifacts are on Maven Central:
-  [web/README.md](../web/README.md#when-010-is-on-maven-central) lists the pages that still describe a
-  snapshot from Maven Local.
+  `dev.kcoap:kcoap-bom:<version>` resolves from Maven Central. **Done for 0.1.0:** the release workflow
+  (run 42298365400) uploaded deployment `743641f4-0507-4572-855f-4e769e22fd10`, the owner published it on
+  2026-11-06, and 0.1.0 is on Maven Central.
+- Set `kcoap.version` in `gradle.properties` to the next version with `-SNAPSHOT`, as
+  [versioning](versioning.md#version-numbers) asks between releases. **Done for 0.1.0:** 0.2.0-SNAPSHOT.
+- Bring the website to the release once the artifacts are on Maven Central:
+  [web/README.md](../web/README.md#with-each-release) lists the places. **Done for 0.1.0** on 2026-11-07.
+- Check that the API reference is online at https://adihack.github.io/kcoap/. **Done for 0.1.0:** the `docs`
+  job of run 42298365400 failed at first, because the `github-pages` environment allowed deployments from `main`
+  only, and a release runs on its `v*` tag. The owner added a rule for tags matching `v*` beside `main`
+  (Settings → Environments → `github-pages` → *Deployment branches and tags*), and the job, run again, deployed
+  the reference from `v0.1.0`. Every later release deploys its reference by itself.
 
 ## What is published
 
@@ -169,7 +182,8 @@ goes to GitHub Packages, unsigned.
 | `SIGNING_PASSWORD` | the key's passphrase |
 
 GitHub Pages must be enabled once, with "GitHub Actions" as the source (Settings → Pages); the
-workflow's own token cannot turn it on.
+workflow's own token cannot turn it on. Its `github-pages` environment must allow `v*` tags, or the API
+reference job fails ([after the release](#after-the-release)).
 
 ## Before the first Maven Central release
 
@@ -188,8 +202,9 @@ workflow's own token cannot turn it on.
   *Generate User Token*; its username and password are the `MAVEN_CENTRAL_USERNAME` and
   `MAVEN_CENTRAL_PASSWORD` repository secrets ([Secrets](#secrets)), set on 2026-11-06.
 - **Signing key: done.** The `SIGNING_KEY`, `SIGNING_KEY_ID` and `SIGNING_PASSWORD` secrets hold the release
-  key below, set on 2026-11-06. The passphrase is checked only when a release first signs; a wrong one fails
-  the publish step, and nothing is published.
+  key below, set on 2026-11-06. 0.1.0 was signed with it (its `.asc` files on Maven Central name the key ID
+  `4A7E491069FAEAB3`), so the three secrets work. If they change, a wrong passphrase fails the publish step,
+  and nothing is published.
 
 ### The release signing key
 
@@ -255,7 +270,7 @@ this table and the website's releases page updated, and the CHANGELOG of the fir
 ## Trying a release locally
 
 ```bash
-./gradlew publishToMavenLocal -Pkcoap.version=0.1.0-local   # into ~/.m2/repository/dev/kcoap, unsigned
+./gradlew publishToMavenLocal -Pkcoap.version=0.2.0-local   # into ~/.m2/repository/dev/kcoap, unsigned
 ./gradlew dokkaGenerate                                     # API reference in build/dokka/html
 ```
 

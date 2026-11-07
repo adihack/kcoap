@@ -48,7 +48,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -66,7 +66,7 @@
         <p class="hero-brand"><img src="/assets/kcoap-logo.svg" alt="" width="56" height="56">kcoap</p>
         <h1 id="hero-title"><span class="visually-hidden">kcoap: </span>CoAP, OSCORE and EDHOC for <span class="accent">Kotlin Multiplatform</span></h1>
         <p class="lede">One implementation in common Kotlin for Android, iOS, macOS, JVM servers, Linux gateways, browsers and Node.js. Checked against the RFCs’ own test vectors, and in live interop with libcoap and libedhoc.</p>
-        <p class="status-line"><span class="status-pill">In development</span> <span>Version <code>0.1.0-SNAPSHOT</code>. Nothing is released yet: you build it from source today.</span></p>
+        <p class="status-line"><span class="status-pill">In development</span> <span>Version <code>0.1.0</code> is on Maven Central.</span></p>
         <div class="btn-row">
           <a class="btn btn-primary btn-lg" href="/start/">Get started <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
           <a class="btn btn-secondary btn-lg" href="https://github.com/adihack/kcoap"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2.25"/><circle cx="6" cy="18.5" r="2.25"/><circle cx="18" cy="8" r="2.25"/><path d="M6 7.75v8.5M18 10.25c0 4-5 3.5-10.5 7"/></svg> View on GitHub</a>
@@ -151,7 +151,7 @@ security.<span class="tok-f">install</span>(client, server, protection)
 
 client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/lights"</span>)  <span class="tok-c">// protected and verified</span></code></pre></div>
         </div>
-        <p class="tabs-window-foot">Requests are <code>suspend</code> functions, Observe is a <code>Flow</code>, and <code>scope</code> is your <code>CoroutineScope</code>. More in the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>.</p>
+        <p class="tabs-window-foot">Requests are <code>suspend</code> functions, Observe is a <code>Flow</code>, and <code>scope</code> is your <code>CoroutineScope</code>. More in the <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a>.</p>
       </div>
     </div>
   </section>
@@ -224,7 +224,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.25v2.5"/></svg><div><strong>Protection end to end</strong>OSCORE protects each request and response end to end, the same on every transport. EDHOC runs over CoAP and hands its keys to OSCORE.</div></li>
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5.5" cy="12" r="3"/><circle cx="18.5" cy="12" r="3"/><path d="M8 9.5c2-3 6-3 8 0"/><path d="m14.25 8.6 1.75.9.4-1.9"/><path d="M16 14.5c-2 3-6 3-8 0"/><path d="m9.75 15.4-1.75-.9-.4 1.9"/></svg><div><strong>Sockets at the edge</strong>The protocol cores never touch a socket. Thin adapters bind them to ktor on each runtime.</div></li>
         </ul>
-        <p class="open-items"><strong>Not built yet:</strong> DTLS for <code>coaps://</code>, which comes last; TLS on the server side, which ends at a reverse proxy for now, and <code>coaps+tcp</code> beyond the JVM; outer Block-wise for proxies. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/architecture.md">Read the architecture</a>.</p>
+        <p class="open-items"><strong>Not built yet:</strong> DTLS for <code>coaps://</code>, which comes last; TLS on the server side, which ends at a reverse proxy for now, and <code>coaps+tcp</code> beyond the JVM; outer Block-wise for proxies. <a href="https://github.com/adihack/kcoap/blob/main/docs/architecture.md">Read the architecture</a>.</p>
       </div>
       <figure class="figure">
         <svg class="diagram diagram-narrow" viewBox="0 0 440 388" role="img" aria-labelledby="fig-stack-title" aria-describedby="fig-stack-desc"><title id="fig-stack-title">The kcoap protocol stack</title><desc id="fig-stack-desc">From top to bottom: your application, which uses CoapClient and CoapServer; the request and response layer with Observe, Block-wise, Q-Block and Echo; OSCORE, which protects messages end to end on every transport; CoAP messaging, RFC 7252 over datagrams and RFC 8323 over streams; and the transports UDP (coap), TCP (coap+tcp) and WebSocket (coap+ws). EDHOC sits beside the request and OSCORE layers: it runs over CoAP and hands its keys to OSCORE. Under the transports, TLS clients: coaps+tcp on the JVM, and coaps+ws where the WebSocket engine checks the server; servers terminate TLS at a reverse proxy. Not built yet: DTLS, which comes last.</desc><defs><marker id="stack-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head-amber" d="M0 0 10 5 0 10z"/></marker></defs><rect class="d-box" x="1" y="1" width="438" height="58" rx="12"/><text class="d-title" x="19" y="26">Your application</text><text class="d-sub" x="19" y="45">CoapClient and CoapServer: suspend calls, Flow for Observe</text><rect class="d-box-soft" x="1" y="69" width="290" height="58" rx="12"/><text class="d-title" x="19" y="94">Request / response</text><text class="d-sub" x="19" y="113">Observe · Block-wise · Q-Block · Echo</text><rect class="d-box-accent" x="1" y="137" width="262" height="58" rx="12"/><text class="d-title d-on-accent" x="19" y="162">OSCORE</text><text class="d-sub d-on-accent-2" x="19" y="181">end to end, on every transport</text><g class="d-icon-on-accent" transform="translate(225 151) scale(1.08333)"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.25v2.5"/></g><rect class="d-box-amber-soft" x="321" y="69" width="118" height="126" rx="12"/><text class="d-big" x="380" y="101" text-anchor="middle">EDHOC</text><text class="d-sub" x="380" y="122" text-anchor="middle">RFC 9528</text><text class="d-sub" x="380" y="141" text-anchor="middle">key exchange</text><text class="d-sub" x="380" y="159" text-anchor="middle">over CoAP</text><path class="d-arrow-amber" d="M319 182H269" marker-end="url(#stack-head)"/><text class="d-small" x="292" y="173" text-anchor="middle">keys</text><rect class="d-box-soft" x="1" y="205" width="438" height="58" rx="12"/><text class="d-title" x="19" y="230">CoAP messaging</text><text class="d-sub" x="19" y="249">RFC 7252 over datagrams · RFC 8323 over streams</text><rect class="d-box-2" x="1" y="273" width="140" height="58" rx="12"/><text class="d-title" x="71" y="298" text-anchor="middle">UDP</text><text class="d-sub d-mono" x="71" y="317" text-anchor="middle">coap://</text><rect class="d-box-2" x="150" y="273" width="140" height="58" rx="12"/><text class="d-title" x="220" y="298" text-anchor="middle">TCP</text><text class="d-sub d-mono" x="220" y="317" text-anchor="middle">coap+tcp://</text><rect class="d-box-2" x="299" y="273" width="140" height="58" rx="12"/><text class="d-title" x="369" y="298" text-anchor="middle">WebSocket</text><text class="d-sub d-mono" x="369" y="317" text-anchor="middle">coap+ws://</text><rect class="d-box-soft" x="1" y="341" width="290" height="44" rx="12"/><text class="d-sub" x="19" y="368">TLS clients: coaps+tcp, coaps+ws</text><rect class="d-box-dashed" x="299" y="341" width="140" height="44" rx="12"/><text class="d-sub" x="369" y="368" text-anchor="middle">DTLS: last</text></svg>
@@ -245,7 +245,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.75 19.5 5.5v5.75c0 4.6-3.1 8.4-7.5 9.9-4.4-1.5-7.5-5.3-7.5-9.9V5.5z"/><path d="m8.75 12 2.25 2.25 4.25-4.5"/></svg><div><strong>Fails closed</strong>With OSCORE configured, a server answers an unprotected request with 4.01 before any handler runs, and a client acts only on responses it verified.</div></li>
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h14M5 12h14M7 18h14M3 6l4 12M10 6l4 12M17 6l4 12"/><circle cx="10" cy="6" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/><circle cx="14" cy="18" r="1.6" fill="currentColor"/></svg><div><strong>Post-quantum suite −24</strong>ML-KEM-512 and ML-DSA-44 on the JVM, live against libedhoc in both roles. Not run on an Android device yet.</div></li>
         </ul>
-        <p class="open-items"><strong>Still open:</strong> the reverse flow (RFC 9528 Appendix A.2.2), the client’s EDHOC error after a failed message_2 or message_4, the sequential fallback for a large combined request, and an independent peer for EDHOC over CoAP. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md">See the checklist</a>.</p>
+        <p class="open-items"><strong>Still open:</strong> the reverse flow (RFC 9528 Appendix A.2.2), the client’s EDHOC error after a failed message_2 or message_4, the sequential fallback for a large combined request, and an independent peer for EDHOC over CoAP. <a href="https://github.com/adihack/kcoap/blob/main/docs/checklist.md">See the checklist</a>.</p>
       </div>
       <figure class="figure">
         <svg class="diagram diagram-narrow" viewBox="0 0 440 460" role="img" aria-labelledby="fig-edhoc-title" aria-describedby="fig-edhoc-desc"><title id="fig-edhoc-title">EDHOC, then OSCORE, in two round trips</title><desc id="fig-edhoc-desc">Round trip 1: the client, as EDHOC Initiator, posts message_1 to /.well-known/edhoc, and the server, as Responder, answers 2.04 Changed with message_2. The client derives the OSCORE keys. Round trip 2: the client sends its first OSCORE request with EDHOC message_3 inside, the combined request of RFC 9668. The server checks message_3, derives the same keys and answers 2.05 Content, protected with OSCORE, which the client verifies.</desc><defs><marker id="edhoc-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head" d="M0 0 10 5 0 10z"/></marker><marker id="edhoc-head-accent" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head-accent" d="M0 0 10 5 0 10z"/></marker></defs><rect class="d-row-alt" x="1" y="66" width="438" height="152" rx="12"/><rect class="d-row-alt" x="1" y="268" width="438" height="190" rx="12"/><path class="d-lifeline" d="M72 53V458M368 53V458"/><rect class="d-box" x="2" y="1" width="140" height="52" rx="12"/><text class="d-title" x="72" y="24" text-anchor="middle">Client</text><text class="d-sub" x="72" y="42" text-anchor="middle">EDHOC Initiator</text><rect class="d-box" x="298" y="1" width="140" height="52" rx="12"/><text class="d-title" x="368" y="24" text-anchor="middle">Server</text><text class="d-sub" x="368" y="42" text-anchor="middle">EDHOC Responder</text><text class="d-small d-caps" x="220" y="86" text-anchor="middle">ROUND TRIP 1 · EDHOC</text><text class="d-mono" x="220" y="120" text-anchor="middle">POST /.well-known/edhoc</text><path class="d-arrow" d="M74 130H365" marker-end="url(#edhoc-head)"/><text class="d-sub" x="220" y="148" text-anchor="middle">message_1: method, suites, ephemeral key</text><text class="d-mono" x="220" y="178" text-anchor="middle">2.04 Changed</text><path class="d-arrow" d="M366 188H75" marker-end="url(#edhoc-head)"/><text class="d-sub" x="220" y="206" text-anchor="middle">message_2: ephemeral key, encrypted ID</text><rect class="d-box-amber-soft" x="2" y="228" width="152" height="30" rx="8"/><text class="d-sub" x="78" y="248" text-anchor="middle">derives OSCORE keys</text><text class="d-small d-caps" x="220" y="288" text-anchor="middle">ROUND TRIP 2 · COMBINED REQUEST</text><text class="d-title" x="220" y="320" text-anchor="middle">OSCORE request + message_3</text><path class="d-arrow-accent" d="M74 330H365" marker-end="url(#edhoc-head-accent)"/><text class="d-sub" x="220" y="348" text-anchor="middle">the combined request of RFC 9668</text><rect class="d-box-amber-soft" x="286" y="360" width="152" height="44" rx="8"/><text class="d-sub" x="362" y="378" text-anchor="middle">checks message_3,</text><text class="d-sub" x="362" y="395" text-anchor="middle">derives OSCORE keys</text><text class="d-mono" x="220" y="416" text-anchor="middle">2.05 Content</text><path class="d-arrow-accent" d="M366 426H75" marker-end="url(#edhoc-head-accent)"/><text class="d-sub" x="220" y="444" text-anchor="middle">protected response, verified by the client</text></svg>
@@ -266,7 +266,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="4.5" cy="12" r="2.75"/><circle cx="19.5" cy="12" r="2.75"/><path d="M8.5 9.25h7.5"/><path d="m13.75 7 2.25 2.25-2.25 2.25"/><path d="M15.5 14.75H8"/><path d="m10.25 12.5-2.25 2.25 2.25 2.25"/></svg><div><strong>Recovery without restarting</strong>The receiver asks for exactly the blocks it is missing, in one 4.08 for an upload, and only those travel again.</div></li>
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 21V4M5 4.5h11l-2 4 2 4H5"/></svg><div><strong>Off until you turn it on</strong>Enable it on both sides. A client set to probe asks each server once and falls back to RFC 7959 Block-wise.</div></li>
         </ul>
-        <p class="open-items"><strong>Evidence:</strong> every figure of RFC 9177 replays as a test on virtual time; soaks run at 10 % and 30 % loss; libcoap 4.3.5b in both roles. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0006-q-block.md">ADR 0006</a>.</p>
+        <p class="open-items"><strong>Evidence:</strong> every figure of RFC 9177 replays as a test on virtual time; soaks run at 10 % and 30 % loss; libcoap 4.3.5b in both roles. <a href="https://github.com/adihack/kcoap/blob/main/docs/adr/0006-q-block.md">ADR 0006</a>.</p>
       </div>
       <figure class="figure">
         <svg class="diagram diagram-narrow" viewBox="0 0 440 454" role="img" aria-labelledby="fig-qblock-title" aria-describedby="fig-qblock-desc"><title id="fig-qblock-title">A Q-Block1 burst that loses block 3</title><desc id="fig-qblock-desc">The client sends a body as a burst of six Non-confirmable blocks, numbered 0 to 5, without waiting between them. Block 3 is lost on the way. The server waits NON_RECEIVE_TIMEOUT, then answers 4.08 Request Entity Incomplete with the list of missing blocks: 3. The client sends only block 3 again, and the server answers 2.04 Changed once the whole body has arrived.</desc><defs><marker id="qb-head" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head" d="M0 0 10 5 0 10z"/></marker><marker id="qb-head-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path class="d-head-amber" d="M0 0 10 5 0 10z"/></marker></defs><path class="d-lifeline" d="M78 53V452M362 53V452"/><rect class="d-box" x="8" y="1" width="140" height="52" rx="12"/><text class="d-title" x="78" y="24" text-anchor="middle">Client</text><text class="d-sub" x="78" y="42" text-anchor="middle">sends a body</text><rect class="d-box" x="292" y="1" width="140" height="52" rx="12"/><text class="d-title" x="362" y="24" text-anchor="middle">Server</text><text class="d-sub" x="362" y="42" text-anchor="middle">receives it</text><text class="d-small d-caps" x="220" y="84" text-anchor="middle">BURST OF NON-CONFIRMABLE BLOCKS</text><rect class="d-box-accent" x="65" y="95.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-accent" x="78" y="108" text-anchor="middle">0</text><path class="d-arrow" d="M94 104L359 115" marker-end="url(#qb-head)"/><rect class="d-box-accent" x="65" y="118.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-accent" x="78" y="131" text-anchor="middle">1</text><path class="d-arrow" d="M94 127L359 138" marker-end="url(#qb-head)"/><rect class="d-box-accent" x="65" y="141.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-accent" x="78" y="154" text-anchor="middle">2</text><path class="d-arrow" d="M94 150L359 161" marker-end="url(#qb-head)"/><rect class="d-box-lost" x="65" y="164.5" width="26" height="17" rx="5"/><text class="d-block-num d-lost-text" x="78" y="177" text-anchor="middle">3</text><path class="d-arrow-lost" d="M94 173L228 178.5"/><path class="d-stroke-lost" d="M234 172l9 9M243 172l-9 9"/><text class="d-small d-lost-text" x="252" y="181">lost</text><rect class="d-box-accent" x="65" y="187.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-accent" x="78" y="200" text-anchor="middle">4</text><path class="d-arrow" d="M94 196L359 207" marker-end="url(#qb-head)"/><rect class="d-box-accent" x="65" y="210.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-accent" x="78" y="223" text-anchor="middle">5</text><path class="d-arrow" d="M94 219L359 230" marker-end="url(#qb-head)"/><rect class="d-box-amber-soft" x="358" y="236" width="8" height="44" rx="4"/><text class="d-small" x="348" y="254" text-anchor="end">waits</text><text class="d-small d-mono-small" x="348" y="270" text-anchor="end">NON_RECEIVE_TIMEOUT</text><text class="d-mono" x="220" y="304" text-anchor="middle">4.08 Request Entity Incomplete</text><path class="d-arrow" d="M360 314H81" marker-end="url(#qb-head)"/><text class="d-sub" x="220" y="332" text-anchor="middle">missing blocks: 3</text><rect class="d-box-amber" x="65" y="361.5" width="26" height="17" rx="5"/><text class="d-block-num d-on-amber" x="78" y="374" text-anchor="middle">3</text><text class="d-title" x="220" y="360" text-anchor="middle">block 3 only, sent again</text><path class="d-arrow-amber" d="M94 370L359 381" marker-end="url(#qb-head-amber)"/><text class="d-mono" x="220" y="412" text-anchor="middle">2.04 Changed</text><path class="d-arrow" d="M360 422H81" marker-end="url(#qb-head)"/><text class="d-sub" x="220" y="440" text-anchor="middle">the whole body has arrived</text></svg>
@@ -319,7 +319,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="7.5" cy="12" r="4"/><path d="M11.5 12h10M17.5 12v3M20.5 12v2.25"/></svg><div><strong>Both sides derive the same keys</strong>A session passes when both sides hold the same OSCORE Master Secret and Salt, identifiers and exporter output, before and after a key update.</div></li>
           <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 21V4M5 4.5h11l-2 4 2 4H5"/></svg><div><strong>Upstream deviations pinned</strong>Where libcoap or libedhoc deviates from an RFC, the interop notes list it and a test pins it where it can. kcoap does not copy it.</div></li>
         </ul>
-        <p class="open-items"><strong>Not cross-tested yet:</strong> EDHOC over CoAP against an independent peer, cipher suites 1, 3, 5 and 6, DTLS, and kcoap as a TLS server. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/interop/README.md">Interop details</a>.</p>
+        <p class="open-items"><strong>Not cross-tested yet:</strong> EDHOC over CoAP against an independent peer, cipher suites 1, 3, 5 and 6, DTLS, and kcoap as a TLS server. <a href="https://github.com/adihack/kcoap/blob/main/interop/README.md">Interop details</a>.</p>
       </div>
       <figure class="figure">
         <svg class="diagram diagram-narrow" viewBox="0 0 440 648" role="img" aria-labelledby="fig-interop-title" aria-describedby="fig-interop-desc"><title id="fig-interop-title">Interop matrix</title><desc id="fig-interop-desc">Against libcoap v4.3.5b, kcoap runs as client and as server for CoAP over UDP, CoAP over TCP and WebSockets, Q-Block (RFC 9177) and OSCORE (RFC 8613); as client for TLS over coaps+tcp and coaps+ws; and as server for address verification with Echo (RFC 9175). kcoap also runs as client and as server on either side of libcoap’s forward-proxy, from WebSockets to UDP, with OSCORE, EDHOC and the combined request. Against libedhoc 0363bd3, kcoap runs as Initiator and as Responder for EDHOC (RFC 9528) suites 0, 2, 4 and 24 with methods 0 to 3, and for the post-quantum suite -24 with ML-KEM-512 and ML-DSA-44. EDHOC over CoAP and the combined request of RFC 9668 have no independent EDHOC peer yet; they are tested kcoap against kcoap.</desc><rect class="d-row-alt" x="272" y="1" width="80" height="646" rx="12"/><rect class="d-row-alt" x="356" y="1" width="80" height="646" rx="12"/><text class="d-title" x="0" y="22">Cross-tested in CI</text><text class="d-sub" x="0" y="40">against pinned builds</text><text class="d-title" x="312" y="22" text-anchor="middle">Client</text><text class="d-sub" x="312" y="40" text-anchor="middle">Initiator</text><text class="d-title" x="396" y="22" text-anchor="middle">Server</text><text class="d-sub" x="396" y="40" text-anchor="middle">Responder</text><rect class="d-box-soft" x="0.75" y="60" width="143" height="26" rx="13"/><text class="d-mono" x="13" y="77.5">libcoap v4.3.5b</text><text class="d-title" x="0" y="112">CoAP over UDP</text><text class="d-sub" x="0" y="129">Block-wise, Observe, discovery</text><circle class="d-fill-accent" cx="312" cy="115" r="12"/><path class="d-check" d="M306.5 115.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="115" r="12"/><path class="d-check" d="M390.5 115.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 137H438"/><text class="d-title" x="0" y="158">CoAP over TCP and WebSockets</text><text class="d-sub" x="0" y="175">CSM, Ping/Pong, BERT, Observe</text><circle class="d-fill-accent" cx="312" cy="161" r="12"/><path class="d-check" d="M306.5 161.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="161" r="12"/><path class="d-check" d="M390.5 161.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 183H438"/><text class="d-title" x="0" y="204">TLS, coaps+tcp and coaps+ws</text><text class="d-sub" x="0" y="221">trusted, pinned, refused, other host</text><circle class="d-fill-accent" cx="312" cy="207" r="12"/><path class="d-check" d="M306.5 207.5l3.75 3.75 7.25-7.5"/><circle class="d-box-dashed" cx="396" cy="207" r="11"/><path class="d-line-soft" d="M0 229H438"/><text class="d-title" x="0" y="250">Q-Block, RFC 9177</text><text class="d-sub" x="0" y="267">bursts with loss, Observe, fallback</text><circle class="d-fill-accent" cx="312" cy="253" r="12"/><path class="d-check" d="M306.5 253.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="253" r="12"/><path class="d-check" d="M390.5 253.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 275H438"/><text class="d-title" x="0" y="296">Address verification</text><text class="d-sub" x="0" y="313">4.01 with Echo, RFC 9175</text><path class="d-line" d="M305 299h14"/><circle class="d-fill-accent" cx="396" cy="299" r="12"/><path class="d-check" d="M390.5 299.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 321H438"/><text class="d-title" x="0" y="342">OSCORE, RFC 8613</text><text class="d-sub" x="0" y="359">through the stack, over UDP, TCP, WS</text><circle class="d-fill-accent" cx="312" cy="345" r="12"/><path class="d-check" d="M306.5 345.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="345" r="12"/><path class="d-check" d="M390.5 345.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 367H438"/><text class="d-title" x="0" y="388">Through libcoap’s proxy</text><text class="d-sub" x="0" y="405">WebSocket to UDP: OSCORE, EDHOC</text><circle class="d-fill-accent" cx="312" cy="391" r="12"/><path class="d-check" d="M306.5 391.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="391" r="12"/><path class="d-check" d="M390.5 391.5l3.75 3.75 7.25-7.5"/><rect class="d-box-soft" x="0.75" y="428" width="150.8" height="26" rx="13"/><text class="d-mono" x="13" y="445.5">libedhoc 0363bd3</text><text class="d-title" x="0" y="480">EDHOC, RFC 9528</text><text class="d-sub" x="0" y="497">suites 0, 2, 4, 24 × methods 0–3</text><circle class="d-fill-accent" cx="312" cy="483" r="12"/><path class="d-check" d="M306.5 483.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="483" r="12"/><path class="d-check" d="M390.5 483.5l3.75 3.75 7.25-7.5"/><path class="d-line-soft" d="M0 505H438"/><text class="d-title" x="0" y="526">Post-quantum EDHOC</text><text class="d-sub" x="0" y="543">suite −24: ML-KEM-512, ML-DSA-44</text><circle class="d-fill-accent" cx="312" cy="529" r="12"/><path class="d-check" d="M306.5 529.5l3.75 3.75 7.25-7.5"/><circle class="d-fill-accent" cx="396" cy="529" r="12"/><path class="d-check" d="M390.5 529.5l3.75 3.75 7.25-7.5"/><rect class="d-box-dashed" x="0.75" y="566" width="184.7" height="26" rx="13"/><text class="d-small" x="13" y="583.5">no independent peer yet</text><text class="d-title" x="0" y="618">EDHOC over CoAP, RFC 9668</text><text class="d-sub" x="0" y="635">kcoap ↔ kcoap only</text><circle class="d-box-dashed" cx="312" cy="621" r="11"/><circle class="d-box-dashed" cx="396" cy="621" r="11"/></svg>
@@ -333,18 +333,10 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
     <div class="container container-narrow">
       <div class="section-head">
         <p class="eyebrow">Get started</p>
-        <h2 id="setup-title">Use it today, before the first release</h2>
-        <p class="lede">Nothing is on Maven Central yet. Publish a snapshot from a clone into your local Maven repository, then depend on it like any other library.</p>
+        <h2 id="setup-title">Add it to your build</h2>
+        <p class="lede">kcoap 0.1.0 is on Maven Central. Name the modules you need, with one version for all of them, and depend on them like any other library.</p>
       </div>
       <ol class="steps">
-        <li>
-          <h3>Clone and publish to Maven Local</h3>
-          <p>Needs a JDK 17 or newer; Gradle downloads the rest. For iOS and macOS apps, run it on a Mac with Xcode.</p>
-          <div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-        </li>
         <li>
           <h3>Add the modules you need</h3>
           <p>The bill of materials, <code>kcoap-bom</code>, gives every kcoap module the same version. In a multiplatform project the BOM and the same coordinates go into <code>commonMain.dependencies</code>, except the adapters a target lacks.</p>
@@ -353,13 +345,11 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
               <p class="tab-panel-title">Kotlin DSL</p>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
-    <span class="tok-c">// kcoap 0.1.0-SNAPSHOT, until the first release is on Maven Central</span>
-    <span class="tok-f">mavenLocal</span>()
-    <span class="tok-f">mavenCentral</span>()  <span class="tok-c">// kcoap's own dependencies</span>
+    <span class="tok-f">mavenCentral</span>()
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)            <span class="tok-c">// client, server</span>
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)  <span class="tok-c">// UDP, TCP</span>
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)  <span class="tok-c">// cryptography</span>
@@ -371,7 +361,7 @@ client.<span class="tok-f">get</span>(<span class="tok-s">"coap://192.0.2.1/ligh
               <p class="tab-panel-title">Version catalog</p>
               <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-c"># gradle/libs.versions.toml</span>
 <span class="tok-k">[versions]</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -391,7 +381,6 @@ kcoap = [
 ]</code></pre></div>
               <div class="code-block"><p class="code-block-label">build.gradle.kts</p><pre tabindex="0"><code><span class="tok-c">// build.gradle.kts</span>
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span>()
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -409,8 +398,8 @@ kcoap = [
         </li>
       </ol>
       <div class="callout callout-status mt-2">
-        <span class="callout-title">After the first release</span>
-        <p>The coordinates will be <code>dev.kcoap:&lt;module&gt;:&lt;version&gt;</code> from <code>mavenCentral()</code>, under the verified <code>dev.kcoap</code> namespace. Not available yet.</p>
+        <span class="callout-title">On Maven Central</span>
+        <p>The coordinates are <code>dev.kcoap:&lt;module&gt;:0.1.0</code> from <code>mavenCentral()</code>, under the verified <code>dev.kcoap</code> namespace, and the release key signs every artifact. <a href="/releases/">Releases</a> lists the versions.</p>
       </div>
     </div>
   </section>
@@ -425,8 +414,8 @@ kcoap = [
       <div class="grid grid-2">
         <article class="card status-card">
           <h3>Releases</h3>
-          <p class="status-big"><code>0.1.0-SNAPSHOT</code> <span class="badge badge-partial badge-dot">nothing released yet</span></p>
-          <p>No release could ship before the API-breaking work packages of the refactoring plan had merged. All of them have, as of 6 November 2026:</p>
+          <p class="status-big"><code>0.1.0</code> <span class="badge badge-done badge-dot">released</span></p>
+          <p>0.1.0 came out on 6 November 2026, once the API-breaking work packages of the refactoring plan had merged, all thirteen of them:</p>
           <ol class="meter" aria-label="Work packages in the release freeze">
             <li class="meter-block is-done">A1<span class="visually-hidden">, merged</span></li>
             <li class="meter-block is-done">A2<span class="visually-hidden">, merged</span></li>
@@ -445,7 +434,7 @@ kcoap = [
           <ul class="meter-legend">
             <li class="is-done">13 merged</li>
           </ul>
-          <p class="mt-2">A release is a <code>v*</code> tag: CI runs in full, then the artifacts go to GitHub Packages, and to Maven Central once it is set up.</p>
+          <p class="mt-2">A release is a <code>v*</code> tag: CI runs in full, then the artifacts go to GitHub Packages and Maven Central.</p>
           <p class="card-foot"><a class="link-arrow" href="/releases/">Releases and versioning</a></p>
         </article>
         <article class="card status-card">
@@ -455,10 +444,8 @@ kcoap = [
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>TLS</strong>: a <code>coaps+tcp</code> client on the JVM only, and no TLS server of kcoap’s own; servers terminate TLS at a reverse proxy.</li>
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>OSCORE Appendix B.2</strong>: re-deriving the ID Context is deferred.</li>
             <li class="is-open"><span class="visually-hidden">Open: </span><strong>Swift-facing API</strong>: no XCFramework, Swift package or <code>Flow</code> bridge yet.</li>
-            <li class="is-open"><span class="visually-hidden">Open: </span><strong>Maven Central</strong>: ready, with the <code>dev.kcoap</code> namespace verified and the publishing token and signing key set; nothing is published before 0.1.0 is tagged.</li>
-            <li class="is-open"><span class="visually-hidden">Open: </span><strong>API reference</strong>: goes online with the first release.</li>
           </ul>
-          <p class="card-foot"><a class="link-arrow" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/checklist.md">The full checklist</a></p>
+          <p class="card-foot"><a class="link-arrow" href="https://github.com/adihack/kcoap/blob/main/docs/checklist.md">The full checklist</a></p>
         </article>
       </div>
     </div>
@@ -474,12 +461,12 @@ kcoap = [
             <p>kcoap has no sponsors yet. Sponsorship through GitHub Sponsors or Open Collective is planned.</p>
           </div>
           <div class="btn-row">
-            <a class="btn btn-primary btn-lg" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.25"/><path d="M3 19.5c.6-3.3 3-5.25 6-5.25s5.4 1.95 6 5.25"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.4c2.4.2 4 1.9 4.5 4.6"/></svg> How to contribute</a>
+            <a class="btn btn-primary btn-lg" href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.25"/><path d="M3 19.5c.6-3.3 3-5.25 6-5.25s5.4 1.95 6 5.25"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.4c2.4.2 4 1.9 4.5 4.6"/></svg> How to contribute</a>
             <a class="btn btn-secondary btn-lg" href="/sponsors/"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20s-7.5-4.6-7.5-10.1A4.15 4.15 0 0 1 12 7.4a4.15 4.15 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></svg> Sponsorship</a>
           </div>
         </div>
       </div>
-      <p class="muted text-center mt-2 mb-0">Found a vulnerability? Do not open a public issue: <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">SECURITY.md</a> says how to report it privately.</p>
+      <p class="muted text-center mt-2 mb-0">Found a vulnerability? Do not open a public issue: <a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">SECURITY.md</a> says how to report it privately.</p>
     </div>
   </section>
 
@@ -490,7 +477,7 @@ kcoap = [
     <div class="footer-grid">
       <div class="footer-brand">
         <a class="brand" href="/"><img src="/assets/kcoap-logo.svg" alt="" width="32" height="32"><span>kcoap</span></a>
-        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. In development: version <code>0.1.0-SNAPSHOT</code>, nothing released yet.</p>
+        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. Latest release: <code>0.1.0</code>, on Maven Central.</p>
       </div>
       <div>
         <p class="footer-heading">Site</p>
@@ -516,18 +503,18 @@ kcoap = [
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>

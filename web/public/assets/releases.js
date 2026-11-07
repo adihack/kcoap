@@ -1,11 +1,12 @@
 /*
  * kcoap.dev /releases/: lists kcoap's latest releases from the GitHub REST API.
  *
- * Progressive enhancement: without this script the page shows its static "no release yet" note, which is
- * true until the first release. With it, a status line under that note says GitHub is being asked, then
- * that GitHub lists no release, or why GitHub could not be asked (network, the rate limit of 60 requests
- * an hour per visitor, a timeout, an unexpected answer). Only when GitHub lists releases does the list
- * replace the note. The note and the status line keep their place, so the page does not jump.
+ * Progressive enhancement: without this script the page shows its static note on 0.1.0, the first release.
+ * With it, a status line under that note says GitHub is being asked, then that GitHub listed no release
+ * (wrong since 0.1.0, so the line points at the releases page), or why GitHub could not be asked (network,
+ * the rate limit of 60 requests an hour per visitor, a timeout, an unexpected answer). Only when GitHub
+ * lists releases does the list replace the note. The note and the status line keep their place, so the
+ * page does not jump.
  *
  * The request is anonymous: no credentials, no cookies, and only the Accept header, which needs no CORS
  * preflight. The Content-Security-Policy allows connect-src https://api.github.com and nothing else.
@@ -56,7 +57,8 @@
   }
 
   function showEmpty(feed) {
-    status(feed, ["Checked GitHub just now: no release yet."]);
+    status(feed, ["GitHub’s API listed no release just now. ", link(RELEASES, "GitHub Releases"),
+      " has the current list."]);
   }
 
   function showError(feed, rateLimited) {
@@ -76,7 +78,8 @@
     }
   }
 
-  /* The first few entries of generated release notes, as plain text: "* Title by @user in https://…". */
+  /* The first few list items of a release body, as plain text: those of the changelog summary, then GitHub’s
+     generated "* Title by @user in https://…". */
   function noteLines(body) {
     if (typeof body !== "string") return [];
     var lines = [];

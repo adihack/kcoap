@@ -315,8 +315,9 @@ Test vectors are generated from the RFC texts and NIST files by `tools/regen-vec
 
 ## Project status
 
-kcoap 0.1.0, its first release, came out on 2026-11-06; the website at [kcoap.dev](https://kcoap.dev) goes
-live later.
+kcoap 0.1.0, its first release, came out on 2026-11-06 and is on Maven Central. `main` holds it and what merges
+after it; the next version is 0.2.0. The website is [kcoap.dev](https://kcoap.dev), and the
+[API reference](https://adihack.github.io/kcoap/) is on GitHub Pages.
 
 - [Roadmap](docs/roadmap.md): the milestones, built bottom-up, each verified before the next depends on it.
 - [Checklist](docs/checklist.md): every requirement with its status, evidence and next step, ending with

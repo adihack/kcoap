@@ -47,8 +47,10 @@ Maintainers who step back are thanked and listed as former maintainers.
 
 ## Releases
 
-Maintainers publish releases as the [Releasing](docs/releasing.md) page describes: a release is a tag,
-CI must pass first, and no tag is made before the release freeze list has merged.
+Maintainers publish releases as the [Releasing](docs/releasing.md) page describes: a release is a `v*`
+tag, which a ruleset lets only administrators push; CI must pass before anything is published, and a
+maintainer publishes the Maven Central deployment by hand. 0.1.0 waited for the release freeze list to
+merge.
 
 ## The project's assets
 

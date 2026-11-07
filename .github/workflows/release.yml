@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.1.0 to release that version: every test runs first, and the version's summary is
+# Push a tag such as v0.2.0 to release that version: every test runs first, and the version's summary is
 # taken from CHANGELOG.md, which fails the run before anything is published when CHANGELOG.md has no
 # section for the version; then the artifacts are published (GitHub Packages always, Maven Central when
 # its secrets are configured), a GitHub Release is created with that summary followed by generated notes,
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish, without the leading v (e.g. 0.1.0-rc1)'
+        description: 'Version to publish, without the leading v (e.g. 0.2.0-rc1)'
         required: true
 
 permissions:

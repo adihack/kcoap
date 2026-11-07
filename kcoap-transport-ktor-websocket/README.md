@@ -56,13 +56,12 @@ client never depends on ktor-server.
   mounting in an application.
 - `NativeWebSocketLoopbackTest` (native): the default client against the listener on loopback sockets,
   and refused by a server that selects no subprotocol. On Linux it is CIO. On macOS and the iOS
-  simulator it is the Darwin engine, in CI's macOS job (`scripts/test apple`): **pending the first
-  apple-job run**. Until then the Apple test binaries have only been compiled, and Darwin's subprotocol
-  negotiation is unverified (see [docs/testing.md](../docs/testing.md#continuous-integration) for the
-  fallback to CIO if that job fails).
+  simulator it is the Darwin engine, in CI's macOS job (`scripts/test apple`), which passed on pull
+  request #1 and for the release. In release run 42298365400 the default client's negotiation timed out
+  once on macOS, after 20 s, and passed when the job ran again.
 - `DefaultEngineTest`: the default client's engine on the JVM, Linux, and on `js` and `wasmJs`
   (`webTest`, on Node.js), where an application's `HttpClient()` also finds the Js engine; on Apple, in
-  a test binary that links ktor-client-cio too, pending the first apple-job run.
+  a test binary that links ktor-client-cio too.
 - `KtorWebSocketConnectorTest`: `KtorWebSocketConnector()` builds its client and refuses non-WebSocket
   endpoints, on every target; it lists `coaps+ws` exactly where its engine authenticates servers, and a
   connector on the application's client lists it everywhere.
@@ -70,15 +69,14 @@ client never depends on ktor-server.
   connector fails `coaps+ws` with `TRANSPORT_UNAVAILABLE` before resolving it, and the connector refuses a `wss`
   endpoint before opening a socket. `LinuxSecureWebSocketTest` also pins that CIO has no TLS on Linux native,
   and `CioWebSocketNameCheckTest` in kcoap-transport-ktor pins CIO's name check on the JVM; `DefaultEngineTest`
-  checks that the default connector lists `coaps+ws` on `js` and `wasmJs`, and on Apple (pending the first
-  apple-job run).
+  checks that the default connector lists `coaps+ws` on `js` and `wasmJs`, and on Apple.
 - `JsWebSocketSubprotocolTest` (js, on Node.js): an npm `ws` server whose `handleProtocols` records the
   offered subprotocols sees `coap` requested alone, and the connector reads `coap` back from the
   negotiated protocol and exchanges a message; a server that selects none is refused.
 - `BrowserAgainstJvmListenerTest` (JVM, with `-Pkcoap.browser`): the js tests above in a headless
   browser against a `KtorWebSocketListener` on the JVM, which accepts only handshakes that ask for
-  `coap`. CI's browser job runs them in Chrome, **pending its first run**; so far they have passed in
-  headless Firefox (`scripts/test browser firefox`). The
+  `coap`. CI's browser job runs them in headless Chrome; they have also passed in headless Firefox
+  (`scripts/test browser firefox`). The
   page loads the compiled js tests with a small AMD loader and runs them with mocha, both served by the
   test; no bundler and no extra npm packages are involved.
 - The libcoap interop tests over `coap+ws` in `kcoap-coap/src/jvmTest`, and over `coaps+ws` on a CIO client

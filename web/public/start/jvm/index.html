@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JVM servers and desktop · kcoap</title>
-<meta name="description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta name="description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <link rel="canonical" href="https://kcoap.dev/start/jvm/">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -19,7 +19,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="kcoap">
 <meta property="og:title" content="JVM servers and desktop · kcoap">
-<meta property="og:description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta property="og:description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <meta property="og:url" content="https://kcoap.dev/start/jvm/">
 <meta property="og:image" content="https://kcoap.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -27,7 +27,7 @@
 <meta property="og:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="JVM servers and desktop · kcoap">
-<meta name="twitter:description" content="Set up kcoap on the JVM: publish a snapshot to Maven Local, add the modules, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
+<meta name="twitter:description" content="Set up kcoap on the JVM: add kcoap 0.1.0 from Maven Central, and run a first CoAP server and client over UDP, TCP and WebSockets. Java 17 or newer.">
 <meta name="twitter:image" content="https://kcoap.dev/assets/og-image.png">
 <meta name="twitter:image:alt" content="The kcoap logo and the words: CoAP, OSCORE and EDHOC for Kotlin Multiplatform.">
 </head>
@@ -47,7 +47,7 @@
         <li><a href="/features/">Features</a></li>
         <li><a href="/releases/">Releases</a></li>
         <li><a href="/sponsors/">Sponsors</a></li>
-        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
+        <li><a class="nav-external" href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Docs <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M10 8h6v6"/></svg><span class="visually-hidden"> (on GitHub)</span></a></li>
       </ul>
     </nav>
     <div class="header-actions">
@@ -83,26 +83,18 @@
       <div class="doc-body prose">
         <h2 id="prerequisites">Prerequisites</h2>
         <ul>
-          <li>A JDK 17 or newer, to build kcoap and to run your application.</li>
+          <li>A JDK 17 or newer, to build and run your application.</li>
           <li>Kotlin 2.3 or newer in your project. The samples use 2.4.21, the version kcoap is built with.</li>
-          <li>Git, to clone kcoap. Gradle comes with kcoap’s wrapper.</li>
         </ul>
 
         <h2 id="status">Install status</h2>
         <div class="callout callout-status">
-          <span class="callout-title">Not released yet</span>
-          <p>kcoap is at <code>0.1.0-SNAPSHOT</code> and is not on Maven Central. You publish it from a clone into your local Maven repository, as below. The coordinates stay the same after the first release; only the repository and the version change.</p>
+          <span class="callout-title">On Maven Central</span>
+          <p>kcoap 0.1.0 is on Maven Central under <code>dev.kcoap</code>. The build file below takes it from <code>mavenCentral()</code>, which also has every library kcoap depends on.</p>
         </div>
 
         <h2 id="setup">Set up</h2>
         <ol class="steps">
-          <li>
-            <h3>Publish kcoap to Maven Local</h3>
-<div class="code-block"><p class="code-block-label">Terminal</p><pre tabindex="0"><code><span class="tok-f">git</span> clone <span class="tok-k">--branch</span> feat/protocol-core https://github.com/adihack/kcoap.git
-<span class="tok-f">cd</span> kcoap
-<span class="tok-c"># dev.kcoap:*:0.1.0-SNAPSHOT into ~/.m2/repository</span>
-<span class="tok-f">./gradlew</span> publishToMavenLocal</code></pre></div>
-          </li>
           <li>
             <h3>Create the build file</h3>
             <p>A plain Kotlin/JVM application. Without a toolchain setting it compiles for the JDK that runs Gradle, which must be 17 or newer. The bill of materials, <code>kcoap-bom</code>, sets one version for every kcoap module, so the modules name none.</p>
@@ -115,12 +107,11 @@
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
 <span class="tok-f">dependencies</span> {
-    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0-SNAPSHOT"</span>))
+    <span class="tok-f">implementation</span>(<span class="tok-f">platform</span>(<span class="tok-s">"dev.kcoap:kcoap-bom:0.1.0"</span>))
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-coap"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-transport-ktor"</span>)
     <span class="tok-f">implementation</span>(<span class="tok-s">"dev.kcoap:kcoap-crypto-default"</span>)
@@ -137,7 +128,7 @@
                 <p class="tab-panel-title">Version catalog</p>
 <div class="code-block"><p class="code-block-label">gradle/libs.versions.toml</p><pre tabindex="0"><code><span class="tok-k">[versions]</span>
 kotlin = <span class="tok-s">"2.4.21"</span>
-kcoap = <span class="tok-s">"0.1.0-SNAPSHOT"</span>
+kcoap = <span class="tok-s">"0.1.0"</span>
 
 <span class="tok-k">[libraries]</span>
 kcoap-bom = { module = <span class="tok-s">"dev.kcoap:kcoap-bom"</span>, version.ref = <span class="tok-s">"kcoap"</span> }
@@ -165,7 +156,6 @@ kotlin-jvm = { id = <span class="tok-s">"org.jetbrains.kotlin.jvm"</span>, versi
 }
 
 <span class="tok-f">repositories</span> {
-    <span class="tok-f">mavenLocal</span> { <span class="tok-f">content</span> { <span class="tok-f">includeGroup</span>(<span class="tok-s">"dev.kcoap"</span>) } }
     <span class="tok-f">mavenCentral</span>()
 }
 
@@ -239,7 +229,7 @@ kotlin-jvm = { id = <span class="tok-s">"org.jetbrains.kotlin.jvm"</span>, versi
         scope.<span class="tok-f">cancel</span>()
     }
 }</code></pre></div>
-        <p class="code-note"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The server and client lines, with two long ones split, are those of the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>, which <code>GuideExamplesTest</code> compiles and runs in CI. The <code>main</code> function around them is not compiled there.</span></p>
+        <p class="code-note"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The server and client lines, with two long ones split, are those of the <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a>, which <code>GuideExamplesTest</code> compiles and runs in CI. The <code>main</code> function around them is not compiled there.</span></p>
         <p>Run it with <code>./gradlew run</code>. The client binds port 0, so the system picks a free port, and the server greets it by its address:</p>
         <div class="code-block code-block-output" data-no-copy><p class="code-block-label">Output</p><pre tabindex="0"><code>Hello, Udp(host=127.0.0.1, port=51234)
 on</code></pre></div>
@@ -329,9 +319,9 @@ on</code></pre></div>
         <p class="code-note"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8.25 12.25 2.5 2.5 5-5.25"/></svg><span>The test is <code>GuideExamplesTest.greets</code>, which runs in CI, with its lines wrapped and its last assertion split in two here. It needs <code>kotlinx-coroutines-test</code> and <code>kotlin("test")</code> as test dependencies.</span></p>
 
         <h2 id="security">Securing it</h2>
-        <p>OSCORE and EDHOC work the same on every platform; the <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/README.md#quick-start">quick start</a> shows an OSCORE server and client, then EDHOC with the combined request, two round trips in all. On a JVM server, three things matter more than elsewhere:</p>
+        <p>OSCORE and EDHOC work the same on every platform; the <a href="https://github.com/adihack/kcoap/blob/main/README.md#quick-start">quick start</a> shows an OSCORE server and client, then EDHOC with the combined request, two round trips in all. On a JVM server, three things matter more than elsewhere:</p>
         <ul>
-          <li><strong>Sequence numbers must survive restarts.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>; kcoap ships none on purpose. <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-oscore/README.md#writing-a-durable-store">The JVM recipe</a> writes a temporary file, forces it to disk and moves it into place.</li>
+          <li><strong>Sequence numbers must survive restarts.</strong> Pre-shared OSCORE keys need a durable <code>SequenceNumberStore</code>; kcoap ships none on purpose. <a href="https://github.com/adihack/kcoap/blob/main/kcoap-oscore/README.md#writing-a-durable-store">The JVM recipe</a> writes a temporary file, forces it to disk and moves it into place.</li>
           <li><strong>Bound the contexts.</strong> <code>InMemoryContextRepository</code> never evicts. A production server that runs EDHOC supplies a bounded <code>MutableSecurityContextRepository</code>.</li>
           <li><strong>Post-quantum EDHOC</strong> runs here. <code>BouncyCastleCryptoBackend(DefaultCryptoBackend())</code> from <code>kcoap-crypto-bc</code> adds ML-KEM and ML-DSA to the classical backend you pass, here the one of <code>kcoap-crypto-default</code>; configure <code>CipherSuite.SUITE_PQC_1</code> (suite −24). <a href="/features/#post-quantum">What is verified</a>.</li>
         </ul>
@@ -346,7 +336,7 @@ on</code></pre></div>
 <span class="tok-k">val</span> client = <span class="tok-t">CoapClient</span>(<span class="tok-f">listOf</span>(<span class="tok-t">KtorTlsConnector</span>()), scope)
 <span class="tok-f">println</span>(client.<span class="tok-f">get</span>(<span class="tok-s">"coaps+tcp://coap.example.org/sensors/temp"</span>).<span class="tok-f">payloadAsText</span>())</code></pre></div>
         <p class="code-note code-note-names"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.75h.01"/></svg><span>From the KDoc of <code>KtorTlsConnector</code>; names checked. <code>KcoapClientAgainstLibcoapTlsTest</code> runs the connector against libcoap in CI.</span></p>
-        <p>kcoap has no TLS listener: a server terminates TLS at a reverse proxy, such as HAProxy or nginx’s <code>stream</code> module, in front of <code>KtorTcpListener</code> (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/adr/0010-server-side-tls.md">ADR 0010</a>).</p>
+        <p>kcoap has no TLS listener: a server terminates TLS at a reverse proxy, such as HAProxy or nginx’s <code>stream</code> module, in front of <code>KtorTcpListener</code> (<a href="https://github.com/adihack/kcoap/blob/main/docs/adr/0010-server-side-tls.md">ADR 0010</a>).</p>
         <h3>Cryptography</h3>
         <p><code>DefaultCryptoBackend()</code> uses the JDK’s own providers through JCA. The JVM runs every EDHOC suite kcoap implements; suites 0, 2, 4 and 24 and the post-quantum suite −24 are cross-tested against libedhoc here.</p>
         <h3>Not done yet on the JVM</h3>
@@ -357,8 +347,8 @@ on</code></pre></div>
 
         <h2 id="troubleshooting">Troubleshooting</h2>
         <dl class="qa-list">
-          <dt>Could not find <code>dev.kcoap:kcoap-coap:0.1.0-SNAPSHOT</code></dt>
-          <dd>Run <code>./gradlew publishToMavenLocal</code> in the kcoap clone, and check that <code>mavenLocal()</code> is in your repositories.</dd>
+          <dt>Could not find <code>dev.kcoap:kcoap-coap:0.1.0</code></dt>
+          <dd>Check that <code>mavenCentral()</code> is in your repositories, or in <code>dependencyResolutionManagement</code> when the settings file declares them.</dd>
           <dt>An error about inlining bytecode built with JVM target 17</dt>
           <dd>Your project compiles for an older JVM. Build it with a JDK 17 or newer, or set the Kotlin <code>jvmTarget</code> to 17 or newer.</dd>
           <dt><code>Cannot resolve '…': configure an EndpointResolver</code></dt>
@@ -371,10 +361,10 @@ on</code></pre></div>
 
         <h2 id="next-steps">Next steps</h2>
         <ul>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/guide-client-server.md">client and server guide</a>: Observe, discovery, endpoint tuning, Q-Block and message security.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/docs/guide-client-server.md">client and server guide</a>: Observe, discovery, endpoint tuning, Q-Block and message security.</li>
           <li><a href="/features/">Features</a>: what kcoap implements and how it is checked.</li>
-          <li>The <a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/kcoap-edhoc-oscore/README.md">EDHOC with OSCORE guide</a>: the EDHOC server, the client handshake and the combined request.</li>
-          <li>The API reference is published with the first release; until then <code>./gradlew dokkaGenerate</code> builds it into <code>build/dokka/html</code>.</li>
+          <li>The <a href="https://github.com/adihack/kcoap/blob/main/kcoap-edhoc-oscore/README.md">EDHOC with OSCORE guide</a>: the EDHOC server, the client handshake and the combined request.</li>
+          <li>The <a href="https://adihack.github.io/kcoap/">API reference</a>: every public declaration with its KDoc, published with each release.</li>
         </ul>
 
         <nav class="pager" aria-label="Platform guides">
@@ -391,7 +381,7 @@ on</code></pre></div>
     <div class="footer-grid">
       <div class="footer-brand">
         <a class="brand" href="/"><img src="/assets/kcoap-logo.svg" alt="" width="32" height="32"><span>kcoap</span></a>
-        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. In development: version <code>0.1.0-SNAPSHOT</code>, nothing released yet.</p>
+        <p>CoAP, OSCORE and EDHOC for Kotlin Multiplatform. Latest release: <code>0.1.0</code>, on Maven Central.</p>
       </div>
       <div>
         <p class="footer-heading">Site</p>
@@ -417,18 +407,18 @@ on</code></pre></div>
         <p class="footer-heading">Project</p>
         <ul class="footer-links">
           <li><a href="https://github.com/adihack/kcoap">GitHub repository</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/docs/README.md">Documentation</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CHANGELOG.md">Changelog</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CONTRIBUTING.md">Contributing</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/SECURITY.md">Security policy</a></li>
-          <li><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/docs/README.md">Documentation</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/adihack/kcoap/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-legal">
       <p>© 2026 Adrian Sołtys and the kcoap contributors</p>
-      <p><a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/LICENSE">Apache License 2.0</a></p>
-      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/feat/protocol-core/TRADEMARKS.md">trademark policy</a>)</p>
+      <p><a href="https://github.com/adihack/kcoap/blob/main/LICENSE">Apache License 2.0</a></p>
+      <p>kcoap™ is a trademark of Adrian Sołtys (<a href="https://github.com/adihack/kcoap/blob/main/TRADEMARKS.md">trademark policy</a>)</p>
     </div>
   </div>
 </footer>
